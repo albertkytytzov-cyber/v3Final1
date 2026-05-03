@@ -15,14 +15,15 @@
     "dev": "npm-run-all --parallel dev:web dev:api",
     "dev:web": "npm run dev --workspace @training-platform/web",
     "dev:api": "npm run dev --workspace @training-platform/api",
-    "build": "npm run build --workspace @training-platform/shared && npm run build --workspace @training-platform/api && npm run build --workspace @training-platform/web",
+    "build": "npm run build --workspace @training-platform/shared && npm run build --workspace @training-platform/api && npm run build --workspace @training-platform/web && npm run build --workspace @training-platform/mobile",
     "lint": "npm run lint --workspace @training-platform/web",
+    "mobile:build": "npm run build --workspace @training-platform/mobile",
     "mobile:sync": "npm run sync --workspace @training-platform/mobile",
     "mobile:sync:android": "npm run sync:android --workspace @training-platform/mobile",
     "mobile:sync:ios": "npm run sync:ios --workspace @training-platform/mobile",
     "mobile:open:android": "npm run open:android --workspace @training-platform/mobile",
     "mobile:open:ios": "npm run open:ios --workspace @training-platform/mobile",
-    "typecheck": "npm run typecheck --workspace @training-platform/shared && npm run typecheck --workspace @training-platform/api && npm run typecheck --workspace @training-platform/web"
+    "typecheck": "npm run typecheck --workspace @training-platform/shared && npm run typecheck --workspace @training-platform/api && npm run typecheck --workspace @training-platform/web && npm run typecheck --workspace @training-platform/mobile"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",

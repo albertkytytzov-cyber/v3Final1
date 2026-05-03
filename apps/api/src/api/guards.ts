@@ -10,6 +10,11 @@ export type HttpErrorFactory = (
   message: string,
 ) => Error & { statusCode: number };
 
+type SessionRequest = {
+  cookies: Record<string, string | undefined>;
+  headers?: Record<string, string | string[] | undefined>;
+};
+
 interface GuardDependencies {
   sessionCookieName: string;
   sessionSecret: string;
@@ -18,9 +23,8 @@ interface GuardDependencies {
 }
 
 export interface ApiGuards {
-  requireUser(request: {
-    cookies: Record<string, string | undefined>;
-  }): Promise<AuthSessionUser>;
+  requireUser(request: SessionRequest): Promise<AuthSessionUser>;
+  getSessionToken(request: SessionRequest): string | undefined;
   assertAthleteAccess(user: AuthSessionUser, athleteId: string): Promise<void>;
   setSessionCookie(
     reply: Pick<FastifyReply, "setCookie">,
@@ -30,9 +34,26 @@ export interface ApiGuards {
 }
 
 export function createApiGuards(dependencies: GuardDependencies): ApiGuards {
+  function getSessionToken(request: SessionRequest) {
+    const authorization = request.headers?.authorization;
+    const authorizationValue = Array.isArray(authorization)
+      ? authorization[0]
+      : authorization;
+
+    if (typeof authorizationValue === "string") {
+      const [scheme, token] = authorizationValue.split(/\s+/, 2);
+
+      if (scheme?.toLowerCase() === "bearer" && token) {
+        return token;
+      }
+    }
+
+    return request.cookies[dependencies.sessionCookieName];
+  }
+
   return {
     async requireUser(request) {
-      const token = request.cookies[dependencies.sessionCookieName];
+      const token = getSessionToken(request);
 
       if (!token) {
         throw dependencies.httpError(401, "Auth session is required");
@@ -46,6 +67,7 @@ export function createApiGuards(dependencies: GuardDependencies): ApiGuards {
 
       return user;
     },
+    getSessionToken,
     async assertAthleteAccess(user, athleteId) {
       const failure = await getAthleteAccessFailure(user, athleteId);
 

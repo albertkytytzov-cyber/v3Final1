@@ -25,6 +25,12 @@ const sessionCookieName =
   process.env.SESSION_COOKIE_NAME ?? "training_platform_session";
 const sessionSecret = process.env.SESSION_SECRET ?? "change-me-in-production";
 const sessionCookieSecure = process.env.SESSION_COOKIE_SECURE === "true";
+const mobileCorsOrigins = [
+  "capacitor://localhost",
+  "ionic://localhost",
+  "http://localhost",
+  "https://localhost",
+];
 const allowedCorsOrigins = resolveAllowedCorsOrigins();
 
 validateRuntimeConfig();
@@ -132,14 +138,14 @@ function resolveAllowedCorsOrigins() {
   const publicHost = (process.env.PUBLIC_HOST ?? "").trim();
 
   if (!publicHost || publicHost === "change-me.example.com") {
-    return configured;
+    return Array.from(new Set([...configured, ...mobileCorsOrigins]));
   }
 
   const hostOrigin = publicHost.startsWith("http://") || publicHost.startsWith("https://")
     ? publicHost
     : `https://${publicHost}`;
 
-  return Array.from(new Set([...configured, hostOrigin]));
+  return Array.from(new Set([...configured, hostOrigin, ...mobileCorsOrigins]));
 }
 
 function validateRuntimeConfig() {

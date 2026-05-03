@@ -19,6 +19,9 @@ apps/mobile/android/**/build/
 apps/mobile/ios/App/Pods/
 apps/mobile/ios/App/build/
 apps/mobile/ios/App/DerivedData/
+apps/mobile/www/**/*.js
+apps/mobile/www/**/*.js.map
+apps/mobile/www/mobile-config.js
 
 # Logs
 *.log

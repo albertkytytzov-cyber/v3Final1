@@ -9,8 +9,8 @@ PERFORM is a training-process platform for coaches and athletes. The app covers 
 - Monorepo: npm workspaces.
 - Language: TypeScript.
 - Web: Next.js App Router, React, global CSS.
-- API: Fastify, PostgreSQL, cookie sessions.
-- Mobile: Capacitor shell in `apps/mobile`.
+- API: Fastify, PostgreSQL, cookie sessions for web and bearer session tokens for mobile.
+- Mobile: Capacitor app in `apps/mobile` with bundled local UI, local storage, and sync queue.
 - Shared package: `@training-platform/shared`.
 - Runtime services: PostgreSQL, Redis, worker, scheduler, Caddy via Docker Compose.
 
@@ -46,6 +46,12 @@ Build:
 npm run build
 ```
 
+Mobile build:
+
+```bash
+npm run mobile:build
+```
+
 Mobile sync:
 
 ```bash
@@ -71,7 +77,7 @@ bash scripts/update.sh
 ## Testing Requirements
 
 - Run `npm run check` before handing off code changes.
-- Run `npm run build` when touching shared types, API bootstrapping, Next.js routes, or production-facing UI.
+- Run `npm run build` when touching shared types, API bootstrapping, Next.js routes, mobile UI, or production-facing UI.
 - `npm run test` currently documents that no dedicated test runner exists. Add focused tests when a real runner is introduced.
 - For UI changes, verify the affected flow manually in a browser and report what was checked.
 

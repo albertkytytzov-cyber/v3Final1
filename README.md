@@ -5,9 +5,9 @@ PERFORM is a training-process management platform for coaches and athletes. It c
 ## Technology Stack
 
 - Node.js workspace monorepo with npm workspaces.
-- TypeScript across shared types, API, and web app.
+- TypeScript across shared types, API, web app, and mobile app.
 - Next.js App Router, React, and CSS modules/global CSS for the web application.
-- Fastify API with cookie-based sessions.
+- Fastify API with cookie sessions for web and bearer session tokens for mobile.
 - PostgreSQL for persistence and Redis for background/runtime coordination.
 - Docker Compose for self-hosted deployment with PostgreSQL, Redis, API, web, worker, scheduler, and Caddy reverse proxy.
 - ESLint and TypeScript checks for quality gates.
@@ -18,7 +18,7 @@ PERFORM is a training-process management platform for coaches and athletes. It c
 apps/
   api/                 Fastify API, background worker, scheduler, database bootstrap
   web/                 Next.js application and static assets
-  mobile/              Capacitor shell for Android and iOS
+  mobile/              Capacitor app with bundled mobile UI for Android and iOS
 packages/
   shared/              Shared TypeScript domain types and constants
 infra/
@@ -136,15 +136,19 @@ npm run build
 
 ## Mobile App
 
-The mobile shell lives in `apps/mobile` and uses Capacitor to load the deployed PERFORM web app on Android and iOS.
+The mobile app lives in `apps/mobile`. It uses Capacitor, but the UI is bundled inside the app instead of loading the deployed web site. The server is used only as the API backend.
 
-Configure a local mobile server URL without committing it:
+Configure a local mobile API URL without committing it:
 
 ```bash
 cp apps/mobile/mobile.env.example apps/mobile/.env.mobile.local
 ```
 
-Then set `MOBILE_SERVER_URL` in `apps/mobile/.env.mobile.local` and sync native projects:
+Then set `MOBILE_API_BASE_URL` in `apps/mobile/.env.mobile.local`, build the mobile assets, and sync native projects:
+
+```bash
+npm run mobile:build
+```
 
 ```bash
 npm run mobile:sync

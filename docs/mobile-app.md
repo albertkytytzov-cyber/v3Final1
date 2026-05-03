@@ -1,8 +1,25 @@
 # Mobile App
 
-This project uses Capacitor to package the existing PERFORM web app for Android and iOS.
+PERFORM mobile is a Capacitor app with bundled local UI in `apps/mobile/www`.
+The app does not load the web site from the server. The server is used only as
+the API backend for auth, athletes, plans, calendar, readiness and results.
 
-The current mobile setup is temporary: the native app loads the deployed web app through `MOBILE_SERVER_URL`. Keep that URL in a local ignored file and do not commit real server addresses if the repository is public.
+## Architecture
+
+```text
+Android/iPhone app
+  -> bundled mobile UI
+  -> API server
+  -> PostgreSQL
+```
+
+Main mobile layers:
+
+- `apps/mobile/src/api` - API client.
+- `apps/mobile/src/storage` - local session, cached data and selected athlete.
+- `apps/mobile/src/sync` - offline sync queue.
+- `apps/mobile/src/screens` - mobile UI screens.
+- `apps/mobile/www` - bundled static shell and styles.
 
 ## Local Configuration
 
@@ -15,14 +32,22 @@ cp apps/mobile/mobile.env.example apps/mobile/.env.mobile.local
 Set:
 
 ```bash
-MOBILE_SERVER_URL=https://your-current-server.example.com
+MOBILE_API_BASE_URL=https://your-current-server.example.com/api/v1
 ```
 
-Use HTTPS for real devices. Session cookies and PWA features are not reliable over plain HTTP.
+`MOBILE_SERVER_URL` is no longer used for loading the interface. If it still
+exists in a local file, the build script uses it only as a fallback to derive
+`/api/v1` for the API client.
 
-## Sync Native Projects
+## Build And Sync
 
-After changing `MOBILE_SERVER_URL` or web/native configuration:
+Build bundled mobile assets:
+
+```bash
+npm run mobile:build
+```
+
+Sync native projects:
 
 ```bash
 npm run mobile:sync
@@ -54,8 +79,29 @@ iOS requires Xcode on macOS:
 npm run mobile:open:ios
 ```
 
-## Release Notes
+## Offline Mode
 
-- Android can be prepared on Windows with Android Studio.
-- iOS needs Xcode/macOS or a cloud build pipeline for signing and App Store/TestFlight delivery.
-- The current `server.url` mode is useful for the MVP and internal testing. Before store release, review App Store and Google Play requirements and decide whether to keep remote loading, add live updates, or ship bundled app assets.
+The mobile app stores the latest loaded data in local storage:
+
+- current session and user;
+- athletes;
+- assigned plans;
+- competitions;
+- competition plans;
+- readiness entry;
+- execution results;
+- pending sync actions.
+
+When a readiness entry, training result or competition result cannot be sent
+because the device is offline or the server is unavailable, the action is saved
+locally. The queue is retried when the connection returns or when the user taps
+sync.
+
+## Backend Notes
+
+The web app still uses httpOnly session cookies. The mobile app additionally
+uses the session token returned by login/register and sends it through the
+`Authorization: Bearer <token>` header. Existing cookie auth remains supported.
+
+For production, the API server must allow the mobile app origin in CORS, for
+example `capacitor://localhost`, together with the public web origin.

@@ -59,6 +59,7 @@ export interface AuthUser {
 
 export interface AuthResponse {
   user: AuthUser;
+  sessionToken?: string;
 }
 
 export interface ReadinessFormValues {

@@ -20,6 +20,13 @@ export function registerAuthRoutes(
   app: FastifyInstance,
   dependencies: AuthRouteDependencies,
 ) {
+  function shouldReturnSessionToken(request: { headers: Record<string, string | string[] | undefined> }) {
+    const mobileHeader = request.headers["x-perform-mobile"];
+    const mobileHeaderValue = Array.isArray(mobileHeader) ? mobileHeader[0] : mobileHeader;
+
+    return mobileHeaderValue === "1";
+  }
+
   app.post("/api/v1/auth/register", async (request, reply) => {
     let body;
     try {
@@ -37,6 +44,7 @@ export function registerAuthRoutes(
       dependencies.guards.setSessionCookie(reply, result.sessionToken);
 
       return {
+        ...(shouldReturnSessionToken(request) ? { sessionToken: result.sessionToken } : {}),
         user: result.user,
       };
     } catch (error) {
@@ -65,6 +73,7 @@ export function registerAuthRoutes(
       dependencies.guards.setSessionCookie(reply, result.sessionToken);
 
       return {
+        ...(shouldReturnSessionToken(request) ? { sessionToken: result.sessionToken } : {}),
         user: result.user,
       };
     } catch (error) {
@@ -85,7 +94,7 @@ export function registerAuthRoutes(
   });
 
   app.post("/api/v1/auth/logout", async (request, reply) => {
-    const token = request.cookies[dependencies.sessionCookieName];
+    const token = dependencies.guards.getSessionToken(request);
 
     if (token) {
       await logoutUser(token, dependencies.sessionSecret);
