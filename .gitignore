@@ -1,0 +1,76 @@
+# Dependencies
+node_modules/
+
+# Build output and caches
+.next/
+dist/
+build/
+coverage/
+.turbo/
+.cache/
+*.tsbuildinfo
+apps/web/.next/
+apps/api/dist/
+packages/shared/dist/
+packages/shared/src/index.js
+packages/shared/src/index.d.ts
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.logs/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+cookies/
+*cookie*.txt
+
+# Database dumps and backups
+backups/
+*.sql.gz
+*.dump
+*.bak
+*.backup
+
+# Temporary files and local browser profiles
+tmp/
+tmp-*
+tmp-*/
+tmp_*
+test-results/
+playwright-report/
+.chrome-*/
+.codex-*
+.claude/
+
+# Local archives and generated screenshots
+*.tgz
+*.tar
+*.tar.gz
+*.zip
+/*.png
+/*.jpg
+/*.jpeg
+/*.webp
+/*.gif
+.codex-*.png
+tmp*.png
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+Desktop.ini
+.idea/
+.vscode/
+*.swp
+*.swo

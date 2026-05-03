@@ -1,0 +1,32 @@
+{
+  "name": "training-process-platform",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "postinstall": "npm run build --workspace @training-platform/shared",
+    "setup": "npm ci",
+    "run": "npm run dev",
+    "test": "node -e \"console.log('No dedicated automated test runner is configured yet. Use npm run check for lint and typecheck.')\"",
+    "check": "npm run lint && npm run typecheck",
+    "dev": "npm-run-all --parallel dev:web dev:api",
+    "dev:web": "npm run dev --workspace @training-platform/web",
+    "dev:api": "npm run dev --workspace @training-platform/api",
+    "build": "npm run build --workspace @training-platform/shared && npm run build --workspace @training-platform/api && npm run build --workspace @training-platform/web",
+    "lint": "npm run lint --workspace @training-platform/web",
+    "typecheck": "npm run typecheck --workspace @training-platform/shared && npm run typecheck --workspace @training-platform/api && npm run typecheck --workspace @training-platform/web"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "@types/node": "^24.8.1",
+    "@typescript-eslint/eslint-plugin": "^8.46.2",
+    "@typescript-eslint/parser": "^8.46.2",
+    "eslint": "^9.39.1",
+    "globals": "^16.4.0",
+    "npm-run-all": "^4.1.5",
+    "typescript": "^6.0.3"
+  }
+}

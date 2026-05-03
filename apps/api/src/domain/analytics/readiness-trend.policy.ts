@@ -1,0 +1,242 @@
+import type {
+  AnalyticsOverview,
+  CompletionTrendPoint,
+  LoadTrendPoint,
+  PlanBlockInput,
+  ReadinessStatus,
+  WeightTrendPoint,
+} from "@training-platform/shared";
+import type {
+  DailyExecutionStats,
+  ExecutionBlock,
+} from "./analytics.types";
+
+const DAY_IN_MS = 24 * 60 * 60 * 1000;
+
+export function round(value: number, digits = 1) {
+  return Number(value.toFixed(digits));
+}
+
+export function toDateKey(value: string | Date) {
+  if (typeof value === "string") {
+    return value.slice(0, 10);
+  }
+
+  return value.toISOString().slice(0, 10);
+}
+
+export function startOfDay(value: string | Date) {
+  const date =
+    typeof value === "string" ? new Date(`${toDateKey(value)}T00:00:00Z`) : new Date(value);
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+}
+
+export function shiftDate(dateText: string, dayOffset: number) {
+  const date = startOfDay(dateText);
+  date.setUTCDate(date.getUTCDate() + dayOffset);
+  return toDateKey(date);
+}
+
+export function diffDays(from: string | Date, to: string | Date) {
+  return Math.round((startOfDay(to).getTime() - startOfDay(from).getTime()) / DAY_IN_MS);
+}
+
+export function startOfCalendarWeek(referenceDate: string) {
+  const date = startOfDay(referenceDate);
+  const weekday = date.getUTCDay();
+  const offset = weekday === 0 ? -6 : 1 - weekday;
+  return shiftDate(referenceDate, offset);
+}
+
+export function average(values: number[]) {
+  if (!values.length) {
+    return null;
+  }
+
+  return round(values.reduce((sum, value) => sum + value, 0) / values.length, 1);
+}
+
+export function buildReadinessTrend(rows: Array<{
+  entryDate: string;
+  score: number;
+  status: ReadinessStatus;
+}>): AnalyticsOverview["readinessTrend"] {
+  return rows
+    .slice()
+    .sort((left, right) => left.entryDate.localeCompare(right.entryDate))
+    .slice(-14)
+    .map((row) => ({
+      date: row.entryDate,
+      score: row.score,
+      status: row.status,
+    }));
+}
+
+export function estimatePlannedBlockLoad(
+  blockType: PlanBlockInput["blockType"],
+  blockPriority: number,
+  targetDurationMinutes: number | null,
+  targetRpe: number | null,
+) {
+  if (targetDurationMinutes !== null && targetRpe !== null) {
+    return Number((targetDurationMinutes * targetRpe).toFixed(1));
+  }
+
+  const profile: Record<
+    PlanBlockInput["blockType"],
+    {
+      durationMinutes: number;
+      rpe: number;
+    }
+  > = {
+    technical: { durationMinutes: 35, rpe: 5 },
+    speed: { durationMinutes: 22, rpe: 7.5 },
+    strength: { durationMinutes: 30, rpe: 7 },
+    CNS_high: { durationMinutes: 24, rpe: 8 },
+    metabolic: { durationMinutes: 26, rpe: 8.5 },
+    conditioning: { durationMinutes: 32, rpe: 6.5 },
+    recovery: { durationMinutes: 20, rpe: 2.5 },
+    mobility: { durationMinutes: 18, rpe: 2.5 },
+    activation: { durationMinutes: 14, rpe: 4 },
+  };
+
+  const base = profile[blockType];
+  const priorityFactor = 0.7 + blockPriority * 0.1;
+  return Number((base.durationMinutes * base.rpe * priorityFactor).toFixed(1));
+}
+
+export function hasActualExecution(block: ExecutionBlock) {
+  return (
+    block.setsCompleted !== null ||
+    block.repsCompleted !== null ||
+    block.weightKg !== null ||
+    block.durationMinutes !== null ||
+    block.rpe !== null ||
+    block.resultNotes.trim().length > 0
+  );
+}
+
+export function buildDailyExecutionStats(blocks: ExecutionBlock[]): DailyExecutionStats {
+  let completedBlocks = 0;
+  let partialBlocks = 0;
+  let missedBlocks = 0;
+  let plannedLoad = 0;
+  let actualLoad = 0;
+  let totalDurationMinutes = 0;
+  let rpeSum = 0;
+  let rpeCount = 0;
+
+  for (const block of blocks) {
+    plannedLoad += estimatePlannedBlockLoad(
+      block.blockType,
+      block.blockPriority,
+      block.targetDurationMinutes,
+      block.targetRpe,
+    );
+
+    if (block.durationMinutes !== null && block.rpe !== null) {
+      actualLoad += block.durationMinutes * block.rpe;
+    }
+
+    if (block.durationMinutes !== null) {
+      totalDurationMinutes += block.durationMinutes;
+    }
+
+    if (block.rpe !== null) {
+      rpeSum += block.rpe;
+      rpeCount += 1;
+    }
+
+    if (block.completed) {
+      completedBlocks += 1;
+    } else if (hasActualExecution(block)) {
+      partialBlocks += 1;
+    } else if (block.completed === false) {
+      missedBlocks += 1;
+    }
+  }
+
+  return {
+    plannedBlocks: blocks.length,
+    completedBlocks,
+    partialBlocks,
+    missedBlocks,
+    adherenceRate: blocks.length ? Math.round((completedBlocks / blocks.length) * 100) : 0,
+    plannedLoad: round(plannedLoad),
+    actualLoad: round(actualLoad),
+    averageRpe: rpeCount ? round(rpeSum / rpeCount) : null,
+    totalDurationMinutes: round(totalDurationMinutes),
+  };
+}
+
+export function buildExecutionTrendMaps(rows: Array<{ dayDate: string; block: ExecutionBlock }>) {
+  const groupedByDate = new Map<string, ExecutionBlock[]>();
+
+  for (const row of rows) {
+    const bucket = groupedByDate.get(row.dayDate) ?? [];
+    bucket.push(row.block);
+    groupedByDate.set(row.dayDate, bucket);
+  }
+
+  return groupedByDate;
+}
+
+export function buildCompletionTrend(
+  groupedByDate: Map<string, ExecutionBlock[]>,
+  referenceDateText: string,
+): CompletionTrendPoint[] {
+  return Array.from(groupedByDate.keys())
+    .filter((date) => date <= referenceDateText)
+    .sort((left, right) => left.localeCompare(right))
+    .slice(-14)
+    .map((date) => {
+      const stats = buildDailyExecutionStats(groupedByDate.get(date) ?? []);
+      return {
+        date,
+        plannedBlocks: stats.plannedBlocks,
+        completedBlocks: stats.completedBlocks,
+        partialBlocks: stats.partialBlocks,
+        missedBlocks: stats.missedBlocks,
+        adherenceRate: stats.adherenceRate,
+      };
+    });
+}
+
+export function buildLoadTrend(
+  groupedByDate: Map<string, ExecutionBlock[]>,
+  referenceDateText: string,
+): LoadTrendPoint[] {
+  return Array.from(groupedByDate.keys())
+    .filter((date) => date <= referenceDateText)
+    .sort((left, right) => left.localeCompare(right))
+    .slice(-14)
+    .map((date) => {
+      const stats = buildDailyExecutionStats(groupedByDate.get(date) ?? []);
+      return {
+        date,
+        plannedLoad: stats.plannedLoad,
+        actualLoad: stats.actualLoad,
+        loadDelta: round(stats.actualLoad - stats.plannedLoad),
+        averageRpe: stats.averageRpe,
+        totalDurationMinutes: stats.totalDurationMinutes,
+      };
+    });
+}
+
+export function buildWeightTrend(
+  rows: Array<{ date: string; weightKg: number }>,
+  baselineWeightKg: number | null,
+): WeightTrendPoint[] {
+  return rows
+    .slice()
+    .sort((left, right) => left.date.localeCompare(right.date))
+    .slice(-14)
+    .map((row) => ({
+      date: row.date,
+      weightKg: row.weightKg,
+      deltaFromBaseline:
+        baselineWeightKg !== null
+          ? Number((row.weightKg - baselineWeightKg).toFixed(2))
+          : null,
+    }));
+}

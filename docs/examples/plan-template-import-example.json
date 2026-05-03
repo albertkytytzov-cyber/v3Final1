@@ -1,0 +1,207 @@
+{
+  "name": "Соревновательная подводка: активация и техника",
+  "description": "Пример импортируемого шаблона для одного тренировочного дня в фазе taper перед приоритетным стартом. Цель: сохранить качество движений и нервно-мышечную готовность без накопления усталости.",
+  "sportType": "Борьба",
+  "phaseFocus": "taper",
+  "competitionPriorityFocus": "A",
+  "templateGoal": "Подвести спортсмена к старту без накопления усталости",
+  "microcycleType": "activation",
+  "competitionSpecific": true,
+  "blocks": [],
+  "days": [
+    {
+      "label": "День -3 до старта",
+      "notes": "Короткий соревновательный день: активация, техника, скорость реакции и контроль восстановления.",
+      "orderIndex": 0,
+      "sessions": [
+        {
+          "name": "Предстартовая активация",
+          "notes": "Сессия должна ощущаться свежей. Не доводить до выраженной усталости.",
+          "orderIndex": 0,
+          "blocks": [
+            {
+              "name": "Мобильность и дыхательная настройка",
+              "blockType": "mobility",
+              "blockPriority": 1,
+              "isMandatory": true,
+              "removePriorityYellow": 5,
+              "removePriorityRed": 5,
+              "reductionPercentYellow": 0,
+              "reductionPercentRed": 30,
+              "targetDurationMinutes": 12,
+              "targetRpe": 2,
+              "targetSets": 2,
+              "targetReps": 6,
+              "notes": "Мягкая мобилизация плечевого пояса, таза и голеностопа. Дыхание ровное, без форсирования.",
+              "replacementBlockId": null,
+              "exercises": [
+                {
+                  "name": "Динамическая мобилизация таза",
+                  "targetSets": 2,
+                  "targetReps": 6,
+                  "targetWeightKg": null,
+                  "targetDurationMinutes": 4,
+                  "targetRpe": 2,
+                  "notes": "Контролировать амплитуду, без боли.",
+                  "displayOrder": 0
+                },
+                {
+                  "name": "Дыхание 4-2-6",
+                  "targetSets": 3,
+                  "targetReps": 5,
+                  "targetWeightKg": null,
+                  "targetDurationMinutes": 5,
+                  "targetRpe": 1,
+                  "notes": "Использовать для снижения лишнего возбуждения перед техническим блоком.",
+                  "displayOrder": 1
+                }
+              ]
+            },
+            {
+              "name": "Техническая активация",
+              "blockType": "technical",
+              "blockPriority": 1,
+              "isMandatory": true,
+              "removePriorityYellow": 5,
+              "removePriorityRed": 4,
+              "reductionPercentYellow": 20,
+              "reductionPercentRed": 50,
+              "targetDurationMinutes": 20,
+              "targetRpe": 4,
+              "targetSets": 5,
+              "targetReps": 3,
+              "notes": "Оставить ключевые соревновательные действия. При жёлтом статусе сокращать объём, но не убирать блок полностью.",
+              "replacementBlockId": null,
+              "exercises": [
+                {
+                  "name": "Вход в основное действие без сопротивления",
+                  "targetSets": 5,
+                  "targetReps": 3,
+                  "targetWeightKg": null,
+                  "targetDurationMinutes": 8,
+                  "targetRpe": 3,
+                  "notes": "Качество выше скорости. Остановить при потере точности.",
+                  "displayOrder": 0
+                },
+                {
+                  "name": "Основное действие с лёгким сопротивлением",
+                  "targetSets": 4,
+                  "targetReps": 2,
+                  "targetWeightKg": null,
+                  "targetDurationMinutes": 10,
+                  "targetRpe": 4,
+                  "notes": "Сопротивление не выше 50-60%.",
+                  "displayOrder": 1
+                }
+              ]
+            },
+            {
+              "name": "Скоростная реакция",
+              "blockType": "activation",
+              "blockPriority": 2,
+              "isMandatory": true,
+              "removePriorityYellow": 4,
+              "removePriorityRed": 3,
+              "reductionPercentYellow": 25,
+              "reductionPercentRed": 60,
+              "targetDurationMinutes": 14,
+              "targetRpe": 5,
+              "targetSets": 6,
+              "targetReps": 2,
+              "notes": "Короткие взрывные включения без закисления. Если до старта меньше 3 дней, не превращать в метаболическую работу.",
+              "replacementBlockId": null,
+              "exercises": [
+                {
+                  "name": "Реакция на сигнал",
+                  "targetSets": 6,
+                  "targetReps": 2,
+                  "targetWeightKg": null,
+                  "targetDurationMinutes": 6,
+                  "targetRpe": 5,
+                  "notes": "Полный отдых между повторениями.",
+                  "displayOrder": 0
+                },
+                {
+                  "name": "Короткий стартовый рывок",
+                  "targetSets": 5,
+                  "targetReps": 1,
+                  "targetWeightKg": null,
+                  "targetDurationMinutes": 6,
+                  "targetRpe": 5,
+                  "notes": "Только свежие повторения.",
+                  "displayOrder": 1
+                }
+              ]
+            },
+            {
+              "name": "Лёгкая силовая поддержка",
+              "blockType": "strength",
+              "blockPriority": 3,
+              "isMandatory": false,
+              "removePriorityYellow": 3,
+              "removePriorityRed": 2,
+              "reductionPercentYellow": 40,
+              "reductionPercentRed": 100,
+              "targetDurationMinutes": 16,
+              "targetRpe": 4,
+              "targetSets": 3,
+              "targetReps": 5,
+              "notes": "Опциональный блок. При жёлтом статусе сократить, при красном убрать и заменить восстановлением.",
+              "replacementBlockId": "Восстановительное завершение",
+              "exercises": [
+                {
+                  "name": "Подтягивание с запасом",
+                  "targetSets": 3,
+                  "targetReps": 4,
+                  "targetWeightKg": null,
+                  "targetDurationMinutes": 6,
+                  "targetRpe": 4,
+                  "notes": "Оставлять 3-4 повтора в запасе.",
+                  "displayOrder": 0
+                },
+                {
+                  "name": "Присед с собственным весом",
+                  "targetSets": 3,
+                  "targetReps": 6,
+                  "targetWeightKg": null,
+                  "targetDurationMinutes": 6,
+                  "targetRpe": 3,
+                  "notes": "Темп контролируемый, без отказа.",
+                  "displayOrder": 1
+                }
+              ]
+            },
+            {
+              "name": "Восстановительное завершение",
+              "blockType": "recovery",
+              "blockPriority": 1,
+              "isMandatory": false,
+              "removePriorityYellow": 5,
+              "removePriorityRed": 5,
+              "reductionPercentYellow": 0,
+              "reductionPercentRed": 0,
+              "targetDurationMinutes": 10,
+              "targetRpe": 1,
+              "targetSets": 1,
+              "targetReps": null,
+              "notes": "Низкоинтенсивное завершение. Использовать как замену, если силовой блок неуместен.",
+              "replacementBlockId": null,
+              "exercises": [
+                {
+                  "name": "Лёгкая ходьба и дыхание",
+                  "targetSets": 1,
+                  "targetReps": null,
+                  "targetWeightKg": null,
+                  "targetDurationMinutes": 10,
+                  "targetRpe": 1,
+                  "notes": "Закончить с ощущением свежести.",
+                  "displayOrder": 0
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,1429 @@
+import type {
+  AnalyticsOverview,
+  AssignedPlanSummary,
+  AuthUser,
+  CoachAthleteSummary,
+  CompetitionContext,
+  CompetitionPlanSummary,
+  CompetitionReviewOverview,
+  CompetitionSummary,
+  ExecutionReviewPlan,
+  MesocycleSummary,
+  OlympicCycleSummary,
+  PlanTemplateSummary,
+  ReadinessEntry,
+  SeasonSummary,
+  TemplatePackRecommendation,
+} from "@training-platform/shared";
+import type { Language } from "./i18n";
+import type { QueueItem } from "./offline-sync";
+import type {
+  CoachDashboardView,
+  PlanningStudioView,
+  WorkspaceSectionId,
+} from "./workspace-types";
+
+type SearchParamValue = string | string[] | undefined;
+type PreviewSeasonEditorMode = "starts" | "plan" | "result" | "cycles";
+
+export type WorkspacePreviewState = {
+  language: Language;
+  user: AuthUser;
+  activeWorkspace: WorkspaceSectionId;
+  coachView: CoachDashboardView;
+  planningView: PlanningStudioView;
+  seasonEditorMode: PreviewSeasonEditorMode;
+  statusMessage: string;
+  isOffline: boolean;
+  coachAthletes: CoachAthleteSummary[];
+  selectedAthleteId: string;
+  selectedAthleteEntries: ReadinessEntry[];
+  planTemplates: PlanTemplateSummary[];
+  assignedPlans: AssignedPlanSummary[];
+  competitions: CompetitionSummary[];
+  competitionPlans: CompetitionPlanSummary[];
+  mesocycles: MesocycleSummary[];
+  seasons: SeasonSummary[];
+  olympicCycles: OlympicCycleSummary[];
+  competitionContext: CompetitionContext;
+  competitionReview: CompetitionReviewOverview;
+  coachExecutionReview: ExecutionReviewPlan;
+  coachAnalyticsOverview: AnalyticsOverview;
+  templatePack: TemplatePackRecommendation;
+  offlineQueueItems: QueueItem[];
+  offlineSyncErrors: Record<string, string>;
+  selectedOfflineItemId: string;
+  cacheSavedAt: {
+    readiness: string;
+    assignedPlans: string;
+    adaptedPlan: string;
+    execution: string;
+    analytics: string;
+  };
+};
+
+function firstValue(value: SearchParamValue) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function isLanguage(value: string | undefined): value is Language {
+  return value === "en" || value === "ru" || value === "bg";
+}
+
+function isWorkspace(value: string | undefined): value is WorkspaceSectionId {
+  return (
+    value === "athlete-today" ||
+    value === "athlete-training" ||
+    value === "athlete-history" ||
+    value === "athlete-competitions" ||
+    value === "daily-readiness" ||
+    value === "athlete-workspace" ||
+    value === "coach-dashboard" ||
+    value === "coach-athletes" ||
+    value === "coach-analytics" ||
+    value === "coach-review" ||
+    value === "planning-studio" ||
+    value === "offline-center"
+  );
+}
+
+function isPlanningView(value: string | undefined): value is PlanningStudioView {
+  return (
+    value === "calendar" ||
+    value === "season" ||
+    value === "mesocycle" ||
+    value === "preparation" ||
+    value === "templates" ||
+    value === "weekly"
+  );
+}
+
+function isSeasonEditorMode(value: string | undefined): value is PreviewSeasonEditorMode {
+  return value === "starts" || value === "plan" || value === "result" || value === "cycles";
+}
+
+const previewUser: AuthUser = {
+  id: "preview-coach-user",
+  email: "coach@example.com",
+  fullName: "Demo Coach",
+  role: "coach",
+  athleteId: null,
+};
+
+const previewAthletes: CoachAthleteSummary[] = [
+  {
+    athleteId: "athlete-1",
+    userId: "athlete-user-1",
+    fullName: "Elena Markova",
+    email: "elena@example.com",
+    photoUrl: "",
+    birthDate: "2004-08-14",
+    heightCm: 168,
+    sport: "Judo",
+    discipline: "-57 kg",
+    weightClass: "57 kg",
+    dominantSide: "Right",
+    baselineRestingHr: 48,
+    baselineWeightKg: 61.4,
+    currentWeightKg: 57.8,
+    currentWeightDate: "2026-04-21",
+    wrestlingExperienceYears: 8.5,
+    strengthSquatKg: 105,
+    strengthBenchPressKg: 62.5,
+    strengthDeadliftKg: 125,
+    strengthPullUpsMax: 14,
+    strengthGripLeftKg: 42,
+    strengthGripRightKg: 45,
+    strengthNotes: "High relative pulling strength; keep shoulder volume controlled.",
+    strengths: "Explosive first attack, strong grip fighting, stable parterre defense.",
+    weaknesses: "Can overcommit after failed single-leg entries.",
+    injuriesOrRestrictions: "Monitor right shoulder after high-volume pulling blocks.",
+    preparationGoal: "Peak for European Cup and keep competition weight stable.",
+    profileNotes: "Fast responder to taper; monitor weight cut during competition week.",
+    updatedAt: "2026-04-21T08:30:00.000Z",
+    latestReadiness: {
+      entryDate: "2026-04-21",
+      score: 81,
+      status: "green",
+    },
+  },
+  {
+    athleteId: "athlete-2",
+    userId: "athlete-user-2",
+    fullName: "Nikolay Petrov",
+    email: "nikolay@example.com",
+    photoUrl: "",
+    birthDate: "2002-11-02",
+    heightCm: 181,
+    sport: "Wrestling",
+    discipline: "Freestyle",
+    weightClass: "74 kg",
+    dominantSide: "Left",
+    baselineRestingHr: 52,
+    baselineWeightKg: 73.2,
+    currentWeightKg: 74.1,
+    currentWeightDate: "2026-04-21",
+    wrestlingExperienceYears: 10,
+    strengthSquatKg: 145,
+    strengthBenchPressKg: 95,
+    strengthDeadliftKg: 175,
+    strengthPullUpsMax: 18,
+    strengthGripLeftKg: 55,
+    strengthGripRightKg: 58,
+    strengthNotes: "Good max strength; recovery drops after dense pulling sessions.",
+    strengths: "High pace hand fighting and strong counter attacks.",
+    weaknesses: "Needs cleaner recovery between high-density strength days.",
+    injuriesOrRestrictions: "",
+    preparationGoal: "Build stable weekly load without readiness drop.",
+    profileNotes: "Needs extra recovery after high-density strength days.",
+    updatedAt: "2026-04-20T12:00:00.000Z",
+    latestReadiness: {
+      entryDate: "2026-04-21",
+      score: 68,
+      status: "yellow",
+    },
+  },
+  {
+    athleteId: "athlete-3",
+    userId: "athlete-user-3",
+    fullName: "Mira Kostova",
+    email: "mira@example.com",
+    photoUrl: "",
+    birthDate: "2005-03-19",
+    heightCm: 164,
+    sport: "Boxing",
+    discipline: "Olympic boxing",
+    weightClass: "60 kg",
+    dominantSide: "Right",
+    baselineRestingHr: 50,
+    baselineWeightKg: 58.7,
+    currentWeightKg: null,
+    currentWeightDate: null,
+    wrestlingExperienceYears: 6,
+    strengthSquatKg: 95,
+    strengthBenchPressKg: 55,
+    strengthDeadliftKg: 115,
+    strengthPullUpsMax: 11,
+    strengthGripLeftKg: 38,
+    strengthGripRightKg: 39,
+    strengthNotes: "Prioritize strength endurance without losing technical quality.",
+    strengths: "Clean footwork, fast reaction to tactical cues.",
+    weaknesses: "Loses structure under fatigue late in sessions.",
+    injuriesOrRestrictions: "No active restrictions.",
+    preparationGoal: "Maintain technical quality during yellow readiness days.",
+    profileNotes: "Keep technical work high priority during yellow readiness days.",
+    updatedAt: "2026-04-19T09:15:00.000Z",
+    latestReadiness: {
+      entryDate: "2026-04-21",
+      score: 59,
+      status: "yellow",
+    },
+  },
+];
+
+const previewReadinessEntries: ReadinessEntry[] = [
+  {
+    id: "readiness-1",
+    athleteId: "athlete-1",
+    entryDate: "2026-04-21",
+    createdAt: "2026-04-21T06:35:00.000Z",
+    score: 81,
+    status: "green",
+    explanation: [{ code: "sleep_quality", label: "sleep_quality", impact: 6 }],
+    sleepHours: 8,
+    sleepQuality: 8,
+    generalFeeling: 8,
+    fatigueLevel: 3,
+    muscleSoreness: 2,
+    motivationLevel: 9,
+    restingHr: 49,
+    bodyWeight: 61.3,
+    painLevel: 1,
+    illnessFlag: false,
+    feverFlag: false,
+  },
+  {
+    id: "readiness-2",
+    athleteId: "athlete-1",
+    entryDate: "2026-04-20",
+    createdAt: "2026-04-20T06:29:00.000Z",
+    score: 77,
+    status: "green",
+    explanation: [{ code: "motivation", label: "motivation", impact: 4 }],
+    sleepHours: 7.5,
+    sleepQuality: 7,
+    generalFeeling: 8,
+    fatigueLevel: 4,
+    muscleSoreness: 3,
+    motivationLevel: 8,
+    restingHr: 50,
+    bodyWeight: 61.2,
+    painLevel: 1,
+    illnessFlag: false,
+    feverFlag: false,
+  },
+  {
+    id: "readiness-3",
+    athleteId: "athlete-1",
+    entryDate: "2026-04-19",
+    createdAt: "2026-04-19T06:18:00.000Z",
+    score: 71,
+    status: "yellow",
+    explanation: [{ code: "fatigue_level", label: "fatigue_level", impact: -8 }],
+    sleepHours: 6.5,
+    sleepQuality: 6,
+    generalFeeling: 7,
+    fatigueLevel: 6,
+    muscleSoreness: 4,
+    motivationLevel: 7,
+    restingHr: 52,
+    bodyWeight: 61.6,
+    painLevel: 2,
+    illnessFlag: false,
+    feverFlag: false,
+  },
+];
+
+const previewCompetitionContext: CompetitionContext = {
+  competitionPlanId: "competition-plan-1",
+  competitionId: "competition-1",
+  daysToCompetition: 6,
+  competitionPriority: "A",
+  phase: "taper",
+  taperState: true,
+  weightCutState: false,
+};
+
+const previewPlanTemplates = [
+  {
+    id: "template-activation",
+    coachUserId: "preview-coach-user",
+    name: "Taper activation",
+    description: "Sharpness session with low fatigue and speed retention.",
+    sportType: "Combat sports",
+    phaseFocus: "taper",
+    competitionPriorityFocus: "A",
+    templateGoal: "speed retention",
+    microcycleType: "taper",
+    competitionSpecific: true,
+    estimatedLoad: 240,
+    createdAt: "2026-04-18T08:00:00.000Z",
+    blockCount: 3,
+    blocks: [
+      {
+        name: "Explosive entry",
+        blockType: "activation",
+        blockPriority: 3,
+        isMandatory: true,
+        removePriorityYellow: 0,
+        removePriorityRed: 0,
+        reductionPercentYellow: 10,
+        reductionPercentRed: 20,
+        targetDurationMinutes: 18,
+        targetRpe: 5,
+        targetSets: 3,
+        targetReps: 4,
+        notes: "",
+      },
+      {
+        name: "Specific patterns",
+        blockType: "technical",
+        blockPriority: 3,
+        isMandatory: true,
+        removePriorityYellow: 0,
+        removePriorityRed: 0,
+        reductionPercentYellow: 10,
+        reductionPercentRed: 15,
+        targetDurationMinutes: 24,
+        targetRpe: 6,
+        targetSets: 4,
+        targetReps: 3,
+        notes: "",
+      },
+      {
+        name: "Mobility flush",
+        blockType: "mobility",
+        blockPriority: 2,
+        isMandatory: false,
+        removePriorityYellow: 2,
+        removePriorityRed: 1,
+        reductionPercentYellow: 20,
+        reductionPercentRed: 40,
+        targetDurationMinutes: 12,
+        targetRpe: 3,
+        targetSets: null,
+        targetReps: null,
+        notes: "",
+      },
+    ],
+  },
+  {
+    id: "template-specific",
+    coachUserId: "preview-coach-user",
+    name: "Specific power build",
+    description: "Specific intensity with disciplined volume control.",
+    sportType: "Combat sports",
+    phaseFocus: "specific",
+    competitionPriorityFocus: "A",
+    templateGoal: "specific power",
+    microcycleType: "impact",
+    competitionSpecific: true,
+    estimatedLoad: 380,
+    createdAt: "2026-04-12T08:00:00.000Z",
+    blockCount: 4,
+    blocks: [],
+  },
+  {
+    id: "template-recovery",
+    coachUserId: "preview-coach-user",
+    name: "Recovery reset",
+    description: "Low-load reset day with mobility and aerobic flush.",
+    sportType: "Combat sports",
+    phaseFocus: "recovery",
+    competitionPriorityFocus: null,
+    templateGoal: "recovery",
+    microcycleType: "recovery",
+    competitionSpecific: false,
+    estimatedLoad: 120,
+    createdAt: "2026-04-10T08:00:00.000Z",
+    blockCount: 2,
+    blocks: [],
+  },
+] as PlanTemplateSummary[];
+
+const previewAssignedPlans = [
+  {
+    id: "assigned-plan-1",
+    athleteId: "athlete-1",
+    athleteName: "Elena Markova",
+    templateId: "template-activation",
+    templateName: "Taper activation",
+    startDate: "2026-04-21",
+    plannedPhase: "taper",
+    competitionContextSnapshot: previewCompetitionContext,
+    status: "active",
+    createdAt: "2026-04-20T14:30:00.000Z",
+    day: {
+      id: "assigned-day-1",
+      label: "Day 3",
+      dayDate: "2026-04-21",
+      notes: "Final taper activation before weigh-in.",
+      sessions: [
+        {
+          id: "assigned-session-1",
+          name: "Primary session",
+          orderIndex: 0,
+          blocks: [
+            {
+              id: "block-1",
+              name: "Explosive entry",
+              blockType: "activation",
+              blockPriority: 3,
+              isMandatory: true,
+              removePriorityYellow: 0,
+              removePriorityRed: 0,
+              reductionPercentYellow: 10,
+              reductionPercentRed: 20,
+              targetDurationMinutes: 18,
+              targetRpe: 5,
+              targetSets: 3,
+              targetReps: 4,
+              notes: "",
+            },
+            {
+              id: "block-2",
+              name: "Specific patterns",
+              blockType: "technical",
+              blockPriority: 3,
+              isMandatory: true,
+              removePriorityYellow: 0,
+              removePriorityRed: 0,
+              reductionPercentYellow: 10,
+              reductionPercentRed: 15,
+              targetDurationMinutes: 24,
+              targetRpe: 6,
+              targetSets: 4,
+              targetReps: 3,
+              notes: "",
+            },
+            {
+              id: "block-3",
+              name: "Mobility flush",
+              blockType: "mobility",
+              blockPriority: 2,
+              isMandatory: false,
+              removePriorityYellow: 2,
+              removePriorityRed: 1,
+              reductionPercentYellow: 20,
+              reductionPercentRed: 40,
+              targetDurationMinutes: 12,
+              targetRpe: 3,
+              targetSets: null,
+              targetReps: null,
+              notes: "",
+            },
+          ],
+        },
+      ],
+    },
+  },
+] as AssignedPlanSummary[];
+
+const previewExecutionReview = {
+  assignedPlanId: "assigned-plan-1",
+  athleteId: "athlete-1",
+  athleteName: "Elena Markova",
+  templateName: "Taper activation",
+  dayLabel: "Day 3",
+  dayDate: "2026-04-21",
+  summary: {
+    plannedBlocks: 3,
+    completedBlocks: 2,
+    partialBlocks: 1,
+    missedBlocks: 0,
+    completionRate: 83,
+    averageRpe: 5.7,
+    totalDurationMinutes: 46,
+  },
+  sessions: [
+    {
+      id: "assigned-session-1",
+      name: "Primary session",
+      orderIndex: 0,
+      blocks: [
+        {
+          ...previewAssignedPlans[0].day.sessions[0].blocks[0],
+          executionStatus: "completed",
+          planLabel: "within_plan",
+          actualResult: {
+            id: "result-1",
+            athleteId: "athlete-1",
+            assignedPlanId: "assigned-plan-1",
+            assignedBlockId: "block-1",
+            completed: true,
+            setsCompleted: 3,
+            repsCompleted: 4,
+            weightKg: null,
+            durationMinutes: 18,
+            rpe: 5,
+            notes: "Sharp and clean.",
+            completedAt: "2026-04-21T09:18:00.000Z",
+            updatedAt: "2026-04-21T09:18:00.000Z",
+          },
+        },
+        {
+          ...previewAssignedPlans[0].day.sessions[0].blocks[1],
+          executionStatus: "partial",
+          planLabel: "below_plan",
+          actualResult: {
+            id: "result-2",
+            athleteId: "athlete-1",
+            assignedPlanId: "assigned-plan-1",
+            assignedBlockId: "block-2",
+            completed: true,
+            setsCompleted: 3,
+            repsCompleted: 3,
+            weightKg: null,
+            durationMinutes: 20,
+            rpe: 6.5,
+            notes: "Reduced one set after travel fatigue.",
+            completedAt: "2026-04-21T09:45:00.000Z",
+            updatedAt: "2026-04-21T09:45:00.000Z",
+          },
+        },
+        {
+          ...previewAssignedPlans[0].day.sessions[0].blocks[2],
+          executionStatus: "completed",
+          planLabel: "within_plan",
+          actualResult: {
+            id: "result-3",
+            athleteId: "athlete-1",
+            assignedPlanId: "assigned-plan-1",
+            assignedBlockId: "block-3",
+            completed: true,
+            setsCompleted: null,
+            repsCompleted: null,
+            weightKg: null,
+            durationMinutes: 8,
+            rpe: 3,
+            notes: "Shortened cool-down.",
+            completedAt: "2026-04-21T09:56:00.000Z",
+            updatedAt: "2026-04-21T09:56:00.000Z",
+          },
+        },
+      ],
+    },
+  ],
+} as ExecutionReviewPlan;
+
+const previewAnalytics = {
+  athleteId: "athlete-1",
+  athleteName: "Elena Markova",
+  readinessTrend: [
+    { date: "2026-04-15", score: 64, status: "yellow" },
+    { date: "2026-04-16", score: 71, status: "yellow" },
+    { date: "2026-04-17", score: 74, status: "yellow" },
+    { date: "2026-04-18", score: 77, status: "green" },
+    { date: "2026-04-19", score: 71, status: "yellow" },
+    { date: "2026-04-20", score: 77, status: "green" },
+    { date: "2026-04-21", score: 81, status: "green" },
+  ],
+  completionTrend: [
+    { date: "2026-04-15", plannedBlocks: 4, completedBlocks: 3, partialBlocks: 1, missedBlocks: 0, adherenceRate: 88 },
+    { date: "2026-04-16", plannedBlocks: 4, completedBlocks: 4, partialBlocks: 0, missedBlocks: 0, adherenceRate: 100 },
+    { date: "2026-04-17", plannedBlocks: 5, completedBlocks: 4, partialBlocks: 0, missedBlocks: 1, adherenceRate: 80 },
+    { date: "2026-04-18", plannedBlocks: 3, completedBlocks: 3, partialBlocks: 0, missedBlocks: 0, adherenceRate: 100 },
+    { date: "2026-04-19", plannedBlocks: 4, completedBlocks: 3, partialBlocks: 1, missedBlocks: 0, adherenceRate: 88 },
+    { date: "2026-04-20", plannedBlocks: 3, completedBlocks: 3, partialBlocks: 0, missedBlocks: 0, adherenceRate: 100 },
+    { date: "2026-04-21", plannedBlocks: 3, completedBlocks: 2, partialBlocks: 1, missedBlocks: 0, adherenceRate: 83 },
+  ],
+  loadTrend: [
+    { date: "2026-04-15", plannedLoad: 420, actualLoad: 395, loadDelta: -25, averageRpe: 6.2, totalDurationMinutes: 58 },
+    { date: "2026-04-16", plannedLoad: 450, actualLoad: 460, loadDelta: 10, averageRpe: 6.6, totalDurationMinutes: 61 },
+    { date: "2026-04-17", plannedLoad: 510, actualLoad: 470, loadDelta: -40, averageRpe: 7.1, totalDurationMinutes: 67 },
+    { date: "2026-04-18", plannedLoad: 360, actualLoad: 340, loadDelta: -20, averageRpe: 5.6, totalDurationMinutes: 48 },
+    { date: "2026-04-19", plannedLoad: 300, actualLoad: 280, loadDelta: -20, averageRpe: 5.2, totalDurationMinutes: 44 },
+    { date: "2026-04-20", plannedLoad: 250, actualLoad: 240, loadDelta: -10, averageRpe: 4.8, totalDurationMinutes: 41 },
+    { date: "2026-04-21", plannedLoad: 240, actualLoad: 221, loadDelta: -19, averageRpe: 5.7, totalDurationMinutes: 46 },
+  ],
+  chain: {
+    season: {
+      id: "season-1",
+      name: "Olympic qualification",
+      year: 2026,
+      strategyType: "single_peak",
+      goal: "Peak for European Cup qualification and stabilize competitive output.",
+    },
+    competitionPlan: {
+      id: "competition-plan-1",
+      competitionTitle: "European Cup Sofia",
+      priority: "A",
+      planType: "main",
+      prepStartDate: "2026-03-17",
+      prepEndDate: "2026-04-28",
+      competitionStartDate: "2026-04-27",
+      competitionEndDate: "2026-04-28",
+    },
+    competitionContext: {
+      competitionPlanId: "competition-plan-1",
+      competitionId: "competition-1",
+      daysToCompetition: 6,
+      competitionPriority: "A",
+      phase: "taper",
+      taperState: true,
+      weightCutState: false,
+    },
+    mesocycle: {
+      id: "mesocycle-1",
+      name: "Specific-to-taper block",
+      phase: "taper",
+      progressionType: "taper",
+      goal: "Convert specific load into fresh competition rhythm.",
+      startDate: "2026-04-07",
+      endDate: "2026-04-27",
+    },
+    mesocycleWeek: {
+      mesocycleId: "mesocycle-1",
+      mesocycleName: "Specific-to-taper block",
+      phase: "taper",
+      progressionType: "taper",
+      competitionPlanId: "competition-plan-1",
+      competitionTitle: "European Cup Sofia",
+      weekIndex: 3,
+      weekLabel: "Week 3",
+      startDate: "2026-04-20",
+      endDate: "2026-04-26",
+      focus: "Protect freshness and preserve speed of execution.",
+      targetLoad: 268,
+      loadModifier: 0.7,
+      microcycleType: "taper",
+    },
+    weekSummary: {
+      label: "Week 3",
+      startDate: "2026-04-20",
+      endDate: "2026-04-26",
+      status: "in_progress",
+      elapsedDays: 2,
+      totalDays: 7,
+      microcycleType: "taper",
+      targetLoad: 268,
+      expectedLoadToDate: 77,
+      plannedLoad: 112,
+      actualLoad: 94,
+      loadDelta: -18,
+      averageRpe: 5.3,
+      averageReadiness: 79,
+      plannedBlocks: 6,
+      completedBlocks: 5,
+      partialBlocks: 1,
+      missedBlocks: 0,
+      adherenceRate: 83,
+    },
+    missingLinks: [],
+  },
+  insights: [
+    {
+      code: "adherence_risk",
+      level: "warning",
+      title: "Execution adherence is slipping",
+      summary: "Actual execution is falling behind the assigned work, so progression quality and analytics confidence are weakening.",
+      recommendation: "Review the blocker with the athlete, simplify the next 48 hours if needed, and protect the most important session instead of chasing missed volume.",
+      phase: "taper",
+      competitionPriority: "A",
+      daysToCompetition: 6,
+      evidence: [
+        { label: "latest_adherence", value: "83", tone: "warning" },
+        { label: "adherence_3d_avg", value: "90.3", tone: "warning" },
+        { label: "missed_blocks", value: "0" },
+      ],
+    },
+    {
+      code: "taper_violation",
+      level: "critical",
+      title: "Taper freshness is being violated",
+      summary: "Close-to-competition load is still too dense for a taper or competition window, which can erode freshness without adding useful stimulus.",
+      recommendation: "Keep activation, mobility, and tactical sharpness, but remove fatiguing volume from the remaining days.",
+      phase: "taper",
+      competitionPriority: "A",
+      daysToCompetition: 6,
+      evidence: [
+        { label: "competition_phase", value: "taper", tone: "warning" },
+        { label: "days_to_competition", value: "6", tone: "warning" },
+        { label: "week_actual_load", value: "94", tone: "warning" },
+        { label: "expected_load_to_date", value: "77" },
+      ],
+    },
+  ],
+  patterns: [
+    {
+      code: "fatigue_block_density",
+      level: "critical",
+      scope: "block",
+      title: "Fatiguing block density is too high for the current context",
+      summary: "A large share of the week is still coming from metabolic or CNS-heavy work, which increases fatigue carry-over into the next sessions.",
+      weekLabel: "Week 3",
+      blockType: "metabolic",
+      dayOffset: 2,
+      evidence: [
+        { label: "fatigue_load_share", value: "42%", tone: "warning" },
+        { label: "fatigue_block_type", value: "metabolic", tone: "warning" },
+        { label: "week_actual_load", value: "94", tone: "warning" },
+      ],
+    },
+    {
+      code: "recovery_gap",
+      level: "warning",
+      scope: "block",
+      title: "Recovery-support work is too thin for the week intent",
+      summary: "The current week does not contain enough recovery, mobility, or activation work for the active phase and competition proximity.",
+      weekLabel: "Week 3",
+      blockType: "recovery",
+      dayOffset: 2,
+      evidence: [
+        { label: "recovery_blocks", value: "1", tone: "warning" },
+        { label: "recovery_adherence", value: "100", tone: "positive" },
+        { label: "week_microcycle", value: "taper" },
+      ],
+    },
+  ],
+  coachSuggestions: [
+    {
+      id: "protect-taper-freshness",
+      level: "critical",
+      title: "Protect taper freshness in planner",
+      summary: "Open the active week in planning studio and convert the flagged fatiguing slot into activation or recovery work.",
+      recommendation: "Load the weekly planner for this week and apply the taper-safe swap on the targeted day.",
+      source: "pattern",
+      sourceCode: "fatigue_block_density",
+      weekStartDate: "2026-04-20",
+      weekLabel: "Week 3",
+      plannerBridge: {
+        athleteId: "athlete-1",
+        startDate: "2026-04-20",
+        plannedPhase: "taper",
+        preferredSuggestionCode: "activation_swap",
+        preferredAction: "swap_to_activation",
+        dayOffset: 2,
+        targetDayOffset: null,
+        autoApply: true,
+      },
+      latestDecision: {
+        id: "decision-1",
+        athleteId: "athlete-1",
+        suggestionId: "protect-taper-freshness",
+        suggestionTitle: "Protect taper freshness in planner",
+        suggestionLevel: "critical",
+        sourceCode: "fatigue_block_density",
+        weekStartDate: "2026-04-20",
+        weekLabel: "Week 3",
+        decisionStatus: "applied",
+        outcome: "positive",
+        outcomeSource: "automatic",
+        plannerBridge: {
+          athleteId: "athlete-1",
+          startDate: "2026-04-20",
+          plannedPhase: "taper",
+          preferredSuggestionCode: "activation_swap",
+          preferredAction: "swap_to_activation",
+          dayOffset: 2,
+          targetDayOffset: null,
+          autoApply: true,
+        },
+        baselineSnapshot: {
+          readinessScore: 74,
+          readinessStatus: "yellow",
+          adherenceRate: 76,
+          actualLoad: 96,
+          loadDelta: 18,
+          phase: "taper",
+          competitionPriority: "A",
+        },
+        latestSnapshot: {
+          readinessScore: 79,
+          readinessStatus: "green",
+          adherenceRate: 83,
+          actualLoad: 94,
+          loadDelta: 11,
+          phase: "taper",
+          competitionPriority: "A",
+        },
+        sourceStillActive: false,
+        metricDeltaScore: 3,
+        decisionNotes: "",
+        outcomeNotes: "",
+        createdAt: "2026-04-18T09:00:00.000Z",
+        updatedAt: "2026-04-21T10:14:00.000Z",
+      },
+    },
+    {
+      id: "rebalance-recovery-density",
+      level: "warning",
+      title: "Rebalance the week toward recovery",
+      summary: "Use the weekly planner to insert more recovery-support work before fatigue accumulates further.",
+      recommendation: "Open the current week and convert the heaviest slot into a recovery day or lighter template.",
+      source: "pattern",
+      sourceCode: "recovery_gap",
+      weekStartDate: "2026-04-20",
+      weekLabel: "Week 3",
+      plannerBridge: {
+        athleteId: "athlete-1",
+        startDate: "2026-04-20",
+        plannedPhase: "taper",
+        preferredSuggestionCode: "recover_day_swap",
+        preferredAction: "swap_to_recovery",
+        dayOffset: 2,
+        targetDayOffset: null,
+        autoApply: true,
+      },
+      latestDecision: {
+        id: "decision-2",
+        athleteId: "athlete-1",
+        suggestionId: "rebalance-recovery-density",
+        suggestionTitle: "Rebalance the week toward recovery",
+        suggestionLevel: "warning",
+        sourceCode: "recovery_gap",
+        weekStartDate: "2026-04-20",
+        weekLabel: "Week 3",
+        decisionStatus: "not_applied",
+        outcome: "pending",
+        outcomeSource: "pending",
+        plannerBridge: {
+          athleteId: "athlete-1",
+          startDate: "2026-04-20",
+          plannedPhase: "taper",
+          preferredSuggestionCode: "recover_day_swap",
+          preferredAction: "swap_to_recovery",
+          dayOffset: 2,
+          targetDayOffset: null,
+          autoApply: true,
+        },
+        baselineSnapshot: {
+          readinessScore: 74,
+          readinessStatus: "yellow",
+          adherenceRate: 76,
+          actualLoad: 96,
+          loadDelta: 18,
+          phase: "taper",
+          competitionPriority: "A",
+        },
+        latestSnapshot: {
+          readinessScore: 79,
+          readinessStatus: "green",
+          adherenceRate: 83,
+          actualLoad: 94,
+          loadDelta: 11,
+          phase: "taper",
+          competitionPriority: "A",
+        },
+        sourceStillActive: true,
+        metricDeltaScore: 2,
+        decisionNotes: "",
+        outcomeNotes: "",
+        createdAt: "2026-04-20T08:25:00.000Z",
+        updatedAt: "2026-04-20T08:25:00.000Z",
+      },
+    },
+  ],
+  decisionHistory: [
+    {
+      id: "decision-1",
+      athleteId: "athlete-1",
+      suggestionId: "protect-taper-freshness",
+      suggestionTitle: "Protect taper freshness in planner",
+      suggestionLevel: "critical",
+      sourceCode: "fatigue_block_density",
+      weekStartDate: "2026-04-20",
+      weekLabel: "Week 3",
+      decisionStatus: "applied",
+      outcome: "positive",
+      outcomeSource: "automatic",
+      plannerBridge: {
+        athleteId: "athlete-1",
+        startDate: "2026-04-20",
+        plannedPhase: "taper",
+        preferredSuggestionCode: "activation_swap",
+        preferredAction: "swap_to_activation",
+        dayOffset: 2,
+        targetDayOffset: null,
+        autoApply: true,
+      },
+      baselineSnapshot: {
+        readinessScore: 74,
+        readinessStatus: "yellow",
+        adherenceRate: 76,
+        actualLoad: 96,
+        loadDelta: 18,
+        phase: "taper",
+        competitionPriority: "A",
+      },
+      latestSnapshot: {
+        readinessScore: 79,
+        readinessStatus: "green",
+        adherenceRate: 83,
+        actualLoad: 94,
+        loadDelta: 11,
+        phase: "taper",
+        competitionPriority: "A",
+      },
+      sourceStillActive: false,
+      metricDeltaScore: 3,
+      decisionNotes: "",
+      outcomeNotes: "",
+      createdAt: "2026-04-18T09:00:00.000Z",
+      updatedAt: "2026-04-21T10:14:00.000Z",
+    },
+    {
+      id: "decision-2",
+      athleteId: "athlete-1",
+      suggestionId: "rebalance-recovery-density",
+      suggestionTitle: "Rebalance the week toward recovery",
+      suggestionLevel: "warning",
+      sourceCode: "recovery_gap",
+      weekStartDate: "2026-04-20",
+      weekLabel: "Week 3",
+      decisionStatus: "not_applied",
+      outcome: "pending",
+      outcomeSource: "pending",
+      plannerBridge: {
+        athleteId: "athlete-1",
+        startDate: "2026-04-20",
+        plannedPhase: "taper",
+        preferredSuggestionCode: "recover_day_swap",
+        preferredAction: "swap_to_recovery",
+        dayOffset: 2,
+        targetDayOffset: null,
+        autoApply: true,
+      },
+      baselineSnapshot: {
+        readinessScore: 74,
+        readinessStatus: "yellow",
+        adherenceRate: 76,
+        actualLoad: 96,
+        loadDelta: 18,
+        phase: "taper",
+        competitionPriority: "A",
+      },
+      latestSnapshot: {
+        readinessScore: 79,
+        readinessStatus: "green",
+        adherenceRate: 83,
+        actualLoad: 94,
+        loadDelta: 11,
+        phase: "taper",
+        competitionPriority: "A",
+      },
+      sourceStillActive: true,
+      metricDeltaScore: 2,
+      decisionNotes: "",
+      outcomeNotes: "",
+      createdAt: "2026-04-20T08:25:00.000Z",
+      updatedAt: "2026-04-20T08:25:00.000Z",
+    },
+  ],
+} as AnalyticsOverview;
+
+const previewCompetitions = [
+  {
+    id: "competition-1",
+    title: "European Cup Sofia",
+    federation: "EJU",
+    location: "Sofia",
+    startDate: "2026-04-27",
+    endDate: "2026-04-28",
+    level: "continental",
+    ageGroup: "Senior",
+    description: "Primary spring target.",
+    createdAt: "2026-03-01T09:00:00.000Z",
+  },
+  {
+    id: "competition-2",
+    title: "National Championship",
+    federation: "BJF",
+    location: "Plovdiv",
+    startDate: "2026-06-12",
+    endDate: "2026-06-13",
+    level: "national",
+    ageGroup: "Senior",
+    description: "Secondary peak.",
+    createdAt: "2026-03-10T09:00:00.000Z",
+  },
+] as CompetitionSummary[];
+
+const previewCompetitionPlans = [
+  {
+    id: "competition-plan-1",
+    athleteId: "athlete-1",
+    athleteName: "Elena Markova",
+    seasonId: "season-1",
+    seasonName: "Olympic qualification",
+    seasonYear: 2026,
+    competitionId: "competition-1",
+    competitionTitle: "European Cup Sofia",
+    competitionStartDate: "2026-04-27",
+    competitionEndDate: "2026-04-28",
+    priority: "A",
+    planType: "main",
+    peakRequired: true,
+    taperDays: 7,
+    weightCutRequired: false,
+    targetWeight: 61,
+    currentWeight: 61.3,
+    expectedMatches: 4,
+    competitionFormat: "single elimination + repechage",
+    prepStartDate: "2026-03-16",
+    prepEndDate: "2026-04-26",
+    notes: "Main competitive objective of the mesocycle.",
+    createdAt: "2026-03-15T08:00:00.000Z",
+    updatedAt: "2026-04-18T08:00:00.000Z",
+    result: {
+      competitionPlanId: "competition-plan-1",
+      finalPlace: 3,
+      matchesCount: 5,
+      weightAtWeighIn: 60.9,
+      weightAfter: 62.3,
+      performanceNotes: "Strong semifinal, lost on penalties.",
+      coachNotes: "Taper timing was correct, activation day should move earlier next cycle.",
+      createdAt: "2026-04-28T19:00:00.000Z",
+    },
+  },
+] as CompetitionPlanSummary[];
+
+const previewMesocycles = [
+  {
+    id: "mesocycle-1",
+    athleteId: "athlete-1",
+    athleteName: "Elena Markova",
+    seasonId: "season-1",
+    seasonName: "Olympic qualification",
+    competitionPlanId: "competition-plan-1",
+    competitionTitle: "European Cup Sofia",
+    name: "Specific-to-taper block",
+    phase: "taper",
+    goal: "Preserve sharpness and reduce residual fatigue.",
+    progressionType: "taper",
+    startDate: "2026-04-06",
+    endDate: "2026-04-27",
+    weeksCount: 3,
+    notes: "Load must trend down without losing speed exposure.",
+    weeks: [
+      { weekIndex: 1, label: "Week 1", microcycleType: "build", targetLoad: 420, loadModifier: 1.05 },
+      { weekIndex: 2, label: "Week 2", microcycleType: "taper", targetLoad: 310, loadModifier: 0.82 },
+      { weekIndex: 3, label: "Week 3", microcycleType: "competition", targetLoad: 240, loadModifier: 0.66 },
+    ],
+    createdAt: "2026-04-01T10:00:00.000Z",
+    updatedAt: "2026-04-18T10:00:00.000Z",
+  },
+] as MesocycleSummary[];
+
+const previewSeasons = [
+  {
+    id: "season-1",
+    athleteId: "athlete-1",
+    athleteName: "Elena Markova",
+    olympicCycleId: "cycle-1",
+    olympicCycleName: "LA 2028",
+    year: 2026,
+    name: "Olympic qualification",
+    goal: "Convert spring results into ranking points and stable tapering.",
+    strategyType: "double_peak",
+    createdAt: "2026-01-05T08:00:00.000Z",
+  },
+] as SeasonSummary[];
+
+const previewOlympicCycles = [
+  {
+    id: "cycle-1",
+    name: "LA 2028",
+    startDate: "2025-01-01",
+    endDate: "2028-08-31",
+    targetEvent: "Olympic qualification",
+    description: "Four-year qualification and performance cycle.",
+    createdAt: "2025-01-01T08:00:00.000Z",
+  },
+] as OlympicCycleSummary[];
+
+const previewCompetitionReview = {
+  athleteId: "athlete-1",
+  athleteName: "Elena Markova",
+  seasons: [
+    {
+      seasonId: "season-1",
+      seasonName: "Olympic qualification",
+      seasonYear: 2026,
+      athleteId: "athlete-1",
+      athleteName: "Elena Markova",
+      plans: previewCompetitionPlans,
+    },
+  ],
+  unlinkedPlans: [],
+} as CompetitionReviewOverview;
+
+const previewTemplatePack = {
+  phase: "taper",
+  competitionPriority: "A",
+  mesocycleWeek: {
+    mesocycleId: "mesocycle-1",
+    mesocycleName: "Specific-to-taper block",
+    weekIndex: 3,
+    weekLabel: "Week 3",
+    microcycleType: "competition",
+    targetLoad: 240,
+    loadModifier: 0.66,
+  },
+  suggestedDays: 5,
+  totalPlannedLoad: 238,
+  targetLoadDelta: -2,
+  varietyScore: 0.8,
+  loadBalanceLabel: "balanced taper",
+  nearbyAssignedDays: 2,
+  nearbyAssignedPlanSummaries: [
+    {
+      assignedPlanId: "assigned-plan-1",
+      date: "2026-04-20",
+      templateName: "Specific power build",
+      plannedPhase: "specific",
+      estimatedLoad: 310,
+    },
+    {
+      assignedPlanId: "assigned-plan-2",
+      date: "2026-04-21",
+      templateName: "Taper activation",
+      plannedPhase: "taper",
+      estimatedLoad: 240,
+    },
+  ],
+  warnings: [
+    {
+      code: "taper_violated",
+      level: "warning",
+      message: "Too much high-load density between Day 2 and Day 3 of the taper week.",
+    },
+    {
+      code: "low_recovery",
+      level: "info",
+      message: "Only one explicit recovery slot is present before competition travel.",
+    },
+  ],
+  suggestions: [
+    {
+      code: "recover_day_swap",
+      action: "swap_to_recovery",
+      message: "Swap Day 3 to recovery to reduce taper stress before weigh-in.",
+      dayOffset: 2,
+      targetDayOffset: null,
+      recommendedTemplateId: "template-recovery",
+      recommendedTemplateName: "Recovery reset",
+      feedback: {
+        label: "historically_effective",
+        scope: "exact_context",
+        netScore: 3,
+        sampleSize: 3,
+        appliedCount: 2,
+        skippedCount: 1,
+        positiveCount: 2,
+        neutralCount: 1,
+        negativeCount: 0,
+        phase: "taper",
+        competitionPriority: "A",
+      },
+    },
+    {
+      code: "move_specific_day",
+      action: "move_day",
+      message: "Move the specific technical day by +1 to widen the competition taper.",
+      dayOffset: 1,
+      targetDayOffset: 2,
+      recommendedTemplateId: null,
+      recommendedTemplateName: null,
+      feedback: {
+        label: "mixed",
+        scope: "phase_context",
+        netScore: 0,
+        sampleSize: 2,
+        appliedCount: 1,
+        skippedCount: 1,
+        positiveCount: 1,
+        neutralCount: 0,
+        negativeCount: 1,
+        phase: "taper",
+        competitionPriority: "A",
+      },
+    },
+  ],
+  items: [
+    {
+      templateId: "template-recovery",
+      templateName: "Recovery reset",
+      dayOffset: 0,
+      dayLabel: "Day 1",
+      microcycleType: "recovery",
+      score: 81,
+      reason: "Restores freshness after the last build session.",
+      estimatedLoad: 110,
+      historyBiases: [
+        {
+          code: "recover_day_swap",
+          action: "swap_to_recovery",
+          effect: "boost",
+          label: "historically_effective",
+          scope: "exact_context",
+          netScore: 3,
+          sampleSize: 3,
+        },
+      ],
+    },
+    {
+      templateId: "template-activation",
+      templateName: "Taper activation",
+      dayOffset: 1,
+      dayLabel: "Day 2",
+      microcycleType: "taper",
+      score: 92,
+      reason: "Best fit for phase taper, priority A, and competition proximity.",
+      estimatedLoad: 240,
+      historyBiases: [
+        {
+          code: "activation_swap",
+          action: "swap_to_activation",
+          effect: "boost",
+          label: "historically_effective",
+          scope: "phase_context",
+          netScore: 2,
+          sampleSize: 4,
+        },
+      ],
+    },
+    {
+      templateId: "template-recovery",
+      templateName: "Recovery reset",
+      dayOffset: 2,
+      dayLabel: "Day 3",
+      microcycleType: "recovery",
+      score: 76,
+      reason: "Balances cumulative density before travel.",
+      estimatedLoad: 90,
+      historyBiases: [
+        {
+          code: "reduce_slot_load",
+          action: "reduce_load",
+          effect: "boost",
+          label: "historically_effective",
+          scope: "phase_context",
+          netScore: 2,
+          sampleSize: 4,
+        },
+        {
+          code: "recover_day_swap",
+          action: "swap_to_recovery",
+          effect: "boost",
+          label: "historically_effective",
+          scope: "exact_context",
+          netScore: 3,
+          sampleSize: 3,
+        },
+      ],
+    },
+    {
+      templateId: "template-activation",
+      templateName: "Taper activation",
+      dayOffset: 3,
+      dayLabel: "Day 4",
+      microcycleType: "activation",
+      score: 88,
+      reason: "Keeps specific sharpness without reopening fatigue.",
+      estimatedLoad: 210,
+      historyBiases: [
+        {
+          code: "activation_swap",
+          action: "swap_to_activation",
+          effect: "boost",
+          label: "mixed",
+          scope: "phase_context",
+          netScore: 1,
+          sampleSize: 2,
+        },
+      ],
+    },
+    {
+      templateId: "template-recovery",
+      templateName: "Recovery reset",
+      dayOffset: 4,
+      dayLabel: "Day 5",
+      microcycleType: "competition",
+      score: 70,
+      reason: "Short flush and mobility before competition day.",
+      estimatedLoad: 68,
+      historyBiases: [],
+    },
+  ],
+} as TemplatePackRecommendation;
+
+const previewOfflineQueueItems: QueueItem[] = [
+  {
+    id: "queue-readiness-1",
+    type: "readiness",
+    clientRequestId: "preview-readiness-request-1",
+    dedupeKey: "readiness:2026-04-21",
+    createdAt: "2026-04-21T06:42:00.000Z",
+    lastAttemptAt: null,
+    syncedAt: null,
+    attemptCount: 0,
+    status: "pending",
+    error: null,
+    payload: {
+      sleepHours: 8,
+      sleepQuality: 8,
+      generalFeeling: 8,
+      fatigueLevel: 3,
+      muscleSoreness: 2,
+      motivationLevel: 9,
+      restingHr: 49,
+      bodyWeight: 61.3,
+      painLevel: 1,
+      illnessFlag: false,
+      feverFlag: false,
+    },
+  },
+  {
+    id: "queue-execution-1",
+    type: "execution",
+    clientRequestId: "preview-execution-request-1",
+    dedupeKey: "execution:block-2",
+    createdAt: "2026-04-21T09:57:00.000Z",
+    lastAttemptAt: "2026-04-21T10:01:00.000Z",
+    syncedAt: null,
+    attemptCount: 1,
+    status: "failed",
+    error: "Conflict detected: newer block result exists on server.",
+    payload: {
+      assignedPlanId: "assigned-plan-1",
+      assignedBlockId: "block-2",
+      completed: true,
+      setsCompleted: 3,
+      repsCompleted: 3,
+      weightKg: null,
+      durationMinutes: 20,
+      rpe: 6.5,
+      notes: "Pending sync after travel zone handoff.",
+    },
+  },
+];
+
+const previewOfflineSyncErrors = {
+  "queue-execution-1": "Conflict detected: newer block result exists on server.",
+};
+
+function buildPreviewState(
+  language: Language,
+  activeWorkspace: WorkspaceSectionId,
+  planningView: PlanningStudioView = "weekly",
+  seasonEditorMode: PreviewSeasonEditorMode = "starts",
+): WorkspacePreviewState {
+  return {
+    language,
+    user: previewUser,
+    activeWorkspace,
+    coachView: "analytics",
+    planningView,
+    seasonEditorMode,
+    statusMessage: "Preview mode: product scenes with representative coach data.",
+    isOffline: activeWorkspace === "offline-center",
+    coachAthletes: previewAthletes,
+    selectedAthleteId: "athlete-1",
+    selectedAthleteEntries: previewReadinessEntries,
+    planTemplates: previewPlanTemplates,
+    assignedPlans: previewAssignedPlans,
+    competitions: previewCompetitions,
+    competitionPlans: previewCompetitionPlans,
+    mesocycles: previewMesocycles,
+    seasons: previewSeasons,
+    olympicCycles: previewOlympicCycles,
+    competitionContext: previewCompetitionContext,
+    competitionReview: previewCompetitionReview,
+    coachExecutionReview: previewExecutionReview,
+    coachAnalyticsOverview: previewAnalytics,
+    templatePack: previewTemplatePack,
+    offlineQueueItems: previewOfflineQueueItems,
+    offlineSyncErrors: previewOfflineSyncErrors,
+    selectedOfflineItemId: "queue-execution-1",
+    cacheSavedAt: {
+      readiness: "2026-04-21 06:42",
+      assignedPlans: "2026-04-21 07:10",
+      adaptedPlan: "2026-04-21 07:14",
+      execution: "2026-04-21 09:57",
+      analytics: "2026-04-21 10:05",
+    },
+  };
+}
+
+export function resolveWorkspacePreviewState(
+  searchParams: Record<string, SearchParamValue> | undefined,
+) {
+  const authMode = firstValue(searchParams?.auth);
+  const previewFlag = firstValue(searchParams?.preview);
+  const workspaceValue = firstValue(searchParams?.workspace);
+  const languageValue = firstValue(searchParams?.language);
+  const planningViewValue = firstValue(searchParams?.planningView ?? searchParams?.planning);
+  const seasonEditorModeValue = firstValue(
+    searchParams?.seasonEditorMode ?? searchParams?.seasonEditor,
+  );
+
+  if (authMode === "login" || authMode === "register") {
+    return null;
+  }
+
+  if (previewFlag !== "1" && previewFlag !== "true" && !workspaceValue) {
+    return null;
+  }
+
+  if (!isWorkspace(workspaceValue)) {
+    return null;
+  }
+
+  return buildPreviewState(
+    isLanguage(languageValue) ? languageValue : "ru",
+    workspaceValue,
+    isPlanningView(planningViewValue) ? planningViewValue : "weekly",
+    isSeasonEditorMode(seasonEditorModeValue) ? seasonEditorModeValue : "starts",
+  );
+}

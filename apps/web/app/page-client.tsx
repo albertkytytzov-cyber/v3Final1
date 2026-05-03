@@ -1,0 +1,14304 @@
+﻿"use client";
+
+import {
+  type AdaptedPlanDay,
+  type AnalyticsCoachActionDecision,
+  type AnalyticsCoachActionDecisionPayload,
+  type AnalyticsCoachSuggestion,
+  type AnalyticsOverview,
+  type AnalyticsPlannerBridge,
+  type AssignedPlanPayload,
+  type AssignedPlanSummary,
+  type CompetitionContext,
+  type CompetitionPlanSummary,
+  type CompetitionReviewOverview,
+  type CompetitionResultPayload,
+  type CompetitionSummary,
+  type CreateCompetitionPayload,
+  type CreateCompetitionPlanPayload,
+  type CreateMesocyclePayload,
+  type CreateOlympicCyclePayload,
+  type CreateSeasonPayload,
+  DEFAULT_PLAN_TEMPLATE,
+  type ExecutionReviewPlan,
+  type ExecutionResult,
+  type ExecutionResultInput,
+  MVP_MODULES,
+  type MesocycleSummary,
+  type OlympicCycleSummary,
+  type PreparationPhase,
+  READINESS_DEFAULTS,
+  READINESS_FIELD_META,
+  READINESS_STATUS_META,
+  type SeasonSummary,
+  TRAINING_ROLES,
+  type AuthResponse,
+  type AuthUser,
+  type CoachAttachAthleteResponse,
+  type CoachAvailableAthletesResponse,
+  type CoachAthleteProfilePayload,
+  type CoachAthleteSummary,
+  type PlanTemplateRecommendation,
+  type PlannerSuggestion,
+  type PlanExerciseInput,
+  type TemplatePackRecommendation,
+  type TemplatePackRecommendationResponse,
+  type TemplatePackItem,
+  type AutoAssignMicrocyclePayload,
+  type PlanTemplateRecommendationResponse,
+  type PlanTemplatePayload,
+  type PlanTemplateSummary,
+  type ReadinessEntry,
+  type ReadinessFormValues,
+  type ReadinessResponse,
+  type ReadinessSubmissionPayload,
+  type DeleteCompetitionsPayload,
+  type DeleteCompetitionsResponse,
+  type UwwEventSyncFilters,
+  type UwwEventSyncOptions,
+  type UwwEventSyncOptionsResponse,
+  type UwwEventSyncResponse,
+} from "@training-platform/shared";
+import { startTransition, type FormEvent, useEffect, useState } from "react";
+import {
+  LANGUAGE_OPTIONS as I18N_LANGUAGE_OPTIONS,
+  type Language as I18nLanguage,
+  UI_TEXT as IMPORTED_UI_TEXT,
+  formatQueueItemLabel as importedFormatQueueItemLabel,
+  queueConflictLabel as importedQueueConflictLabel,
+  queueItemStatusLabel as importedQueueItemStatusLabel,
+  queueLabel as importedQueueLabel,
+  syncStateLabel as importedSyncStateLabel,
+  translateAnalyticsEvidenceLabel as importedTranslateAnalyticsEvidenceLabel,
+  translateAnalyticsCoachSuggestionRecommendation as importedTranslateAnalyticsCoachSuggestionRecommendation,
+  translateAnalyticsCoachSuggestionSummary as importedTranslateAnalyticsCoachSuggestionSummary,
+  translateAnalyticsCoachSuggestionTitle as importedTranslateAnalyticsCoachSuggestionTitle,
+  translateAnalyticsDecisionExplanation as importedTranslateAnalyticsDecisionExplanation,
+  translateAnalyticsDecisionOutcome as importedTranslateAnalyticsDecisionOutcome,
+  translateAnalyticsDecisionOutcomeSource as importedTranslateAnalyticsDecisionOutcomeSource,
+  translateAnalyticsDecisionStatus as importedTranslateAnalyticsDecisionStatus,
+  translateAnalyticsInsightLevel as importedTranslateAnalyticsInsightLevel,
+  translateAnalyticsInsightRecommendation as importedTranslateAnalyticsInsightRecommendation,
+  translateAnalyticsInsightSummary as importedTranslateAnalyticsInsightSummary,
+  translateAnalyticsInsightTitle as importedTranslateAnalyticsInsightTitle,
+  translateAnalyticsMissingLink as importedTranslateAnalyticsMissingLink,
+  translateAnalyticsPatternSummary as importedTranslateAnalyticsPatternSummary,
+  translateAnalyticsPatternTitle as importedTranslateAnalyticsPatternTitle,
+  translateAnalyticsWeekStatus as importedTranslateAnalyticsWeekStatus,
+  translateBlockAction as importedTranslateBlockAction,
+  translateExecutionStatus as importedTranslateExecutionStatus,
+  translateModule as importedTranslateModule,
+  translateRoleName as importedTranslateRoleName,
+  translateTrainingRole as importedTranslateTrainingRole,
+  COPY as importedCopy,
+  translateReadinessReason as importedTranslateReadinessReason,
+  translateAdaptationText as importedTranslateAdaptationText,
+} from "./lib/i18n";
+import {
+  STORAGE_KEYS as OFFLINE_STORAGE_KEYS,
+  countActiveQueueItems as importedCountActiveQueueItems,
+  createQueueItem as importedCreateQueueItem,
+  enqueueOfflineItem as importedEnqueueOfflineItem,
+  getActiveQueueItems as importedGetActiveQueueItems,
+  getOfflineQueue as importedGetOfflineQueue,
+  getQueueErrorMap as importedGetQueueErrorMap,
+  getQueueStatusCounts as importedGetQueueStatusCounts,
+  readCachedData as importedReadCachedData,
+  setOfflineQueue as importedSetOfflineQueue,
+  type QueueItem as ImportedQueueItem,
+  updateQueueItem as importedUpdateQueueItem,
+  writeCachedData as importedWriteCachedData,
+} from "./lib/offline-sync";
+import {
+  type PreparationPlanReference,
+  type PreparationPlanTableRow,
+} from "./lib/preparation-plan-reference";
+import { type WorkspacePreviewState } from "./lib/workspace-preview";
+import {
+  type CoachDashboardView,
+  type PlanningStudioView,
+  type WorkspaceSectionId,
+} from "./lib/workspace-types";
+import {
+  WorkspaceContextDock,
+  WorkspaceContextSection,
+  WorkspaceRail,
+  WorkspaceStageHeader,
+  WorkspaceTopBar,
+} from "./components/workspace-shell";
+import {
+  AthleteWorkspaceScene,
+  CoachDashboardScene,
+  OfflineSyncCenterScene,
+  PlanningStudioScene,
+} from "./components/workspace-scenes";
+import { AthleteWorkspace } from "./components/athlete-workspace";
+import { CoachDashboard } from "./components/coach-dashboard";
+import { PlanningStudio } from "./components/planning-studio";
+import { OfflineSyncCenter } from "./components/offline-sync-center";
+
+const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api/v1";
+const SHOW_OFFLINE_CENTER_NAV = false;
+
+function getDateInputValue(date = new Date()) {
+  return date.toISOString().slice(0, 10);
+}
+
+function shiftDateInputValue(dateValue: string, days: number) {
+  const date = new Date(`${dateValue}T00:00:00.000Z`);
+
+  if (Number.isNaN(date.getTime())) {
+    return getDateInputValue();
+  }
+
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function diffDateInputDays(fromDateValue: string, toDateValue: string) {
+  const fromDate = new Date(`${fromDateValue}T00:00:00.000Z`);
+  const toDate = new Date(`${toDateValue}T00:00:00.000Z`);
+
+  if (Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime())) {
+    return null;
+  }
+
+  return Math.round((toDate.getTime() - fromDate.getTime()) / (24 * 60 * 60 * 1000));
+}
+
+function deriveAthletePreparationPhase(daysToCompetition: number | null): PreparationPhase | null {
+  if (daysToCompetition === null) {
+    return null;
+  }
+
+  if (daysToCompetition > 30) {
+    return "base";
+  }
+
+  if (daysToCompetition >= 15) {
+    return "strength";
+  }
+
+  if (daysToCompetition >= 8) {
+    return "specific";
+  }
+
+  if (daysToCompetition >= 2) {
+    return "taper";
+  }
+
+  if (daysToCompetition >= 0) {
+    return "competition";
+  }
+
+  if (daysToCompetition >= -7) {
+    return "recovery";
+  }
+
+  return null;
+}
+
+function getDateYearValue(dateValue: string) {
+  const date = new Date(`${dateValue}T00:00:00.000Z`);
+
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return date.getUTCFullYear();
+}
+
+function getDateMonthIndex(dateValue: string) {
+  const date = new Date(`${dateValue}T00:00:00.000Z`);
+
+  if (Number.isNaN(date.getTime())) {
+    return -1;
+  }
+
+  return date.getUTCMonth();
+}
+
+function getSeasonTimelinePosition(dateValue: string) {
+  const date = new Date(`${dateValue}T00:00:00.000Z`);
+
+  if (Number.isNaN(date.getTime())) {
+    return 0;
+  }
+
+  const year = date.getUTCFullYear();
+  const yearStart = Date.UTC(year, 0, 1);
+  const yearEnd = Date.UTC(year, 11, 31);
+  const value = date.getTime();
+  const percent = ((value - yearStart) / (yearEnd - yearStart)) * 100;
+
+  return Math.min(100, Math.max(0, percent));
+}
+
+function parseOptionalNumberInput(value: string) {
+  return value === "" ? null : Number(value);
+}
+
+function formatKgValue(value: number | null) {
+  return value !== null ? `${value} кг` : "-";
+}
+
+type AuthMode = "login" | "register";
+type Language = I18nLanguage;
+type SeasonDisplayMode = "timeline" | "hybrid";
+type SeasonEditorMode = "starts" | "plan" | "result" | "cycles";
+
+const MONTH_LABELS: Record<Language, string[]> = {
+  en: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
+  ru: ["Янв", "Фев", "Мар", "Апр", "Май", "Июн", "Июл", "Авг", "Сен", "Окт", "Ноя", "Дек"],
+  bg: ["Яну", "Фев", "Мар", "Апр", "Май", "Юни", "Юли", "Авг", "Сеп", "Окт", "Ное", "Дек"],
+};
+
+const SEASON_PHASE_LABELS: Record<string, Record<Language, string>> = {
+  base: { en: "Base", ru: "База", bg: "База" },
+  specific: { en: "Specific", ru: "Спецподготовка", bg: "Спецподготовка" },
+  taper: { en: "Taper", ru: "Подводка", bg: "Тейпър" },
+  competition: { en: "Start", ru: "Старт", bg: "Старт" },
+  recovery: { en: "Recovery", ru: "Восстановление", bg: "Възстановяване" },
+};
+
+type AuthFormState = {
+  email: string;
+  password: string;
+  fullName: string;
+  role: "coach" | "athlete";
+};
+
+type QueueItem = ImportedQueueItem;
+
+const UI_TEXT = IMPORTED_UI_TEXT;
+const STORAGE_KEYS = OFFLINE_STORAGE_KEYS;
+
+type ExecutionDraft = Omit<ExecutionResultInput, "assignedPlanId" | "assignedBlockId">;
+
+type OfflineSyncErrors = Record<string, string>;
+type TemplatePackDraftItem = TemplatePackRecommendation["items"][number];
+type TemplatePackHistoryBiasItem = TemplatePackDraftItem["historyBiases"][number];
+type TemplatePackContext = {
+  athleteId: string;
+  startDate: string;
+};
+
+const emptyExecutionDraft: ExecutionDraft = {
+  completed: false,
+  setsCompleted: null,
+  repsCompleted: null,
+  weightKg: null,
+  durationMinutes: null,
+  rpe: null,
+  notes: "",
+};
+
+const emptyAthleteProfileForm: CoachAthleteProfilePayload = {
+  photoUrl: "",
+  birthDate: null,
+  heightCm: null,
+  sport: "",
+  discipline: "",
+  weightClass: "",
+  dominantSide: "",
+  baselineRestingHr: null,
+  baselineWeightKg: null,
+  wrestlingExperienceYears: null,
+  strengthSquatKg: null,
+  strengthBenchPressKg: null,
+  strengthDeadliftKg: null,
+  strengthPullUpsMax: null,
+  strengthGripLeftKg: null,
+  strengthGripRightKg: null,
+  strengthNotes: "",
+  strengths: "",
+  weaknesses: "",
+  injuriesOrRestrictions: "",
+  preparationGoal: "",
+  profileNotes: "",
+};
+
+const initialAuthForm: AuthFormState = {
+  email: "",
+  password: "",
+  fullName: "",
+  role: "athlete",
+};
+const SELF_REGISTRATION_ROLES = TRAINING_ROLES.filter(
+  (role): role is (typeof TRAINING_ROLES)[number] & { id: AuthFormState["role"] } =>
+    role.id === "coach" || role.id === "athlete",
+);
+
+const initialAssignedPlanForm: AssignedPlanPayload = {
+  athleteId: "",
+  templateId: "",
+  startDate: new Date().toISOString().slice(0, 10),
+  dayLabel: "Day 1",
+  notes: "Assigned from coach workspace",
+  plannedPhase: null,
+};
+
+const initialCompetitionForm: CreateCompetitionPayload = {
+  title: "",
+  federation: "",
+  location: "",
+  startDate: new Date().toISOString().slice(0, 10),
+  endDate: new Date().toISOString().slice(0, 10),
+  level: "national",
+  ageGroup: "",
+  description: "",
+};
+
+const initialUwwSyncFilters: UwwEventSyncFilters = {
+  year: String(new Date().getFullYear()),
+  ageGroup: "",
+  style: "",
+  eventType: "",
+  country: "",
+};
+
+const emptyUwwSyncOptions: UwwEventSyncOptions = {
+  years: [],
+  ageGroups: [],
+  styles: [],
+  eventTypes: [],
+  countries: [],
+};
+
+const initialOlympicCycleForm: CreateOlympicCyclePayload = {
+  name: "",
+  startDate: new Date().toISOString().slice(0, 10),
+  endDate: new Date().toISOString().slice(0, 10),
+  targetEvent: "",
+  description: "",
+};
+
+const initialSeasonForm: CreateSeasonPayload = {
+  athleteId: "",
+  olympicCycleId: null,
+  year: new Date().getFullYear(),
+  name: "",
+  goal: "",
+  strategyType: "single_peak",
+};
+
+const initialCompetitionPlanForm: CreateCompetitionPlanPayload = {
+  athleteId: "",
+  seasonId: null,
+  competitionId: "",
+  priority: "B",
+  planType: "main",
+  peakRequired: false,
+  taperDays: 7,
+  weightCutRequired: false,
+  targetWeight: null,
+  currentWeight: null,
+  expectedMatches: null,
+  competitionFormat: "",
+  prepStartDate: new Date().toISOString().slice(0, 10),
+  prepEndDate: new Date().toISOString().slice(0, 10),
+  notes: "",
+};
+
+const initialMesocycleForm: CreateMesocyclePayload = {
+  athleteId: "",
+  seasonId: null,
+  competitionPlanId: null,
+  name: "",
+  phase: "base",
+  goal: "",
+  progressionType: "linear",
+  startDate: new Date().toISOString().slice(0, 10),
+  endDate: new Date().toISOString().slice(0, 10),
+  weeksCount: 4,
+  notes: "",
+};
+
+const initialCompetitionResultForm: CompetitionResultPayload = {
+  competitionPlanId: "",
+  finalPlace: null,
+  matchesCount: null,
+  weightAtWeighIn: null,
+  weightAfter: null,
+  performanceNotes: "",
+  coachNotes: "",
+};
+
+const initialMicrocycleForm: AutoAssignMicrocyclePayload = {
+  athleteId: "",
+  startDate: new Date().toISOString().slice(0, 10),
+  daysCount: 5,
+  notes: "Phase-driven microcycle",
+  plannedPhase: null,
+  items: [],
+};
+
+const COPY = importedCopy;
+const queueLabel = importedQueueLabel;
+const translateRoleName = importedTranslateRoleName;
+const translateExecutionStatus = importedTranslateExecutionStatus;
+const translateBlockAction = importedTranslateBlockAction;
+const translateReadinessReason = importedTranslateReadinessReason;
+const translateAdaptationText = importedTranslateAdaptationText;
+
+async function apiRequest<T>(path: string, options?: RequestInit): Promise<T> {
+  const headers = new Headers(options?.headers ?? {});
+
+  if (options?.body && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+
+  const response = await fetch(`${apiBaseUrl}${path}`, {
+    ...options,
+    credentials: "include",
+    headers,
+  });
+
+  if (!response.ok) {
+    const rawMessage = await response.text();
+    let message = rawMessage;
+
+    if (rawMessage) {
+      try {
+        const errorBody = JSON.parse(rawMessage) as { message?: unknown };
+
+        if (typeof errorBody.message === "string" && errorBody.message) {
+          message = errorBody.message;
+        }
+      } catch {
+        message = rawMessage;
+      }
+    }
+
+    throw new Error(message || `Request failed with ${response.status}`);
+  }
+
+  return (await response.json()) as T;
+}
+
+function copyFor(language: Language, values: Record<Language, string>) {
+  return values[language];
+}
+
+function withFallbackOptions(options: string[], fallback: string) {
+  const values = new Set(options.filter(Boolean));
+
+  if (fallback) {
+    values.add(fallback);
+  }
+
+  return [...values];
+}
+
+function syncCompetitionSelection(
+  selectedIds: string[],
+  competitions: CompetitionSummary[],
+) {
+  const availableIds = new Set(competitions.map((competition) => competition.id));
+  return selectedIds.filter((id) => availableIds.has(id));
+}
+
+function buildAthleteProfileForm(athlete: CoachAthleteSummary | null): CoachAthleteProfilePayload {
+  if (!athlete) {
+    return emptyAthleteProfileForm;
+  }
+
+  return {
+    photoUrl: athlete.photoUrl,
+    birthDate: athlete.birthDate,
+    heightCm: athlete.heightCm,
+    sport: athlete.sport,
+    discipline: athlete.discipline,
+    weightClass: athlete.weightClass,
+    dominantSide: athlete.dominantSide,
+    baselineRestingHr: athlete.baselineRestingHr,
+    baselineWeightKg: athlete.baselineWeightKg,
+    wrestlingExperienceYears: athlete.wrestlingExperienceYears,
+    strengthSquatKg: athlete.strengthSquatKg,
+    strengthBenchPressKg: athlete.strengthBenchPressKg,
+    strengthDeadliftKg: athlete.strengthDeadliftKg,
+    strengthPullUpsMax: athlete.strengthPullUpsMax,
+    strengthGripLeftKg: athlete.strengthGripLeftKg,
+    strengthGripRightKg: athlete.strengthGripRightKg,
+    strengthNotes: athlete.strengthNotes,
+    strengths: athlete.strengths,
+    weaknesses: athlete.weaknesses,
+    injuriesOrRestrictions: athlete.injuriesOrRestrictions,
+    preparationGoal: athlete.preparationGoal,
+    profileNotes: athlete.profileNotes,
+  };
+}
+
+function getAthleteInitials(name: string) {
+  return name
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
+}
+
+function getAthleteAge(birthDate: string | null) {
+  if (!birthDate) {
+    return null;
+  }
+
+  const parsedDate = new Date(`${birthDate}T00:00:00`);
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return null;
+  }
+
+  const today = new Date();
+  let age = today.getFullYear() - parsedDate.getFullYear();
+  const monthDelta = today.getMonth() - parsedDate.getMonth();
+
+  if (monthDelta < 0 || (monthDelta === 0 && today.getDate() < parsedDate.getDate())) {
+    age -= 1;
+  }
+
+  return age;
+}
+
+function getAthleteProfileSaveErrorMessage(message: string, language: Language) {
+  if (message.includes("birthDate cannot be in the future")) {
+    return copyFor(language, {
+      en: "Birth date cannot be in the future.",
+      ru: "Дата рождения не может быть в будущем.",
+      bg: "Датата на раждане не може да бъде в бъдещето.",
+    });
+  }
+
+  if (message.includes("birthDate must be a valid date")) {
+    return copyFor(language, {
+      en: "Enter birth date in the correct format.",
+      ru: "Укажите дату рождения в правильном формате.",
+      bg: "Въведете датата на раждане в правилен формат.",
+    });
+  }
+
+  return message;
+}
+
+const PREPARATION_PHASE_LABELS: Record<string, Record<Language, string>> = {
+  base: { en: "Base", ru: "Базовая", bg: "Базова" },
+  strength: { en: "Strength", ru: "Силовая", bg: "Силова" },
+  specific: { en: "Specific", ru: "Специальная", bg: "Специфична" },
+  taper: { en: "Taper", ru: "Подводка", bg: "Тейпър" },
+  competition: { en: "Competition", ru: "Соревновательная", bg: "Състезателна" },
+  recovery: { en: "Recovery", ru: "Восстановление", bg: "Възстановяване" },
+};
+
+const PREPARATION_PHASE_VALUES = [
+  "base",
+  "strength",
+  "specific",
+  "taper",
+  "competition",
+  "recovery",
+] as const;
+
+const BLOCK_TYPE_LABELS: Record<string, Record<Language, string>> = {
+  technical: { en: "Technical", ru: "Технический", bg: "Технически" },
+  speed: { en: "Speed", ru: "Скоростной", bg: "Скоростен" },
+  strength: { en: "Strength", ru: "Силовой", bg: "Силов" },
+  CNS_high: { en: "High CNS load", ru: "Высокая нагрузка ЦНС", bg: "Високо ЦНС натоварване" },
+  metabolic: { en: "Metabolic", ru: "Метаболический", bg: "Метаболитен" },
+  conditioning: { en: "Conditioning", ru: "Кондиционный", bg: "Кондиционен" },
+  recovery: { en: "Recovery", ru: "Восстановительный", bg: "Възстановителен" },
+  mobility: { en: "Mobility", ru: "Мобильность", bg: "Мобилност" },
+  activation: { en: "Activation", ru: "Активация", bg: "Активация" },
+};
+
+const PLAN_BLOCK_TYPE_VALUES = [
+  "technical",
+  "speed",
+  "strength",
+  "CNS_high",
+  "metabolic",
+  "conditioning",
+  "recovery",
+  "mobility",
+  "activation",
+] as const satisfies readonly PlanTemplatePayload["blocks"][number]["blockType"][];
+
+type PlanBlockType = PlanTemplatePayload["blocks"][number]["blockType"];
+
+type BlockExercisePreset = Omit<PlanExerciseInput, "name" | "notes" | "id"> & {
+  id: string;
+  label: Record<Language, string>;
+  notes: Record<Language, string>;
+};
+
+const BLOCK_EXERCISE_PRESETS: Record<PlanBlockType, BlockExercisePreset[]> = {
+  technical: [
+    {
+      id: "stance_movement",
+      label: { en: "Stance and movement", ru: "Стойка и передвижения", bg: "Стойка и движение" },
+      targetSets: 4,
+      targetReps: 3,
+      targetWeightKg: null,
+      targetDurationMinutes: 12,
+      targetRpe: 4,
+      displayOrder: 0,
+      notes: {
+        en: "Quality footwork, stance discipline, and mat position.",
+        ru: "Качество передвижений, дисциплина стойки и контроль позиции на ковре.",
+        bg: "Качествено движение, дисциплина в стойката и контрол на позицията.",
+      },
+    },
+    {
+      id: "leg_attack_entries",
+      label: { en: "Leg attack entries", ru: "Проходы в ноги", bg: "Влизания в крака" },
+      targetSets: 5,
+      targetReps: 4,
+      targetWeightKg: null,
+      targetDurationMinutes: null,
+      targetRpe: 5,
+      displayOrder: 1,
+      notes: {
+        en: "Clean entry, head position, and finish mechanics.",
+        ru: "Чистый вход, позиция головы и механика завершения атаки.",
+        bg: "Чисто влизане, позиция на главата и механика на завършване.",
+      },
+    },
+    {
+      id: "shot_defense",
+      label: { en: "Shot defense", ru: "Защита от прохода", bg: "Защита от влизане" },
+      targetSets: 4,
+      targetReps: 5,
+      targetWeightKg: null,
+      targetDurationMinutes: null,
+      targetRpe: 5,
+      displayOrder: 2,
+      notes: {
+        en: "Sprawl timing, hips heavy, and immediate counter control.",
+        ru: "Тайминг спролла, тяжёлый таз и быстрый контроль после защиты.",
+        bg: "Тайминг на спроул, тежък таз и бърз контрол след защита.",
+      },
+    },
+    {
+      id: "parterre_escape",
+      label: { en: "Parterre escape", ru: "Выход из партера", bg: "Излизане от партер" },
+      targetSets: 4,
+      targetReps: 4,
+      targetWeightKg: null,
+      targetDurationMinutes: null,
+      targetRpe: 5,
+      displayOrder: 3,
+      notes: {
+        en: "First move speed, hip pressure, and hand control.",
+        ru: "Скорость первого движения, давление тазом и контроль рук.",
+        bg: "Скорост на първото движение, натиск с таза и контрол на ръцете.",
+      },
+    },
+    {
+      id: "hand_fighting",
+      label: { en: "Hand fighting", ru: "Борьба за захват", bg: "Борба за захват" },
+      targetSets: 5,
+      targetReps: 3,
+      targetWeightKg: null,
+      targetDurationMinutes: 10,
+      targetRpe: 6,
+      displayOrder: 4,
+      notes: {
+        en: "Grip control, inside position, and pressure without rushing.",
+        ru: "Контроль захвата, внутренняя позиция и давление без суеты.",
+        bg: "Контрол на захвата, вътрешна позиция и натиск без бързане.",
+      },
+    },
+  ],
+  speed: [
+    {
+      id: "short_starts",
+      label: { en: "5-10 m starts", ru: "Старты 5-10 м", bg: "Стартове 5-10 м" },
+      targetSets: 6,
+      targetReps: 2,
+      targetWeightKg: null,
+      targetDurationMinutes: null,
+      targetRpe: 7,
+      displayOrder: 0,
+      notes: {
+        en: "Explosive first step. Full recovery between reps.",
+        ru: "Взрывной первый шаг. Полное восстановление между повторами.",
+        bg: "Взривна първа крачка. Пълно възстановяване между повторенията.",
+      },
+    },
+    {
+      id: "reaction_signal",
+      label: { en: "Reaction to signal", ru: "Реакция на сигнал", bg: "Реакция на сигнал" },
+      targetSets: 5,
+      targetReps: 4,
+      targetWeightKg: null,
+      targetDurationMinutes: null,
+      targetRpe: 6,
+      displayOrder: 1,
+      notes: {
+        en: "React to visual or audio cue, then enter cleanly.",
+        ru: "Реакция на зрительный или звуковой сигнал с чистым входом.",
+        bg: "Реакция на визуален или звуков сигнал с чисто влизане.",
+      },
+    },
+    {
+      id: "fast_attack_entry",
+      label: { en: "Fast attack entry", ru: "Быстрый вход в атаку", bg: "Бързо влизане в атака" },
+      targetSets: 5,
+      targetReps: 3,
+      targetWeightKg: null,
+      targetDurationMinutes: null,
+      targetRpe: 7,
+      displayOrder: 2,
+      notes: {
+        en: "Speed first, finish only if mechanics stay clean.",
+        ru: "Сначала скорость, завершение только при чистой механике.",
+        bg: "Първо скорост, завършване само при чиста механика.",
+      },
+    },
+    {
+      id: "speed_footwork",
+      label: { en: "Fast footwork", ru: "Скоростные передвижения", bg: "Бързо движение" },
+      targetSets: 4,
+      targetReps: 4,
+      targetWeightKg: null,
+      targetDurationMinutes: 8,
+      targetRpe: 6,
+      displayOrder: 3,
+      notes: {
+        en: "Short bursts with stance control and no technical collapse.",
+        ru: "Короткие ускорения с контролем стойки без развала техники.",
+        bg: "Кратки ускорения с контрол на стойката без срив на техниката.",
+      },
+    },
+  ],
+  strength: [
+  {
+    id: "back_squat",
+    label: { en: "Back squat", ru: "Приседания со штангой", bg: "Клек с щанга" },
+    targetSets: 4,
+    targetReps: 5,
+    targetWeightKg: null,
+    targetDurationMinutes: null,
+    targetRpe: 7.5,
+    displayOrder: 0,
+    notes: {
+      en: "Primary lower-body strength. Keep technique strict.",
+      ru: "Основная силовая работа для ног. Контроль техники обязателен.",
+      bg: "Основна силова работа за краката. Техниката е задължителна.",
+    },
+  },
+  {
+    id: "trap_bar_deadlift",
+    label: { en: "Trap bar deadlift", ru: "Тяга трэп-грифа", bg: "Тяга с трап бар" },
+    targetSets: 4,
+    targetReps: 4,
+    targetWeightKg: null,
+    targetDurationMinutes: null,
+    targetRpe: 8,
+    displayOrder: 1,
+    notes: {
+      en: "Hip extension and mat drive strength.",
+      ru: "Разгибание таза и силовой толчок для работы в ковре.",
+      bg: "Разгъване в таза и силов натиск за работа на тепиха.",
+    },
+  },
+  {
+    id: "weighted_pull_up",
+    label: { en: "Weighted pull-up", ru: "Подтягивания с весом", bg: "Набирания с тежест" },
+    targetSets: 4,
+    targetReps: 5,
+    targetWeightKg: null,
+    targetDurationMinutes: null,
+    targetRpe: 8,
+    displayOrder: 2,
+    notes: {
+      en: "Grip, back, and pulling strength.",
+      ru: "Хват, спина и силовая тяга.",
+      bg: "Хват, гръб и силово дърпане.",
+    },
+  },
+  {
+    id: "bench_press",
+    label: { en: "Bench press", ru: "Жим лёжа", bg: "Лег преса с щанга" },
+    targetSets: 4,
+    targetReps: 5,
+    targetWeightKg: null,
+    targetDurationMinutes: null,
+    targetRpe: 7.5,
+    displayOrder: 3,
+    notes: {
+      en: "Upper-body pressing strength without grinding reps.",
+      ru: "Силовой жим без отказных повторов.",
+      bg: "Силово избутване без отказни повторения.",
+    },
+  },
+  {
+    id: "barbell_row",
+    label: { en: "Barbell row", ru: "Тяга штанги в наклоне", bg: "Гребане с щанга" },
+    targetSets: 4,
+    targetReps: 6,
+    targetWeightKg: null,
+    targetDurationMinutes: null,
+    targetRpe: 7,
+    displayOrder: 4,
+    notes: {
+      en: "Back strength for pulling and hand fighting.",
+      ru: "Сила спины для тяг и борьбы за захват.",
+      bg: "Сила на гърба за дърпане и борба за захват.",
+    },
+  },
+  {
+    id: "bulgarian_split_squat",
+    label: {
+      en: "Bulgarian split squat",
+      ru: "Болгарские сплит-приседания",
+      bg: "Български сплит клек",
+    },
+    targetSets: 3,
+    targetReps: 6,
+    targetWeightKg: null,
+    targetDurationMinutes: null,
+    targetRpe: 7,
+    displayOrder: 5,
+    notes: {
+      en: "Single-leg strength and hip control.",
+      ru: "Одноногая сила и контроль таза.",
+      bg: "Едностранна сила и контрол в таза.",
+    },
+  },
+  {
+    id: "power_clean",
+    label: { en: "Power clean", ru: "Взятие на грудь в стойку", bg: "Силово обръщане" },
+    targetSets: 5,
+    targetReps: 3,
+    targetWeightKg: null,
+    targetDurationMinutes: null,
+    targetRpe: 7,
+    displayOrder: 6,
+    notes: {
+      en: "Explosive strength. Stop before speed drops.",
+      ru: "Взрывная сила. Остановить подход до падения скорости.",
+      bg: "Взривна сила. Спира се преди спад на скоростта.",
+    },
+  },
+  {
+    id: "rope_climb",
+    label: { en: "Rope climb", ru: "Лазание по канату", bg: "Катерене по въже" },
+    targetSets: 4,
+    targetReps: 2,
+    targetWeightKg: null,
+    targetDurationMinutes: null,
+    targetRpe: 8,
+    displayOrder: 7,
+    notes: {
+      en: "Grip endurance and pulling strength.",
+      ru: "Силовая выносливость хвата и тяги.",
+      bg: "Силова издръжливост на хвата и дърпането.",
+    },
+  },
+  {
+    id: "dummy_throws",
+    label: { en: "Power dummy throws", ru: "Броски манекена на мощность", bg: "Хвърляния на манекен за мощност" },
+    targetSets: 5,
+    targetReps: 5,
+    targetWeightKg: null,
+    targetDurationMinutes: null,
+    targetRpe: 8,
+    displayOrder: 8,
+    notes: {
+      en: "Wrestling-specific power. Keep every throw explosive.",
+      ru: "Специальная мощность для борьбы. Каждый бросок должен быть взрывным.",
+      bg: "Специфична мощност за борба. Всяко хвърляне трябва да е взривно.",
+    },
+  },
+  ],
+  CNS_high: [
+    {
+      id: "explosive_dummy_throws",
+      label: {
+        en: "Explosive dummy throws",
+        ru: "Взрывные броски манекена",
+        bg: "Взривни хвърляния на манекен",
+      },
+      targetSets: 5,
+      targetReps: 4,
+      targetWeightKg: null,
+      targetDurationMinutes: null,
+      targetRpe: 8,
+      displayOrder: 0,
+      notes: {
+        en: "High neural output. Stop if speed or coordination drops.",
+        ru: "Высокая нервная нагрузка. Остановить при падении скорости или координации.",
+        bg: "Високо нервно натоварване. Спрете при спад на скоростта или координацията.",
+      },
+    },
+    {
+      id: "power_clean_cns",
+      label: { en: "Power clean", ru: "Взятие на грудь", bg: "Силово обръщане" },
+      targetSets: 5,
+      targetReps: 3,
+      targetWeightKg: null,
+      targetDurationMinutes: null,
+      targetRpe: 7.5,
+      displayOrder: 1,
+      notes: {
+        en: "Fast bar speed only. No grinding reps.",
+        ru: "Только высокая скорость штанги. Без отказных повторов.",
+        bg: "Само висока скорост на щангата. Без отказни повторения.",
+      },
+    },
+    {
+      id: "box_jumps",
+      label: { en: "Box jumps", ru: "Прыжки на тумбу", bg: "Скокове на кутия" },
+      targetSets: 5,
+      targetReps: 3,
+      targetWeightKg: null,
+      targetDurationMinutes: null,
+      targetRpe: 7,
+      displayOrder: 2,
+      notes: {
+        en: "Explosive jump quality with full reset between reps.",
+        ru: "Качественные взрывные прыжки с полным сбросом между повторами.",
+        bg: "Качествени взривни скокове с пълен ресет между повторенията.",
+      },
+    },
+    {
+      id: "short_sprints",
+      label: { en: "Short sprints", ru: "Короткие спринты", bg: "Кратки спринтове" },
+      targetSets: 6,
+      targetReps: 1,
+      targetWeightKg: null,
+      targetDurationMinutes: null,
+      targetRpe: 8,
+      displayOrder: 3,
+      notes: {
+        en: "Maximum acceleration, full recovery, low total volume.",
+        ru: "Максимальное ускорение, полное восстановление, малый общий объём.",
+        bg: "Максимално ускорение, пълно възстановяване, малък общ обем.",
+      },
+    },
+  ],
+  metabolic: [
+    {
+      id: "wrestling_intervals_30_30",
+      label: { en: "Wrestling intervals 30/30", ru: "Интервалы борьбы 30/30", bg: "Борцови интервали 30/30" },
+      targetSets: 2,
+      targetReps: 6,
+      targetWeightKg: null,
+      targetDurationMinutes: 12,
+      targetRpe: 8,
+      displayOrder: 0,
+      notes: {
+        en: "Work/rest intervals with controlled technical quality.",
+        ru: "Интервалы работа/отдых с контролем качества техники.",
+        bg: "Интервали работа/почивка с контрол на техническото качество.",
+      },
+    },
+    {
+      id: "wrestling_circuit",
+      label: { en: "Wrestling circuit", ru: "Круговая работа", bg: "Кръгова работа" },
+      targetSets: 3,
+      targetReps: 4,
+      targetWeightKg: null,
+      targetDurationMinutes: 18,
+      targetRpe: 7.5,
+      displayOrder: 1,
+      notes: {
+        en: "Rotate through wrestling-specific stations without technical collapse.",
+        ru: "Переход по борцовским станциям без развала техники.",
+        bg: "Ротация през борцови станции без срив на техниката.",
+      },
+    },
+    {
+      id: "grip_movement_combo",
+      label: { en: "Grip + movement combo", ru: "Захваты + перемещения", bg: "Захват + движение" },
+      targetSets: 4,
+      targetReps: 3,
+      targetWeightKg: null,
+      targetDurationMinutes: 12,
+      targetRpe: 7,
+      displayOrder: 2,
+      notes: {
+        en: "Sustained hand fighting with stance movement.",
+        ru: "Продолжительная борьба за захват с передвижением в стойке.",
+        bg: "Продължителна борба за захват с движение в стойка.",
+      },
+    },
+    {
+      id: "match_simulation",
+      label: { en: "Match simulation", ru: "Имитация схватки", bg: "Имитация на схватка" },
+      targetSets: 3,
+      targetReps: 1,
+      targetWeightKg: null,
+      targetDurationMinutes: 18,
+      targetRpe: 8.5,
+      displayOrder: 3,
+      notes: {
+        en: "Controlled match pace with coach-defined intensity.",
+        ru: "Контролируемый темп схватки с заданной тренером интенсивностью.",
+        bg: "Контролирано темпо на схватка с интензивност от треньора.",
+      },
+    },
+  ],
+  conditioning: [
+    {
+      id: "aerobic_work",
+      label: { en: "Aerobic work", ru: "Аэробная работа", bg: "Аеробна работа" },
+      targetSets: 1,
+      targetReps: 1,
+      targetWeightKg: null,
+      targetDurationMinutes: 30,
+      targetRpe: 5,
+      displayOrder: 0,
+      notes: {
+        en: "Low-to-moderate intensity base work.",
+        ru: "Базовая работа низкой или умеренной интенсивности.",
+        bg: "Базова работа с ниска до умерена интензивност.",
+      },
+    },
+    {
+      id: "tempo_wrestling",
+      label: { en: "Tempo wrestling", ru: "Темповая борьба", bg: "Темпова борба" },
+      targetSets: 4,
+      targetReps: 1,
+      targetWeightKg: null,
+      targetDurationMinutes: 20,
+      targetRpe: 6,
+      displayOrder: 1,
+      notes: {
+        en: "Sustainable pace, clean positions, no maximal exchanges.",
+        ru: "Устойчивый темп, чистые позиции, без максимальных разменов.",
+        bg: "Устойчиво темпо, чисти позиции, без максимални размени.",
+      },
+    },
+    {
+      id: "jump_rope",
+      label: { en: "Jump rope", ru: "Скакалка", bg: "Скачане на въже" },
+      targetSets: 5,
+      targetReps: 1,
+      targetWeightKg: null,
+      targetDurationMinutes: 15,
+      targetRpe: 5,
+      displayOrder: 2,
+      notes: {
+        en: "Rhythm, ankle stiffness, and general conditioning.",
+        ru: "Ритм, упругость стопы и общая кондиция.",
+        bg: "Ритъм, стабилност на глезена и обща кондиция.",
+      },
+    },
+    {
+      id: "erg_work",
+      label: { en: "Rowing / bike erg", ru: "Гребля / велотренажёр", bg: "Гребен / велоергометър" },
+      targetSets: 1,
+      targetReps: 1,
+      targetWeightKg: null,
+      targetDurationMinutes: 25,
+      targetRpe: 5.5,
+      displayOrder: 3,
+      notes: {
+        en: "Joint-friendly conditioning option.",
+        ru: "Кондиционная работа с низкой ударной нагрузкой.",
+        bg: "Кондиционна работа с ниско ударно натоварване.",
+      },
+    },
+  ],
+  recovery: [
+    {
+      id: "light_mobilization",
+      label: { en: "Light mobilization", ru: "Лёгкая мобилизация", bg: "Лека мобилизация" },
+      targetSets: 1,
+      targetReps: 1,
+      targetWeightKg: null,
+      targetDurationMinutes: 15,
+      targetRpe: 2,
+      displayOrder: 0,
+      notes: {
+        en: "Easy movement to restore range without fatigue.",
+        ru: "Лёгкое движение для восстановления амплитуды без усталости.",
+        bg: "Леко движение за възстановяване на амплитудата без умора.",
+      },
+    },
+    {
+      id: "breathing_reset",
+      label: { en: "Breathing reset", ru: "Дыхание", bg: "Дишане" },
+      targetSets: 1,
+      targetReps: 1,
+      targetWeightKg: null,
+      targetDurationMinutes: 8,
+      targetRpe: 1.5,
+      displayOrder: 1,
+      notes: {
+        en: "Down-regulation and recovery focus.",
+        ru: "Снижение возбуждения и фокус на восстановлении.",
+        bg: "Намаляване на възбудата и фокус върху възстановяване.",
+      },
+    },
+    {
+      id: "easy_technical_drills",
+      label: { en: "Easy technical drills", ru: "Лёгкая техника", bg: "Лека техника" },
+      targetSets: 3,
+      targetReps: 4,
+      targetWeightKg: null,
+      targetDurationMinutes: 12,
+      targetRpe: 3,
+      displayOrder: 2,
+      notes: {
+        en: "Technical patterning only, no pressure exchanges.",
+        ru: "Только технический рисунок, без силовых разменов.",
+        bg: "Само технически модел, без силови размени.",
+      },
+    },
+    {
+      id: "soft_stretching",
+      label: { en: "Soft stretching", ru: "Мягкая растяжка", bg: "Меко разтягане" },
+      targetSets: 1,
+      targetReps: 1,
+      targetWeightKg: null,
+      targetDurationMinutes: 10,
+      targetRpe: 2,
+      displayOrder: 3,
+      notes: {
+        en: "Relaxed positions, no aggressive end-range forcing.",
+        ru: "Расслабленные позиции без агрессивного продавливания амплитуды.",
+        bg: "Отпуснати позиции без агресивно натискане в крайна амплитуда.",
+      },
+    },
+  ],
+  mobility: [
+    {
+      id: "hip_mobility",
+      label: { en: "Hip mobility", ru: "Таз / бедро", bg: "Таз / бедро" },
+      targetSets: 2,
+      targetReps: 6,
+      targetWeightKg: null,
+      targetDurationMinutes: 10,
+      targetRpe: 3,
+      displayOrder: 0,
+      notes: {
+        en: "Hip rotation and split-position control.",
+        ru: "Ротация таза и контроль позиций в выпаде.",
+        bg: "Ротация в таза и контрол на позиции в напад.",
+      },
+    },
+    {
+      id: "shoulder_scapula_mobility",
+      label: { en: "Shoulders / scapula", ru: "Плечи / лопатки", bg: "Рамене / лопатки" },
+      targetSets: 2,
+      targetReps: 8,
+      targetWeightKg: null,
+      targetDurationMinutes: 8,
+      targetRpe: 3,
+      displayOrder: 1,
+      notes: {
+        en: "Shoulder control for posting, pulling, and mat pressure.",
+        ru: "Контроль плеча для упора, тяги и давления в ковре.",
+        bg: "Контрол на рамото за опора, дърпане и натиск.",
+      },
+    },
+    {
+      id: "thoracic_mobility",
+      label: { en: "Thoracic spine", ru: "Грудной отдел", bg: "Гръден отдел" },
+      targetSets: 2,
+      targetReps: 6,
+      targetWeightKg: null,
+      targetDurationMinutes: 8,
+      targetRpe: 2.5,
+      displayOrder: 2,
+      notes: {
+        en: "Rotation and extension for cleaner positions.",
+        ru: "Ротация и разгибание для более чистых позиций.",
+        bg: "Ротация и разгъване за по-чисти позиции.",
+      },
+    },
+    {
+      id: "ankle_mobility",
+      label: { en: "Ankle mobility", ru: "Голеностоп", bg: "Глезен" },
+      targetSets: 2,
+      targetReps: 8,
+      targetWeightKg: null,
+      targetDurationMinutes: 8,
+      targetRpe: 2.5,
+      displayOrder: 3,
+      notes: {
+        en: "Dorsiflexion and stance depth control.",
+        ru: "Тыльное сгибание и контроль глубины стойки.",
+        bg: "Дорзифлексия и контрол на дълбочината в стойка.",
+      },
+    },
+  ],
+  activation: [
+    {
+      id: "band_activation",
+      label: { en: "Band activation", ru: "Резина", bg: "Ластик" },
+      targetSets: 2,
+      targetReps: 10,
+      targetWeightKg: null,
+      targetDurationMinutes: 8,
+      targetRpe: 3,
+      displayOrder: 0,
+      notes: {
+        en: "Prime hips, shoulders, and trunk before mat work.",
+        ru: "Подготовить таз, плечи и корпус перед работой на ковре.",
+        bg: "Подготовка на таза, раменете и корпуса преди работа.",
+      },
+    },
+    {
+      id: "light_shots",
+      label: { en: "Light shots", ru: "Лёгкие проходы", bg: "Леки влизания" },
+      targetSets: 3,
+      targetReps: 4,
+      targetWeightKg: null,
+      targetDurationMinutes: null,
+      targetRpe: 4,
+      displayOrder: 1,
+      notes: {
+        en: "Smooth entries without fatigue.",
+        ru: "Плавные входы без накопления усталости.",
+        bg: "Плавни влизания без натрупване на умора.",
+      },
+    },
+    {
+      id: "start_accelerations",
+      label: { en: "Start accelerations", ru: "Стартовые ускорения", bg: "Стартови ускорения" },
+      targetSets: 4,
+      targetReps: 2,
+      targetWeightKg: null,
+      targetDurationMinutes: null,
+      targetRpe: 5,
+      displayOrder: 2,
+      notes: {
+        en: "Short activation sprints, stop well before fatigue.",
+        ru: "Короткие активационные ускорения, остановка до усталости.",
+        bg: "Кратки активационни ускорения, спиране преди умора.",
+      },
+    },
+    {
+      id: "coordination_entries",
+      label: { en: "Coordination entries", ru: "Координационные входы", bg: "Координационни влизания" },
+      targetSets: 3,
+      targetReps: 4,
+      targetWeightKg: null,
+      targetDurationMinutes: null,
+      targetRpe: 4,
+      displayOrder: 3,
+      notes: {
+        en: "Timing and coordination before heavier work.",
+        ru: "Тайминг и координация перед более тяжёлой работой.",
+        bg: "Тайминг и координация преди по-тежка работа.",
+      },
+    },
+  ],
+};
+
+const TEMPLATE_MICROCYCLE_TYPES = [
+  "load",
+  "support",
+  "specific",
+  "activation",
+  "recovery",
+  "build",
+  "impact",
+  "shock",
+  "taper",
+  "competition",
+] as const;
+
+const MICROCYCLE_TYPE_LABELS: Record<string, Record<Language, string>> = {
+  load: { en: "Load", ru: "Нагрузочный", bg: "Натоварващ" },
+  support: { en: "Support", ru: "Поддерживающий", bg: "Поддържащ" },
+  specific: { en: "Specific", ru: "Специальный", bg: "Специфичен" },
+  activation: { en: "Activation", ru: "Активационный", bg: "Активационен" },
+  recovery: { en: "Recovery", ru: "Восстановительный", bg: "Възстановителен" },
+  build: { en: "Build", ru: "Накопительный", bg: "Изграждащ" },
+  impact: { en: "Impact", ru: "Ударный", bg: "Ударен" },
+  shock: { en: "Shock", ru: "Шоковый", bg: "Шоков" },
+  taper: { en: "Taper", ru: "Подводящий", bg: "Тейпър" },
+  competition: { en: "Competition", ru: "Соревновательный", bg: "Състезателен" },
+};
+
+const PROGRESSION_TYPE_LABELS: Record<string, Record<Language, string>> = {
+  linear: { en: "Linear", ru: "Линейная", bg: "Линейна" },
+  wave: { en: "Wave", ru: "Волновая", bg: "Вълнова" },
+  taper: { en: "Taper", ru: "Подводящая", bg: "Тейпър" },
+  recovery: { en: "Recovery", ru: "Восстановительная", bg: "Възстановителна" },
+};
+
+const KNOWN_TEMPLATE_TEXT_LABELS: Record<string, Record<Language, string>> = {
+  "Weekly speed-strength day": {
+    en: "Weekly speed-strength day",
+    ru: "Недельный скоростно-силовой день",
+    bg: "Седмичен скоростно-силов ден",
+  },
+  "Coach-authored template for a single key training day.": {
+    en: "Coach-authored template for a single key training day.",
+    ru: "Тренерский шаблон для одного ключевого тренировочного дня.",
+    bg: "Треньорски шаблон за един ключов тренировъчен ден.",
+  },
+  "Baseline template for a primary speed-strength loading day.": {
+    en: "Baseline template for a primary speed-strength loading day.",
+    ru: "Базовый шаблон основного скоростно-силового нагрузочного дня.",
+    bg: "Базов шаблон за основен скоростно-силов натоварващ ден.",
+  },
+  "Track and field": {
+    en: "Track and field",
+    ru: "Лёгкая атлетика",
+    bg: "Лека атлетика",
+  },
+  "Primary speed-strength loading day": {
+    en: "Primary speed-strength loading day",
+    ru: "Основной скоростно-силовой нагрузочный день",
+    bg: "Основен скоростно-силов натоварващ ден",
+  },
+  "Sprint mechanics": {
+    en: "Sprint mechanics",
+    ru: "Спринтерская механика",
+    bg: "Спринтова механика",
+  },
+  "Drills and coordination work stay in all statuses.": {
+    en: "Drills and coordination work stay in all statuses.",
+    ru: "Дриллы и координационная работа сохраняются при любом статусе.",
+    bg: "Дриловете и координационната работа остават при всички статуси.",
+  },
+  "Drills and coordination stay in all statuses.": {
+    en: "Drills and coordination stay in all statuses.",
+    ru: "Дриллы и координация сохраняются при любом статусе.",
+    bg: "Дриловете и координацията остават при всички статуси.",
+  },
+  "Main acceleration set": {
+    en: "Main acceleration set",
+    ru: "Основной блок ускорений",
+    bg: "Основен блок ускорения",
+  },
+  "Reduce total sprint volume on yellow or red days.": {
+    en: "Reduce total sprint volume on yellow or red days.",
+    ru: "Снижайте общий объём спринта в жёлтые и красные дни.",
+    bg: "Намалете общия спринтов обем в жълти и червени дни.",
+  },
+  "Reduce sprint volume when readiness drops.": {
+    en: "Reduce sprint volume when readiness drops.",
+    ru: "Снижайте объём спринта при падении готовности.",
+    bg: "Намалете спринтовия обем при спад на готовността.",
+  },
+  "Gym strength block": {
+    en: "Gym strength block",
+    ru: "Силовой блок в зале",
+    bg: "Силов блок в залата",
+  },
+  "Secondary block that can be cut first when readiness drops.": {
+    en: "Secondary block that can be cut first when readiness drops.",
+    ru: "Второстепенный блок, который можно убрать первым при падении готовности.",
+    bg: "Второстепенен блок, който може да се премахне първи при спад на готовността.",
+  },
+  "Secondary strength work that can be removed first.": {
+    en: "Secondary strength work that can be removed first.",
+    ru: "Второстепенная силовая работа, которую можно убрать первой.",
+    bg: "Второстепенна силова работа, която може да се премахне първа.",
+  },
+  "Base aerobic support day": {
+    en: "Base aerobic support day",
+    ru: "Базовый день аэробной поддержки",
+    bg: "Базов ден за аеробна подкрепа",
+  },
+  "Lower-intensity base phase day for aerobic support and movement quality.": {
+    en: "Lower-intensity base phase day for aerobic support and movement quality.",
+    ru: "День базовой фазы с низкой интенсивностью для аэробной поддержки и качества движения.",
+    bg: "Ден от базовата фаза с по-ниска интензивност за аеробна подкрепа и качество на движението.",
+  },
+  "Aerobic support and movement base": {
+    en: "Aerobic support and movement base",
+    ru: "Аэробная поддержка и двигательная база",
+    bg: "Аеробна подкрепа и двигателна база",
+  },
+  "Movement prep": {
+    en: "Movement prep",
+    ru: "Подготовка движения",
+    bg: "Подготовка на движението",
+  },
+  "Open the session with low-load mobility.": {
+    en: "Open the session with low-load mobility.",
+    ru: "Начните с низконагрузочной мобильности.",
+    bg: "Започнете с нискоинтензивна мобилност.",
+  },
+  "Extensive tempo run": {
+    en: "Extensive tempo run",
+    ru: "Объёмный темповый бег",
+    bg: "Обемен темпов бег",
+  },
+  "Base phase aerobic support.": {
+    en: "Base phase aerobic support.",
+    ru: "Аэробная поддержка базовой фазы.",
+    bg: "Аеробна подкрепа за базовата фаза.",
+  },
+  "Recovery circuit": {
+    en: "Recovery circuit",
+    ru: "Восстановительный круг",
+    bg: "Възстановителен кръг",
+  },
+  "Finish with light circuit and breathing.": {
+    en: "Finish with light circuit and breathing.",
+    ru: "Завершите лёгким кругом и дыханием.",
+    bg: "Завършете с лек кръг и дишане.",
+  },
+  "Specific speed-technical day": {
+    en: "Specific speed-technical day",
+    ru: "Специальный скоростно-технический день",
+    bg: "Специфичен скоростно-технически ден",
+  },
+  "Specific phase day focused on event rhythm and quality speed exposure.": {
+    en: "Specific phase day focused on event rhythm and quality speed exposure.",
+    ru: "День специальной фазы с фокусом на ритм дисциплины и качественную скорость.",
+    bg: "Ден от специфичната фаза с фокус върху състезателния ритъм и качествената скорост.",
+  },
+  "Specific speed and technical sharpness": {
+    en: "Specific speed and technical sharpness",
+    ru: "Специальная скорость и техническая острота",
+    bg: "Специфична скорост и техническа острота",
+  },
+  "Event rhythm drills": {
+    en: "Event rhythm drills",
+    ru: "Дриллы ритма дисциплины",
+    bg: "Дрилове за ритъм на дисциплината",
+  },
+  "Technical quality is protected close to competition.": {
+    en: "Technical quality is protected close to competition.",
+    ru: "Техническое качество сохраняется ближе к старту.",
+    bg: "Техническото качество се пази близо до състезанието.",
+  },
+  "Specific speed reps": {
+    en: "Specific speed reps",
+    ru: "Специальные скоростные повторы",
+    bg: "Специфични скоростни повторения",
+  },
+  "Keep quality, reduce total volume when needed.": {
+    en: "Keep quality, reduce total volume when needed.",
+    ru: "Сохраняйте качество и при необходимости снижайте общий объём.",
+    bg: "Запазете качеството и намалете общия обем при нужда.",
+  },
+  "Activation lifts": {
+    en: "Activation lifts",
+    ru: "Активационные подъёмы",
+    bg: "Активационни вдигания",
+  },
+  "Short neural activation without excessive fatigue.": {
+    en: "Short neural activation without excessive fatigue.",
+    ru: "Короткая нейроактивация без лишней усталости.",
+    bg: "Кратка невроактивация без излишна умора.",
+  },
+  "Taper activation day": {
+    en: "Taper activation day",
+    ru: "Активационный день подводки",
+    bg: "Активационен ден в тейпър",
+  },
+  "Taper phase session to maintain sharpness with minimal fatigue.": {
+    en: "Taper phase session to maintain sharpness with minimal fatigue.",
+    ru: "Сессия подводки для сохранения остроты при минимальной усталости.",
+    bg: "Сесия в тейпър за запазване на острота с минимална умора.",
+  },
+  "Maintain readiness and activation": {
+    en: "Maintain readiness and activation",
+    ru: "Сохранить готовность и активацию",
+    bg: "Поддържане на готовност и активация",
+  },
+  "Warm-up mobility": {
+    en: "Warm-up mobility",
+    ru: "Разминочная мобильность",
+    bg: "Загряваща мобилност",
+  },
+  "Easy mobility and breathing.": {
+    en: "Easy mobility and breathing.",
+    ru: "Лёгкая мобильность и дыхание.",
+    bg: "Лека мобилност и дишане.",
+  },
+  "Starts and reactions": {
+    en: "Starts and reactions",
+    ru: "Старты и реакции",
+    bg: "Стартове и реакции",
+  },
+  "Short high-quality activation work.": {
+    en: "Short high-quality activation work.",
+    ru: "Короткая качественная активационная работа.",
+    bg: "Кратка качествена активационна работа.",
+  },
+  "Technical rehearsal": {
+    en: "Technical rehearsal",
+    ru: "Техническая репетиция",
+    bg: "Техническа репетиция",
+  },
+  "Keep timing and event feel.": {
+    en: "Keep timing and event feel.",
+    ru: "Сохраняйте тайминг и ощущение дисциплины.",
+    bg: "Запазете тайминга и усещането за дисциплината.",
+  },
+  "Recovery regeneration day": {
+    en: "Recovery regeneration day",
+    ru: "День восстановления и регенерации",
+    bg: "Ден за възстановяване и регенерация",
+  },
+  "Recovery phase day with regeneration, mobility, and low-stress restoration.": {
+    en: "Recovery phase day with regeneration, mobility, and low-stress restoration.",
+    ru: "День восстановительной фазы с регенерацией, мобильностью и низким стрессом.",
+    bg: "Ден от възстановителната фаза с регенерация, мобилност и нисък стрес.",
+  },
+  "Restore freshness and mobility": {
+    en: "Restore freshness and mobility",
+    ru: "Восстановить свежесть и мобильность",
+    bg: "Възстановяване на свежестта и мобилността",
+  },
+  "Breathing reset": {
+    en: "Breathing reset",
+    ru: "Дыхательный сброс",
+    bg: "Дихателен ресет",
+  },
+  "Reset and down-regulate.": {
+    en: "Reset and down-regulate.",
+    ru: "Сбросить напряжение и снизить возбуждение.",
+    bg: "Ресет и намаляване на възбудата.",
+  },
+  "Mobility flow": {
+    en: "Mobility flow",
+    ru: "Мобильность в потоке",
+    bg: "Мобилност в движение",
+  },
+  "Low-load full-body mobility.": {
+    en: "Low-load full-body mobility.",
+    ru: "Низконагрузочная мобильность всего тела.",
+    bg: "Нискоинтензивна мобилност за цяло тяло.",
+  },
+  "Easy activation": {
+    en: "Easy activation",
+    ru: "Лёгкая активация",
+    bg: "Лека активация",
+  },
+  "Optional light activation if athlete feels flat.": {
+    en: "Optional light activation if athlete feels flat.",
+    ru: "Опциональная лёгкая активация, если спортсмен выглядит вялым.",
+    bg: "Опционална лека активация, ако спортистът изглежда отпуснат.",
+  },
+};
+
+function localizedOptionLabel(
+  value: string | null | undefined,
+  language: Language,
+  labels: Record<string, Record<Language, string>>,
+) {
+  if (!value) {
+    return copyFor(language, { en: "General", ru: "Общий", bg: "Общ" });
+  }
+
+  return labels[value]?.[language] ?? value;
+}
+
+function translateKnownTemplateText(value: string | null | undefined, language: Language) {
+  if (!value) {
+    return "";
+  }
+
+  const exact = KNOWN_TEMPLATE_TEXT_LABELS[value];
+  if (exact) {
+    return exact[language];
+  }
+
+  const source = Object.entries(KNOWN_TEMPLATE_TEXT_LABELS).find(([, translations]) =>
+    Object.values(translations).includes(value),
+  );
+
+  return source ? source[1][language] : value;
+}
+
+const KNOWN_MESOCYCLE_TEXT_LABELS: Record<string, Record<Language, string>> = {
+  "Specific-to-taper block": {
+    en: "Specific-to-taper block",
+    ru: "Специально-подводящий блок",
+    bg: "Блок от специфична подготовка към тейпър",
+  },
+  "Preserve sharpness and reduce residual fatigue.": {
+    en: "Preserve sharpness and reduce residual fatigue.",
+    ru: "Сохранить скорость и снизить остаточную усталость.",
+    bg: "Запазване на остротата и намаляване на остатъчната умора.",
+  },
+  "Convert specific load into fresh competition rhythm.": {
+    en: "Convert specific load into fresh competition rhythm.",
+    ru: "Перевести специальную нагрузку в свежий соревновательный ритм.",
+    bg: "Превеждане на специфичното натоварване в свеж състезателен ритъм.",
+  },
+  "Protect freshness, preserve specificity, and reduce fatigue.": {
+    en: "Protect freshness, preserve specificity, and reduce fatigue.",
+    ru: "Сохранить свежесть, специальную готовность и снизить усталость.",
+    bg: "Запазване на свежестта, специфичната готовност и намаляване на умората.",
+  },
+  "Restore readiness and tissue quality before the next build.": {
+    en: "Restore readiness and tissue quality before the next build.",
+    ru: "Восстановить готовность перед следующим нагрузочным блоком.",
+    bg: "Възстановяване на готовността преди следващия натоварващ блок.",
+  },
+  "Convert general capacity into competition-specific quality.": {
+    en: "Convert general capacity into competition-specific quality.",
+    ru: "Перевести общую работоспособность в соревновательное качество.",
+    bg: "Превръщане на общия капацитет в специфично състезателно качество.",
+  },
+  "Build force output while keeping sport-specific rhythm.": {
+    en: "Build force output while keeping sport-specific rhythm.",
+    ru: "Развить силовую отдачу без потери специального ритма.",
+    bg: "Развитие на силовата отдача при запазване на специфичния ритъм.",
+  },
+  "Establish aerobic, technical, and structural base.": {
+    en: "Establish aerobic, technical, and structural base.",
+    ru: "Заложить аэробную, техническую и структурную базу.",
+    bg: "Изграждане на аеробна, техническа и структурна база.",
+  },
+};
+
+function localizedWeekLabel(label: string, language: Language) {
+  const match = /^Week\s+(\d+)$/i.exec(label.trim());
+
+  if (!match) {
+    return label;
+  }
+
+  return copyFor(language, {
+    en: `Week ${match[1]}`,
+    ru: `Неделя ${match[1]}`,
+    bg: `Седмица ${match[1]}`,
+  });
+}
+
+function translateKnownMesocycleText(value: string | null | undefined, language: Language) {
+  if (!value) {
+    return "";
+  }
+
+  const exact = KNOWN_MESOCYCLE_TEXT_LABELS[value];
+  if (exact) {
+    return exact[language];
+  }
+
+  const competitionMatch = /^Competition execution(?: for (.+))?\.$/.exec(value);
+  if (competitionMatch) {
+    const suffix = competitionMatch[1] ? `: ${competitionMatch[1]}` : "";
+    return copyFor(language, {
+      en: `Competition execution${suffix}.`,
+      ru: `Соревновательное выполнение${suffix}.`,
+      bg: `Състезателно изпълнение${suffix}.`,
+    });
+  }
+
+  const source = Object.entries(KNOWN_MESOCYCLE_TEXT_LABELS).find(([, translations]) =>
+    Object.values(translations).includes(value),
+  );
+
+  return source ? source[1][language] : value;
+}
+
+function isKnownTemplateText(value: string | null | undefined) {
+  if (!value) {
+    return false;
+  }
+
+  return Object.entries(KNOWN_TEMPLATE_TEXT_LABELS).some(
+    ([source, translations]) => value === source || Object.values(translations).includes(value),
+  );
+}
+
+function getBlockExercisePresets(blockType: PlanBlockType) {
+  return BLOCK_EXERCISE_PRESETS[blockType] ?? [];
+}
+
+function buildBlockExerciseFromPreset(
+  preset: BlockExercisePreset,
+  language: Language,
+): PlanExerciseInput {
+  return {
+    name: copyFor(language, preset.label),
+    targetSets: preset.targetSets,
+    targetReps: preset.targetReps,
+    targetWeightKg: preset.targetWeightKg,
+    targetDurationMinutes: preset.targetDurationMinutes,
+    targetRpe: preset.targetRpe,
+    notes: copyFor(language, preset.notes),
+    displayOrder: preset.displayOrder,
+  };
+}
+
+function formatExercisePresetVolume(preset: BlockExercisePreset, language: Language) {
+  const parts: string[] = [];
+
+  if (preset.targetSets && preset.targetReps) {
+    parts.push(`${preset.targetSets}x${preset.targetReps}`);
+  } else if (preset.targetSets) {
+    parts.push(`${preset.targetSets} ${copyFor(language, { en: "sets", ru: "подх.", bg: "серии" })}`);
+  } else if (preset.targetReps) {
+    parts.push(`${preset.targetReps} ${copyFor(language, { en: "reps", ru: "повт.", bg: "повт." })}`);
+  }
+
+  if (preset.targetDurationMinutes) {
+    parts.push(`${preset.targetDurationMinutes} ${copyFor(language, { en: "min", ru: "мин", bg: "мин" })}`);
+  }
+
+  if (preset.targetWeightKg) {
+    parts.push(`${preset.targetWeightKg} ${copyFor(language, { en: "kg", ru: "кг", bg: "кг" })}`);
+  }
+
+  return parts.length ? parts.join(" / ") : copyFor(language, {
+    en: "Set by coach",
+    ru: "По назначению",
+    bg: "По преценка",
+  });
+}
+
+function formatExercisePresetControl(preset: BlockExercisePreset, language: Language) {
+  const control = preset.targetRpe ? `RPE ${preset.targetRpe}` : "";
+  const notes = copyFor(language, preset.notes);
+
+  return control ? `${control} / ${notes}` : notes;
+}
+
+function buildPreparationRowFromPreset(
+  preset: BlockExercisePreset,
+  language: Language,
+): PreparationPlanTableRow {
+  return {
+    block: copyFor(language, preset.label),
+    volume: formatExercisePresetVolume(preset, language),
+    control: formatExercisePresetControl(preset, language),
+  };
+}
+
+function buildEmptyBlockExercise(language: Language, blockType: PlanBlockType): PlanExerciseInput {
+  return {
+    name: copyFor(language, {
+      en: `Custom ${localizedOptionLabel(blockType, language, BLOCK_TYPE_LABELS).toLowerCase()} exercise`,
+      ru: `Своё упражнение: ${localizedOptionLabel(blockType, language, BLOCK_TYPE_LABELS).toLowerCase()}`,
+      bg: `Собствено упражнение: ${localizedOptionLabel(blockType, language, BLOCK_TYPE_LABELS).toLowerCase()}`,
+    }),
+    targetSets: 3,
+    targetReps: 5,
+    targetWeightKg: null,
+    targetDurationMinutes: null,
+    targetRpe: 7,
+    notes: "",
+  };
+}
+
+function buildDefaultBlockExercises(language: Language, blockType: PlanBlockType): PlanExerciseInput[] {
+  return getBlockExercisePresets(blockType).slice(0, 3).map((preset, index) => ({
+    ...buildBlockExerciseFromPreset(preset, language),
+    displayOrder: index,
+  }));
+}
+
+function templateSummaryToPayload(template: PlanTemplateSummary, language: Language): PlanTemplatePayload {
+  return {
+    name: translateKnownTemplateText(template.name, language),
+    description: translateKnownTemplateText(template.description, language),
+    sportType: translateKnownTemplateText(template.sportType, language),
+    phaseFocus: template.phaseFocus,
+    competitionPriorityFocus: template.competitionPriorityFocus,
+    templateGoal: translateKnownTemplateText(template.templateGoal, language),
+    microcycleType: template.microcycleType,
+    competitionSpecific: template.competitionSpecific,
+    blocks: template.blocks.map((block) => ({
+      ...block,
+      name: translateKnownTemplateText(block.name, language),
+      notes: translateKnownTemplateText(block.notes, language),
+      exercises: block.exercises?.map((exercise, index) => ({
+        name: translateKnownTemplateText(exercise.name, language),
+        targetSets: exercise.targetSets,
+        targetReps: exercise.targetReps,
+        targetWeightKg: exercise.targetWeightKg,
+        targetDurationMinutes: exercise.targetDurationMinutes,
+        targetRpe: exercise.targetRpe,
+        notes: translateKnownTemplateText(exercise.notes, language),
+        displayOrder: index,
+      })),
+    })),
+    days: template.days?.map((day, dayIndex) => ({
+      label: translateKnownTemplateText(day.label, language),
+      notes: translateKnownTemplateText(day.notes, language),
+      orderIndex: day.orderIndex ?? dayIndex,
+      sessions: day.sessions.map((session, sessionIndex) => ({
+        name: translateKnownTemplateText(session.name, language),
+        notes: translateKnownTemplateText(session.notes, language),
+        orderIndex: session.orderIndex ?? sessionIndex,
+        blocks: session.blocks.map((block) => ({
+          ...block,
+          name: translateKnownTemplateText(block.name, language),
+          notes: translateKnownTemplateText(block.notes, language),
+          exercises: block.exercises?.map((exercise, exerciseIndex) => ({
+            name: translateKnownTemplateText(exercise.name, language),
+            targetSets: exercise.targetSets,
+            targetReps: exercise.targetReps,
+            targetWeightKg: exercise.targetWeightKg,
+            targetDurationMinutes: exercise.targetDurationMinutes,
+            targetRpe: exercise.targetRpe,
+            notes: translateKnownTemplateText(exercise.notes, language),
+            displayOrder: exercise.displayOrder ?? exerciseIndex,
+          })),
+        })),
+      })),
+    })),
+  };
+}
+
+function createEmptyPreparationPlanDraft(language: Language): PreparationPlanReference {
+  return {
+    title: copyFor(language, {
+      en: "New preparation plan",
+      ru: "Новый план подготовки",
+      bg: "Нов план за подготовка",
+    }),
+    period: getDateInputValue(),
+    subtitle: "",
+    metrics: [],
+    phases: [],
+    zones: [],
+    monitoringDates: [],
+    weeks: [
+      {
+        title: copyFor(language, { en: "Week 1", ru: "Неделя 1", bg: "Седмица 1" }),
+        days: [
+          {
+            title: copyFor(language, { en: "Day 1", ru: "День 1", bg: "Ден 1" }),
+            type: copyFor(language, {
+              en: "Training focus",
+              ru: "Фокус дня",
+              bg: "Фокус на деня",
+            }),
+            sessions: [
+              {
+                title: copyFor(language, { en: "Session 1", ru: "Сессия 1", bg: "Сесия 1" }),
+                columns: [
+                  copyFor(language, { en: "Exercise", ru: "Упражнение", bg: "Упражнение" }),
+                  copyFor(language, { en: "Volume", ru: "Объём", bg: "Обем" }),
+                  copyFor(language, { en: "Control", ru: "Контроль", bg: "Контрол" }),
+                ],
+                rows: [],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+    nutrition: [],
+    summary: [],
+  };
+}
+
+function createLocalizedDefaultPlanTemplate(language: Language): PlanTemplatePayload {
+  return {
+    ...DEFAULT_PLAN_TEMPLATE,
+    name: translateKnownTemplateText(DEFAULT_PLAN_TEMPLATE.name, language),
+    description: translateKnownTemplateText(DEFAULT_PLAN_TEMPLATE.description, language),
+    sportType: translateKnownTemplateText(DEFAULT_PLAN_TEMPLATE.sportType, language),
+    templateGoal: translateKnownTemplateText(DEFAULT_PLAN_TEMPLATE.templateGoal, language),
+    blocks: DEFAULT_PLAN_TEMPLATE.blocks.map((block) => ({
+      ...block,
+      name: translateKnownTemplateText(block.name, language),
+      notes: translateKnownTemplateText(block.notes, language),
+      exercises:
+        block.exercises && block.exercises.length > 0
+          ? block.exercises.map((exercise) => ({
+              ...exercise,
+              name: translateKnownTemplateText(exercise.name, language),
+              notes: translateKnownTemplateText(exercise.notes, language),
+            }))
+          : buildDefaultBlockExercises(language, block.blockType),
+    })),
+  };
+}
+
+function isLocalizedDefaultPlanTemplate(template: PlanTemplatePayload) {
+  return (
+    isKnownTemplateText(template.name) &&
+    isKnownTemplateText(template.description) &&
+    isKnownTemplateText(template.sportType) &&
+    isKnownTemplateText(template.templateGoal) &&
+    template.phaseFocus === DEFAULT_PLAN_TEMPLATE.phaseFocus &&
+    template.competitionPriorityFocus === DEFAULT_PLAN_TEMPLATE.competitionPriorityFocus &&
+    template.microcycleType === DEFAULT_PLAN_TEMPLATE.microcycleType &&
+    template.competitionSpecific === DEFAULT_PLAN_TEMPLATE.competitionSpecific &&
+    template.blocks.length === DEFAULT_PLAN_TEMPLATE.blocks.length &&
+    template.blocks.every((block, index) => {
+      const defaultBlock = DEFAULT_PLAN_TEMPLATE.blocks[index];
+
+      return (
+        Boolean(defaultBlock) &&
+        block.blockType === defaultBlock.blockType &&
+        block.blockPriority === defaultBlock.blockPriority &&
+        block.isMandatory === defaultBlock.isMandatory &&
+        isKnownTemplateText(block.name) &&
+        isKnownTemplateText(block.notes)
+      );
+    })
+  );
+}
+
+function localizedDayOneLabel(language: Language) {
+  return copyFor(language, { en: "Day 1", ru: "День 1", bg: "Ден 1" });
+}
+
+function localizedAssignedPlanNotes(language: Language) {
+  return copyFor(language, {
+    en: "Assigned from coach workspace",
+    ru: "Назначено из рабочего места тренера",
+    bg: "Назначено от работното място на треньора",
+  });
+}
+
+function localizedMicrocycleNotes(language: Language) {
+  return copyFor(language, {
+    en: "Phase-driven microcycle",
+    ru: "Микроцикл с учётом фазы подготовки",
+    bg: "Микроцикъл според фазата на подготовка",
+  });
+}
+
+function isKnownDayOneLabel(value: string) {
+  return ["Day 1", "День 1", "Ден 1"].includes(value);
+}
+
+function isKnownAssignedPlanNotes(value: string) {
+  return [
+    "Assigned from coach workspace",
+    "Назначено из рабочего места тренера",
+    "Назначено от работното място на треньора",
+  ].includes(value);
+}
+
+function isKnownMicrocycleNotes(value: string) {
+  return [
+    "Phase-driven microcycle",
+    "Микроцикл с учётом фазы подготовки",
+    "Микроцикъл според фазата на подготовка",
+  ].includes(value);
+}
+
+function blocksCountLabel(count: number, language: Language) {
+  if (language === "en") {
+    return `${count} ${count === 1 ? "block" : "blocks"}`;
+  }
+
+  if (language === "bg") {
+    return `${count} ${count === 1 ? "блок" : "блока"}`;
+  }
+
+  const lastDigit = count % 10;
+  const lastTwoDigits = count % 100;
+  const form =
+    lastDigit === 1 && lastTwoDigits !== 11
+      ? "блок"
+      : lastDigit >= 2 && lastDigit <= 4 && (lastTwoDigits < 12 || lastTwoDigits > 14)
+        ? "блока"
+        : "блоков";
+
+  return `${count} ${form}`;
+}
+
+function translateTemplateRecommendationReason(reason: string, language: Language) {
+  return reason
+    .split(", ")
+    .map((part) => {
+      if (part.startsWith("phase match: ")) {
+        const phase = part.replace("phase match: ", "");
+        return copyFor(language, {
+          en: `Phase match: ${localizedOptionLabel(phase, language, PREPARATION_PHASE_LABELS)}`,
+          ru: `Совпадение фазы: ${localizedOptionLabel(phase, language, PREPARATION_PHASE_LABELS)}`,
+          bg: `Съвпадение на фазата: ${localizedOptionLabel(phase, language, PREPARATION_PHASE_LABELS)}`,
+        });
+      }
+
+      if (part.startsWith("priority match: ")) {
+        const priority = part.replace("priority match: ", "");
+        return copyFor(language, {
+          en: `Priority match: ${priority}`,
+          ru: `Совпадение приоритета: ${priority}`,
+          bg: `Съвпадение на приоритета: ${priority}`,
+        });
+      }
+
+      if (part === "competition-specific template") {
+        return copyFor(language, {
+          en: "Competition-specific template",
+          ru: "Шаблон учитывает специфику соревнований",
+          bg: "Шаблонът отчита състезателната специфика",
+        });
+      }
+
+      if (part === "general template fit") {
+        return copyFor(language, {
+          en: "General template fit",
+          ru: "Общее соответствие шаблона",
+          bg: "Общо съответствие на шаблона",
+        });
+      }
+
+      return part;
+    })
+    .join("; ");
+}
+
+function initialsFor(name: string) {
+  const parts = name
+    .split(/\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  if (parts.length === 0) {
+    return "V3";
+  }
+
+  return parts
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
+}
+
+function scrollViewportToTop() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  if (document.activeElement instanceof HTMLElement) {
+    document.activeElement.blur();
+  }
+
+  const scrollNow = () => {
+    const scrollingElement = document.scrollingElement ?? document.documentElement;
+    scrollingElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  };
+
+  scrollNow();
+  window.requestAnimationFrame(scrollNow);
+  window.setTimeout(scrollNow, 0);
+  window.setTimeout(scrollNow, 180);
+  window.setTimeout(scrollNow, 420);
+}
+
+function isCoachWorkspaceId(workspaceId: WorkspaceSectionId) {
+  return (
+    workspaceId === "coach-dashboard" ||
+    workspaceId === "coach-athletes" ||
+    workspaceId === "coach-analytics" ||
+    workspaceId === "coach-review"
+  );
+}
+
+function isAthleteWorkspaceId(workspaceId: WorkspaceSectionId) {
+  return (
+    workspaceId === "athlete-today" ||
+    workspaceId === "daily-readiness" ||
+    workspaceId === "athlete-training" ||
+    workspaceId === "athlete-workspace" ||
+    workspaceId === "athlete-history" ||
+    workspaceId === "athlete-competitions"
+  );
+}
+
+function resolveAccessibleWorkspace(
+  workspaceId: WorkspaceSectionId,
+  canSeeCoachWorkspace: boolean,
+): WorkspaceSectionId {
+  if (!SHOW_OFFLINE_CENTER_NAV && workspaceId === "offline-center") {
+    return canSeeCoachWorkspace ? "coach-dashboard" : "athlete-today";
+  }
+
+  if (canSeeCoachWorkspace && isAthleteWorkspaceId(workspaceId)) {
+    return "coach-dashboard";
+  }
+
+  if (
+    !canSeeCoachWorkspace &&
+    (isCoachWorkspaceId(workspaceId) || workspaceId === "planning-studio")
+  ) {
+    return "athlete-today";
+  }
+
+  return workspaceId;
+}
+
+function createEmptyAnalyticsChain(): AnalyticsOverview["chain"] {
+  return {
+    season: null,
+    competitionPlan: null,
+    competitionContext: null,
+    mesocycle: null,
+    mesocycleWeek: null,
+    weekSummary: null,
+    missingLinks: [],
+  };
+}
+
+function normalizeAnalyticsOverview(
+  overview: Partial<AnalyticsOverview> | AnalyticsOverview | null | undefined,
+): AnalyticsOverview | null {
+  if (!overview) {
+    return null;
+  }
+
+  const chain = overview.chain ?? createEmptyAnalyticsChain();
+
+  return {
+    athleteId: overview.athleteId ?? "",
+    athleteName: overview.athleteName ?? "",
+    readinessTrend: Array.isArray(overview.readinessTrend) ? overview.readinessTrend : [],
+    completionTrend: Array.isArray(overview.completionTrend) ? overview.completionTrend : [],
+    loadTrend: Array.isArray(overview.loadTrend) ? overview.loadTrend : [],
+    chain: {
+      ...createEmptyAnalyticsChain(),
+      ...chain,
+      missingLinks: Array.isArray(chain.missingLinks) ? chain.missingLinks : [],
+    },
+    insights: Array.isArray(overview.insights) ? overview.insights : [],
+    patterns: Array.isArray(overview.patterns) ? overview.patterns : [],
+    coachSuggestions: Array.isArray(overview.coachSuggestions)
+      ? overview.coachSuggestions.map((suggestion) => ({
+          ...suggestion,
+          weekStartDate: suggestion.weekStartDate ?? suggestion.plannerBridge?.startDate ?? null,
+          weekLabel:
+            suggestion.weekLabel ??
+            chain.weekSummary?.label ??
+            chain.mesocycleWeek?.weekLabel ??
+            null,
+          latestDecision: suggestion.latestDecision ?? null,
+        }))
+      : [],
+    decisionHistory: Array.isArray(overview.decisionHistory) ? overview.decisionHistory : [],
+  };
+}
+
+function toExecutionDraft(result?: ExecutionResult): ExecutionDraft {
+  if (!result) {
+    return emptyExecutionDraft;
+  }
+
+  return {
+    completed: result.completed,
+    setsCompleted: result.setsCompleted,
+    repsCompleted: result.repsCompleted,
+    weightKg: result.weightKg,
+    durationMinutes: result.durationMinutes,
+    rpe: result.rpe,
+    notes: result.notes,
+  };
+}
+
+function normalizeTemplatePackItems(items: TemplatePackDraftItem[]) {
+  return [...items]
+    .sort((left, right) => left.dayOffset - right.dayOffset)
+    .map((item) => ({
+      ...item,
+      dayLabel: `Day ${item.dayOffset + 1}`,
+    }));
+}
+
+function recalculateTemplatePack(
+  pack: TemplatePackRecommendation,
+  items: TemplatePackDraftItem[],
+): TemplatePackRecommendation {
+  const normalizedItems = normalizeTemplatePackItems(items);
+  const totalPlannedLoad = Number(
+    normalizedItems.reduce((sum, item) => sum + item.estimatedLoad, 0).toFixed(1),
+  );
+  const uniqueTemplates = new Set(normalizedItems.map((item) => item.templateId)).size;
+  const varietyScore = normalizedItems.length
+    ? Number((uniqueTemplates / normalizedItems.length).toFixed(2))
+    : 0;
+  const loadBalanceLabel =
+    normalizedItems.length <= 1
+      ? "single-day"
+      : normalizedItems.some(
+            (item, index) =>
+              index > 0 &&
+              Math.abs(item.estimatedLoad - normalizedItems[index - 1].estimatedLoad) > 120,
+          )
+        ? "volatile"
+        : "balanced";
+  const targetLoadDelta = pack.mesocycleWeek
+    ? Number((totalPlannedLoad - pack.mesocycleWeek.targetLoad).toFixed(1))
+    : null;
+
+  return {
+    ...pack,
+    suggestedDays: normalizedItems.length,
+    totalPlannedLoad,
+    targetLoadDelta,
+    varietyScore,
+    loadBalanceLabel,
+    warnings: [],
+    suggestions: [],
+    items: normalizedItems,
+  };
+}
+
+function packToMicrocycleItems(pack: TemplatePackRecommendation) {
+  return pack.items.map((item) => ({
+    templateId: item.templateId,
+    dayOffset: item.dayOffset,
+    dayLabel: item.dayLabel,
+    microcycleType: item.microcycleType,
+  }));
+}
+
+function historyBiasesFromPlannerSuggestion(
+  suggestion: PlannerSuggestion,
+): TemplatePackHistoryBiasItem[] {
+  if (!suggestion.feedback) {
+    return [];
+  }
+
+  return [
+    {
+      code: suggestion.code,
+      action: suggestion.action,
+      effect:
+        suggestion.feedback.label === "watch" || suggestion.feedback.netScore < 0
+          ? "caution"
+          : "boost",
+      label: suggestion.feedback.label,
+      scope: suggestion.feedback.scope,
+      netScore: suggestion.feedback.netScore,
+      sampleSize: suggestion.feedback.sampleSize,
+    },
+  ];
+}
+
+function summarizeTemplatePackHistory(pack: TemplatePackRecommendation | null) {
+  if (!pack) {
+    return null;
+  }
+
+  let informedSlots = 0;
+  let boostSignals = 0;
+  let cautionSignals = 0;
+  let exactContextSignals = 0;
+
+  for (const item of pack.items) {
+    if (item.historyBiases.length) {
+      informedSlots += 1;
+    }
+
+    for (const bias of item.historyBiases) {
+      if (bias.effect === "boost") {
+        boostSignals += 1;
+      } else {
+        cautionSignals += 1;
+      }
+
+      if (bias.scope === "exact_context") {
+        exactContextSignals += 1;
+      }
+    }
+  }
+
+  return {
+    informedSlots,
+    boostSignals,
+    cautionSignals,
+    exactContextSignals,
+  };
+}
+
+function resolveAnalyticsSuggestionPlannerLink(
+  suggestion: AnalyticsCoachSuggestion,
+  templatePack: TemplatePackRecommendation | null,
+  templatePackContext: TemplatePackContext | null,
+) {
+  const bridge = suggestion.plannerBridge;
+
+  if (!bridge) {
+    return {
+      bridge: null,
+      hasMatchingPack: false,
+      packItem: null as TemplatePackDraftItem | null,
+      plannerSuggestion: null as PlannerSuggestion | null,
+    };
+  }
+
+  const hasMatchingPack =
+    !!templatePack &&
+    !!templatePackContext &&
+    templatePackContext.athleteId === bridge.athleteId &&
+    templatePackContext.startDate === bridge.startDate;
+
+  if (!hasMatchingPack || !templatePack) {
+    return {
+      bridge,
+      hasMatchingPack: false,
+      packItem: null as TemplatePackDraftItem | null,
+      plannerSuggestion: null as PlannerSuggestion | null,
+    };
+  }
+
+  return {
+    bridge,
+    hasMatchingPack: true,
+    packItem:
+      bridge.dayOffset !== null
+        ? templatePack.items.find((item) => item.dayOffset === bridge.dayOffset) ?? null
+        : null,
+    plannerSuggestion: findPlannerSuggestionForBridge(templatePack.suggestions, bridge),
+  };
+}
+
+function applyPlannerSuggestionToPack(
+  pack: TemplatePackRecommendation,
+  suggestion: PlannerSuggestion,
+  templates: PlanTemplateSummary[],
+) {
+  if (suggestion.dayOffset === null) {
+    return null;
+  }
+
+  const draftItems = pack.items.map((item) => ({ ...item }));
+  const targetIndex = draftItems.findIndex((item) => item.dayOffset === suggestion.dayOffset);
+
+  if (targetIndex === -1) {
+    return null;
+  }
+
+  const targetItem = draftItems[targetIndex];
+  const recommendedTemplate = suggestion.recommendedTemplateId
+    ? templates.find((template) => template.id === suggestion.recommendedTemplateId) ?? null
+    : null;
+
+  if (
+    (suggestion.action === "swap_to_recovery" ||
+      suggestion.action === "swap_to_activation" ||
+      suggestion.action === "reduce_load" ||
+      suggestion.action === "increase_load") &&
+    recommendedTemplate
+  ) {
+    targetItem.templateId = recommendedTemplate.id;
+    targetItem.templateName = recommendedTemplate.name;
+    targetItem.microcycleType = recommendedTemplate.microcycleType || targetItem.microcycleType;
+    targetItem.estimatedLoad = recommendedTemplate.estimatedLoad;
+    targetItem.reason = `${targetItem.reason}, manual suggestion applied`;
+    targetItem.score = Number((targetItem.score + 1).toFixed(1));
+    targetItem.historyBiases = historyBiasesFromPlannerSuggestion(suggestion);
+  }
+
+  if (suggestion.action === "move_day" || suggestion.action === "avoid_overlap") {
+    const nextDayOffset = suggestion.targetDayOffset ?? suggestion.dayOffset + 1;
+    const swapIndex = draftItems.findIndex(
+      (item, index) => index !== targetIndex && item.dayOffset === nextDayOffset,
+    );
+
+    if (swapIndex >= 0) {
+      draftItems[swapIndex].dayOffset = targetItem.dayOffset;
+    }
+
+    targetItem.dayOffset = nextDayOffset;
+  }
+
+  return recalculateTemplatePack(pack, draftItems);
+}
+
+function findPlannerSuggestionForBridge(
+  suggestions: PlannerSuggestion[],
+  bridge: AnalyticsPlannerBridge,
+) {
+  return (
+    suggestions.find(
+      (suggestion) =>
+        suggestion.action === bridge.preferredAction &&
+        (bridge.preferredSuggestionCode === null ||
+          suggestion.code === bridge.preferredSuggestionCode) &&
+        (bridge.dayOffset === null || suggestion.dayOffset === bridge.dayOffset),
+    ) ??
+    suggestions.find(
+      (suggestion) =>
+        bridge.preferredSuggestionCode !== null &&
+        suggestion.code === bridge.preferredSuggestionCode,
+    ) ??
+    suggestions.find((suggestion) => suggestion.action === bridge.preferredAction) ??
+    null
+  );
+}
+
+type PageClientProps = {
+  initialPreviewState?: WorkspacePreviewState | null;
+  initialAuthMode?: AuthMode;
+  initialGuestAccessOpen?: boolean;
+  initialLanguage?: Language;
+  initialLanguageLocked?: boolean;
+  suppressSessionRestore?: boolean;
+};
+
+export function PageClient({
+  initialPreviewState = null,
+  initialAuthMode = "login",
+  initialGuestAccessOpen = false,
+  initialLanguage = "ru",
+  initialLanguageLocked = false,
+  suppressSessionRestore = false,
+}: PageClientProps) {
+  const previewState = initialPreviewState;
+  const isPreviewMode = Boolean(previewState);
+  const [language, setLanguage] = useState<Language>(previewState?.language ?? initialLanguage);
+  const [authMode, setAuthMode] = useState<AuthMode>(initialAuthMode);
+  const [guestAccessOpen, setGuestAccessOpen] = useState(initialGuestAccessOpen);
+  const [authForm, setAuthForm] = useState<AuthFormState>(initialAuthForm);
+  const [readinessForm, setReadinessForm] =
+    useState<ReadinessFormValues>(READINESS_DEFAULTS);
+  const [readinessEntryDate, setReadinessEntryDate] = useState(
+    getDateInputValue(),
+  );
+  const [user, setUser] = useState<AuthUser | null>(previewState?.user ?? null);
+  const [todayEntry, setTodayEntry] = useState<ReadinessEntry | null>(null);
+  const [coachAthletes, setCoachAthletes] = useState<CoachAthleteSummary[]>(
+    previewState?.coachAthletes ?? [],
+  );
+  const [availableCoachAthletes, setAvailableCoachAthletes] = useState<
+    CoachAthleteSummary[]
+  >([]);
+  const [selectedAthleteId, setSelectedAthleteId] = useState<string>(
+    previewState?.selectedAthleteId ?? "",
+  );
+  const [athleteProfileForm, setAthleteProfileForm] =
+    useState<CoachAthleteProfilePayload>(emptyAthleteProfileForm);
+  const [isAthleteProfileEditorOpen, setIsAthleteProfileEditorOpen] = useState(false);
+  const [athleteProfileSaveState, setAthleteProfileSaveState] = useState<
+    "idle" | "saving" | "saved" | "failed"
+  >("idle");
+  const [athleteProfileSaveMessage, setAthleteProfileSaveMessage] = useState("");
+  const [selectedAthleteEntries, setSelectedAthleteEntries] = useState<
+    ReadinessEntry[]
+  >(previewState?.selectedAthleteEntries ?? []);
+  const [planTemplates, setPlanTemplates] = useState<PlanTemplateSummary[]>(
+    previewState?.planTemplates ?? [],
+  );
+  const [planForm, setPlanForm] =
+    useState<PlanTemplatePayload>(() => createLocalizedDefaultPlanTemplate(language));
+  const [assignedPlans, setAssignedPlans] = useState<AssignedPlanSummary[]>(
+    previewState?.assignedPlans ?? [],
+  );
+  const [competitions, setCompetitions] = useState<CompetitionSummary[]>(
+    previewState?.competitions ?? [],
+  );
+  const [uwwSyncSummary, setUwwSyncSummary] = useState<UwwEventSyncResponse | null>(
+    null,
+  );
+  const [uwwSyncFilters, setUwwSyncFilters] =
+    useState<UwwEventSyncFilters>(initialUwwSyncFilters);
+  const [uwwSyncOptions, setUwwSyncOptions] =
+    useState<UwwEventSyncOptions>(emptyUwwSyncOptions);
+  const [uwwSyncOptionsLoaded, setUwwSyncOptionsLoaded] = useState(false);
+  const [selectedCompetitionIds, setSelectedCompetitionIds] = useState<string[]>([]);
+  const [competitionPlans, setCompetitionPlans] = useState<CompetitionPlanSummary[]>(
+    previewState?.competitionPlans ?? [],
+  );
+  const [mesocycles, setMesocycles] = useState<MesocycleSummary[]>(
+    previewState?.mesocycles ?? [],
+  );
+  const [competitionReview, setCompetitionReview] =
+    useState<CompetitionReviewOverview | null>(previewState?.competitionReview ?? null);
+  const [templateRecommendations, setTemplateRecommendations] = useState<
+    PlanTemplateRecommendation[]
+  >([]);
+  const [templatePack, setTemplatePack] = useState<TemplatePackRecommendation | null>(
+    previewState?.templatePack ?? null,
+  );
+  const [templatePackContext, setTemplatePackContext] = useState<TemplatePackContext | null>(
+    previewState?.templatePack
+      ? {
+          athleteId: previewState.selectedAthleteId,
+          startDate:
+            previewState.coachAnalyticsOverview.chain.weekSummary?.startDate ??
+            initialMicrocycleForm.startDate,
+        }
+      : null,
+  );
+  const [seasons, setSeasons] = useState<SeasonSummary[]>(previewState?.seasons ?? []);
+  const [olympicCycles, setOlympicCycles] = useState<OlympicCycleSummary[]>(
+    previewState?.olympicCycles ?? [],
+  );
+  const [competitionContext, setCompetitionContext] = useState<CompetitionContext | null>(
+    previewState?.competitionContext ?? null,
+  );
+  const [selectedAthleteCompetitionPlanId, setSelectedAthleteCompetitionPlanId] = useState("");
+  const [competitionForm, setCompetitionForm] =
+    useState<CreateCompetitionPayload>(initialCompetitionForm);
+  const [olympicCycleForm, setOlympicCycleForm] =
+    useState<CreateOlympicCyclePayload>(initialOlympicCycleForm);
+  const [seasonForm, setSeasonForm] = useState<CreateSeasonPayload>(initialSeasonForm);
+  const [competitionPlanForm, setCompetitionPlanForm] =
+    useState<CreateCompetitionPlanPayload>(initialCompetitionPlanForm);
+  const [mesocycleForm, setMesocycleForm] =
+    useState<CreateMesocyclePayload>(initialMesocycleForm);
+  const [competitionResultForm, setCompetitionResultForm] =
+    useState<CompetitionResultPayload>(initialCompetitionResultForm);
+  const [microcycleForm, setMicrocycleForm] =
+    useState<AutoAssignMicrocyclePayload>(() => ({
+      ...initialMicrocycleForm,
+      notes: localizedMicrocycleNotes(language),
+    }));
+  const [adaptedPlan, setAdaptedPlan] = useState<AdaptedPlanDay | null>(null);
+  const [executionResults, setExecutionResults] = useState<ExecutionResult[]>([]);
+  const [executionDrafts, setExecutionDrafts] = useState<
+    Record<string, ExecutionDraft>
+  >({});
+  const [analyticsOverview, setAnalyticsOverview] =
+    useState<AnalyticsOverview | null>(null);
+  const [coachAdaptedPlan, setCoachAdaptedPlan] = useState<AdaptedPlanDay | null>(
+    null,
+  );
+  const [coachExecutionReview, setCoachExecutionReview] =
+    useState<ExecutionReviewPlan | null>(previewState?.coachExecutionReview ?? null);
+  const [coachAnalyticsOverview, setCoachAnalyticsOverview] =
+    useState<AnalyticsOverview | null>(
+      normalizeAnalyticsOverview(previewState?.coachAnalyticsOverview ?? null),
+    );
+  const [assignedPlanForm, setAssignedPlanForm] =
+    useState<AssignedPlanPayload>(() => ({
+      ...initialAssignedPlanForm,
+      dayLabel: localizedDayOneLabel(language),
+      notes: localizedAssignedPlanNotes(language),
+    }));
+  const [statusMessage, setStatusMessage] = useState(
+    previewState?.statusMessage ?? IMPORTED_UI_TEXT.en.signInHint,
+  );
+  const [errorMessage, setErrorMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+  const initialOfflineQueue = previewState?.offlineQueueItems ?? [];
+  const [offlineQueueSize, setOfflineQueueSize] = useState(
+    importedCountActiveQueueItems(initialOfflineQueue),
+  );
+  const [isOffline, setIsOffline] = useState(previewState?.isOffline ?? false);
+  const [offlineQueueItems, setOfflineQueueItems] = useState<QueueItem[]>(initialOfflineQueue);
+  const [offlineSyncErrors, setOfflineSyncErrors] = useState<OfflineSyncErrors>(
+    previewState?.offlineSyncErrors ?? importedGetQueueErrorMap(initialOfflineQueue),
+  );
+  const [isSyncingNow, setIsSyncingNow] = useState(false);
+  const [selectedOfflineItemId, setSelectedOfflineItemId] = useState(
+    previewState?.selectedOfflineItemId ?? "",
+  );
+  const [coachView, setCoachView] = useState<CoachDashboardView>(
+    previewState?.coachView ?? "readiness",
+  );
+  const [planningView, setPlanningView] = useState<PlanningStudioView>(
+    previewState?.planningView ?? "weekly",
+  );
+  const [seasonDisplayMode, setSeasonDisplayMode] =
+    useState<SeasonDisplayMode>("hybrid");
+  const [seasonEditorMode, setSeasonEditorMode] = useState<SeasonEditorMode>(
+    previewState?.seasonEditorMode ?? "starts",
+  );
+  const [selectedSeasonStartId, setSelectedSeasonStartId] = useState("");
+  const [preparationPlanDraft, setPreparationPlanDraft] = useState<PreparationPlanReference>(
+    () => createEmptyPreparationPlanDraft(language),
+  );
+  const [selectedPreparationWeekIndex, setSelectedPreparationWeekIndex] = useState(0);
+  const [selectedPreparationDayIndex, setSelectedPreparationDayIndex] = useState(0);
+  const [selectedPreparationSessionIndex, setSelectedPreparationSessionIndex] = useState(0);
+  const [activeWorkspace, setActiveWorkspace] =
+    useState<WorkspaceSectionId>(previewState?.activeWorkspace ?? "athlete-today");
+  const [isCheckinOpen, setIsCheckinOpen] = useState(true);
+
+  const t = (key: string) => COPY[language][key] ?? key;
+  const ui = (key: string) =>
+    IMPORTED_UI_TEXT[language]?.[key] ?? UI_TEXT[language]?.[key] ?? COPY[language]?.[key] ?? key;
+  const analyticsInsightTitle = (insight: NonNullable<AnalyticsOverview["insights"]>[number]) =>
+    importedTranslateAnalyticsInsightTitle(insight, language);
+  const analyticsInsightSummary = (insight: NonNullable<AnalyticsOverview["insights"]>[number]) =>
+    importedTranslateAnalyticsInsightSummary(insight, language);
+  const analyticsInsightRecommendation = (
+    insight: NonNullable<AnalyticsOverview["insights"]>[number],
+  ) => importedTranslateAnalyticsInsightRecommendation(insight, language);
+  const analyticsInsightLevel = (insight: NonNullable<AnalyticsOverview["insights"]>[number]) =>
+    importedTranslateAnalyticsInsightLevel(insight.level, language);
+  const analyticsSeverityLabel = (
+    level: NonNullable<AnalyticsOverview["insights"]>[number]["level"],
+  ) => importedTranslateAnalyticsInsightLevel(level, language);
+  const analyticsEvidenceLabel = (label: string) =>
+    importedTranslateAnalyticsEvidenceLabel(label, language);
+
+  useEffect(() => {
+    setPlanForm((current) =>
+      isLocalizedDefaultPlanTemplate(current)
+        ? createLocalizedDefaultPlanTemplate(language)
+        : current,
+    );
+    setAssignedPlanForm((current) => ({
+      ...current,
+      dayLabel: isKnownDayOneLabel(current.dayLabel)
+        ? localizedDayOneLabel(language)
+        : current.dayLabel,
+      notes: isKnownAssignedPlanNotes(current.notes)
+        ? localizedAssignedPlanNotes(language)
+        : current.notes,
+    }));
+    setMicrocycleForm((current) => ({
+      ...current,
+      notes: isKnownMicrocycleNotes(current.notes)
+        ? localizedMicrocycleNotes(language)
+        : current.notes,
+      }));
+  }, [language]);
+
+  function canLoadCoachScopedAthleteData(
+    athleteId: string,
+    athletes: CoachAthleteSummary[] = coachAthletes,
+    role: AuthUser["role"] | null = user?.role ?? null,
+  ) {
+    if (!athleteId) {
+      return false;
+    }
+
+    if (role !== "coach") {
+      return true;
+    }
+
+    return athletes.some((athlete) => athlete.athleteId === athleteId);
+  }
+
+  function resetCoachAthleteSelection() {
+    setSelectedAthleteId("");
+    setSelectedAthleteEntries([]);
+    setCoachAdaptedPlan(null);
+    setCoachExecutionReview(null);
+    setCoachAnalyticsOverview(null);
+    setCompetitionContext(null);
+    setCompetitionReview(null);
+    setTemplateRecommendations([]);
+    setTemplatePack(null);
+    setTemplatePackContext(null);
+    setSeasons([]);
+    setCompetitionPlans([]);
+    setMesocycles([]);
+    setSeasonEditorMode("starts");
+    setSelectedSeasonStartId("");
+    setSeasonForm((current) => ({ ...current, athleteId: "" }));
+    setCompetitionPlanForm((current) => ({ ...current, athleteId: "" }));
+    setMesocycleForm((current) => ({ ...current, athleteId: "" }));
+    setCompetitionResultForm(initialCompetitionResultForm);
+    setAssignedPlanForm((current) => ({
+      ...current,
+      athleteId: "",
+      plannedPhase: null,
+    }));
+    setMicrocycleForm((current) => ({
+      ...current,
+      athleteId: "",
+      plannedPhase: null,
+      items: [],
+    }));
+  }
+
+  const analyticsPatternTitle = (pattern: NonNullable<AnalyticsOverview["patterns"]>[number]) =>
+    importedTranslateAnalyticsPatternTitle(pattern, language);
+  const analyticsPatternSummary = (pattern: NonNullable<AnalyticsOverview["patterns"]>[number]) =>
+    importedTranslateAnalyticsPatternSummary(pattern, language);
+  const analyticsCoachSuggestionTitle = (
+    suggestion: NonNullable<AnalyticsOverview["coachSuggestions"]>[number],
+  ) => importedTranslateAnalyticsCoachSuggestionTitle(suggestion, language);
+  const analyticsCoachSuggestionSummary = (
+    suggestion: NonNullable<AnalyticsOverview["coachSuggestions"]>[number],
+  ) => importedTranslateAnalyticsCoachSuggestionSummary(suggestion, language);
+  const analyticsCoachSuggestionRecommendation = (
+    suggestion: NonNullable<AnalyticsOverview["coachSuggestions"]>[number],
+  ) => importedTranslateAnalyticsCoachSuggestionRecommendation(suggestion, language);
+  const analyticsDecisionStatus = (status: AnalyticsCoachActionDecision["decisionStatus"]) =>
+    importedTranslateAnalyticsDecisionStatus(status, language);
+  const analyticsDecisionOutcome = (outcome: AnalyticsCoachActionDecision["outcome"]) =>
+    importedTranslateAnalyticsDecisionOutcome(outcome, language);
+  const analyticsDecisionOutcomeSource = (
+    source: AnalyticsCoachActionDecision["outcomeSource"],
+  ) => importedTranslateAnalyticsDecisionOutcomeSource(source, language);
+  const analyticsDecisionExplanation = (decision: AnalyticsCoachActionDecision) =>
+    importedTranslateAnalyticsDecisionExplanation(decision, language);
+  const analyticsWeekStatus = (status: NonNullable<AnalyticsOverview["chain"]["weekSummary"]>["status"]) =>
+    importedTranslateAnalyticsWeekStatus(status, language);
+  const analyticsMissingLink = (link: string) =>
+    importedTranslateAnalyticsMissingLink(link, language);
+  const plannerSuggestionFeedbackLabel = (
+    feedback: Pick<NonNullable<PlannerSuggestion["feedback"]>, "label">,
+  ) => {
+    if (feedback.label === "historically_effective") {
+      return copyFor(language, {
+        en: "Historically effective",
+        ru: "Исторически эффективно",
+        bg: "Исторически ефективно",
+      });
+    }
+
+    if (feedback.label === "watch") {
+      return copyFor(language, {
+        en: "Watch closely",
+        ru: "Нужен контроль",
+        bg: "Нужен е контрол",
+      });
+    }
+
+    if (feedback.label === "mixed") {
+      return copyFor(language, {
+        en: "Mixed outcomes",
+        ru: "Смешанные исходы",
+        bg: "Смесени резултати",
+      });
+    }
+
+    return copyFor(language, {
+      en: "New pattern",
+      ru: "Новый паттерн",
+      bg: "Нов патерн",
+    });
+  };
+  const plannerSuggestionFeedbackScope = (
+    feedback: Pick<NonNullable<PlannerSuggestion["feedback"]>, "scope">,
+  ) => {
+    if (feedback.scope === "exact_context") {
+      return copyFor(language, {
+        en: "same phase and priority",
+        ru: "та же фаза и приоритет",
+        bg: "същата фаза и приоритет",
+      });
+    }
+
+    if (feedback.scope === "phase_context") {
+      return copyFor(language, {
+        en: "same phase",
+        ru: "та же фаза",
+        bg: "същата фаза",
+      });
+    }
+
+    return copyFor(language, {
+      en: "athlete history",
+      ru: "история спортсмена",
+      bg: "история на спортиста",
+    });
+  };
+  const plannerSuggestionFeedbackSummary = (
+    feedback: NonNullable<PlannerSuggestion["feedback"]>,
+  ) =>
+    copyFor(language, {
+      en: `${plannerSuggestionFeedbackLabel(feedback)} • ${feedback.positiveCount} positive / ${feedback.negativeCount} negative • ${plannerSuggestionFeedbackScope(feedback)}`,
+      ru: `${plannerSuggestionFeedbackLabel(feedback)} • ${feedback.positiveCount} позитивных / ${feedback.negativeCount} негативных • ${plannerSuggestionFeedbackScope(feedback)}`,
+      bg: `${plannerSuggestionFeedbackLabel(feedback)} • ${feedback.positiveCount} положителни / ${feedback.negativeCount} негативни • ${plannerSuggestionFeedbackScope(feedback)}`,
+    });
+  const plannerHistoryBiasEffectLabel = (bias: TemplatePackHistoryBiasItem) =>
+    bias.effect === "caution"
+      ? copyFor(language, {
+          en: "History caution",
+          ru: "История предупреждает",
+          bg: "Историята предупреждава",
+        })
+      : copyFor(language, {
+          en: "History boost",
+          ru: "История усиливает выбор",
+          bg: "Историята подсилва избора",
+        });
+  const plannerHistoryBiasAction = (bias: TemplatePackHistoryBiasItem) => {
+    if (bias.action === "swap_to_recovery") {
+      return copyFor(language, {
+        en: "recovery replacement",
+        ru: "восстановительная замена",
+        bg: "възстановителна замяна",
+      });
+    }
+
+    if (bias.action === "swap_to_activation") {
+      return copyFor(language, {
+        en: "activation-safe replacement",
+        ru: "безопасная активационная замена",
+        bg: "безопасна активационна замяна",
+      });
+    }
+
+    if (bias.action === "reduce_load") {
+      return copyFor(language, {
+        en: "lighter slot choice",
+        ru: "более лёгкий слот",
+        bg: "по-лек слот",
+      });
+    }
+
+    if (bias.action === "increase_load") {
+      return copyFor(language, {
+        en: "higher-load choice",
+        ru: "более нагруженный слот",
+        bg: "по-натоварен слот",
+      });
+    }
+
+    if (bias.action === "move_day") {
+      return copyFor(language, {
+        en: "day shift preference",
+        ru: "предпочтение к сдвигу дня",
+        bg: "предпочитание за местене на деня",
+      });
+    }
+
+    return copyFor(language, {
+      en: "overlap avoidance",
+      ru: "избежание наложения",
+      bg: "избягване на припокриване",
+    });
+  };
+  const plannerHistoryBiasSummary = (bias: TemplatePackHistoryBiasItem) =>
+    copyFor(language, {
+      en: `${plannerHistoryBiasEffectLabel(bias)} • ${plannerHistoryBiasAction(
+        bias,
+      )} • ${plannerSuggestionFeedbackScope(bias)} • n=${bias.sampleSize}`,
+      ru: `${plannerHistoryBiasEffectLabel(bias)} • ${plannerHistoryBiasAction(
+        bias,
+      )} • ${plannerSuggestionFeedbackScope(bias)} • n=${bias.sampleSize}`,
+      bg: `${plannerHistoryBiasEffectLabel(bias)} • ${plannerHistoryBiasAction(
+        bias,
+      )} • ${plannerSuggestionFeedbackScope(bias)} • n=${bias.sampleSize}`,
+    });
+  const templatePackHistorySummary = summarizeTemplatePackHistory(templatePack);
+  const syncQueueState = (items = importedGetOfflineQueue()) => {
+    setOfflineQueueSize(importedCountActiveQueueItems(items));
+    setOfflineQueueItems(items);
+    setOfflineSyncErrors(importedGetQueueErrorMap(items));
+    setSelectedOfflineItemId((current) =>
+      items.some((item) => item.id === current) ? current : items[0]?.id || "",
+    );
+  };
+  const translatedReadinessFields = READINESS_FIELD_META.map((field) => ({
+    ...field,
+    label:
+      {
+        sleepHours: { en: "Sleep, hours", ru: "Сон, часы", bg: "Сън, часове" },
+        sleepQuality: { en: "Sleep quality", ru: "Качество сна", bg: "Качество на съня" },
+        generalFeeling: { en: "General feeling", ru: "Общее самочувствие", bg: "Общо състояние" },
+        fatigueLevel: { en: "Fatigue", ru: "Усталость", bg: "Умора" },
+        muscleSoreness: { en: "Muscle soreness", ru: "Мышечная боль", bg: "Мускулна болезненост" },
+        motivationLevel: { en: "Motivation", ru: "Мотивация", bg: "Мотивация" },
+        restingHr: { en: "Resting HR", ru: "Пульс покоя", bg: "Пулс в покой" },
+        bodyWeight: { en: "Body weight, kg", ru: "Вес, кг", bg: "Тегло, кг" },
+        painLevel: { en: "Pain level", ru: "Уровень боли", bg: "Ниво на болка" },
+        illnessFlag: { en: "Illness symptoms", ru: "Признаки болезни", bg: "Симптоми на заболяване" },
+        feverFlag: { en: "Fever", ru: "Температура", bg: "Температура" },
+      }[field.key][language],
+  }));
+  const readinessCacheSavedAt =
+    previewState?.cacheSavedAt.readiness ??
+    importedReadCachedData<{ entry: ReadinessEntry | null }>(
+      STORAGE_KEYS.readiness,
+    )?.savedAt;
+  const assignedCacheSavedAt =
+    previewState?.cacheSavedAt.assignedPlans ??
+    importedReadCachedData<{ assignedPlans: AssignedPlanSummary[] }>(
+      STORAGE_KEYS.assignedPlans,
+    )?.savedAt;
+  const adaptedCacheSavedAt =
+    previewState?.cacheSavedAt.adaptedPlan ??
+    importedReadCachedData<{ adaptedPlan: AdaptedPlanDay | null }>(
+      STORAGE_KEYS.adaptedPlan,
+    )?.savedAt;
+  const executionCacheSavedAt =
+    previewState?.cacheSavedAt.execution ??
+    importedReadCachedData<{ results: ExecutionResult[] }>(
+      STORAGE_KEYS.execution,
+    )?.savedAt;
+  const analyticsCacheSavedAt =
+    previewState?.cacheSavedAt.analytics ??
+    importedReadCachedData<{ analytics: AnalyticsOverview | null }>(
+      STORAGE_KEYS.analytics,
+    )?.savedAt;
+  const readinessMeta = Object.fromEntries(
+    Object.entries(READINESS_STATUS_META).map(([key, value]) => [
+      key,
+      {
+        label:
+          key === "green"
+            ? language === "ru"
+              ? "Зелёный"
+              : language === "bg"
+                ? "Зелен"
+                : "Green"
+            : key === "yellow"
+              ? language === "ru"
+                ? "Жёлтый"
+                : language === "bg"
+                  ? "Жълт"
+                  : "Yellow"
+              : language === "ru"
+                ? "Красный"
+                : language === "bg"
+                  ? "Червен"
+                  : "Red",
+        loadRange:
+          language === "ru"
+            ? `Нагрузка ${value.loadRange}`
+            : language === "bg"
+              ? `Натоварване ${value.loadRange}`
+              : value.loadRange,
+        summary:
+          key === "green"
+            ? language === "ru"
+              ? "Плановый тренировочный день можно оставить без изменений."
+              : language === "bg"
+                ? "Планираният тренировъчен ден може да остане без промяна."
+                : value.summary
+            : key === "yellow"
+              ? language === "ru"
+                ? "День требует частичного снижения объёма и интенсивности."
+                : language === "bg"
+                  ? "Денят изисква частично намаляване на обема и интензивността."
+                  : value.summary
+              : language === "ru"
+                ? "День требует сильного снижения нагрузки или замены на восстановительную работу."
+                : language === "bg"
+                  ? "Денят изисква силно намаляване на натоварването или замяна с възстановителна работа."
+                  : value.summary,
+      },
+    ]),
+  ) as typeof READINESS_STATUS_META;
+
+  function applyCachedAthleteSnapshot() {
+    const cachedUser = importedReadCachedData<AuthUser>(OFFLINE_STORAGE_KEYS.authUser)?.data ?? null;
+    const cachedReadiness =
+      importedReadCachedData<{ entry: ReadinessEntry | null; entryDate?: string }>(
+        OFFLINE_STORAGE_KEYS.readiness,
+      )?.data ?? null;
+    const cachedAssigned =
+      importedReadCachedData<{ assignedPlans: AssignedPlanSummary[] }>(
+        OFFLINE_STORAGE_KEYS.assignedPlans,
+      )?.data ?? null;
+    const cachedAdapted =
+      importedReadCachedData<{ adaptedPlan: AdaptedPlanDay | null }>(
+        OFFLINE_STORAGE_KEYS.adaptedPlan,
+      )?.data ?? null;
+    const cachedExecution =
+      importedReadCachedData<{ results: ExecutionResult[] }>(OFFLINE_STORAGE_KEYS.execution)?.data ??
+      null;
+    const cachedAnalytics =
+      importedReadCachedData<{ analytics: AnalyticsOverview | null }>(
+        OFFLINE_STORAGE_KEYS.analytics,
+      )?.data ?? null;
+
+    if (cachedUser) {
+      setUser(cachedUser);
+    }
+
+    if (cachedReadiness) {
+      setTodayEntry(cachedReadiness.entry);
+      setReadinessEntryDate(
+        cachedReadiness.entryDate ?? cachedReadiness.entry?.entryDate ?? getDateInputValue(),
+      );
+      applyReadinessEntryToForm(cachedReadiness.entry);
+    }
+
+    if (cachedAssigned) {
+      setAssignedPlans(cachedAssigned.assignedPlans);
+    }
+
+    if (cachedAdapted) {
+      setAdaptedPlan(cachedAdapted.adaptedPlan);
+    }
+
+    if (cachedExecution) {
+      setExecutionResults(cachedExecution.results);
+      setExecutionDrafts(
+        Object.fromEntries(
+          cachedExecution.results.map((result) => [
+            result.assignedBlockId,
+            toExecutionDraft(result),
+          ]),
+        ),
+      );
+    }
+
+    if (cachedAnalytics) {
+      setAnalyticsOverview(normalizeAnalyticsOverview(cachedAnalytics.analytics));
+    }
+  }
+
+  async function flushOfflineQueue() {
+    let queue = importedGetOfflineQueue();
+    const activeQueue = importedGetActiveQueueItems(queue);
+
+    if (!activeQueue.length || (typeof navigator !== "undefined" && !navigator.onLine)) {
+      syncQueueState(queue);
+      return;
+    }
+
+    const commitQueue = (nextQueue: QueueItem[]) => {
+      importedSetOfflineQueue(nextQueue);
+      queue = importedGetOfflineQueue();
+      syncQueueState(queue);
+    };
+
+    for (const item of activeQueue) {
+      const attemptStartedAt = new Date().toISOString();
+      commitQueue(
+        importedUpdateQueueItem(queue, item.id, {
+          attemptCount: item.attemptCount + 1,
+          error: null,
+          lastAttemptAt: attemptStartedAt,
+          status: "syncing",
+        }),
+      );
+
+      try {
+        if (item.type === "readiness") {
+          const response = await apiRequest<ReadinessResponse>("/readiness", {
+            method: "POST",
+            headers: { "X-Idempotency-Key": item.clientRequestId },
+            body: JSON.stringify(item.payload),
+          });
+          if (response.entry.entryDate === readinessEntryDate) {
+            setTodayEntry(response.entry);
+            applyReadinessEntryToForm(response.entry);
+            importedWriteCachedData(OFFLINE_STORAGE_KEYS.readiness, {
+              entry: response.entry,
+              entryDate: response.entry.entryDate,
+            });
+          }
+        } else if (item.type === "execution") {
+          const response = await apiRequest<{ result: ExecutionResult }>("/execution", {
+            method: "POST",
+            headers: { "X-Idempotency-Key": item.clientRequestId },
+            body: JSON.stringify(item.payload),
+          });
+          setExecutionResults((current) => {
+            const next = current.filter(
+              (result) => result.assignedBlockId !== response.result.assignedBlockId,
+            );
+            next.unshift(response.result);
+            importedWriteCachedData(OFFLINE_STORAGE_KEYS.execution, { results: next });
+            return next;
+          });
+          setExecutionDrafts((current) => ({
+            ...current,
+            [response.result.assignedBlockId]: toExecutionDraft(response.result),
+          }));
+        } else {
+          const response = await apiRequest<{
+            analytics: AnalyticsOverview | null;
+            decision: AnalyticsCoachActionDecision | null;
+          }>(`/coach/athletes/${item.athleteId}/analytics-decisions`, {
+            method: "POST",
+            headers: { "X-Idempotency-Key": item.clientRequestId },
+            body: JSON.stringify(item.payload),
+          });
+          const normalized = normalizeAnalyticsOverview(response.analytics);
+          if (item.athleteId === selectedAthleteId) {
+            setCoachAnalyticsOverview(normalized);
+          }
+        }
+      } catch (error) {
+        commitQueue(
+          importedUpdateQueueItem(queue, item.id, {
+            error:
+              error instanceof Error && error.message
+                ? error.message
+                : `${ui("syncFailedPrefix")}.`,
+            status: "failed",
+          }),
+        );
+        continue;
+      }
+
+      commitQueue(
+        importedUpdateQueueItem(queue, item.id, {
+          error: null,
+          status: "synced",
+          syncedAt: new Date().toISOString(),
+        }),
+      );
+    }
+
+    const activeItemsLeft = importedCountActiveQueueItems(queue);
+    if (activeItemsLeft === 0) {
+      setStatusMessage(ui("offlineChangesSynced"));
+      return;
+    }
+
+    setStatusMessage(importedQueueLabel(language, activeItemsLeft));
+  }
+
+  useEffect(() => {
+    if (isPreviewMode || suppressSessionRestore) {
+      return;
+    }
+    void refreshSession();
+  }, [isPreviewMode, suppressSessionRestore]);
+
+  useEffect(() => {
+    if (isPreviewMode || initialLanguageLocked) {
+      return;
+    }
+    const savedLanguage = window.localStorage.getItem(OFFLINE_STORAGE_KEYS.language);
+    if (savedLanguage === "en" || savedLanguage === "ru" || savedLanguage === "bg") {
+      setLanguage(savedLanguage);
+    }
+  }, [initialLanguageLocked, isPreviewMode]);
+
+  useEffect(() => {
+    window.localStorage.setItem(OFFLINE_STORAGE_KEYS.language, language);
+  }, [language]);
+
+  useEffect(() => {
+    if ("serviceWorker" in navigator) {
+      const hostname = window.location.hostname;
+      const isLocalHost =
+        hostname === "localhost" ||
+        hostname === "127.0.0.1" ||
+        hostname === "::1";
+
+      if (isLocalHost) {
+        void navigator.serviceWorker.getRegistrations().then((registrations) =>
+          Promise.all(registrations.map((registration) => registration.unregister())),
+        );
+
+        if ("caches" in window) {
+          void window.caches.keys().then((keys) =>
+            Promise.all(
+              keys
+                .filter((key) => key.startsWith("training-platform-"))
+                .map((key) => window.caches.delete(key)),
+            ),
+          );
+        }
+
+        return;
+      }
+
+      void navigator.serviceWorker
+        .register("/sw.js", { updateViaCache: "none" })
+        .then((registration) => registration.update())
+        .catch(() => undefined);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isPreviewMode || suppressSessionRestore) {
+      return;
+    }
+    syncQueueState();
+    setIsOffline(typeof navigator !== "undefined" ? !navigator.onLine : false);
+
+    async function handleOnline() {
+      setIsOffline(false);
+      await flushOfflineQueue();
+      await refreshSession();
+    }
+
+    function handleOffline() {
+      setIsOffline(true);
+      setStatusMessage(
+        importedQueueLabel(language, importedCountActiveQueueItems(importedGetOfflineQueue())),
+      );
+    }
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, [isPreviewMode, language, suppressSessionRestore]);
+
+  async function refreshSession() {
+    try {
+      const response = await apiRequest<AuthResponse>("/auth/me");
+      setUser(response.user);
+      importedWriteCachedData(OFFLINE_STORAGE_KEYS.authUser, response.user);
+      setErrorMessage("");
+      setStatusMessage(`${ui("sessionRestored")} ${response.user.fullName}.`);
+
+      if (response.user.role === "athlete") {
+        setActiveWorkspace("athlete-today");
+        if (response.user.athleteId) {
+          await loadCompetitionContext(response.user.athleteId);
+          await Promise.all([
+            loadCompetitions(),
+            loadOlympicCycles(),
+            loadSeasons(),
+            loadMesocycles(),
+            loadCompetitionPlans(),
+            loadCompetitionReview(response.user.athleteId),
+          ]);
+        }
+        await Promise.all([
+          loadReadiness(),
+          loadAssignedPlans(),
+          loadAdaptedPlan(),
+          loadExecutionResults(),
+          loadAnalyticsOverview(),
+        ]);
+      } else if (response.user.role === "coach" || response.user.role === "admin") {
+        setTodayEntry(null);
+        setAdaptedPlan(null);
+        setExecutionResults([]);
+        setExecutionDrafts({});
+        setAnalyticsOverview(null);
+        resetCoachAthleteSelection();
+        setActiveWorkspace("coach-dashboard");
+        await Promise.all([
+          loadCoachAthletes(),
+          loadAvailableCoachAthletes(),
+          loadPlanTemplates(),
+          loadAssignedPlans(),
+          loadCompetitions(),
+          loadOlympicCycles(),
+          loadMesocycles(),
+        ]);
+      }
+    } catch {
+      applyCachedAthleteSnapshot();
+      const cachedUser = importedReadCachedData<AuthUser>(OFFLINE_STORAGE_KEYS.authUser)?.data ?? null;
+
+      if (!cachedUser) {
+        setUser(null);
+        setTodayEntry(null);
+        setCoachAthletes([]);
+        setAvailableCoachAthletes([]);
+        setPlanTemplates([]);
+        setAssignedPlans([]);
+        setAdaptedPlan(null);
+        setExecutionResults([]);
+        setExecutionDrafts({});
+        setAnalyticsOverview(null);
+        resetCoachAthleteSelection();
+        setCompetitions([]);
+        setUwwSyncSummary(null);
+        setUwwSyncOptions(emptyUwwSyncOptions);
+        setUwwSyncOptionsLoaded(false);
+        setSelectedCompetitionIds([]);
+        setCompetitionPlans([]);
+        setMesocycles([]);
+        setSeasons([]);
+        setOlympicCycles([]);
+      } else {
+        setStatusMessage(
+          language === "ru"
+            ? "Сеть недоступна. Загружены последние сохранённые данные."
+            : language === "bg"
+              ? "Няма връзка. Заредени са последните запазени данни."
+              : ui("networkLoadedCache"),
+        );
+      }
+    }
+  }
+
+  function applyReadinessEntryToForm(entry: ReadinessEntry | null) {
+    if (entry) {
+      setReadinessForm({
+        sleepHours: entry.sleepHours,
+        sleepQuality: entry.sleepQuality,
+        generalFeeling: entry.generalFeeling,
+        fatigueLevel: entry.fatigueLevel,
+        muscleSoreness: entry.muscleSoreness,
+        motivationLevel: entry.motivationLevel,
+        restingHr: entry.restingHr,
+        bodyWeight: entry.bodyWeight,
+        painLevel: entry.painLevel,
+        illnessFlag: entry.illnessFlag,
+        feverFlag: entry.feverFlag,
+      });
+      return;
+    }
+
+    setReadinessForm(READINESS_DEFAULTS);
+  }
+
+  async function loadReadiness(entryDate = getDateInputValue()) {
+    try {
+      const response = await apiRequest<{ entry: ReadinessEntry | null }>(
+        `/readiness/day?date=${encodeURIComponent(entryDate)}`,
+      );
+      setTodayEntry(response.entry);
+      setReadinessEntryDate(entryDate);
+      importedWriteCachedData(OFFLINE_STORAGE_KEYS.readiness, {
+        ...response,
+        entryDate,
+      });
+
+      applyReadinessEntryToForm(response.entry);
+    } catch {
+      const cached = importedReadCachedData<{
+        entry: ReadinessEntry | null;
+        entryDate?: string;
+      }>(
+        OFFLINE_STORAGE_KEYS.readiness,
+      )?.data;
+      if (cached && (cached.entryDate ?? cached.entry?.entryDate) === entryDate) {
+        setTodayEntry(cached.entry);
+        applyReadinessEntryToForm(cached.entry);
+      }
+    }
+  }
+
+  async function loadCoachAthletes(preferredAthleteId?: string) {
+    const response = await apiRequest<{ athletes: CoachAthleteSummary[] }>(
+      "/coach/athletes",
+    );
+    setCoachAthletes(response.athletes);
+
+    if (response.athletes.length > 0) {
+      const athleteId =
+        (preferredAthleteId &&
+        response.athletes.some((athlete) => athlete.athleteId === preferredAthleteId)
+          ? preferredAthleteId
+          : response.athletes.some((athlete) => athlete.athleteId === selectedAthleteId)
+            ? selectedAthleteId
+            : response.athletes[0]?.athleteId) ?? "";
+
+      if (!athleteId) {
+        return;
+      }
+
+      setSelectedAthleteId(athleteId);
+      setSeasonForm((current) => ({ ...current, athleteId }));
+      setCompetitionPlanForm((current) => ({ ...current, athleteId }));
+      setMesocycleForm((current) => ({ ...current, athleteId }));
+      setCompetitionResultForm(initialCompetitionResultForm);
+      setSeasonEditorMode("starts");
+      setSelectedSeasonStartId("");
+      setAssignedPlanForm((current) => ({ ...current, athleteId }));
+      setMicrocycleForm((current) => ({ ...current, athleteId }));
+      await Promise.all([
+        loadCoachAthleteReadiness(athleteId),
+        loadCoachAdaptedPlan(athleteId),
+        loadCoachExecutionReview(athleteId),
+        loadCoachAnalyticsOverview(athleteId),
+        loadCompetitionContext(athleteId),
+        loadSeasons(athleteId),
+        loadMesocycles(athleteId),
+        loadCompetitionPlans(athleteId),
+        loadCompetitionReview(athleteId),
+        loadTemplateRecommendations(
+          athleteId,
+          initialAssignedPlanForm.startDate,
+          response.athletes,
+        ),
+        loadTemplatePackRecommendations(
+          athleteId,
+          initialMicrocycleForm.startDate,
+          response.athletes,
+        ),
+      ]);
+    } else {
+      resetCoachAthleteSelection();
+    }
+  }
+
+  async function loadAvailableCoachAthletes() {
+    const response = await apiRequest<CoachAvailableAthletesResponse>(
+      "/coach/athletes/available",
+    );
+    setAvailableCoachAthletes(response.athletes);
+  }
+
+  async function loadCoachAthleteReadiness(athleteId: string) {
+    const response = await apiRequest<{ entries: ReadinessEntry[] }>(
+      `/coach/athletes/${athleteId}/readiness`,
+    );
+    setSelectedAthleteEntries(response.entries);
+
+    const latestEntry = response.entries[0];
+    if (latestEntry) {
+      setCoachAthletes((current) =>
+        current.map((athlete) =>
+          athlete.athleteId === athleteId
+            ? {
+                ...athlete,
+                latestReadiness: {
+                  entryDate: latestEntry.entryDate,
+                  score: latestEntry.score,
+                  status: latestEntry.status,
+                },
+              }
+            : athlete,
+        ),
+      );
+    }
+  }
+
+  async function loadPlanTemplates() {
+    const response = await apiRequest<{ templates: PlanTemplateSummary[] }>(
+      "/plans/templates",
+    );
+    setPlanTemplates(response.templates);
+  }
+
+  async function loadCompetitions() {
+    const response = await apiRequest<{ competitions: CompetitionSummary[] }>(
+      "/competitions",
+    );
+    setCompetitions(response.competitions);
+    setSelectedCompetitionIds((current) =>
+      syncCompetitionSelection(current, response.competitions),
+    );
+  }
+
+  async function loadUwwSyncOptions() {
+    const response = await apiRequest<UwwEventSyncOptionsResponse>(
+      "/competitions/uww-options",
+    );
+    setUwwSyncOptions(response.options);
+    setUwwSyncOptionsLoaded(true);
+  }
+
+  async function loadOlympicCycles() {
+    const response = await apiRequest<{ olympicCycles: OlympicCycleSummary[] }>(
+      "/olympic-cycles",
+    );
+    setOlympicCycles(response.olympicCycles);
+  }
+
+  async function loadSeasons(athleteId?: string) {
+    const suffix = athleteId ? `?athleteId=${encodeURIComponent(athleteId)}` : "";
+    const response = await apiRequest<{ seasons: SeasonSummary[] }>(`/seasons${suffix}`);
+    setSeasons(response.seasons);
+  }
+
+  async function loadCompetitionPlans(athleteId?: string) {
+    const suffix = athleteId ? `?athleteId=${encodeURIComponent(athleteId)}` : "";
+    const response = await apiRequest<{ competitionPlans: CompetitionPlanSummary[] }>(
+      `/competition-plans${suffix}`,
+    );
+    setCompetitionPlans(response.competitionPlans);
+  }
+
+  async function loadMesocycles(athleteId?: string) {
+    const suffix = athleteId ? `?athleteId=${encodeURIComponent(athleteId)}` : "";
+    const response = await apiRequest<{ mesocycles: MesocycleSummary[] }>(
+      `/mesocycles${suffix}`,
+    );
+    setMesocycles(response.mesocycles);
+  }
+
+  async function loadCompetitionReview(athleteId: string) {
+    const response = await apiRequest<{ review: CompetitionReviewOverview | null }>(
+      `/competition-review/${athleteId}`,
+    );
+    setCompetitionReview(response.review);
+  }
+
+  async function loadTemplateRecommendations(
+    athleteId: string,
+    date: string,
+    allowedAthletes: CoachAthleteSummary[] = coachAthletes,
+  ) {
+    if (!canLoadCoachScopedAthleteData(athleteId, allowedAthletes)) {
+      setTemplateRecommendations([]);
+      setAssignedPlanForm((current) =>
+        current.athleteId === athleteId
+          ? { ...current, athleteId: "", templateId: "", plannedPhase: null }
+          : current,
+      );
+      return null;
+    }
+
+    let response: PlanTemplateRecommendationResponse;
+    try {
+      response = await apiRequest<PlanTemplateRecommendationResponse>(
+        `/plans/template-recommendations?athleteId=${encodeURIComponent(athleteId)}&date=${encodeURIComponent(date)}`,
+      );
+    } catch (error) {
+      if (error instanceof Error && error.message === "Athlete is not assigned to this coach") {
+        setTemplateRecommendations([]);
+        setAssignedPlanForm((current) =>
+          current.athleteId === athleteId
+            ? { ...current, athleteId: "", templateId: "", plannedPhase: null }
+            : current,
+        );
+        return null;
+      }
+
+      throw error;
+    }
+
+    setTemplateRecommendations(response.recommendations);
+    setAssignedPlanForm((current) => ({
+      ...current,
+      plannedPhase: response.competitionContext?.phase ?? current.plannedPhase ?? null,
+      templateId: current.templateId || response.recommendations[0]?.templateId || current.templateId,
+    }));
+    return response;
+  }
+
+  async function loadTemplatePackRecommendations(
+    athleteId: string,
+    startDate: string,
+    allowedAthletes: CoachAthleteSummary[] = coachAthletes,
+  ) {
+    if (!canLoadCoachScopedAthleteData(athleteId, allowedAthletes)) {
+      setTemplatePack(null);
+      setTemplatePackContext(null);
+      setMicrocycleForm((current) =>
+        current.athleteId === athleteId
+          ? { ...current, athleteId: "", plannedPhase: null, items: [] }
+          : current,
+      );
+      return null;
+    }
+
+    let response: TemplatePackRecommendationResponse;
+    try {
+      response = await apiRequest<TemplatePackRecommendationResponse>(
+        `/plans/template-pack-recommendations?athleteId=${encodeURIComponent(athleteId)}&startDate=${encodeURIComponent(startDate)}`,
+      );
+    } catch (error) {
+      if (error instanceof Error && error.message === "Athlete is not assigned to this coach") {
+        setTemplatePack(null);
+        setTemplatePackContext(null);
+        setMicrocycleForm((current) =>
+          current.athleteId === athleteId
+            ? { ...current, athleteId: "", plannedPhase: null, items: [] }
+            : current,
+        );
+        return null;
+      }
+
+      throw error;
+    }
+
+    setTemplatePack(response.pack);
+    setTemplatePackContext({ athleteId, startDate });
+    setMicrocycleForm((current) => ({
+      ...current,
+      plannedPhase:
+        response.pack.mesocycleWeek?.phase ??
+        response.competitionContext?.phase ??
+        current.plannedPhase ??
+        null,
+      items: packToMicrocycleItems(response.pack),
+      daysCount: response.pack.items.length || current.daysCount,
+    }));
+    return response;
+  }
+
+  async function loadCompetitionContext(athleteId: string) {
+    const response = await apiRequest<{ context: CompetitionContext | null }>(
+      `/competition-context/${athleteId}`,
+    );
+    setCompetitionContext(response.context);
+  }
+
+  async function loadAssignedPlans() {
+    try {
+      const response = await apiRequest<{ assignedPlans: AssignedPlanSummary[] }>(
+        "/plans/assigned",
+      );
+      setAssignedPlans(response.assignedPlans);
+      importedWriteCachedData(OFFLINE_STORAGE_KEYS.assignedPlans, response);
+    } catch {
+      const cached = importedReadCachedData<{ assignedPlans: AssignedPlanSummary[] }>(
+        OFFLINE_STORAGE_KEYS.assignedPlans,
+      )?.data;
+      if (cached) {
+        setAssignedPlans(cached.assignedPlans);
+      }
+    }
+  }
+
+  async function loadExecutionResults() {
+    try {
+      const response = await apiRequest<{ results: ExecutionResult[] }>("/execution");
+      setExecutionResults(response.results);
+      importedWriteCachedData(OFFLINE_STORAGE_KEYS.execution, response);
+      setExecutionDrafts((current) => {
+        const next = { ...current };
+
+        for (const result of response.results) {
+          next[result.assignedBlockId] = toExecutionDraft(result);
+        }
+
+        return next;
+      });
+    } catch {
+      const cached = importedReadCachedData<{ results: ExecutionResult[] }>(
+        OFFLINE_STORAGE_KEYS.execution,
+      )?.data;
+      if (cached) {
+        setExecutionResults(cached.results);
+        setExecutionDrafts(
+          Object.fromEntries(
+            cached.results.map((result) => [result.assignedBlockId, toExecutionDraft(result)]),
+          ),
+        );
+      }
+    }
+  }
+
+  async function loadAnalyticsOverview() {
+    try {
+      const response = await apiRequest<{ analytics: AnalyticsOverview | null }>(
+        "/analytics",
+      );
+      const normalized = normalizeAnalyticsOverview(response.analytics);
+      setAnalyticsOverview(normalized);
+      importedWriteCachedData(OFFLINE_STORAGE_KEYS.analytics, { analytics: normalized });
+    } catch {
+      const cached = importedReadCachedData<{ analytics: AnalyticsOverview | null }>(
+        OFFLINE_STORAGE_KEYS.analytics,
+      )?.data;
+      if (cached) {
+        setAnalyticsOverview(normalizeAnalyticsOverview(cached.analytics));
+      }
+    }
+  }
+
+  async function loadAdaptedPlan() {
+    try {
+      const response = await apiRequest<{ adaptedPlan: AdaptedPlanDay | null }>(
+        "/adapted-plan",
+      );
+      setAdaptedPlan(response.adaptedPlan);
+      importedWriteCachedData(OFFLINE_STORAGE_KEYS.adaptedPlan, response);
+    } catch {
+      const cached = importedReadCachedData<{ adaptedPlan: AdaptedPlanDay | null }>(
+        OFFLINE_STORAGE_KEYS.adaptedPlan,
+      )?.data;
+      if (cached) {
+        setAdaptedPlan(cached.adaptedPlan);
+      }
+    }
+  }
+
+  async function loadCoachAdaptedPlan(athleteId: string) {
+    const response = await apiRequest<{ adaptedPlan: AdaptedPlanDay | null }>(
+      `/coach/athletes/${athleteId}/adapted-plan`,
+    );
+    setCoachAdaptedPlan(response.adaptedPlan);
+  }
+
+  async function loadCoachExecutionReview(athleteId: string) {
+    const response = await apiRequest<{ review: ExecutionReviewPlan | null }>(
+      `/coach/athletes/${athleteId}/execution-review`,
+    );
+    setCoachExecutionReview(response.review);
+  }
+
+  async function loadCoachAnalyticsOverview(athleteId: string) {
+    const response = await apiRequest<{ analytics: AnalyticsOverview | null }>(
+      `/coach/athletes/${athleteId}/analytics`,
+    );
+    setCoachAnalyticsOverview(normalizeAnalyticsOverview(response.analytics));
+  }
+
+  async function saveCoachAnalyticsDecision(
+    athleteId: string,
+    payload: AnalyticsCoachActionDecisionPayload,
+    clientRequestId?: string,
+  ) {
+    const response = await apiRequest<{
+      analytics: AnalyticsOverview | null;
+      decision: AnalyticsCoachActionDecision | null;
+    }>(`/coach/athletes/${athleteId}/analytics-decisions`, {
+      method: "POST",
+      headers: clientRequestId ? { "X-Idempotency-Key": clientRequestId } : undefined,
+      body: JSON.stringify(payload),
+    });
+    const normalized = normalizeAnalyticsOverview(response.analytics);
+    setCoachAnalyticsOverview(normalized);
+    return {
+      analytics: normalized,
+      decision: response.decision,
+    };
+  }
+
+  function enqueueAnalyticsDecision(
+    athleteId: string,
+    payload: AnalyticsCoachActionDecisionPayload,
+    queueItem = importedCreateQueueItem({
+      type: "analytics-decision",
+      athleteId,
+      payload,
+    }),
+  ) {
+    const enqueueResult = importedEnqueueOfflineItem(queueItem);
+    const nextQueueSize = importedCountActiveQueueItems(enqueueResult.queue);
+    syncQueueState(enqueueResult.queue);
+    setStatusMessage(
+      copyFor(language, {
+        en: `Analytics decision was queued offline. ${queueLabel(language, nextQueueSize)}`,
+        ru: `Решение аналитики сохранено в офлайн-очередь. ${queueLabel(language, nextQueueSize)}`,
+        bg: `Решението от анализа е добавено в офлайн опашката. ${queueLabel(language, nextQueueSize)}`,
+      }),
+    );
+    return enqueueResult;
+  }
+
+  function getExecutionDraft(blockId: string) {
+    return executionDrafts[blockId] ?? emptyExecutionDraft;
+  }
+
+  function updateExecutionDraft(
+    blockId: string,
+    patch: Partial<ExecutionDraft>,
+  ) {
+    setExecutionDrafts((current) => ({
+      ...current,
+      [blockId]: {
+        ...(current[blockId] ?? emptyExecutionDraft),
+        ...patch,
+      },
+    }));
+  }
+
+  async function saveExecutionResult(
+    assignedPlanId: string,
+    assignedBlockId: string,
+    clientRequestId?: string,
+  ) {
+    const draft = getExecutionDraft(assignedBlockId);
+    const response = await apiRequest<{ result: ExecutionResult }>("/execution", {
+      method: "POST",
+      headers: clientRequestId ? { "X-Idempotency-Key": clientRequestId } : undefined,
+      body: JSON.stringify({
+        assignedPlanId,
+        assignedBlockId,
+        ...draft,
+      }),
+    });
+
+    setExecutionResults((current) => {
+      const next = current.filter((item) => item.assignedBlockId !== assignedBlockId);
+      next.unshift(response.result);
+      return next;
+    });
+    setExecutionDrafts((current) => ({
+      ...current,
+      [assignedBlockId]: toExecutionDraft(response.result),
+    }));
+  }
+
+  async function handleAuthSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setErrorMessage("");
+
+    try {
+      const endpoint = authMode === "login" ? "/auth/login" : "/auth/register";
+      const payload =
+        authMode === "login"
+          ? { email: authForm.email, password: authForm.password }
+          : authForm;
+
+      const response = await apiRequest<AuthResponse>(endpoint, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+
+      if (typeof window !== "undefined") {
+        window.history.replaceState({}, "", "/workspace");
+      }
+
+      setUser(response.user);
+      setGuestAccessOpen(false);
+      scrollViewportToTop();
+      setStatusMessage(
+        authMode === "login"
+          ? `${ui("signedInAs")} ${response.user.fullName}.`
+          : `${ui("accountCreatedFor")} ${response.user.fullName}.`,
+      );
+
+      if (response.user.role === "athlete") {
+        setActiveWorkspace("athlete-today");
+        if (response.user.athleteId) {
+          await loadCompetitionContext(response.user.athleteId);
+          await Promise.all([loadCompetitions(), loadOlympicCycles(), loadSeasons(), loadCompetitionPlans()]);
+        }
+        await Promise.all([
+          loadReadiness(),
+          loadAssignedPlans(),
+          loadAdaptedPlan(),
+          loadExecutionResults(),
+          loadAnalyticsOverview(),
+        ]);
+      } else {
+        setTodayEntry(null);
+        setAdaptedPlan(null);
+        setExecutionResults([]);
+        setExecutionDrafts({});
+        setAnalyticsOverview(null);
+        resetCoachAthleteSelection();
+        setActiveWorkspace("coach-dashboard");
+        await Promise.all([
+          loadCoachAthletes(),
+          loadAvailableCoachAthletes(),
+          loadPlanTemplates(),
+          loadAssignedPlans(),
+          loadCompetitions(),
+          loadOlympicCycles(),
+        ]);
+      }
+
+      scrollViewportToTop();
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : ui("authFailed"),
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleLogout() {
+    setBusy(true);
+
+    try {
+      await apiRequest("/auth/logout", { method: "POST" });
+      setUser(null);
+      scrollViewportToTop();
+      setTodayEntry(null);
+      setCoachAthletes([]);
+      setAvailableCoachAthletes([]);
+      setPlanTemplates([]);
+      setAssignedPlans([]);
+      setAdaptedPlan(null);
+      setExecutionResults([]);
+      setExecutionDrafts({});
+      setAnalyticsOverview(null);
+      resetCoachAthleteSelection();
+      setCompetitions([]);
+      setUwwSyncSummary(null);
+      setUwwSyncOptions(emptyUwwSyncOptions);
+      setUwwSyncOptionsLoaded(false);
+      setSelectedCompetitionIds([]);
+      setCompetitionPlans([]);
+      setSeasons([]);
+      setOlympicCycles([]);
+      setStatusMessage(ui("sessionClosed"));
+      scrollViewportToTop();
+      window.location.assign("/");
+      return;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleReadinessSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setErrorMessage("");
+    const payload: ReadinessSubmissionPayload = {
+      ...readinessForm,
+      entryDate: readinessEntryDate,
+    };
+    const queueItem = importedCreateQueueItem({
+      type: "readiness",
+      payload,
+    });
+
+    try {
+      const response = await apiRequest<ReadinessResponse>("/readiness", {
+        method: "POST",
+        headers: { "X-Idempotency-Key": queueItem.clientRequestId },
+        body: JSON.stringify(payload),
+      });
+      setTodayEntry(response.entry);
+      setReadinessEntryDate(response.entry.entryDate);
+      importedWriteCachedData(OFFLINE_STORAGE_KEYS.readiness, {
+        entry: response.entry,
+        entryDate: response.entry.entryDate,
+      });
+      setStatusMessage(ui("readinessSaved"));
+      if (response.entry.entryDate === getDateInputValue()) {
+        await loadAdaptedPlan();
+      }
+      await loadAnalyticsOverview();
+    } catch (error) {
+      const enqueueResult = importedEnqueueOfflineItem(queueItem);
+      const nextQueueSize = importedCountActiveQueueItems(enqueueResult.queue);
+      syncQueueState(enqueueResult.queue);
+      setStatusMessage(
+        language === "ru"
+          ? `Готовность сохранена в офлайн-очередь. ${queueLabel(language, nextQueueSize)}`
+          : language === "bg"
+            ? `Готовността е добавена в офлайн опашката. ${queueLabel(language, nextQueueSize)}`
+            : `Readiness was queued offline. ${queueLabel(language, nextQueueSize)}`,
+      );
+      setErrorMessage(
+        error instanceof Error && typeof navigator !== "undefined" && navigator.onLine
+          ? error.message
+          : "",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function handleReadinessDateChange(entryDate: string) {
+    setReadinessEntryDate(entryDate);
+    void loadReadiness(entryDate);
+  }
+
+  async function handleExecutionSave(assignedPlanId: string, assignedBlockId: string) {
+    setBusy(true);
+    setErrorMessage("");
+    const draft = getExecutionDraft(assignedBlockId);
+    const queueItem = importedCreateQueueItem({
+      type: "execution",
+      payload: { assignedPlanId, assignedBlockId, ...draft },
+    });
+
+    try {
+      await saveExecutionResult(
+        assignedPlanId,
+        assignedBlockId,
+        queueItem.clientRequestId,
+      );
+      await loadAnalyticsOverview();
+      setStatusMessage(ui("executionSaved"));
+    } catch (error) {
+      const optimisticResult: ExecutionResult = {
+        id: `offline-${assignedBlockId}`,
+        athleteId: user?.athleteId ?? "",
+        assignedPlanId,
+        assignedBlockId,
+        completed: draft.completed,
+        setsCompleted: draft.setsCompleted,
+        repsCompleted: draft.repsCompleted,
+        weightKg: draft.weightKg,
+        durationMinutes: draft.durationMinutes,
+        rpe: draft.rpe,
+        notes: draft.notes,
+        completedAt: draft.completed ? new Date().toISOString() : null,
+        updatedAt: new Date().toISOString(),
+      };
+
+      setExecutionResults((current) => {
+        const next = current.filter((item) => item.assignedBlockId !== assignedBlockId);
+        next.unshift(optimisticResult);
+        importedWriteCachedData(OFFLINE_STORAGE_KEYS.execution, { results: next });
+        return next;
+      });
+
+      const enqueueResult = importedEnqueueOfflineItem(queueItem);
+      const nextQueueSize = importedCountActiveQueueItems(enqueueResult.queue);
+      syncQueueState(enqueueResult.queue);
+      setStatusMessage(
+        language === "ru"
+          ? `Выполнение сохранено локально и будет отправлено позже. ${queueLabel(language, nextQueueSize)}`
+          : language === "bg"
+            ? `Изпълнението е запазено локално и ще бъде изпратено по-късно. ${queueLabel(language, nextQueueSize)}`
+            : `Execution was saved locally and will sync later. ${queueLabel(language, nextQueueSize)}`,
+      );
+      setErrorMessage(
+        error instanceof Error && typeof navigator !== "undefined" && navigator.onLine
+          ? error.message
+          : "",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleCoachAthleteChange(athleteId: string) {
+    if (!canLoadCoachScopedAthleteData(athleteId)) {
+      resetCoachAthleteSelection();
+      return;
+    }
+
+    setSelectedAthleteId(athleteId);
+    setSeasonForm((current) => ({ ...current, athleteId }));
+    setCompetitionPlanForm((current) => ({ ...current, athleteId }));
+    setMesocycleForm((current) => ({
+      ...current,
+      athleteId,
+      seasonId: null,
+      competitionPlanId: null,
+    }));
+    setCompetitionResultForm(initialCompetitionResultForm);
+    setSeasonEditorMode("starts");
+    setSelectedSeasonStartId("");
+    setAssignedPlanForm((current) => ({ ...current, athleteId }));
+    setMicrocycleForm((current) => ({ ...current, athleteId }));
+    setBusy(true);
+
+    try {
+      await Promise.all([
+        loadCoachAthleteReadiness(athleteId),
+        loadCoachAdaptedPlan(athleteId),
+        loadCoachExecutionReview(athleteId),
+        loadCoachAnalyticsOverview(athleteId),
+        loadCompetitionContext(athleteId),
+        loadSeasons(athleteId),
+        loadCompetitionPlans(athleteId),
+        loadMesocycles(athleteId),
+        loadCompetitionReview(athleteId),
+        loadTemplateRecommendations(athleteId, assignedPlanForm.startDate, coachAthletes),
+        loadTemplatePackRecommendations(athleteId, microcycleForm.startDate, coachAthletes),
+      ]);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleAttachCoachAthlete(athleteId: string) {
+    setBusy(true);
+    setErrorMessage("");
+
+    try {
+      const response = await apiRequest<CoachAttachAthleteResponse>(
+        `/coach/athletes/${athleteId}/assign`,
+        {
+          method: "POST",
+        },
+      );
+
+      setStatusMessage(
+        copyFor(language, {
+          en: `${response.athlete.fullName} was attached to your roster.`,
+          ru: `${response.athlete.fullName}: спортсмен добавлен в ваш список.`,
+          bg: `${response.athlete.fullName} е прикрепена към вашия списък със спортисти.`,
+        }),
+      );
+      await Promise.all([
+        loadCoachAthletes(response.athlete.athleteId),
+        loadAvailableCoachAthletes(),
+      ]);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : copyFor(language, {
+              en: "Failed to attach athlete.",
+              ru: "Не удалось прикрепить спортсмена.",
+              bg: "Спортистът не можа да бъде прикрепен.",
+            }),
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handlePlanTemplateSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setErrorMessage("");
+
+    try {
+      await apiRequest("/plans/templates", {
+        method: "POST",
+        body: JSON.stringify(planForm),
+      });
+      setStatusMessage(ui("templateCreated"));
+      await loadPlanTemplates();
+      if (!assignedPlanForm.templateId) {
+        const latestTemplates = await apiRequest<{ templates: PlanTemplateSummary[] }>(
+          "/plans/templates",
+        );
+        setPlanTemplates(latestTemplates.templates);
+        setAssignedPlanForm((current) => ({
+          ...current,
+          templateId: latestTemplates.templates[0]?.id ?? current.templateId,
+        }));
+      }
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : ui("templateRequestFailed"),
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function addPlanBlockExercise(blockIndex: number, exercise: PlanExerciseInput) {
+    setPlanForm((current) => ({
+      ...current,
+      blocks: current.blocks.map((block, index) =>
+        index === blockIndex
+          ? {
+              ...block,
+              exercises: [
+                ...(block.exercises ?? []),
+                {
+                  ...exercise,
+                  displayOrder: block.exercises?.length ?? 0,
+                },
+              ],
+            }
+          : block,
+      ),
+    }));
+  }
+
+  function updatePlanBlockExercise(
+    blockIndex: number,
+    exerciseIndex: number,
+    patch: Partial<PlanExerciseInput>,
+  ) {
+    setPlanForm((current) => ({
+      ...current,
+      blocks: current.blocks.map((block, index) =>
+        index === blockIndex
+          ? {
+              ...block,
+              exercises: (block.exercises ?? []).map((exercise, currentExerciseIndex) =>
+                currentExerciseIndex === exerciseIndex ? { ...exercise, ...patch } : exercise,
+              ),
+            }
+          : block,
+      ),
+    }));
+  }
+
+  function removePlanBlockExercise(blockIndex: number, exerciseIndex: number) {
+    setPlanForm((current) => ({
+      ...current,
+      blocks: current.blocks.map((block, index) =>
+        index === blockIndex
+          ? {
+              ...block,
+              exercises: (block.exercises ?? [])
+                .filter((_, currentExerciseIndex) => currentExerciseIndex !== exerciseIndex)
+                .map((exercise, nextIndex) => ({ ...exercise, displayOrder: nextIndex })),
+            }
+          : block,
+      ),
+    }));
+  }
+
+  function updatePreparationPlanDraft(patch: Partial<PreparationPlanReference>) {
+    setPreparationPlanDraft((current) => ({ ...current, ...patch }));
+  }
+
+  function updatePreparationMetric(
+    metricIndex: number,
+    patch: Partial<PreparationPlanReference["metrics"][number]>,
+  ) {
+    setPreparationPlanDraft((current) => ({
+      ...current,
+      metrics: current.metrics.map((metric, currentMetricIndex) =>
+        currentMetricIndex === metricIndex ? { ...metric, ...patch } : metric,
+      ),
+    }));
+  }
+
+  function addPreparationMetric() {
+    setPreparationPlanDraft((current) => ({
+      ...current,
+      metrics: [
+        ...current.metrics,
+        {
+          label: copyFor(language, {
+            en: "New module",
+            ru: "Новый модуль",
+            bg: "Нов модул",
+          }),
+          value: "",
+          tone: "blue",
+        },
+      ],
+    }));
+  }
+
+  function removePreparationMetric(metricIndex: number) {
+    setPreparationPlanDraft((current) => ({
+      ...current,
+      metrics: current.metrics.filter((_, currentMetricIndex) => currentMetricIndex !== metricIndex),
+    }));
+  }
+
+  function updatePreparationPhase(phaseIndex: number, value: string) {
+    setPreparationPlanDraft((current) => ({
+      ...current,
+      phases: current.phases.map((phase, currentPhaseIndex) =>
+        currentPhaseIndex === phaseIndex ? value : phase,
+      ),
+    }));
+  }
+
+  function removePreparationPhase(phaseIndex: number) {
+    setPreparationPlanDraft((current) => ({
+      ...current,
+      phases: current.phases.filter((_, currentPhaseIndex) => currentPhaseIndex !== phaseIndex),
+    }));
+  }
+
+  function addPreparationPhase() {
+    setPreparationPlanDraft((current) => ({
+      ...current,
+      phases: [
+        ...current.phases,
+        copyFor(language, {
+          en: "New phase - dates and focus",
+          ru: "Новый этап - даты и фокус",
+          bg: "Нов етап - дати и фокус",
+        }),
+      ],
+    }));
+  }
+
+  function updatePreparationGuidance(color: "green" | "yellow" | "red", value: string) {
+    setPreparationPlanDraft((current) => ({
+      ...current,
+      weeks: current.weeks.map((week, weekIndex) =>
+        weekIndex === selectedPreparationWeekIndex
+          ? {
+              ...week,
+              days: week.days.map((day, dayIndex) =>
+                dayIndex === selectedPreparationDayIndex
+                  ? {
+                      ...day,
+                      guidance: {
+                        green: day.guidance?.green ?? "",
+                        yellow: day.guidance?.yellow ?? "",
+                        red: day.guidance?.red ?? "",
+                        [color]: value,
+                      },
+                    }
+                  : day,
+              ),
+            }
+          : week,
+      ),
+    }));
+  }
+
+  function updatePreparationSessionTitle(value: string) {
+    setPreparationPlanDraft((current) => ({
+      ...current,
+      weeks: current.weeks.map((week, weekIndex) =>
+        weekIndex === selectedPreparationWeekIndex
+          ? {
+              ...week,
+              days: week.days.map((day, dayIndex) =>
+                dayIndex === selectedPreparationDayIndex
+                  ? {
+                      ...day,
+                      sessions: day.sessions.map((session, sessionIndex) =>
+                        sessionIndex === selectedPreparationSessionIndex
+                          ? { ...session, title: value }
+                          : session,
+                      ),
+                    }
+                  : day,
+              ),
+            }
+          : week,
+      ),
+    }));
+  }
+
+  function updatePreparationRow(rowIndex: number, patch: Partial<PreparationPlanTableRow>) {
+    setPreparationPlanDraft((current) => ({
+      ...current,
+      weeks: current.weeks.map((week, weekIndex) =>
+        weekIndex === selectedPreparationWeekIndex
+          ? {
+              ...week,
+              days: week.days.map((day, dayIndex) =>
+                dayIndex === selectedPreparationDayIndex
+                  ? {
+                      ...day,
+                      sessions: day.sessions.map((session, sessionIndex) =>
+                        sessionIndex === selectedPreparationSessionIndex
+                          ? {
+                              ...session,
+                              rows: session.rows.map((row, currentRowIndex) =>
+                                currentRowIndex === rowIndex ? { ...row, ...patch } : row,
+                              ),
+                            }
+                          : session,
+                      ),
+                    }
+                  : day,
+              ),
+            }
+          : week,
+      ),
+    }));
+  }
+
+  function addPreparationExerciseFromPreset(preset: BlockExercisePreset) {
+    setPreparationPlanDraft((current) => ({
+      ...current,
+      weeks: current.weeks.map((week, weekIndex) =>
+        weekIndex === selectedPreparationWeekIndex
+          ? {
+              ...week,
+              days: week.days.map((day, dayIndex) =>
+                dayIndex === selectedPreparationDayIndex
+                  ? {
+                      ...day,
+                      sessions: day.sessions.map((session, sessionIndex) =>
+                        sessionIndex === selectedPreparationSessionIndex
+                          ? {
+                              ...session,
+                              rows: [
+                                ...session.rows,
+                                buildPreparationRowFromPreset(preset, language),
+                              ],
+                            }
+                          : session,
+                      ),
+                    }
+                  : day,
+              ),
+            }
+          : week,
+      ),
+    }));
+  }
+
+  function removePreparationRow(rowIndex: number) {
+    setPreparationPlanDraft((current) => ({
+      ...current,
+      weeks: current.weeks.map((week, weekIndex) =>
+        weekIndex === selectedPreparationWeekIndex
+          ? {
+              ...week,
+              days: week.days.map((day, dayIndex) =>
+                dayIndex === selectedPreparationDayIndex
+                  ? {
+                      ...day,
+                      sessions: day.sessions.map((session, sessionIndex) =>
+                        sessionIndex === selectedPreparationSessionIndex
+                          ? {
+                              ...session,
+                              rows: session.rows.filter(
+                                (_, currentRowIndex) => currentRowIndex !== rowIndex,
+                              ),
+                            }
+                          : session,
+                      ),
+                    }
+                  : day,
+              ),
+            }
+          : week,
+      ),
+    }));
+  }
+
+  function addPreparationWeek() {
+    setPreparationPlanDraft((current) => {
+      const nextIndex = current.weeks.length;
+      return {
+        ...current,
+        weeks: [
+          ...current.weeks,
+          {
+            title: `${copyFor(language, { en: "New week", ru: "Новая неделя", bg: "Нова седмица" })} ${
+              nextIndex + 1
+            }`,
+            days: [
+              {
+                title: copyFor(language, { en: "New day", ru: "Новый день", bg: "Нов ден" }),
+                type: copyFor(language, { en: "Training focus", ru: "Фокус тренировки", bg: "Фокус на тренировката" }),
+                sessions: [
+                  {
+                    title: copyFor(language, { en: "Session", ru: "Сессия", bg: "Сесия" }),
+                    columns: ["Блок", "Объём", "Контроль"],
+                    rows: [
+                      {
+                        block: copyFor(language, { en: "Block", ru: "Блок", bg: "Блок" }),
+                        volume: "",
+                        control: "",
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+    });
+    setSelectedPreparationWeekIndex(preparationPlanDraft.weeks.length);
+    setSelectedPreparationDayIndex(0);
+    setSelectedPreparationSessionIndex(0);
+  }
+
+  function addPreparationDay() {
+    setPreparationPlanDraft((current) => ({
+      ...current,
+      weeks: current.weeks.map((week, weekIndex) =>
+        weekIndex === selectedPreparationWeekIndex
+          ? {
+              ...week,
+              days: [
+                ...week.days,
+                {
+                  title: copyFor(language, { en: "New day", ru: "Новый день", bg: "Нов ден" }),
+                  type: copyFor(language, { en: "Training focus", ru: "Фокус тренировки", bg: "Фокус на тренировката" }),
+                  sessions: [
+                    {
+                      title: copyFor(language, { en: "Session", ru: "Сессия", bg: "Сесия" }),
+                      columns: ["Блок", "Объём", "Контроль"],
+                      rows: [
+                        {
+                          block: copyFor(language, { en: "Block", ru: "Блок", bg: "Блок" }),
+                          volume: "",
+                          control: "",
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            }
+          : week,
+      ),
+    }));
+    setSelectedPreparationDayIndex(selectedPreparationWeek?.days.length ?? 0);
+    setSelectedPreparationSessionIndex(0);
+  }
+
+  function addPreparationSession() {
+    setPreparationPlanDraft((current) => ({
+      ...current,
+      weeks: current.weeks.map((week, weekIndex) =>
+        weekIndex === selectedPreparationWeekIndex
+          ? {
+              ...week,
+              days: week.days.map((day, dayIndex) =>
+                dayIndex === selectedPreparationDayIndex
+                  ? {
+                      ...day,
+                      sessions: [
+                        ...day.sessions,
+                        {
+                          title: copyFor(language, { en: "Session", ru: "Сессия", bg: "Сесия" }),
+                          columns: ["Блок", "Объём", "Контроль"],
+                          rows: [
+                            {
+                              block: copyFor(language, { en: "Block", ru: "Блок", bg: "Блок" }),
+                              volume: "",
+                              control: "",
+                            },
+                          ],
+                        },
+                      ],
+                    }
+                  : day,
+              ),
+            }
+          : week,
+      ),
+    }));
+    setSelectedPreparationSessionIndex(selectedPreparationDay?.sessions.length ?? 0);
+  }
+
+  function addPreparationRow() {
+    setPreparationPlanDraft((current) => ({
+      ...current,
+      weeks: current.weeks.map((week, weekIndex) =>
+        weekIndex === selectedPreparationWeekIndex
+          ? {
+              ...week,
+              days: week.days.map((day, dayIndex) =>
+                dayIndex === selectedPreparationDayIndex
+                  ? {
+                      ...day,
+                      sessions: day.sessions.map((session, sessionIndex) =>
+                        sessionIndex === selectedPreparationSessionIndex
+                          ? {
+                              ...session,
+                              rows: [
+                                ...session.rows,
+                                {
+                                  block: copyFor(language, { en: "Block", ru: "Блок", bg: "Блок" }),
+                                  volume: "",
+                                  control: "",
+                                },
+                              ],
+                            }
+                          : session,
+                      ),
+                    }
+                  : day,
+              ),
+            }
+          : week,
+      ),
+    }));
+  }
+
+  async function handleAssignPlanSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setErrorMessage("");
+
+    try {
+      await apiRequest("/plans/assign", {
+        method: "POST",
+        body: JSON.stringify(assignedPlanForm),
+      });
+      setStatusMessage(ui("templateAssigned"));
+      await loadAssignedPlans();
+      await loadCoachAthletes();
+      if (canLoadCoachScopedAthleteData(assignedPlanForm.athleteId)) {
+        await loadTemplateRecommendations(
+          assignedPlanForm.athleteId,
+          assignedPlanForm.startDate,
+          coachAthletes,
+        );
+      }
+      if (assignedPlanForm.athleteId === selectedAthleteId) {
+        await Promise.all([
+          loadCoachAdaptedPlan(assignedPlanForm.athleteId),
+          loadCoachExecutionReview(assignedPlanForm.athleteId),
+          loadCoachAnalyticsOverview(assignedPlanForm.athleteId),
+        ]);
+      }
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : ui("planAssignmentFailed"),
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleCompetitionSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setErrorMessage("");
+
+    try {
+      await apiRequest("/competitions", {
+        method: "POST",
+        body: JSON.stringify(competitionForm),
+      });
+      setStatusMessage("Competition created.");
+      setCompetitionForm(initialCompetitionForm);
+      await loadCompetitions();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Competition request failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleUwwEventSync() {
+    setBusy(true);
+    setErrorMessage("");
+
+    try {
+      const response = await apiRequest<UwwEventSyncResponse>(
+        "/competitions/uww-sync",
+        {
+          method: "POST",
+          body: JSON.stringify(uwwSyncFilters),
+        },
+      );
+      setCompetitions(response.competitions);
+      setSelectedCompetitionIds((current) =>
+        syncCompetitionSelection(current, response.competitions),
+      );
+      setUwwSyncSummary(response);
+      setUwwSyncOptions(response.options);
+      setUwwSyncOptionsLoaded(true);
+      setStatusMessage(
+        copyFor(language, {
+          en: `UWW calendar synced: ${response.addedCount} added, ${response.updatedCount} updated.`,
+          ru: `Календарь UWW обновлён: добавлено ${response.addedCount}, обновлено ${response.updatedCount}.`,
+          bg: `Календарът UWW е обновен: добавени ${response.addedCount}, обновени ${response.updatedCount}.`,
+        }),
+      );
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "UWW sync request failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleDeleteCompetition(competition: CompetitionSummary) {
+    await handleDeleteCompetitions([competition]);
+  }
+
+  async function requestDeleteCompetitions(
+    payload: DeleteCompetitionsPayload,
+  ): Promise<DeleteCompetitionsResponse> {
+    try {
+      return await apiRequest<DeleteCompetitionsResponse>("/competitions/bulk-delete", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+    } catch (primaryError) {
+      try {
+        return await apiRequest<DeleteCompetitionsResponse>("/competitions/delete", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+      } catch {
+        if (payload.competitionIds.length === 0) {
+          throw primaryError;
+        }
+
+        let linkedPlanCount = 0;
+
+        for (const competitionId of payload.competitionIds) {
+          const response = await apiRequest<{
+            deletedCompetitionId: string;
+            linkedPlanCount: number;
+          }>(`/competitions/${competitionId}`, {
+            method: "DELETE",
+          });
+          linkedPlanCount += response.linkedPlanCount;
+        }
+
+        const competitionsResponse = await apiRequest<{
+          competitions: CompetitionSummary[];
+        }>("/competitions");
+
+        return {
+          deletedCompetitionIds: payload.competitionIds,
+          linkedPlanCount,
+          competitions: competitionsResponse.competitions,
+        };
+      }
+    }
+  }
+
+  async function handleDeleteSelectedCompetitions() {
+    await handleDeleteCompetitions(selectedCalendarCompetitions);
+  }
+
+  async function handleDeleteCompetitions(items: CompetitionSummary[]) {
+    if (items.length === 0) {
+      return;
+    }
+
+    const nextDeletedIds = new Set(items.map((item) => item.id));
+    const previousCompetitions = competitions;
+    const previousSelectedIds = selectedCompetitionIds;
+    setBusy(true);
+    setErrorMessage("");
+    setStatusMessage(
+      copyFor(language, {
+        en: items.length === 1 ? "Deleting competition..." : `Deleting selected competitions (${items.length})...`,
+        ru:
+          items.length === 1
+            ? "Удаляю соревнование..."
+            : `Удаляю выбранные соревнования (${items.length})...`,
+        bg:
+          items.length === 1
+            ? "Изтриване на състезание..."
+            : `Изтриване на избраните състезания (${items.length})...`,
+      }),
+    );
+    setCompetitions((current) =>
+      current.filter((competition) => !nextDeletedIds.has(competition.id)),
+    );
+    setSelectedCompetitionIds([]);
+
+    try {
+      const payload: DeleteCompetitionsPayload = {
+        competitionIds: items.map((item) => item.id),
+      };
+      const response = await requestDeleteCompetitions(payload);
+      setCompetitions(response.competitions);
+      setSelectedCompetitionIds([]);
+
+      if (response.deletedCompetitionIds.includes(competitionPlanForm.competitionId)) {
+        setCompetitionPlanForm((current) => ({
+          ...current,
+          competitionId: "",
+        }));
+      }
+
+      if (response.linkedPlanCount > 0) {
+        await loadCompetitionPlans(selectedAthleteId || undefined);
+
+        if (selectedAthleteId) {
+          await Promise.all([
+            loadCompetitionContext(selectedAthleteId),
+            loadCompetitionReview(selectedAthleteId),
+          ]);
+        }
+      }
+
+      setStatusMessage(
+        copyFor(language, {
+          en: items.length === 1 ? "Competition deleted." : "Selected competitions deleted.",
+          ru:
+            items.length === 1
+              ? "Соревнование удалено."
+              : "Выбранные соревнования удалены.",
+          bg:
+            items.length === 1
+              ? "Състезанието е изтрито."
+              : "Избраните състезания са изтрити.",
+        }),
+      );
+    } catch (error) {
+      setCompetitions(previousCompetitions);
+      setSelectedCompetitionIds(previousSelectedIds);
+      setErrorMessage(error instanceof Error ? error.message : "Competition delete failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleOlympicCycleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setErrorMessage("");
+
+    try {
+      await apiRequest("/olympic-cycles", {
+        method: "POST",
+        body: JSON.stringify(olympicCycleForm),
+      });
+      setStatusMessage(
+        copyFor(language, {
+          en: "Long-term cycle saved.",
+          ru: "Долгосрочный цикл сохранён.",
+          bg: "Дългосрочният цикъл е запазен.",
+        }),
+      );
+      setOlympicCycleForm(initialOlympicCycleForm);
+      await loadOlympicCycles();
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : copyFor(language, {
+              en: "Could not save the long-term cycle.",
+              ru: "Не удалось сохранить долгосрочный цикл.",
+              bg: "Дългосрочният цикъл не можа да бъде запазен.",
+            }),
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleSeasonSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setErrorMessage("");
+
+    try {
+      await apiRequest("/seasons", {
+        method: "POST",
+        body: JSON.stringify(seasonForm),
+      });
+      setStatusMessage("Season saved.");
+      setSeasonForm((current) => ({
+        ...initialSeasonForm,
+        athleteId: current.athleteId,
+        olympicCycleId: current.olympicCycleId,
+      }));
+      await loadSeasons(seasonForm.athleteId || undefined);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Season request failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function handlePrepareCompetitionPlan(competition: CompetitionSummary) {
+    const athleteId = selectedAthleteId || competitionPlanForm.athleteId;
+    const competitionYear = getDateYearValue(competition.startDate);
+    const matchingSeasonId =
+      athleteId && competitionYear
+        ? seasons.find((season) => season.athleteId === athleteId && season.year === competitionYear)
+            ?.id ?? null
+        : null;
+
+    setCompetitionPlanForm((current) => ({
+      ...current,
+      athleteId,
+      competitionId: competition.id,
+      seasonId:
+        matchingSeasonId ??
+        (current.athleteId === athleteId ? current.seasonId : null),
+      prepStartDate: shiftDateInputValue(competition.startDate, -60),
+      prepEndDate: competition.startDate,
+    }));
+    setSeasonEditorMode("plan");
+    setPlanningView("season");
+    setStatusMessage(
+      copyFor(language, {
+        en: "Competition selected. Save it as a season start for the selected athlete.",
+        ru: "Соревнование выбрано. Сохраните его как старт сезона для выбранного спортсмена.",
+        bg: "Състезанието е избрано. Запазете го като старт от сезона за избрания спортист.",
+      }),
+    );
+    scrollViewportToTop();
+  }
+
+  function handleSelectSeasonStart(
+    plan: CompetitionPlanSummary,
+    nextMode: SeasonEditorMode = "result",
+  ) {
+    setSelectedSeasonStartId(plan.id);
+    setSeasonEditorMode(nextMode);
+    setCompetitionResultForm((current) => ({
+      ...current,
+      competitionPlanId: plan.id,
+    }));
+  }
+
+  function handleNewSeasonStart() {
+    const athleteId = selectedAthleteId || competitionPlanForm.athleteId;
+
+    setSeasonEditorMode("plan");
+    setCompetitionPlanForm((current) => ({
+      ...current,
+      athleteId,
+      competitionId: "",
+    }));
+  }
+
+  async function handleDeleteSeasonStart(plan: CompetitionPlanSummary) {
+    const confirmed =
+      typeof window === "undefined" ||
+      window.confirm(
+        copyFor(language, {
+          en: `Delete season start "${plan.competitionTitle}"?`,
+          ru: `Удалить старт "${plan.competitionTitle}"?`,
+          bg: `Да се изтрие стартът "${plan.competitionTitle}"?`,
+        }),
+      );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setBusy(true);
+    setErrorMessage("");
+
+    try {
+      const response = await apiRequest<{
+        deletedCompetitionPlanId: string;
+        competitionPlans: CompetitionPlanSummary[];
+      }>(`/competition-plans/${plan.id}`, {
+        method: "DELETE",
+      });
+      const nextVisibleStart =
+        response.competitionPlans
+          .filter((item) => {
+            const competitionYear = getDateYearValue(item.competitionStartDate);
+            return (
+              (!selectedAthleteId || item.athleteId === selectedAthleteId) &&
+              competitionYear === seasonDisplayYear
+            );
+          })
+          .sort((left, right) =>
+            left.competitionStartDate.localeCompare(right.competitionStartDate),
+          )[0]?.id ?? "";
+
+      setCompetitionPlans(response.competitionPlans);
+      setSelectedSeasonStartId(nextVisibleStart);
+      setCompetitionResultForm(initialCompetitionResultForm);
+
+      if (!nextVisibleStart) {
+        setSeasonEditorMode("starts");
+      }
+
+      if (selectedAthleteId) {
+        await Promise.all([
+          loadCompetitionContext(selectedAthleteId),
+          loadCompetitionReview(selectedAthleteId),
+        ]);
+      }
+
+      setStatusMessage(
+        copyFor(language, {
+          en: "Season start deleted.",
+          ru: "Старт сезона удалён.",
+          bg: "Стартът от сезона е изтрит.",
+        }),
+      );
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Season start delete failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleCompetitionPlanSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setErrorMessage("");
+    const athleteId = selectedAthleteId || competitionPlanForm.athleteId;
+
+    try {
+      if (!athleteId) {
+        throw new Error(
+          copyFor(language, {
+            en: "Select an athlete in the top menu first.",
+            ru: "Сначала выберите спортсмена в верхнем меню.",
+            bg: "Първо изберете спортист от горното меню.",
+          }),
+        );
+      }
+
+      const response = await apiRequest<{ competitionPlan: CompetitionPlanSummary }>(
+        "/competition-plans",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            ...competitionPlanForm,
+            athleteId,
+          }),
+        },
+      );
+      setSelectedSeasonStartId(response.competitionPlan.id);
+      setStatusMessage(
+        copyFor(language, {
+          en: "Season start saved.",
+          ru: "Старт сезона сохранён.",
+          bg: "Стартът от сезона е запазен.",
+        }),
+      );
+      await loadCompetitionPlans(athleteId);
+      if (athleteId) {
+        await Promise.all([
+          loadCompetitionContext(athleteId),
+          loadCompetitionReview(athleteId),
+        ]);
+      }
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Competition plan request failed",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleCompetitionResultSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setErrorMessage("");
+    const competitionPlanId =
+      competitionResultForm.competitionPlanId || selectedSeasonStart?.id || "";
+
+    try {
+      if (!competitionPlanId) {
+        throw new Error(
+          copyFor(language, {
+            en: "Select a season start first.",
+            ru: "Сначала выберите старт сезона.",
+            bg: "Първо изберете старт от сезона.",
+          }),
+        );
+      }
+
+      await apiRequest("/competition-results", {
+        method: "POST",
+        body: JSON.stringify({
+          ...competitionResultForm,
+          competitionPlanId,
+        }),
+      });
+      setStatusMessage("Competition result saved.");
+      if (selectedAthleteId) {
+        await Promise.all([
+          loadCompetitionPlans(selectedAthleteId),
+          loadCompetitionReview(selectedAthleteId),
+          loadCompetitionContext(selectedAthleteId),
+        ]);
+      }
+      setCompetitionResultForm(initialCompetitionResultForm);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Competition result request failed",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleMesocycleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setErrorMessage("");
+
+    try {
+      const athleteId = mesocycleForm.athleteId || selectedAthleteId;
+      if (!athleteId) {
+        throw new Error(
+          copyFor(language, {
+            en: "Select an athlete in the top menu first.",
+            ru: "Сначала выберите спортсмена в верхнем меню.",
+            bg: "Първо изберете спортист от горното меню.",
+          }),
+        );
+      }
+
+      const payload: CreateMesocyclePayload = {
+        ...mesocycleForm,
+        athleteId,
+      };
+
+      await apiRequest("/mesocycles", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      setStatusMessage(
+        copyFor(language, {
+          en: "Mesocycle saved.",
+          ru: "Мезоцикл сохранён.",
+          bg: "Мезоцикълът е запазен.",
+        }),
+      );
+      await loadMesocycles(athleteId);
+      setMesocycleForm((current) => ({
+        ...initialMesocycleForm,
+        athleteId,
+        seasonId: current.seasonId,
+        competitionPlanId: current.competitionPlanId,
+      }));
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Mesocycle request failed",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function handleUseMesocycleWeek(mesocycle: MesocycleSummary, week: MesocycleSummary["weeks"][number]) {
+    setMicrocycleForm((current) => ({
+      ...current,
+      athleteId: mesocycle.athleteId,
+      startDate: week.startDate,
+      plannedPhase: mesocycle.phase,
+      notes: `${mesocycle.name} / ${week.label} / ${week.microcycleType}`,
+    }));
+    if (canLoadCoachScopedAthleteData(mesocycle.athleteId)) {
+      void loadTemplatePackRecommendations(mesocycle.athleteId, week.startDate, coachAthletes);
+    }
+    setStatusMessage(
+      copyFor(language, {
+        en: `Weekly planner aligned to ${translateKnownMesocycleText(mesocycle.name, language)} ${localizedWeekLabel(week.label, language)}. Review the suggested pack and assign when ready.`,
+          ru: `Недельный план связан с ${translateKnownMesocycleText(mesocycle.name, language)} ${localizedWeekLabel(week.label, language)}. Проверьте предложенный пакет и назначьте, когда будете готовы.`,
+          bg: `Седмичният план е свързан с ${translateKnownMesocycleText(mesocycle.name, language)} ${localizedWeekLabel(week.label, language)}. Прегледайте предложения пакет и назначете, когато сте готови.`,
+      }),
+    );
+  }
+
+  async function handleAutoAssignMicrocycleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setErrorMessage("");
+
+    try {
+      const response = await apiRequest<{ assignedPlans: AssignedPlanSummary[] }>(
+        "/plans/auto-assign-microcycle",
+        {
+          method: "POST",
+          body: JSON.stringify(microcycleForm),
+        },
+      );
+      setStatusMessage(`Microcycle assigned: ${response.assignedPlans.length} day(s).`);
+      await loadAssignedPlans();
+      if (canLoadCoachScopedAthleteData(microcycleForm.athleteId)) {
+        await Promise.all([
+          loadCoachAthletes(),
+          loadCoachAdaptedPlan(microcycleForm.athleteId),
+          loadCoachExecutionReview(microcycleForm.athleteId),
+          loadCoachAnalyticsOverview(microcycleForm.athleteId),
+          loadTemplatePackRecommendations(
+            microcycleForm.athleteId,
+            microcycleForm.startDate,
+            coachAthletes,
+          ),
+        ]);
+      }
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Microcycle auto-assignment failed",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function handleApplyPlannerSuggestion(suggestion: PlannerSuggestion) {
+    if (!templatePack) {
+      return;
+    }
+
+    const nextPack = applyPlannerSuggestionToPack(templatePack, suggestion, planTemplates);
+    const recommendedTemplateName = translateKnownTemplateText(
+      suggestion.recommendedTemplateName,
+      language,
+    );
+
+    if (!nextPack) {
+      return;
+    }
+
+    setTemplatePack(nextPack);
+    setMicrocycleForm((current) => ({
+      ...current,
+      daysCount: nextPack.items.length,
+      items: packToMicrocycleItems(nextPack),
+    }));
+    setStatusMessage(
+      suggestion.recommendedTemplateName
+        ? suggestion.feedback
+          ? copyFor(language, {
+              en: `Suggestion applied: ${recommendedTemplateName}. ${plannerSuggestionFeedbackLabel(
+                suggestion.feedback,
+              )}. Review the draft pack and assign when ready.`,
+              ru: `Совет применён: ${recommendedTemplateName}. ${plannerSuggestionFeedbackLabel(
+                suggestion.feedback,
+              )}. Проверьте черновой пакет и назначьте, когда будете готовы.`,
+              bg: `Предложението е приложено: ${recommendedTemplateName}. ${plannerSuggestionFeedbackLabel(
+                suggestion.feedback,
+              )}. Прегледайте черновия пакет и назначете, когато сте готови.`,
+            })
+          : copyFor(language, {
+              en: `Suggestion applied: ${recommendedTemplateName}. Review the draft pack and assign when ready.`,
+              ru: `Совет применён: ${recommendedTemplateName}. Проверьте черновой пакет и назначьте, когда будете готовы.`,
+              bg: `Предложението е приложено: ${recommendedTemplateName}. Прегледайте черновия пакет и назначете, когато сте готови.`,
+            })
+        : copyFor(language, {
+            en: "Suggestion applied to the draft pack. Review the updated weekly plan before auto-assign.",
+            ru: "Совет применён к черновому пакету. Проверьте обновлённый недельный план перед автоназначением.",
+            bg: "Предложението е приложено към черновия пакет. Прегледайте обновения седмичен план преди автоматично назначаване.",
+          }),
+    );
+  }
+
+  async function handleApplyAnalyticsCoachSuggestion(
+    suggestion: AnalyticsCoachSuggestion,
+  ) {
+    const bridge = suggestion.plannerBridge;
+
+    if (!bridge) {
+      setStatusMessage(
+        copyFor(language, {
+          en: "This analytics suggestion has no direct planner action yet.",
+        ru: "У этого аналитического предложения пока нет прямого действия планирования.",
+        bg: "Това аналитично предложение все още няма директно действие за планиране.",
+        }),
+      );
+      return;
+    }
+
+    if (!canLoadCoachScopedAthleteData(bridge.athleteId)) {
+      resetCoachAthleteSelection();
+      return;
+    }
+
+    setBusy(true);
+    setErrorMessage("");
+
+    startTransition(() => {
+      setActiveWorkspace("planning-studio");
+      setPlanningView("weekly");
+      setSelectedAthleteId(bridge.athleteId);
+    });
+
+    setMicrocycleForm((current) => ({
+      ...current,
+      athleteId: bridge.athleteId,
+      startDate: bridge.startDate,
+      plannedPhase: bridge.plannedPhase ?? current.plannedPhase ?? null,
+      notes: `${suggestion.title} / analytics planner bridge`,
+    }));
+
+    try {
+      const response = await loadTemplatePackRecommendations(
+        bridge.athleteId,
+        bridge.startDate,
+        coachAthletes,
+      );
+      const matchedSuggestion = response
+        ? findPlannerSuggestionForBridge(response.pack.suggestions, bridge)
+        : null;
+
+      if (bridge.autoApply && response && matchedSuggestion) {
+        const nextPack = applyPlannerSuggestionToPack(
+          response.pack,
+          matchedSuggestion,
+          planTemplates,
+        );
+
+        if (nextPack) {
+          const decisionPayload: AnalyticsCoachActionDecisionPayload = {
+            suggestionId: suggestion.id,
+            suggestionTitle: suggestion.title,
+            suggestionLevel: suggestion.level,
+            sourceCode: suggestion.sourceCode,
+            weekStartDate: suggestion.weekStartDate ?? bridge.startDate,
+            weekLabel: suggestion.weekLabel ?? null,
+            decisionStatus: "applied",
+            plannerBridge: bridge,
+          };
+          const queueItem = importedCreateQueueItem({
+            type: "analytics-decision",
+            athleteId: bridge.athleteId,
+            payload: decisionPayload,
+          });
+          try {
+            await saveCoachAnalyticsDecision(
+              bridge.athleteId,
+              decisionPayload,
+              queueItem.clientRequestId,
+            );
+          } catch (error) {
+            enqueueAnalyticsDecision(bridge.athleteId, decisionPayload, queueItem);
+            if (error instanceof Error && typeof navigator !== "undefined" && navigator.onLine) {
+              setErrorMessage(error.message);
+            }
+          }
+          setTemplatePack(nextPack);
+          setMicrocycleForm((current) => ({
+            ...current,
+            athleteId: bridge.athleteId,
+            startDate: bridge.startDate,
+            plannedPhase: bridge.plannedPhase ?? current.plannedPhase ?? null,
+            daysCount: nextPack.items.length,
+            items: packToMicrocycleItems(nextPack),
+          }));
+          setStatusMessage(
+            copyFor(language, {
+              en: `Analytics suggestion applied in weekly planner: ${suggestion.title}.`,
+              ru: `Предложение аналитики применено в недельном планировщике: ${suggestion.title}.`,
+              bg: `Предложението от аналитиката е приложено в седмичния планировчик: ${suggestion.title}.`,
+            }),
+          );
+          return;
+        }
+      }
+
+      setStatusMessage(
+        matchedSuggestion
+          ? copyFor(language, {
+              en: `Weekly planner opened from analytics: ${suggestion.title}. Review the loaded draft.`,
+              ru: `Недельный планировщик открыт из аналитики: ${suggestion.title}. Проверьте загруженный черновик.`,
+              bg: `Седмичният планировчик е отворен от аналитиката: ${suggestion.title}. Прегледайте заредения черновик.`,
+            })
+          : copyFor(language, {
+              en: `Weekly planner opened for ${bridge.startDate}. Review coach suggestions and apply the best fit manually.`,
+              ru: `Недельный планировщик открыт на ${bridge.startDate}. Проверьте советы тренеру и примените лучший вариант вручную.`,
+              bg: `Седмичният планировчик е отворен за ${bridge.startDate}. Прегледайте предложенията за треньора и приложете най-подходящия вариант ръчно.`,
+            }),
+      );
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Analytics planner bridge failed",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleMarkAnalyticsCoachSuggestionNotApplied(
+    suggestion: AnalyticsCoachSuggestion,
+  ) {
+    const athleteId = suggestion.plannerBridge?.athleteId ?? selectedAthleteId;
+    const weekStartDate = suggestion.weekStartDate ?? suggestion.plannerBridge?.startDate ?? null;
+
+    if (!athleteId || !weekStartDate) {
+      setStatusMessage(
+        copyFor(language, {
+          en: "This analytics suggestion is missing week context, so it cannot be logged yet.",
+        ru: "У этого аналитического предложения нет недельного контекста, поэтому его пока нельзя зафиксировать.",
+        bg: "Това аналитично предложение няма седмичен контекст и засега не може да бъде записано.",
+        }),
+      );
+      return;
+    }
+
+    setBusy(true);
+    setErrorMessage("");
+    const decisionPayload: AnalyticsCoachActionDecisionPayload = {
+      suggestionId: suggestion.id,
+      suggestionTitle: suggestion.title,
+      suggestionLevel: suggestion.level,
+      sourceCode: suggestion.sourceCode,
+      weekStartDate,
+      weekLabel: suggestion.weekLabel ?? null,
+      decisionStatus: "not_applied",
+      plannerBridge: suggestion.plannerBridge,
+    };
+    const queueItem = importedCreateQueueItem({
+      type: "analytics-decision",
+      athleteId,
+      payload: decisionPayload,
+    });
+
+    try {
+      await saveCoachAnalyticsDecision(
+        athleteId,
+        decisionPayload,
+        queueItem.clientRequestId,
+      );
+      setStatusMessage(
+        copyFor(language, {
+          en: `Coach action logged as not applied: ${suggestion.title}.`,
+          ru: `Тренерское действие отмечено как не применённое: ${suggestion.title}.`,
+          bg: `Треньорското действие е отбелязано като неприложено: ${suggestion.title}.`,
+        }),
+      );
+    } catch (error) {
+      enqueueAnalyticsDecision(athleteId, decisionPayload, queueItem);
+      setErrorMessage(
+        error instanceof Error && typeof navigator !== "undefined" && navigator.onLine
+          ? error.message
+          : "",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleSetAnalyticsDecisionOutcome(
+    decision: AnalyticsCoachActionDecision,
+    outcome: AnalyticsCoachActionDecision["outcome"],
+  ) {
+    setBusy(true);
+    setErrorMessage("");
+    const decisionPayload: AnalyticsCoachActionDecisionPayload = {
+      suggestionId: decision.suggestionId,
+      suggestionTitle: decision.suggestionTitle,
+      suggestionLevel: decision.suggestionLevel,
+      sourceCode: decision.sourceCode,
+      weekStartDate: decision.weekStartDate,
+      weekLabel: decision.weekLabel,
+      decisionStatus: decision.decisionStatus,
+      plannerBridge: decision.plannerBridge,
+      decisionNotes: decision.decisionNotes,
+      outcome,
+      outcomeNotes: decision.outcomeNotes,
+    };
+    const queueItem = importedCreateQueueItem({
+      type: "analytics-decision",
+      athleteId: decision.athleteId,
+      payload: decisionPayload,
+    });
+
+    try {
+      await saveCoachAnalyticsDecision(
+        decision.athleteId,
+        decisionPayload,
+        queueItem.clientRequestId,
+      );
+      setStatusMessage(
+        copyFor(language, {
+          en: `Outcome updated for ${decision.suggestionTitle}.`,
+          ru: `Результат обновлён для ${decision.suggestionTitle}.`,
+          bg: `Резултатът е обновен за ${decision.suggestionTitle}.`,
+        }),
+      );
+    } catch (error) {
+      enqueueAnalyticsDecision(decision.athleteId, decisionPayload, queueItem);
+      setErrorMessage(
+        error instanceof Error && typeof navigator !== "undefined" && navigator.onLine
+          ? error.message
+          : "",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleSyncNow() {
+    setIsSyncingNow(true);
+    setErrorMessage("");
+
+    try {
+      await flushOfflineQueue();
+      await refreshSession();
+    } finally {
+      setIsSyncingNow(false);
+    }
+  }
+
+  const canSeeCoachWorkspace = user?.role === "coach" || user?.role === "admin";
+  const selectedCoachAthlete =
+    coachAthletes.find((athlete) => athlete.athleteId === selectedAthleteId) ?? null;
+  const visibleSeasons = seasons.filter(
+    (season) => !selectedAthleteId || season.athleteId === selectedAthleteId,
+  );
+  const visibleCompetitionPlans = competitionPlans.filter(
+    (plan) => !selectedAthleteId || plan.athleteId === selectedAthleteId,
+  );
+  const activeMesocycleAthleteId = mesocycleForm.athleteId || selectedAthleteId;
+  const visibleMesocycles = [...mesocycles]
+    .filter(
+      (mesocycle) => !activeMesocycleAthleteId || mesocycle.athleteId === activeMesocycleAthleteId,
+    )
+    .sort(
+      (left, right) =>
+        right.createdAt.localeCompare(left.createdAt) ||
+        right.startDate.localeCompare(left.startDate),
+    );
+  const seasonDisplayYear = Number.isFinite(seasonForm.year)
+    ? seasonForm.year
+    : new Date().getFullYear();
+  const visibleSeasonStarts = [...visibleCompetitionPlans]
+    .filter((plan) => {
+      const competitionYear = getDateYearValue(plan.competitionStartDate);
+      return (
+        plan.seasonYear === seasonDisplayYear ||
+        competitionYear === seasonDisplayYear
+      );
+    })
+    .sort((left, right) =>
+      left.competitionStartDate.localeCompare(right.competitionStartDate),
+    );
+  const selectedSeasonStart =
+    visibleSeasonStarts.find((plan) => plan.id === selectedSeasonStartId) ??
+    visibleSeasonStarts[0] ??
+    null;
+  const selectedSeasonCompetition = selectedSeasonStart
+    ? competitions.find((competition) => competition.id === selectedSeasonStart.competitionId) ??
+      null
+    : null;
+  const seasonMonthLabels = MONTH_LABELS[language];
+  const isCoachDashboardWorkspace = activeWorkspace === "coach-dashboard";
+  const isCoachAthletesWorkspace = activeWorkspace === "coach-athletes";
+  const isCoachAnalyticsWorkspace = activeWorkspace === "coach-analytics";
+  const isCoachReviewWorkspace = activeWorkspace === "coach-review";
+  const showCoachRosterColumn = false;
+  const showCoachInspectorColumn = isCoachDashboardWorkspace;
+  const showAthleteProfileEditor = isAthleteProfileEditorOpen;
+
+  useEffect(() => {
+    if (
+      isPreviewMode ||
+      !canSeeCoachWorkspace ||
+      activeWorkspace !== "planning-studio" ||
+      planningView !== "calendar" ||
+      uwwSyncOptionsLoaded
+    ) {
+      return;
+    }
+
+    void loadUwwSyncOptions().catch((error) => {
+      setUwwSyncOptionsLoaded(true);
+      setErrorMessage(error instanceof Error ? error.message : "UWW options request failed");
+    });
+  }, [
+    activeWorkspace,
+    canSeeCoachWorkspace,
+    isPreviewMode,
+    planningView,
+    user?.id,
+    uwwSyncOptionsLoaded,
+  ]);
+
+  useEffect(() => {
+    setAthleteProfileForm(buildAthleteProfileForm(selectedCoachAthlete));
+    setIsAthleteProfileEditorOpen(false);
+    setAthleteProfileSaveState("idle");
+    setAthleteProfileSaveMessage("");
+  }, [selectedCoachAthlete?.athleteId]);
+
+  useEffect(() => {
+    if (!canSeeCoachWorkspace) {
+      setAvailableCoachAthletes([]);
+      return;
+    }
+
+    void loadAvailableCoachAthletes();
+  }, [canSeeCoachWorkspace, user?.id]);
+
+  async function handleAthleteProfileSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!selectedCoachAthlete) {
+      return;
+    }
+
+    setAthleteProfileSaveState("saving");
+    setAthleteProfileSaveMessage(
+      copyFor(language, {
+        en: "Saving athlete card...",
+        ru: "Сохраняю карточку спортсмена...",
+        bg: "Запазвам картата на спортиста...",
+      }),
+    );
+    setErrorMessage("");
+
+    try {
+      const response = await apiRequest<CoachAttachAthleteResponse>(
+        `/coach/athletes/${selectedCoachAthlete.athleteId}/profile`,
+        {
+          method: "PATCH",
+          body: JSON.stringify(athleteProfileForm),
+        },
+      );
+
+      setCoachAthletes((current) =>
+        current.map((athlete) =>
+          athlete.athleteId === response.athlete.athleteId ? response.athlete : athlete,
+        ),
+      );
+      setAvailableCoachAthletes((current) =>
+        current.map((athlete) =>
+          athlete.athleteId === response.athlete.athleteId ? response.athlete : athlete,
+        ),
+      );
+      setStatusMessage(
+        copyFor(language, {
+          en: "Athlete card updated.",
+          ru: "Карточка спортсмена обновлена.",
+          bg: "Картата на спортиста е обновена.",
+        }),
+      );
+      setAthleteProfileSaveState("saved");
+      setAthleteProfileSaveMessage(
+        copyFor(language, {
+          en: "Saved. Athlete card has been updated.",
+          ru: "Сохранено. Карточка спортсмена обновлена.",
+          bg: "Запазено. Картата на спортиста е обновена.",
+        }),
+      );
+      setIsAthleteProfileEditorOpen(false);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const readableMessage = getAthleteProfileSaveErrorMessage(message, language);
+      setErrorMessage(readableMessage);
+      setAthleteProfileSaveState("failed");
+      setAthleteProfileSaveMessage(readableMessage);
+    } finally {
+      // The athlete card has its own visible save state; do not tie it to global screen busy state.
+    }
+  }
+
+  useEffect(() => {
+    if (isPreviewMode || !canSeeCoachWorkspace || activeWorkspace !== "coach-dashboard") {
+      return;
+    }
+
+    let cancelled = false;
+    const refreshCoachDashboardData = async () => {
+      if (cancelled) {
+        return;
+      }
+
+      try {
+        await Promise.all([
+          loadCoachAthletes(selectedAthleteId || undefined),
+          loadAvailableCoachAthletes(),
+        ]);
+      } catch {
+        // Keep the current dashboard visible if a background refresh fails.
+      }
+    };
+
+    const handleFocus = () => {
+      void refreshCoachDashboardData();
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void refreshCoachDashboardData();
+      }
+    };
+
+    void refreshCoachDashboardData();
+    const intervalId = window.setInterval(refreshCoachDashboardData, 30000);
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [activeWorkspace, canSeeCoachWorkspace, isPreviewMode, selectedAthleteId, user?.id]);
+
+  const activeUserLabel = user ? translateRoleName(user.role, language) : ui("guest");
+  const activeAthleteLabel =
+    user?.role === "athlete"
+      ? user.fullName
+      : selectedCoachAthlete?.fullName ?? ui("selectAthlete");
+  const latestVisibleReadiness =
+    user?.role === "athlete"
+      ? todayEntry
+        ? `${readinessMeta[todayEntry.status].label} (${todayEntry.score})`
+        : ui("noEntriesYet")
+      : selectedCoachAthlete?.latestReadiness
+        ? `${readinessMeta[selectedCoachAthlete.latestReadiness.status].label} (${selectedCoachAthlete.latestReadiness.score})`
+        : ui("noEntriesYet");
+  const visibleAthleteCompetitionPlans =
+    user?.role === "athlete" && user.athleteId
+      ? competitionPlans.filter((plan) => plan.athleteId === user.athleteId)
+      : competitionPlans;
+  const sortedAthleteCompetitionPlans = [...visibleAthleteCompetitionPlans].sort((left, right) =>
+    left.competitionStartDate.localeCompare(right.competitionStartDate),
+  );
+  const upcomingAthleteCompetitionPlans = sortedAthleteCompetitionPlans.filter(
+    (plan) => plan.competitionEndDate >= getDateInputValue(),
+  );
+  const selectedAthleteCompetitionPlan = selectedAthleteCompetitionPlanId
+    ? sortedAthleteCompetitionPlans.find((plan) => plan.id === selectedAthleteCompetitionPlanId) ??
+      null
+    : null;
+  const contextAthleteCompetitionPlan = competitionContext?.competitionPlanId
+    ? sortedAthleteCompetitionPlans.find(
+        (plan) => plan.id === competitionContext.competitionPlanId,
+      ) ?? null
+    : null;
+  const currentAthleteCompetitionPlan =
+    selectedAthleteCompetitionPlan ??
+    contextAthleteCompetitionPlan ??
+    upcomingAthleteCompetitionPlans[0] ??
+    sortedAthleteCompetitionPlans[0] ??
+    null;
+  const hasSelectedAthleteCompetitionPlan = selectedAthleteCompetitionPlan !== null;
+  const currentAthleteContextMatchesPlan = Boolean(
+    currentAthleteCompetitionPlan &&
+      competitionContext?.competitionPlanId === currentAthleteCompetitionPlan.id,
+  );
+  const currentAthleteCompetition =
+    competitions.find(
+      (competition) => competition.id === currentAthleteCompetitionPlan?.competitionId,
+    ) ??
+    competitions.find((competition) => competition.id === competitionContext?.competitionId) ??
+    null;
+  const currentAthletePlanDaysToStart = currentAthleteCompetitionPlan
+    ? diffDateInputDays(getDateInputValue(), currentAthleteCompetitionPlan.competitionStartDate)
+    : null;
+  const currentAthleteDaysToStart =
+    currentAthleteContextMatchesPlan &&
+    competitionContext?.daysToCompetition !== null &&
+    competitionContext?.daysToCompetition !== undefined
+      ? competitionContext.daysToCompetition
+      : currentAthletePlanDaysToStart;
+  const currentAthleteDaysToStartValue =
+    currentAthleteDaysToStart !== null ? String(currentAthleteDaysToStart) : "-";
+  const currentAthleteCompetitionPhaseValue =
+    currentAthleteContextMatchesPlan && competitionContext?.phase
+      ? competitionContext.phase
+      : deriveAthletePreparationPhase(currentAthleteDaysToStart);
+  const currentAthleteCompetitionPhase = currentAthleteCompetitionPhaseValue
+    ? localizedOptionLabel(currentAthleteCompetitionPhaseValue, language, PREPARATION_PHASE_LABELS)
+    : "-";
+  const currentAthleteTaperState =
+    currentAthleteContextMatchesPlan && competitionContext
+      ? competitionContext.taperState
+      : Boolean(
+          currentAthleteCompetitionPlan &&
+            currentAthleteDaysToStart !== null &&
+            currentAthleteDaysToStart >= 0 &&
+            currentAthleteDaysToStart <= currentAthleteCompetitionPlan.taperDays,
+        );
+  const currentAthleteWeightCutState =
+    currentAthleteContextMatchesPlan && competitionContext
+      ? competitionContext.weightCutState
+      : Boolean(
+          currentAthleteCompetitionPlan &&
+            currentAthleteCompetitionPlan.weightCutRequired &&
+            currentAthleteDaysToStart !== null &&
+            currentAthleteDaysToStart >= 0 &&
+            currentAthleteDaysToStart <= Math.max(currentAthleteCompetitionPlan.taperDays, 10),
+        );
+  const availableAthleteAttachmentPanel = canSeeCoachWorkspace ? (
+    <div className="coach-available-panel">
+      <div className="coach-roster-head">
+        <strong>
+          {copyFor(language, {
+            en: "Available athletes",
+            ru: "Доступные спортсмены",
+            bg: "Достъпни спортисти",
+          })}
+        </strong>
+        <span>{availableCoachAthletes.length}</span>
+      </div>
+      {availableCoachAthletes.length > 0 ? (
+        <div className="role-grid coach-roster-grid coach-available-grid">
+          {availableCoachAthletes.map((athlete) => (
+            <article className="role-card" key={athlete.athleteId}>
+              <div className="coach-roster-status">
+                <strong>{athlete.fullName}</strong>
+                <span className="status-chip idle">
+                  {copyFor(language, {
+                    en: "Not linked",
+                    ru: "Не привязан",
+                    bg: "Не е свързан",
+                  })}
+                </span>
+              </div>
+              <span>{athlete.email}</span>
+              <span>
+                {athlete.latestReadiness
+                  ? `${readinessMeta[athlete.latestReadiness.status].label} (${athlete.latestReadiness.score})`
+                  : ui("noEntriesYet")}
+              </span>
+              <button
+                className="primary-button"
+                disabled={busy}
+                onClick={() => void handleAttachCoachAthlete(athlete.athleteId)}
+                type="button"
+              >
+                {copyFor(language, {
+                  en: "Attach athlete",
+                  ru: "Прикрепить",
+                  bg: "Прикачи",
+                })}
+              </button>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <p className="placeholder-copy">
+          {copyFor(language, {
+            en: "There are no free athletes to attach right now.",
+            ru: "Свободных спортсменов для прикрепления сейчас нет.",
+            bg: "В момента няма свободни спортисти за прикрепяне.",
+          })}
+        </p>
+      )}
+    </div>
+  ) : null;
+  const activeAthleteId =
+    user?.role === "athlete" ? user.athleteId : selectedAthleteId || null;
+  const relevantAssignedPlans = activeAthleteId
+    ? assignedPlans.filter((plan) => plan.athleteId === activeAthleteId)
+    : assignedPlans;
+  const primaryAssignedPlan = relevantAssignedPlans[0] ?? null;
+  const activePhaseLabel =
+    competitionContext?.phase ??
+    primaryAssignedPlan?.plannedPhase ??
+    templatePack?.phase ??
+    ui("notGenerated");
+  const productTitle = "v3Final";
+  const productEyebrow = copyFor(language, {
+    en: "Training OS",
+    ru: "Тренировочная система",
+    bg: "Тренировъчна система",
+  });
+  const stateLabelText = copyFor(language, {
+    en: "Sync state",
+    ru: "Состояние синхронизации",
+    bg: "Състояние на синхронизация",
+  });
+  const queueItemLabelText = copyFor(language, {
+    en: "Queue item",
+    ru: "Элемент очереди",
+    bg: "Елемент от опашката",
+  });
+  const athleteLatestReadinessPoint = analyticsOverview?.readinessTrend.at(-1) ?? null;
+  const athleteLatestCompletionPoint = analyticsOverview?.completionTrend.at(-1) ?? null;
+  const athleteLatestLoadPoint = analyticsOverview?.loadTrend.at(-1) ?? null;
+  const athleteWeekSummary = analyticsOverview?.chain.weekSummary ?? null;
+  const coachLatestReadinessPoint = coachAnalyticsOverview?.readinessTrend.at(-1) ?? null;
+  const coachLatestCompletionPoint = coachAnalyticsOverview?.completionTrend.at(-1) ?? null;
+  const coachLatestLoadPoint = coachAnalyticsOverview?.loadTrend.at(-1) ?? null;
+  const coachWeekSummary = coachAnalyticsOverview?.chain.weekSummary ?? null;
+  const isCoachRailContext = isCoachWorkspaceId(activeWorkspace) || activeWorkspace === "planning-studio";
+  const railStats = [
+    {
+      label: stateLabelText,
+      value: importedSyncStateLabel(language, isOffline, offlineQueueSize),
+      note: importedQueueLabel(language, offlineQueueSize),
+      tone: offlineQueueSize > 0 ? "accent" as const : "default" as const,
+    },
+    {
+      label: ui("latestReadiness"),
+      value: latestVisibleReadiness,
+      note: isCoachRailContext
+        ? selectedCoachAthlete?.fullName ?? ui("selectAthlete")
+        : todayEntry
+          ? `Score ${todayEntry.score}`
+          : ui("saveReadiness"),
+      tone: "default" as const,
+    },
+    {
+      label: t("activeAssignments"),
+      value: String(assignedPlans.length),
+      note: activePhaseLabel,
+      tone: "default" as const,
+    },
+  ];
+  const coachWorkspaceLinks: Array<{
+    id: WorkspaceSectionId;
+    label: string;
+    meta: string;
+  }> = canSeeCoachWorkspace
+    ? [
+        {
+          id: "coach-dashboard",
+          label: "Dashboard",
+          meta: selectedCoachAthlete?.fullName ?? ui("selectAthlete"),
+        },
+        {
+          id: "coach-athletes",
+          label:
+            language === "ru"
+              ? "Спортсмены"
+              : language === "bg"
+                ? "Спортисти"
+                : "Athletes",
+          meta: String(coachAthletes.length),
+        },
+        {
+          id: "planning-studio",
+          label:
+            language === "ru"
+              ? "Планирование"
+              : language === "bg"
+                ? "Планиране"
+                : "Planning",
+          meta: `${planTemplates.length} / ${competitionPlans.length}`,
+        },
+        {
+          id: "coach-analytics",
+          label: t("analytics"),
+          meta: coachAnalyticsOverview
+            ? `${coachAnalyticsOverview.insights.length}/${coachAnalyticsOverview.patterns.length}`
+            : ui("noAnalyticsYet"),
+        },
+        {
+          id: "coach-review",
+          label: "Review",
+          meta: coachExecutionReview
+            ? `${coachExecutionReview.summary.completionRate}%`
+            : ui("noReviewYet"),
+        },
+      ]
+    : [];
+
+  const athleteWorkspaceLinks: Array<{
+    id: WorkspaceSectionId;
+    label: string;
+    meta: string;
+  }> =
+    !user || user.role === "athlete"
+      ? [
+          {
+            id: "athlete-today",
+            label:
+              language === "ru"
+                ? "Сегодня"
+                : language === "bg"
+                  ? "Днес"
+                  : "Today",
+            meta: t("dailyReadiness"),
+          },
+          {
+            id: "athlete-training",
+            label:
+              language === "ru"
+                ? "Тренировка"
+                : language === "bg"
+                  ? "Тренировка"
+                  : "Training",
+            meta: primaryAssignedPlan?.day.label ?? ui("noActivePlan"),
+          },
+          {
+            id: "athlete-history",
+            label:
+              language === "ru"
+                ? "История"
+                : language === "bg"
+                  ? "История"
+                  : "History",
+            meta: latestVisibleReadiness,
+          },
+          {
+            id: "athlete-competitions",
+            label:
+              language === "ru"
+                ? "Соревнования"
+                : language === "bg"
+                  ? "Състезания"
+                  : "Competitions",
+            meta:
+              currentAthleteDaysToStartValue !== "-"
+                ? `${copyFor(language, {
+                    en: "Days to start",
+                    ru: "До старта",
+                    bg: "До старт",
+                  })}: ${currentAthleteDaysToStartValue}`
+                : activePhaseLabel,
+          },
+        ]
+      : [];
+
+  const workspaceLinks: Array<{ id: WorkspaceSectionId; label: string; meta: string }> = [
+    ...athleteWorkspaceLinks,
+    ...(SHOW_OFFLINE_CENTER_NAV
+      ? [
+          {
+            id: "offline-center" as const,
+            label: ui("offlineSyncCenter"),
+            meta: importedSyncStateLabel(language, isOffline, offlineQueueSize),
+          },
+        ]
+      : []),
+    ...coachWorkspaceLinks,
+  ];
+  const athleteSummaryItems = [
+    {
+      label: language === "ru" ? "Фаза" : language === "bg" ? "Фаза" : "Phase",
+      value: competitionContext?.phase ?? primaryAssignedPlan?.plannedPhase ?? ui("notGenerated"),
+    },
+    {
+      label:
+        language === "ru"
+          ? "До старта"
+          : language === "bg"
+            ? "До старт"
+            : "Days to comp",
+      value:
+        currentAthleteDaysToStartValue,
+    },
+    {
+      label: t("assignedTrainingDay"),
+      value: primaryAssignedPlan?.day.label ?? ui("noActivePlan"),
+    },
+    {
+      label: stateLabelText,
+      value: importedSyncStateLabel(language, isOffline, offlineQueueSize),
+    },
+  ];
+  const coachTabs: Array<{ id: CoachDashboardView; label: string }> = [
+    { id: "readiness", label: ui("athleteReadinessHistory") },
+    { id: "adaptation", label: ui("coachAdaptationTitle") },
+    { id: "execution", label: t("executionReview") },
+    {
+      id: "competition",
+      label:
+        language === "ru"
+          ? "Соревнования"
+          : language === "bg"
+            ? "Състезания"
+            : "Competition",
+    },
+    { id: "analytics", label: t("analytics") },
+  ];
+  const planningTabs: Array<{ id: PlanningStudioView; label: string }> = [
+    {
+      id: "calendar",
+      label:
+        language === "ru"
+          ? "Календарь"
+          : language === "bg"
+            ? "Календар"
+            : "Calendar",
+    },
+    {
+      id: "season",
+      label:
+        language === "ru"
+          ? "Сезон и старты"
+          : language === "bg"
+            ? "Сезон и стартове"
+            : "Season & starts",
+    },
+    {
+      id: "mesocycle",
+      label:
+        language === "ru"
+          ? "Мезоциклы"
+          : language === "bg"
+            ? "Мезоцикли"
+            : "Mesocycles",
+    },
+    {
+      id: "preparation",
+      label:
+        language === "ru"
+          ? "План подготовки"
+          : language === "bg"
+            ? "План за подготовка"
+            : "Preparation plan",
+    },
+    {
+      id: "templates",
+      label:
+        language === "ru"
+          ? "Шаблоны"
+          : language === "bg"
+            ? "Шаблони"
+            : "Templates",
+    },
+    {
+      id: "weekly",
+      label:
+        language === "ru"
+          ? "Недельный план"
+          : language === "bg"
+            ? "Седмичен план"
+            : "Weekly planner",
+    },
+  ];
+  const topOverviewItems = [
+    {
+      label: t("athlete"),
+      value: activeAthleteLabel,
+      note: latestVisibleReadiness,
+    },
+    {
+      label: language === "ru" ? "Фаза" : language === "bg" ? "Фаза" : "Phase",
+      value: activePhaseLabel,
+      note:
+        competitionContext?.daysToCompetition !== null &&
+        competitionContext?.daysToCompetition !== undefined
+          ? `${
+              language === "ru"
+                ? "До старта"
+                : language === "bg"
+                  ? "До старт"
+                  : "Days to comp"
+            }: ${competitionContext.daysToCompetition}`
+          : ui("notGenerated"),
+    },
+    {
+      label: stateLabelText,
+      value: importedSyncStateLabel(language, isOffline, offlineQueueSize),
+      note: importedQueueLabel(language, offlineQueueSize),
+    },
+    {
+      label: t("activeAssignments"),
+      value: String(assignedPlans.length),
+      note:
+        language === "ru"
+          ? `${planTemplates.length} шаблонов`
+          : language === "bg"
+            ? `${planTemplates.length} шаблона`
+            : `${planTemplates.length} templates`,
+    },
+  ];
+  const athletePreviewCards = [
+    {
+      title: copyFor(language, {
+        en: "Today's readiness",
+        ru: "Готовность на сегодня",
+        bg: "Готовност за днес",
+      }),
+      value: ui("noEntriesYet"),
+      description: copyFor(language, {
+        en: "Sleep, fatigue, soreness, and motivation are collected here before the day is adapted.",
+        ru: "Здесь собираются сон, усталость, soreness и мотивация до адаптации дня.",
+        bg: "Тук се събират сън, умора, soreness и мотивация преди адаптацията на деня.",
+      }),
+    },
+    {
+      title: t("assignedTrainingDay"),
+      value: ui("noActivePlan"),
+      description: copyFor(language, {
+        en: "The central stage shows the working day, target duration, target RPE, and the next athlete task.",
+        ru: "Центральная сцена показывает рабочий день, target duration, target RPE и следующее действие спортсмена.",
+        bg: "Централната сцена показва работния ден, target duration, target RPE и следващото действие на спортиста.",
+      }),
+    },
+    {
+      title: t("executionTracking"),
+      value: importedSyncStateLabel(language, isOffline, offlineQueueSize),
+      description: copyFor(language, {
+        en: "Actual completion, saved block results, and pending offline sync stay visible in the same surface.",
+        ru: "Факт выполнения, сохранённые результаты блоков и ожидание офлайн-синхронизации видны в той же рабочей зоне.",
+        bg: "Реалното изпълнение, записаните резултати от блоковете и чакащата офлайн синхронизация са в същата работна зона.",
+      }),
+    },
+    {
+      title: copyFor(language, {
+        en: "Competition context",
+        ru: "Соревновательный контекст",
+        bg: "Състезателен контекст",
+      }),
+      value: activePhaseLabel,
+      description: copyFor(language, {
+        en: "Phase, days to competition, and adaptation logic remain attached to the daily scene.",
+        ru: "Фаза, дни до старта и логика адаптации остаются привязаны к ежедневной сцене.",
+        bg: "Фазата, дните до старта и логиката за адаптация остават свързани с дневната сцена.",
+      }),
+    },
+  ];
+  const currentWorkspaceLabel =
+    language === "ru"
+      ? "Текущая зона"
+      : language === "bg"
+        ? "Текуща зона"
+        : "Current workspace";
+  const workspaceSectionsLabel =
+    language === "ru"
+      ? "Рабочие зоны"
+      : language === "bg"
+        ? "Работни зони"
+        : "Workspaces";
+  const activeWorkspaceItem =
+    workspaceLinks.find((link) => link.id === activeWorkspace) ?? workspaceLinks[0];
+  const isAthleteTodayWorkspace =
+    activeWorkspace === "athlete-today" || activeWorkspace === "daily-readiness";
+  const isAthleteTrainingWorkspace =
+    activeWorkspace === "athlete-training" || activeWorkspace === "athlete-workspace";
+  const isAthleteHistoryWorkspace = activeWorkspace === "athlete-history";
+  const isAthleteCompetitionsWorkspace = activeWorkspace === "athlete-competitions";
+  const isCoachSceneWorkspace = isCoachWorkspaceId(activeWorkspace);
+  const isDailyReadinessWorkspace = isAthleteTodayWorkspace;
+  const isAthleteSceneWorkspace = isAthleteWorkspaceId(activeWorkspace);
+  const workspaceTitle =
+    isAthleteTodayWorkspace
+      ? t("dailyReadiness")
+      : isAthleteTrainingWorkspace
+      ? language === "ru"
+        ? "Тренировка"
+        : language === "bg"
+          ? "Тренировка"
+          : "Training"
+      : isAthleteHistoryWorkspace
+        ? language === "ru"
+          ? "История"
+          : language === "bg"
+            ? "История"
+            : "History"
+      : isAthleteCompetitionsWorkspace
+        ? language === "ru"
+          ? "Соревнования"
+          : language === "bg"
+            ? "Състезания"
+            : "Competitions"
+      : activeWorkspace === "coach-dashboard"
+        ? "Dashboard"
+      : activeWorkspace === "coach-athletes"
+        ? language === "ru"
+          ? "Спортсмены"
+          : language === "bg"
+            ? "Спортисти"
+            : "Athletes"
+      : activeWorkspace === "coach-analytics"
+        ? t("analytics")
+      : activeWorkspace === "coach-review"
+        ? "Review"
+        : activeWorkspace === "planning-studio"
+          ? language === "ru"
+            ? "Планировочная студия"
+            : language === "bg"
+              ? "Планиращо студио"
+              : "Planning studio"
+          : ui("offlineSyncCenter");
+  const topbarTitle =
+    !user && isAthleteSceneWorkspace ? ui("guestTopbarTitle") : workspaceTitle;
+  const workspaceSummary =
+    isAthleteTodayWorkspace
+      ? language === "ru"
+        ? "Ежедневный сбор сигналов перед началом рабочего дня."
+        : language === "bg"
+          ? "Ежедневно събиране на сигнали преди началото на работния ден."
+          : "Daily signal collection before the working day starts."
+      : isAthleteTrainingWorkspace
+      ? language === "ru"
+        ? "Назначенный тренировочный день, блоки, упражнения и фиксация фактического выполнения."
+        : language === "bg"
+          ? "Назначеният тренировъчен ден, блокове, упражнения и запис на реалното изпълнение."
+          : "Assigned training day, blocks, exercises, and actual execution capture."
+      : isAthleteHistoryWorkspace
+      ? language === "ru"
+        ? "История готовности, выполнения и динамики нагрузки спортсмена."
+        : language === "bg"
+          ? "История на готовността, изпълнението и динамиката на натоварването."
+          : "Readiness, execution, and load history for the athlete."
+      : isAthleteCompetitionsWorkspace
+      ? language === "ru"
+        ? "Соревновательный контекст: фаза, дни до старта, вес и цель подготовки."
+        : language === "bg"
+          ? "Състезателен контекст: фаза, дни до старт, тегло и цел на подготовката."
+          : "Competition context: phase, days to start, weight, and preparation target."
+      : activeWorkspace === "coach-dashboard"
+        ? language === "ru"
+          ? "Быстрый обзор спортсменов, статусы дня и приоритеты внимания."
+          : language === "bg"
+            ? "Бърз преглед на спортистите, дневни статуси и приоритети за внимание."
+            : "Quick athlete overview, daily statuses, and attention priorities."
+      : activeWorkspace === "coach-athletes"
+        ? language === "ru"
+          ? "Список спортсменов, привязка к тренеру и карточка выбранного спортсмена."
+          : language === "bg"
+            ? "Списък със спортисти, прикрепяне към треньор и карта на избрания спортист."
+            : "Athlete roster, coach linking, and selected athlete profile."
+      : activeWorkspace === "coach-analytics"
+        ? language === "ru"
+        ? "Тренды, риски, закономерности и тренерские предложения по выбранному спортсмену."
+        : language === "bg"
+          ? "Тенденции, рискове, закономерности и треньорски предложения за избрания спортист."
+            : "Trends, risks, patterns, and coach suggestions for the selected athlete."
+      : activeWorkspace === "coach-review"
+        ? language === "ru"
+        ? "Разбор выполнения, план и факт, отклонения по выбранному спортсмену."
+        : language === "bg"
+          ? "Преглед на изпълнението, план и реално изпълнение, отклонения за избрания спортист."
+            : "Execution review, plan vs actual, and deviations for the selected athlete."
+        : activeWorkspace === "planning-studio"
+          ? language === "ru"
+            ? "Планирование по фазе, шаблоны, мезоциклы и недельная сборка в одном studio-режиме."
+            : language === "bg"
+              ? "Планиране по фаза, шаблони, мезоцикли и седмично сглобяване в един studio режим."
+              : "Phase-led planning, templates, mesocycles, and weekly assembly in one studio mode."
+          : language === "ru"
+            ? "Очередь синхронизации, локальные данные и конфликты восстановления сети."
+            : language === "bg"
+              ? "Опашка за синхронизация, локални данни и конфликти при възстановяване на мрежата."
+              : "Sync queue, local data snapshots, and conflict handling when the network returns.";
+  const workspaceTopActionLabel =
+    activeWorkspace === "planning-studio"
+      ? copyFor(language, {
+          en: "Build week",
+          ru: "Собрать неделю",
+          bg: "Сглоби седмица",
+        })
+      : isCoachSceneWorkspace
+        ? copyFor(language, {
+            en: "Analytics",
+            ru: "Аналитика",
+            bg: "Анализ",
+          })
+        : ui("syncNow");
+  const warningsLabel =
+    language === "ru"
+      ? "Предупреждения"
+      : language === "bg"
+        ? "Предупреждения"
+        : "Warnings";
+  const activeOfflineQueueItems = importedGetActiveQueueItems(offlineQueueItems);
+  const offlineQueueStatusCounts = importedGetQueueStatusCounts(offlineQueueItems);
+  const pendingReadinessQueued = activeOfflineQueueItems.some((item) => item.type === "readiness");
+  const pendingExecutionBlockIds = new Set(
+    activeOfflineQueueItems
+      .filter((item): item is Extract<QueueItem, { type: "execution" }> => item.type === "execution")
+      .map((item) => item.payload.assignedBlockId),
+  );
+  const athleteChangedToday = adaptedPlan
+    ? [
+        ...adaptedPlan.reducedBlocks.map((name) => ({
+          id: `reduce-${name}`,
+          tone: "warning" as const,
+          label: copyFor(language, {
+            en: `Reduced load: ${name}`,
+            ru: `Снижен объём: ${name}`,
+            bg: `Намален обем: ${name}`,
+          }),
+        })),
+        ...adaptedPlan.replacedBlocks.map((name) => ({
+          id: `replace-${name}`,
+          tone: "accent" as const,
+          label: copyFor(language, {
+            en: `Replaced block: ${name}`,
+            ru: `Заменён блок: ${name}`,
+            bg: `Заменен блок: ${name}`,
+          }),
+        })),
+        ...adaptedPlan.removedBlocks.map((name) => ({
+          id: `remove-${name}`,
+          tone: "danger" as const,
+          label: copyFor(language, {
+            en: `Removed from today: ${name}`,
+            ru: `Убрано из дня: ${name}`,
+            bg: `Премахнато от деня: ${name}`,
+          }),
+        })),
+      ]
+    : [];
+  const athleteExecutionCompletedBlocks = executionResults.filter((item) => item.completed).length;
+  const athletePlannedBlocksCount =
+    primaryAssignedPlan?.day.sessions.reduce((sum, session) => sum + session.blocks.length, 0) ?? 0;
+  const athleteDayChecklist = [
+    {
+      id: "readiness",
+      label: copyFor(language, {
+        en: "Submit readiness",
+        ru: "Отправить готовность",
+        bg: "Подай готовност",
+      }),
+      value: todayEntry
+        ? copyFor(language, {
+            en: "Done",
+            ru: "Готово",
+            bg: "Готово",
+          })
+        : copyFor(language, {
+            en: "Waiting",
+            ru: "Ожидается",
+            bg: "Очаква се",
+          }),
+    },
+    {
+      id: "adaptation",
+      label: copyFor(language, {
+        en: "Check what changed",
+        ru: "Проверить изменения дня",
+        bg: "Провери промените за деня",
+      }),
+      value: adaptedPlan ? String(athleteChangedToday.length) : ui("notGenerated"),
+    },
+    {
+      id: "execution",
+      label: copyFor(language, {
+        en: "Log execution",
+        ru: "Зафиксировать выполнение",
+        bg: "Запиши изпълнението",
+      }),
+      value: `${athleteExecutionCompletedBlocks}/${athletePlannedBlocksCount || 0}`,
+    },
+  ];
+  const coachViewLabel =
+    coachTabs.find((tab) => tab.id === coachView)?.label ?? coachTabs[0]?.label ?? "";
+  const coachViewDescription =
+    coachView === "readiness"
+      ? copyFor(language, {
+          en: "Monitor the last readiness entries, recovery drift, and current daily state.",
+        ru: "Следите за последними записями готовности, динамикой восстановления и текущим состоянием дня.",
+        bg: "Следете последните записи за готовност, динамиката на възстановяване и текущото състояние за деня.",
+        })
+      : coachView === "adaptation"
+        ? copyFor(language, {
+            en: "Review the adapted day, the retained blocks, and the reasoning behind changes.",
+            ru: "Проверьте адаптированный день, сохранённые блоки и причины внесённых изменений.",
+            bg: "Прегледайте адаптирания ден, запазените блокове и причините за промените.",
+          })
+        : coachView === "execution"
+          ? copyFor(language, {
+              en: "Compare planned versus actual execution and spot gaps before they accumulate.",
+              ru: "Сравнивайте план и факт выполнения, чтобы замечать отклонения до накопления риска.",
+              bg: "Сравнявайте план и реално изпълнение, за да хващате отклоненията преди да се натрупат.",
+            })
+          : coachView === "competition"
+            ? copyFor(language, {
+                en: "Track the active competition chain from season structure through result capture.",
+                ru: "Контролируйте активную соревновательную цепочку от структуры сезона до фиксации результата.",
+                bg: "Следете активната състезателна верига от сезонната структура до записания резултат.",
+              })
+            : copyFor(language, {
+                en: "Surface readiness, adherence, and load patterns that need a coaching decision.",
+        ru: "Выводите закономерности готовности, соблюдения плана и нагрузки, которые требуют решения тренера.",
+        bg: "Показвайте закономерности в готовността, спазването на плана и натоварването, които изискват треньорско решение.",
+          });
+  const coachSceneDescription =
+    activeWorkspace === "coach-dashboard" ? coachViewDescription : workspaceSummary;
+  const planningViewLabel =
+    planningTabs.find((tab) => tab.id === planningView)?.label ?? planningTabs[0]?.label ?? "";
+  const planningViewDescription =
+    planningView === "calendar"
+      ? copyFor(language, {
+          en: "Manage the competition calendar, UWW sync, and anchor dates.",
+          ru: "Ведите календарь соревнований, синхронизацию UWW и ключевые даты.",
+          bg: "Управлявайте календара на състезанията, синхронизацията с UWW и ключовите дати.",
+        })
+      : planningView === "season"
+        ? copyFor(language, {
+            en: "Link long-term cycles, season strategy, starts, and actual results in one chain.",
+            ru: "Свяжите долгосрочные циклы, стратегию сезона, старты и реальные результаты в одну цепочку.",
+            bg: "Свържете дългосрочните цикли, сезонната стратегия, стартовете и реалните резултати в една верига.",
+          })
+        : planningView === "mesocycle"
+          ? copyFor(language, {
+              en: "Shape the 3–6 week block with phase, progression, and the weekly targets it drives.",
+              ru: "Сформируйте блок на 3–6 недель с фазой, прогрессией и недельными целями.",
+              bg: "Оформете блок от 3–6 седмици с фаза, прогресия и седмични цели.",
+            })
+        : planningView === "preparation"
+          ? copyFor(language, {
+              en: "Review the full preparation document: monitoring, weeks, days, sessions, load zones, and taper rules.",
+              ru: "Смотрите полный документ подготовки: мониторинг, недели, дни, сессии, зоны нагрузки и правила подводки.",
+        bg: "Прегледайте пълния документ за подготовка: мониторинг, седмици, дни, сесии, зони и правила за тейпър.",
+            })
+          : planningView === "templates"
+            ? copyFor(language, {
+                en: "Curate phase-aware templates and direct assignment logic before they reach the athlete.",
+                ru: "Настройте шаблоны с учётом фаз и логику назначения до того, как они попадут спортсмену.",
+                bg: "Настройте шаблоните според фазите и логиката за назначаване преди да стигнат до спортиста.",
+              })
+            : copyFor(language, {
+                en: "Assemble the weekly pack, evaluate warnings, and apply planner suggestions directly.",
+        ru: "Соберите недельный пакет, проверьте предупреждения и примените предложения планирования напрямую.",
+        bg: "Сглобете седмичния пакет, проверете предупрежденията и приложете предложенията за планиране директно.",
+              });
+  const uwwYearOptions = withFallbackOptions(
+    uwwSyncOptions.years,
+    uwwSyncFilters.year,
+  );
+  const uwwAgeGroupOptions = withFallbackOptions(
+    uwwSyncOptions.ageGroups,
+    uwwSyncFilters.ageGroup,
+  );
+  const uwwStyleOptions = withFallbackOptions(
+    uwwSyncOptions.styles,
+    uwwSyncFilters.style,
+  );
+  const uwwEventTypeOptions = withFallbackOptions(
+    uwwSyncOptions.eventTypes,
+    uwwSyncFilters.eventType,
+  );
+  const uwwCountryOptions = withFallbackOptions(
+    uwwSyncOptions.countries,
+    uwwSyncFilters.country,
+  );
+  const selectedCalendarCompetitions = competitions.filter((competition) =>
+    selectedCompetitionIds.includes(competition.id),
+  );
+  const selectedCalendarCompetitionCount = selectedCalendarCompetitions.length;
+  const allCalendarCompetitionsSelected =
+    competitions.length > 0 && selectedCalendarCompetitionCount === competitions.length;
+  const selectedPreparationWeek =
+    preparationPlanDraft.weeks[selectedPreparationWeekIndex] ?? preparationPlanDraft.weeks[0] ?? null;
+  const selectedPreparationDay =
+    selectedPreparationWeek?.days[selectedPreparationDayIndex] ?? selectedPreparationWeek?.days[0] ?? null;
+  const selectedPreparationSession =
+    selectedPreparationDay?.sessions[selectedPreparationSessionIndex] ??
+    selectedPreparationDay?.sessions[0] ??
+    null;
+  const preparationPlanStats = preparationPlanDraft.weeks.reduce(
+    (stats, week) => {
+      const dayCount = week.days.length;
+      const sessionCount = week.days.reduce((total, day) => total + day.sessions.length, 0);
+      const exerciseCount = week.days.reduce(
+        (total, day) =>
+          total +
+          day.sessions.reduce((sessionTotal, session) => sessionTotal + session.rows.length, 0),
+        0,
+      );
+
+      return {
+        weeks: stats.weeks + 1,
+        days: stats.days + dayCount,
+        sessions: stats.sessions + sessionCount,
+        exercises: stats.exercises + exerciseCount,
+      };
+    },
+    { weeks: 0, days: 0, sessions: 0, exercises: 0 },
+  );
+  const preparationPlanSetupStats = [
+    {
+      label: copyFor(language, { en: "Weeks", ru: "Недели", bg: "Седмици" }),
+      value: String(preparationPlanStats.weeks),
+    },
+    {
+      label: copyFor(language, { en: "Training days", ru: "Тренировочные дни", bg: "Тренировъчни дни" }),
+      value: String(preparationPlanStats.days),
+    },
+    {
+      label: copyFor(language, { en: "Sessions", ru: "Сессии", bg: "Сесии" }),
+      value: String(preparationPlanStats.sessions),
+    },
+    {
+      label: copyFor(language, { en: "Exercises", ru: "Упражнения", bg: "Упражнения" }),
+      value: String(preparationPlanStats.exercises),
+    },
+    {
+      label: copyFor(language, { en: "Monitoring", ru: "Мониторинг", bg: "Мониторинг" }),
+      value: String(preparationPlanDraft.monitoringDates.length),
+    },
+  ];
+  const selectedOfflineItem =
+    offlineQueueItems.find((item) => item.id === selectedOfflineItemId) ?? offlineQueueItems[0] ?? null;
+  const athleteSceneMetrics = [
+    {
+      label: copyFor(language, {
+        en: "Readiness",
+        ru: "Готовность",
+        bg: "Готовност",
+      }),
+      value: todayEntry ? readinessMeta[todayEntry.status].label : ui("noEntriesYet"),
+      note: todayEntry ? `Score ${todayEntry.score}` : ui("saveReadiness"),
+    },
+    {
+      label: copyFor(language, {
+        en: "Assigned day",
+        ru: "Назначенный день",
+        bg: "Назначен ден",
+      }),
+      value: primaryAssignedPlan?.day.label ?? ui("noActivePlan"),
+      note: primaryAssignedPlan?.templateName ?? ui("notGenerated"),
+    },
+    {
+      label: copyFor(language, {
+        en: "Competition phase",
+        ru: "Соревновательная фаза",
+        bg: "Състезателна фаза",
+      }),
+      value: competitionContext?.phase ?? activePhaseLabel,
+      note:
+        competitionContext?.daysToCompetition !== null &&
+        competitionContext?.daysToCompetition !== undefined
+          ? `${copyFor(language, {
+              en: "Days to competition",
+              ru: "До старта",
+              bg: "До старт",
+            })}: ${competitionContext.daysToCompetition}`
+          : ui("notGenerated"),
+    },
+    {
+      label: copyFor(language, {
+        en: "Execution",
+        ru: "Выполнение",
+        bg: "Изпълнение",
+      }),
+      value: String(executionResults.filter((item) => item.completed).length),
+      note:
+        primaryAssignedPlan?.day.sessions.reduce((sum, session) => sum + session.blocks.length, 0) ??
+        0
+          ? `${copyFor(language, {
+              en: "Planned blocks",
+              ru: "Плановых блоков",
+              bg: "Планирани блокове",
+            })}: ${primaryAssignedPlan?.day.sessions.reduce(
+              (sum, session) => sum + session.blocks.length,
+              0,
+            ) ?? 0}`
+          : ui("noActivePlan"),
+    },
+  ];
+  const coachSceneMetrics = [
+    {
+      label: ui("latestReadiness"),
+      value: latestVisibleReadiness,
+      note: selectedCoachAthlete?.email ?? ui("selectAthlete"),
+    },
+    {
+      label: t("executionReview"),
+      value: coachExecutionReview ? `${coachExecutionReview.summary.completionRate}%` : ui("noReviewYet"),
+      note:
+        coachExecutionReview
+          ? `${coachExecutionReview.summary.completedBlocks}/${coachExecutionReview.summary.plannedBlocks}`
+          : ui("coachReviewNeedsPlan"),
+    },
+    {
+      label: copyFor(language, {
+        en: "Competition phase",
+        ru: "Соревновательная фаза",
+        bg: "Състезателна фаза",
+      }),
+      value: competitionContext?.phase ?? ui("notGenerated"),
+      note: competitionContext?.competitionPriority ?? "-",
+    },
+    {
+      label: t("analytics"),
+      value: coachAnalyticsOverview ? String(coachAnalyticsOverview.loadTrend.length) : "0",
+      note: coachViewLabel,
+    },
+  ];
+  const planningSceneMetrics = [
+    {
+      label: copyFor(language, {
+        en: "Phase",
+        ru: "Фаза",
+        bg: "Фаза",
+      }),
+      value: activePhaseLabel,
+      note: planningViewLabel,
+    },
+    {
+      label: copyFor(language, {
+        en: "Templates",
+        ru: "Шаблоны",
+        bg: "Шаблони",
+      }),
+      value: String(planTemplates.length),
+      note: t("savedTemplates"),
+    },
+    {
+      label: copyFor(language, {
+        en: "Competition plans",
+        ru: "Планы стартов",
+        bg: "Планове за старт",
+      }),
+      value: String(competitionPlans.length),
+      note: competitions.length
+        ? `${competitions.length} ${copyFor(language, {
+            en: "competitions",
+            ru: "соревнований",
+            bg: "състезания",
+          })}`
+        : ui("notGenerated"),
+    },
+    {
+      label: copyFor(language, {
+        en: "Mesocycles",
+        ru: "Мезоциклы",
+        bg: "Мезоцикли",
+      }),
+      value: String(mesocycles.length),
+      note:
+        templatePack?.warnings?.length
+          ? `${templatePack.warnings.length} ${warningsLabel.toLowerCase()}`
+          : copyFor(language, {
+              en: "No active warnings",
+              ru: "Нет активных предупреждений",
+              bg: "Няма активни предупреждения",
+            }),
+    },
+  ];
+  const offlineSceneMetrics = [
+    {
+      label: stateLabelText,
+      value: importedSyncStateLabel(language, isOffline, offlineQueueSize),
+      note: importedQueueLabel(language, offlineQueueSize),
+    },
+    {
+      label: ui("pendingItems"),
+      value: String(offlineQueueSize),
+      note: `${ui("synced")}: ${offlineQueueStatusCounts.synced}`,
+    },
+    {
+      label: ui("readinessCache"),
+      value: readinessCacheSavedAt ?? "-",
+      note: assignedCacheSavedAt ?? "-",
+    },
+    {
+      label: ui("analyticsCache"),
+      value: analyticsCacheSavedAt ?? "-",
+      note: executionCacheSavedAt ?? "-",
+    },
+  ];
+  const workspaceTopActionDisabled =
+    activeWorkspace === "planning-studio"
+      ? !canSeeCoachWorkspace
+      : isCoachSceneWorkspace
+        ? !canSeeCoachWorkspace
+        : isSyncingNow || isOffline || offlineQueueSize === 0;
+  const workspaceTopActionButtonLabel =
+    isSyncingNow &&
+    (isAthleteSceneWorkspace || activeWorkspace === "offline-center")
+      ? ui("syncingNow")
+      : workspaceTopActionLabel;
+  const showWorkspaceTopAction = Boolean(
+    user && (isAthleteSceneWorkspace || activeWorkspace === "planning-studio" || activeWorkspace === "coach-dashboard"),
+  );
+  const showTopbarAthleteSelect =
+    canSeeCoachWorkspace && activeWorkspace !== "offline-center";
+  const topbarSelects = [
+    ...(showTopbarAthleteSelect
+      ? [
+          {
+            label: t("athlete"),
+            value: selectedAthleteId,
+            options: [
+              { value: "", label: ui("selectAthlete") },
+              ...coachAthletes.map((athlete) => ({
+                value: athlete.athleteId,
+                label: athlete.fullName,
+              })),
+              ...availableCoachAthletes.map((athlete) => ({
+                value: `attach:${athlete.athleteId}`,
+                label: copyFor(language, {
+                  en: `+ Attach: ${athlete.fullName}`,
+                  ru: `+ Прикрепить: ${athlete.fullName}`,
+                  bg: `+ Прикачи: ${athlete.fullName}`,
+                }),
+              })),
+            ],
+            onChange: (value: string) => {
+              if (!value) {
+                resetCoachAthleteSelection();
+                return;
+              }
+
+              if (value.startsWith("attach:")) {
+                void handleAttachCoachAthlete(value.slice("attach:".length));
+                return;
+              }
+
+              void handleCoachAthleteChange(value);
+            },
+          },
+        ]
+      : []),
+  ];
+  const selectedLanguageLabel =
+    language.toUpperCase();
+  const topbarLanguageMenu = {
+    label: t("language"),
+    valueLabel: selectedLanguageLabel,
+    options: I18N_LANGUAGE_OPTIONS.map((option) => ({
+      value: option.value,
+      label: option.label,
+      active: option.value === language,
+      onSelect: () => setLanguage(option.value as Language),
+    })),
+  };
+  const guestAccessSection = !user ? (
+    <>
+      <div className="toggle-row compact-tab-row workspace-profile-auth-tabs">
+        <button
+          className={authMode === "login" ? "tab-active" : "tab-button"}
+          onClick={() => setAuthMode("login")}
+          type="button"
+        >
+          {t("login")}
+        </button>
+        <button
+          className={authMode === "register" ? "tab-active" : "tab-button"}
+          onClick={() => setAuthMode("register")}
+          type="button"
+        >
+          {t("register")}
+        </button>
+      </div>
+      <form className="auth-form workspace-profile-auth-form" onSubmit={handleAuthSubmit}>
+        {authMode === "register" ? (
+          <label className="field">
+            <span>{t("fullName")}</span>
+            <input
+              value={authForm.fullName}
+              onChange={(event) =>
+                setAuthForm((current) => ({
+                  ...current,
+                  fullName: event.target.value,
+                }))
+              }
+              required
+            />
+          </label>
+        ) : null}
+        <label className="field">
+          <span>{t("email")}</span>
+          <input
+            type="email"
+            value={authForm.email}
+            onChange={(event) =>
+              setAuthForm((current) => ({
+                ...current,
+                email: event.target.value,
+              }))
+            }
+            required
+          />
+        </label>
+        <label className="field">
+          <span>{t("password")}</span>
+          <input
+            type="password"
+            value={authForm.password}
+            onChange={(event) =>
+              setAuthForm((current) => ({
+                ...current,
+                password: event.target.value,
+              }))
+            }
+            required
+          />
+        </label>
+        {authMode === "register" ? (
+          <label className="field">
+            <span>{t("role")}</span>
+            <select
+              value={authForm.role}
+              onChange={(event) =>
+                setAuthForm((current) => ({
+                  ...current,
+                  role: event.target.value as AuthFormState["role"],
+                }))
+              }
+            >
+              {SELF_REGISTRATION_ROLES.map((role) => (
+                <option key={role.id} value={role.id}>
+                  {translateRoleName(role.id, language)}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+        <button className="primary-button workspace-profile-auth-submit" disabled={busy} type="submit">
+          {busy
+            ? ui("pleaseWait")
+            : authMode === "login"
+              ? t("signIn")
+              : t("createAccount")}
+        </button>
+      </form>
+      {errorMessage ? <p className="error-copy">{errorMessage}</p> : null}
+    </>
+  ) : undefined;
+  const profileStatusItem = SHOW_OFFLINE_CENTER_NAV && user
+    ? offlineQueueStatusCounts.failed > 0
+      ? {
+          label: ui("offlineSyncCenter"),
+          value: copyFor(language, {
+            en: "Sync error",
+            ru: "Ошибка синхронизации",
+            bg: "Грешка при синхронизация",
+          }),
+          tone: "failed" as const,
+          onSelect: () => {
+            setActiveWorkspace("offline-center");
+            scrollViewportToTop();
+          },
+        }
+      : offlineQueueStatusCounts.pending > 0
+        ? {
+            label: ui("offlineSyncCenter"),
+            value: copyFor(language, {
+              en: `${offlineQueueStatusCounts.pending} pending`,
+              ru: `${offlineQueueStatusCounts.pending} в очереди`,
+              bg: `${offlineQueueStatusCounts.pending} в опашка`,
+            }),
+            tone: "pending" as const,
+            onSelect: () => {
+              setActiveWorkspace("offline-center");
+              scrollViewportToTop();
+            },
+          }
+        : undefined
+    : undefined;
+  const topbarAuthActions = !user
+    ? {
+        loginLabel: t("login"),
+        registerLabel: t("register"),
+        activeMode: authMode,
+        onLogin: () => {
+          setAuthMode("login");
+          setGuestAccessOpen(true);
+          scrollViewportToTop();
+        },
+        onRegister: () => {
+          setAuthMode("register");
+          setGuestAccessOpen(true);
+          scrollViewportToTop();
+        },
+      }
+    : undefined;
+  const topbarAthleteProfileDetails =
+    user?.role === "athlete" ? (
+      <div className="workspace-athlete-menu-card">
+        <div className="workspace-athlete-menu-head">
+          <div
+            aria-label={user.fullName}
+            className="workspace-athlete-menu-photo"
+            role="img"
+            style={user.photoUrl ? { backgroundImage: `url("${user.photoUrl}")` } : undefined}
+          >
+            {!user.photoUrl ? <span>{initialsFor(user.fullName)}</span> : null}
+          </div>
+          <div className="workspace-athlete-menu-title">
+            <strong>{user.fullName}</strong>
+            <small>{user.email}</small>
+          </div>
+        </div>
+
+        <div className="workspace-profile-info-grid workspace-athlete-menu-grid">
+          <article className="workspace-profile-info-card">
+            <span>{copyFor(language, { en: "Height", ru: "Рост", bg: "Ръст" })}</span>
+            <strong>{user.heightCm ? `${user.heightCm} см` : "-"}</strong>
+          </article>
+          <article className="workspace-profile-info-card">
+            <span>{copyFor(language, { en: "Weight", ru: "Вес", bg: "Тегло" })}</span>
+            <strong>{user.baselineWeightKg ? `${user.baselineWeightKg} кг` : "-"}</strong>
+          </article>
+          <article className="workspace-profile-info-card">
+            <span>{copyFor(language, { en: "Age", ru: "Возраст", bg: "Възраст" })}</span>
+            <strong>{getAthleteAge(user.birthDate ?? null) ?? "-"}</strong>
+          </article>
+          <article className="workspace-profile-info-card">
+            <span>{copyFor(language, { en: "Resting HR", ru: "Пульс покоя", bg: "Пулс в покой" })}</span>
+            <strong>{user.baselineRestingHr ?? "-"}</strong>
+          </article>
+          <article className="workspace-profile-info-card">
+            <span>{copyFor(language, { en: "Sport", ru: "Спорт", bg: "Спорт" })}</span>
+            <strong>{user.sport || "-"}</strong>
+          </article>
+          <article className="workspace-profile-info-card">
+            <span>{copyFor(language, { en: "Class", ru: "Категория", bg: "Категория" })}</span>
+            <strong>{user.weightClass || "-"}</strong>
+          </article>
+        </div>
+
+        {todayEntry ? (
+          <div className="workspace-profile-status-link workspace-athlete-menu-readiness">
+            <span>{ui("latestReadiness")}</span>
+            <strong>{`${readinessMeta[todayEntry.status].label} (${todayEntry.score})`}</strong>
+          </div>
+        ) : null}
+      </div>
+    ) : undefined;
+  const topbarProfileMenu = user
+    ? {
+        avatarLabel: initialsFor(user.fullName),
+        name: user.fullName,
+        meta: translateRoleName(user.role, language),
+        profileDetails: topbarAthleteProfileDetails,
+        statusItem: profileStatusItem,
+        signOutLabel: t("logout"),
+        onSignOut: handleLogout,
+      }
+    : undefined;
+  const guestAccessTitle = authMode === "login" ? t("login") : t("register");
+  const closeGuestAccessLabel = copyFor(language, {
+    en: "Close",
+    ru: "Закрыть",
+    bg: "Затвори",
+  });
+  const workspaceStageTabs =
+    activeWorkspace === "planning-studio" ? (
+      <div className="toggle-row compact-tab-row planning-nav-row workspace-stage-tabs">
+        {planningTabs.map((tab) => (
+          <button
+            className={planningView === tab.id ? "tab-active" : "tab-button"}
+            key={tab.id}
+            onClick={() => setPlanningView(tab.id)}
+            type="button"
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+    ) : null;
+  const workspaceRailNote = errorMessage || statusMessage || ui("signInHint");
+
+  useEffect(() => {
+    const nextWorkspace = resolveAccessibleWorkspace(activeWorkspace, canSeeCoachWorkspace);
+    if (nextWorkspace !== activeWorkspace) {
+      setActiveWorkspace(nextWorkspace);
+    }
+  }, [activeWorkspace, canSeeCoachWorkspace]);
+
+  useEffect(() => {
+    if (activeWorkspace === "coach-dashboard") {
+      setCoachView("readiness");
+      return;
+    }
+
+    if (activeWorkspace === "coach-analytics") {
+      setCoachView("analytics");
+      return;
+    }
+
+    if (activeWorkspace === "coach-review") {
+      setCoachView("execution");
+      return;
+    }
+
+    if (activeWorkspace === "coach-athletes") {
+      setCoachView("readiness");
+    }
+  }, [activeWorkspace]);
+
+  useEffect(() => {
+    if (isAthleteTodayWorkspace) {
+      setIsCheckinOpen(true);
+    }
+  }, [isAthleteTodayWorkspace]);
+
+  useEffect(() => {
+    if (isPreviewMode) {
+      return;
+    }
+
+    scrollViewportToTop();
+  }, [isPreviewMode, user?.id, user?.role]);
+
+  function handleWorkspaceTopAction() {
+    if (activeWorkspace === "planning-studio") {
+      setPlanningView("weekly");
+      return;
+    }
+
+    if (activeWorkspace === "coach-dashboard") {
+      setCoachView("analytics");
+      return;
+    }
+
+    void handleSyncNow();
+  }
+
+  return (
+    <main className="page-shell">
+      <section className="top-shell" id="top">
+        <WorkspaceTopBar
+          actionDisabled={showWorkspaceTopAction ? workspaceTopActionDisabled : undefined}
+          actionLabel={showWorkspaceTopAction ? workspaceTopActionButtonLabel : undefined}
+          authActions={topbarAuthActions}
+          languageMenu={topbarLanguageMenu}
+          onAction={showWorkspaceTopAction ? handleWorkspaceTopAction : undefined}
+          profileMenu={topbarProfileMenu}
+          selects={topbarSelects}
+          title={topbarTitle}
+        />
+
+        <nav className="panel workspace-quick-nav" aria-label={workspaceSectionsLabel}>
+          <span>{workspaceSectionsLabel}</span>
+          <div className="workspace-quick-nav-links">
+            {workspaceLinks.map((link) => (
+              <button
+                aria-current={activeWorkspace === link.id ? "page" : undefined}
+                className={`workspace-quick-nav-link ${
+                  activeWorkspace === link.id ? "workspace-quick-nav-link-active" : ""
+                }`.trim()}
+                key={link.id}
+                onClick={() => {
+                  setActiveWorkspace(link.id);
+                  scrollViewportToTop();
+                }}
+                type="button"
+              >
+                <strong>{link.label}</strong>
+                <small>{link.meta}</small>
+              </button>
+            ))}
+          </div>
+        </nav>
+
+        {!user && guestAccessOpen && guestAccessSection ? (
+          <div className="panel workspace-access-dock">
+            <div className="summary-topline">
+              <strong>{guestAccessTitle}</strong>
+              <button
+                className="secondary-button workspace-access-close"
+                onClick={() => setGuestAccessOpen(false)}
+                type="button"
+              >
+                {closeGuestAccessLabel}
+              </button>
+            </div>
+            {guestAccessSection}
+          </div>
+        ) : null}
+
+        <div className="panel workspace-command-bar">
+          <div className="workspace-command-head">
+            <div className="workspace-command-copy">
+              <span className="eyebrow eyebrow-muted">{currentWorkspaceLabel}</span>
+              <h1>{workspaceTitle}</h1>
+              <p>{statusMessage || workspaceSummary}</p>
+            </div>
+
+            <div className="workspace-command-meta">
+              <article className="command-meta-card">
+                <span>{t("athlete")}</span>
+                <strong>{activeAthleteLabel}</strong>
+                <small>{latestVisibleReadiness}</small>
+              </article>
+              <article className="command-meta-card">
+                <span>{stateLabelText}</span>
+                <strong>{importedSyncStateLabel(language, isOffline, offlineQueueSize)}</strong>
+                <small>{importedQueueLabel(language, offlineQueueSize)}</small>
+              </article>
+              <article className="command-meta-card">
+                <span>API</span>
+                <strong>{apiBaseUrl}</strong>
+                <small>{productTitle}</small>
+              </article>
+            </div>
+          </div>
+
+          <div className="workspace-kpi-strip">
+            {topOverviewItems.map((item) => (
+              <article className="workspace-kpi" key={item.label}>
+                <span>{item.label}</span>
+                <strong>{item.value}</strong>
+                <small>{item.note}</small>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <div
+        className={`workspace-layout ${
+          isAthleteSceneWorkspace ? "workspace-layout-athlete" : ""
+        } ${
+          isCoachSceneWorkspace ? "workspace-layout-coach" : ""
+        } ${
+          activeWorkspace === "planning-studio" ? "workspace-layout-planning" : ""
+        }`.trim()}
+      >
+        <WorkspaceRail
+          activeId={activeWorkspace}
+          activeItem={activeWorkspaceItem}
+          currentWorkspaceLabel={currentWorkspaceLabel}
+          links={workspaceLinks}
+          note={workspaceRailNote}
+          noteIsError={Boolean(errorMessage)}
+          onSelect={setActiveWorkspace}
+          productEyebrow={productEyebrow}
+          productTitle={productTitle}
+          sectionsLabel={workspaceSectionsLabel}
+          stats={isCoachDashboardWorkspace ? [] : railStats}
+        />
+
+        <div className="workspace-stage">
+          {!isAthleteSceneWorkspace && !isCoachDashboardWorkspace ? (
+            <WorkspaceStageHeader
+              eyebrow={activeWorkspaceItem.label}
+              hideCopy={activeWorkspace === "planning-studio"}
+              summary={workspaceSummary}
+              tabs={workspaceStageTabs}
+              title={workspaceTitle}
+            />
+          ) : null}
+
+          <div className="workspace-content">
+      {isAthleteSceneWorkspace ? (
+      <AthleteWorkspaceScene isGuest={!user}>
+        {null}
+
+        {!user ? (
+        <AthleteWorkspace
+          guestLabel={ui("guest")}
+          isGuest
+          metrics={athleteSceneMetrics}
+          previewCards={athletePreviewCards}
+          summaryItems={athleteSummaryItems}
+          title={workspaceTitle}
+        >
+          {null}
+        </AthleteWorkspace>
+        ) : null}
+
+        {user ? (
+        <AthleteWorkspace
+          guestLabel={ui("guest")}
+          isGuest={false}
+          metrics={athleteSceneMetrics}
+          previewCards={athletePreviewCards}
+          summaryItems={athleteSummaryItems}
+          title={workspaceTitle}
+        >
+        {isAthleteCompetitionsWorkspace ? (
+        <div className="anchor-panel athlete-competitions-view" id="athlete-competitions">
+          <div className="section-head">
+            <h2>
+              {copyFor(language, {
+                en: "My competitions",
+                ru: "Мои соревнования",
+                bg: "Моите състезания",
+              })}
+            </h2>
+            <div className="section-head-actions">
+              <span className="eyebrow eyebrow-muted">
+                {copyFor(language, {
+                  en: "Read-only athlete view",
+                  ru: "Витрина спортсмена",
+                  bg: "Витрина за спортиста",
+                })}
+              </span>
+            </div>
+          </div>
+
+          <div className="athlete-competition-hero">
+            <article className="entry-summary athlete-competition-card athlete-competition-card-primary">
+              <div className="summary-topline">
+                <strong>
+                  {hasSelectedAthleteCompetitionPlan
+                    ? copyFor(language, {
+                        en: "Selected start",
+                        ru: "Выбранный старт",
+                        bg: "Избран старт",
+                      })
+                    : copyFor(language, {
+                        en: "Next start",
+                        ru: "Ближайший старт",
+                        bg: "Най-близък старт",
+                      })}
+                </strong>
+                <span className={`status-chip ${currentAthleteCompetitionPlan ? "accent" : "idle"}`}>
+                  {currentAthleteCompetitionPlan?.priority ?? "-"}
+                </span>
+              </div>
+              {currentAthleteCompetitionPlan ? (
+                <>
+                  <h3>{currentAthleteCompetitionPlan.competitionTitle}</h3>
+                  <p className="athlete-scene-note">
+                    {currentAthleteCompetition?.location || currentAthleteCompetition?.federation
+                      ? [currentAthleteCompetition.location, currentAthleteCompetition.federation]
+                          .filter(Boolean)
+                          .join(" / ")
+                      : copyFor(language, {
+                          en: "Location is not specified yet.",
+                          ru: "Место пока не указано.",
+                          bg: "Мястото все още не е зададено.",
+                        })}
+                  </p>
+                  <div className="context-chip-grid">
+                    <article className="context-chip">
+                      <span>
+                        {copyFor(language, {
+                          en: "Competition dates",
+                          ru: "Даты соревнования",
+                          bg: "Дати на състезанието",
+                        })}
+                      </span>
+                      <strong>
+                        {currentAthleteCompetitionPlan.competitionStartDate} {"->"}{" "}
+                        {currentAthleteCompetitionPlan.competitionEndDate}
+                      </strong>
+                    </article>
+                    <article className="context-chip">
+                      <span>{t("priority")}</span>
+                      <strong>{currentAthleteCompetitionPlan.priority}</strong>
+                    </article>
+                    <article className="context-chip">
+                      <span>
+                        {copyFor(language, {
+                          en: "Days to start",
+                          ru: "До старта",
+                          bg: "До старт",
+                        })}
+                      </span>
+                      <strong>{currentAthleteDaysToStartValue}</strong>
+                    </article>
+                    <article className="context-chip">
+                      <span>
+                        {copyFor(language, {
+                          en: "Level",
+                          ru: "Уровень",
+                          bg: "Ниво",
+                        })}
+                      </span>
+                      <strong>{currentAthleteCompetition?.level ?? "-"}</strong>
+                    </article>
+                    <article className="context-chip">
+                      <span>
+                        {copyFor(language, {
+                          en: "Age group",
+                          ru: "Возрастная группа",
+                          bg: "Възрастова група",
+                        })}
+                      </span>
+                      <strong>{currentAthleteCompetition?.ageGroup || "-"}</strong>
+                    </article>
+                  </div>
+                </>
+              ) : (
+                <p className="placeholder-copy">
+                  {copyFor(language, {
+                    en: "No competitions are linked to your athlete profile yet.",
+                    ru: "К вашему профилю спортсмена пока не привязаны соревнования.",
+                    bg: "Към вашия профил на спортист все още няма свързани състезания.",
+                  })}
+                </p>
+              )}
+            </article>
+
+            <article className="entry-summary athlete-competition-card">
+              <div className="summary-topline">
+                <strong>
+                  {copyFor(language, {
+                    en: "Preparation status",
+                    ru: "Статус подготовки",
+                    bg: "Статус на подготовката",
+                  })}
+                </strong>
+                <span
+                  className={`status-chip ${
+                    currentAthleteCompetitionPhaseValue ? "accent" : "idle"
+                  }`}
+                >
+                  {currentAthleteCompetitionPhase}
+                </span>
+              </div>
+              <div className="context-chip-grid">
+                <article className="context-chip">
+                  <span>
+                    {copyFor(language, {
+                      en: "Days to start",
+                      ru: "До старта",
+                      bg: "До старт",
+                    })}
+                  </span>
+                  <strong>{currentAthleteDaysToStartValue}</strong>
+                </article>
+                <article className="context-chip">
+                  <span>{t("phase")}</span>
+                  <strong>{currentAthleteCompetitionPhase}</strong>
+                </article>
+                <article className="context-chip">
+                  <span>
+                    {copyFor(language, {
+                      en: "Taper",
+                      ru: "Подводка",
+                      bg: "Тейпър",
+                    })}
+                  </span>
+                  <strong>
+                    {currentAthleteTaperState
+                      ? copyFor(language, { en: "yes", ru: "да", bg: "да" })
+                      : copyFor(language, { en: "no", ru: "нет", bg: "не" })}
+                  </strong>
+                </article>
+                <article className="context-chip">
+                  <span>
+                    {copyFor(language, {
+                      en: "Weight cut",
+                      ru: "Весогонка",
+                      bg: "Сваляне на тегло",
+                    })}
+                  </span>
+                  <strong>
+                    {currentAthleteWeightCutState
+                      ? copyFor(language, { en: "yes", ru: "да", bg: "да" })
+                      : copyFor(language, { en: "no", ru: "нет", bg: "не" })}
+                  </strong>
+                </article>
+              </div>
+            </article>
+          </div>
+
+          <article className="entry-summary athlete-competition-card">
+            <div className="summary-topline">
+              <strong>
+                {copyFor(language, {
+                  en: "Preparation plan",
+                  ru: "План подготовки",
+                  bg: "План за подготовка",
+                })}
+              </strong>
+              <span>{currentAthleteCompetitionPlan?.planType ?? "-"}</span>
+            </div>
+            {currentAthleteCompetitionPlan ? (
+              <div className="context-chip-grid">
+                <article className="context-chip">
+                  <span>
+                    {copyFor(language, {
+                      en: "Preparation period",
+                      ru: "Период подготовки",
+                      bg: "Период на подготовка",
+                    })}
+                  </span>
+                  <strong>
+                    {currentAthleteCompetitionPlan.prepStartDate} {"->"}{" "}
+                    {currentAthleteCompetitionPlan.prepEndDate}
+                  </strong>
+                </article>
+                <article className="context-chip">
+                  <span>
+                    {copyFor(language, {
+                      en: "Target weight",
+                      ru: "Целевой вес",
+                      bg: "Целево тегло",
+                    })}
+                  </span>
+                  <strong>
+                    {currentAthleteCompetitionPlan.targetWeight !== null
+                      ? `${currentAthleteCompetitionPlan.targetWeight} ${copyFor(language, {
+                          en: "kg",
+                          ru: "кг",
+                          bg: "кг",
+                        })}`
+                      : "-"}
+                  </strong>
+                </article>
+                <article className="context-chip">
+                  <span>
+                    {copyFor(language, {
+                      en: "Expected matches",
+                      ru: "Ожидаемые схватки",
+                      bg: "Очаквани срещи",
+                    })}
+                  </span>
+                  <strong>{currentAthleteCompetitionPlan.expectedMatches ?? "-"}</strong>
+                </article>
+                <article className="context-chip">
+                  <span>
+                    {copyFor(language, {
+                      en: "Peak required",
+                      ru: "Пик формы",
+                      bg: "Пикова форма",
+                    })}
+                  </span>
+                  <strong>
+                    {currentAthleteCompetitionPlan.peakRequired
+                      ? copyFor(language, { en: "yes", ru: "да", bg: "да" })
+                      : copyFor(language, { en: "no", ru: "нет", bg: "не" })}
+                  </strong>
+                </article>
+              </div>
+            ) : (
+              <p className="placeholder-copy">
+                {copyFor(language, {
+                  en: "A coach has not assigned a competition preparation plan yet.",
+                  ru: "Тренер пока не назначил план подготовки к соревнованию.",
+                  bg: "Треньорът все още не е назначил план за подготовка към състезание.",
+                })}
+              </p>
+            )}
+          </article>
+
+          <article className="entry-summary athlete-competition-card">
+            <div className="summary-topline">
+              <strong>
+                {copyFor(language, {
+                  en: "Competition calendar",
+                  ru: "Календарь соревнований",
+                  bg: "Календар на състезанията",
+                })}
+              </strong>
+              <span>{sortedAthleteCompetitionPlans.length}</span>
+            </div>
+            {sortedAthleteCompetitionPlans.length ? (
+              <div className="athlete-competition-list">
+                {sortedAthleteCompetitionPlans.map((plan) => {
+                  const isCurrentPlan = plan.id === currentAthleteCompetitionPlan?.id;
+                  return (
+                    <button
+                      aria-pressed={isCurrentPlan}
+                      className={`athlete-competition-row ${isCurrentPlan ? "athlete-competition-row-active" : ""}`}
+                      key={plan.id}
+                      onClick={() => setSelectedAthleteCompetitionPlanId(plan.id)}
+                      type="button"
+                    >
+                      <span>{plan.competitionStartDate}</span>
+                      <strong>{plan.competitionTitle}</strong>
+                      <span>{plan.priority}</span>
+                      <span>{plan.planType}</span>
+                      <span>
+                        {plan.result
+                          ? copyFor(language, {
+                              en: "result saved",
+                              ru: "результат сохранён",
+                              bg: "резултатът е запазен",
+                            })
+                          : copyFor(language, {
+                              en: "upcoming",
+                              ru: "впереди",
+                              bg: "предстои",
+                            })}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="placeholder-copy">
+                {copyFor(language, {
+                  en: "Competition calendar will appear here after the coach links a competition plan.",
+                  ru: "Календарь появится здесь после того, как тренер привяжет план соревнования.",
+                  bg: "Календарът ще се появи тук, след като треньорът свърже състезателен план.",
+                })}
+              </p>
+            )}
+          </article>
+        </div>
+        ) : (
+        <div
+          className={`anchor-panel athlete-section-panel ${
+            isDailyReadinessWorkspace ? "athlete-checkin-panel" : ""
+          } ${
+            isAthleteTrainingWorkspace ? "athlete-training-panel" : ""
+          } ${
+            isAthleteHistoryWorkspace ? "athlete-history-panel" : ""
+          }`.trim()}
+          id={isDailyReadinessWorkspace ? "daily-readiness" : "athlete-workspace"}
+        >
+          <div className="section-head">
+            <h2>{workspaceTitle}</h2>
+            <div className="section-head-actions">
+              <span className="eyebrow eyebrow-muted">
+                {user?.role === "athlete"
+                  ? user.fullName
+                  : selectedCoachAthlete?.fullName ?? activeAthleteLabel}
+              </span>
+            </div>
+          </div>
+          <div className="context-chip-grid">
+            {athleteSummaryItems.map((item) => (
+              <article className="context-chip" key={item.label}>
+                <span>{item.label}</span>
+                <strong>{item.value}</strong>
+              </article>
+            ))}
+          </div>
+          <div className="athlete-scene-topbar">
+            {athleteSceneMetrics.map((item) => (
+              <article className="scene-metric" key={item.label}>
+                <span>{item.label}</span>
+                <strong>{item.value}</strong>
+                <small>{item.note}</small>
+              </article>
+            ))}
+          </div>
+          <div className="athlete-day-board">
+            <article className="entry-summary athlete-day-card athlete-day-card-accent">
+              <div className="summary-topline">
+                <strong>
+                  {copyFor(language, {
+                    en: "Today at a glance",
+                    ru: "Ключевое на сегодня",
+                    bg: "Най-важното за днес",
+                  })}
+                </strong>
+                <span
+                  className={`status-chip ${
+                    pendingReadinessQueued || offlineQueueSize > 0 ? "pending" : "synced"
+                  }`}
+                >
+                  {pendingReadinessQueued
+                    ? ui("pendingSync")
+                    : importedSyncStateLabel(language, isOffline, offlineQueueSize)}
+                </span>
+              </div>
+              <p className="athlete-scene-note">
+                {copyFor(language, {
+                  en: "One fast flow: check in, review the adapted day, then log actual work without leaving the same screen.",
+                  ru: "Один быстрый сценарий: чек-ин, просмотр адаптированного дня и фиксация факта без переходов по экрану.",
+                  bg: "Един бърз поток: check-in, преглед на адаптирания ден и запис на реалното изпълнение без да напускаш екрана.",
+                })}
+              </p>
+              <div className="athlete-day-checklist">
+                {athleteDayChecklist.map((item) => (
+                  <article className="athlete-day-checklist-item" key={item.id}>
+                    <span>{item.label}</span>
+                    <strong>{item.value}</strong>
+                  </article>
+                ))}
+              </div>
+            </article>
+
+            <article className="entry-summary athlete-day-card">
+              <div className="summary-topline">
+                <strong>
+                  {copyFor(language, {
+                    en: "What changed today",
+                    ru: "Что изменилось сегодня",
+                    bg: "Какво се промени днес",
+                  })}
+                </strong>
+                <span>{athleteChangedToday.length}</span>
+              </div>
+              {athleteChangedToday.length ? (
+                <div className="athlete-change-list">
+                  {athleteChangedToday.slice(0, 4).map((item) => (
+                    <span className={`status-chip ${item.tone}`} key={item.id}>
+                      {item.label}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="placeholder-copy">
+                  {copyFor(language, {
+                    en: "No block-level changes are active right now.",
+                    ru: "Сейчас активных изменений по блокам нет.",
+                    bg: "В момента няма активни промени по блоковете.",
+                  })}
+                </p>
+              )}
+            </article>
+
+            <article className="entry-summary athlete-day-card">
+              <div className="summary-topline">
+                <strong>
+                  {copyFor(language, {
+                    en: "Working surface",
+                    ru: "Рабочая поверхность",
+                    bg: "Работна повърхност",
+                  })}
+                </strong>
+                <span>{primaryAssignedPlan?.day.label ?? ui("noActivePlan")}</span>
+              </div>
+              <ul>
+                <li>
+                  {copyFor(language, {
+                    en: "Readiness queue",
+        ru: "Очередь готовности",
+        bg: "Опашка за готовност",
+                  })}
+                  : {pendingReadinessQueued ? ui("pendingSync") : ui("synced")}
+                </li>
+                <li>
+                  {copyFor(language, {
+                    en: "Execution queue",
+        ru: "Очередь выполнения",
+        bg: "Опашка за изпълнение",
+                  })}
+                  : {pendingExecutionBlockIds.size}
+                </li>
+                <li>
+                  {copyFor(language, {
+                    en: "Phase context",
+                    ru: "Контекст фазы",
+                    bg: "Контекст на фазата",
+                  })}
+                  : {activePhaseLabel}
+                </li>
+              </ul>
+            </article>
+          </div>
+          <div className="athlete-scene-grid">
+          {user?.role !== "athlete" ? (
+            <p className="placeholder-copy">
+              {ui("athleteOnlyReadiness")}
+            </p>
+          ) : (
+            <>
+              <div className="athlete-scene-column athlete-scene-column-primary">
+                <div className="athlete-form-shell">
+                  <button
+                    aria-controls="daily-readiness-form-panel"
+                    aria-expanded={isCheckinOpen}
+                    className="athlete-checkin-trigger"
+                    onClick={() => setIsCheckinOpen((current) => !current)}
+                    type="button"
+                  >
+                    <div className="athlete-panel-head">
+                      <div>
+                        <span className="eyebrow eyebrow-muted">
+                          {copyFor(language, { en: "Check-in", ru: "Чек-ин", bg: "Чек-ин" })}
+                        </span>
+                        <h3>{t("dailyReadiness")}</h3>
+                      </div>
+                      <p>
+                        {copyFor(language, {
+                          en: "Daily signal collection before the working day starts.",
+                          ru: "Ежедневный сбор сигналов перед началом рабочего дня.",
+                          bg: "Ежедневно събиране на сигнали преди началото на работния ден.",
+                        })}
+                      </p>
+                    </div>
+                    <span className="athlete-checkin-caret" aria-hidden="true">
+                      v
+                    </span>
+                  </button>
+
+                  {isCheckinOpen ? (
+                    <div className="athlete-checkin-dropdown-body" id="daily-readiness-form-panel">
+                      <label className="field athlete-readiness-date-field">
+                        <span>
+                          {copyFor(language, {
+                            en: "Readiness date",
+        ru: "Дата готовности",
+        bg: "Дата на готовността",
+                          })}
+                        </span>
+                        <input
+                          max={getDateInputValue()}
+                          onChange={(event) => handleReadinessDateChange(event.target.value)}
+                          type="date"
+                          value={readinessEntryDate}
+                        />
+                      </label>
+                      <div className="athlete-readiness-hint">
+                        <span
+                          className={`status-chip ${
+                            pendingReadinessQueued ? "pending" : "synced"
+                          }`}
+                        >
+                          {pendingReadinessQueued ? ui("pendingSync") : ui("synced")}
+                        </span>
+                        <small>
+                          {copyFor(language, {
+                            en: "Select today or a past date, then submit the daily check-in in 20-30 seconds.",
+                            ru: "Выберите сегодня или прошедшую дату и отправьте дневной чек-ин за 20-30 секунд.",
+                            bg: "Изберете днес или минала дата и подайте дневния check-in за 20-30 секунди.",
+                          })}
+                        </small>
+                      </div>
+                      <form
+                        className="readiness-form athlete-readiness-form"
+                        onSubmit={handleReadinessSubmit}
+                      >
+                        {translatedReadinessFields.map((field) => (
+                          <label
+                            className={`field athlete-readiness-field ${
+                              field.type === "boolean"
+                                ? "athlete-readiness-toggle"
+                                : field.key === "sleepHours" ||
+                                    field.key === "restingHr" ||
+                                    field.key === "bodyWeight"
+                                  ? "athlete-readiness-metric"
+                                  : "athlete-readiness-score"
+                            }`}
+                            key={field.key}
+                          >
+                            <span>{field.label}</span>
+                            {field.type === "boolean" ? (
+                              <input
+                                checked={Boolean(readinessForm[field.key])}
+                                onChange={(event) =>
+                                  setReadinessForm((current) => ({
+                                    ...current,
+                                    [field.key]: event.target.checked,
+                                  }))
+                                }
+                                type="checkbox"
+                              />
+                            ) : (
+                              <input
+                                min={field.min}
+                                max={field.max}
+                                step={field.step}
+                                type="number"
+                                value={String(readinessForm[field.key])}
+                                onChange={(event) =>
+                                  setReadinessForm((current) => ({
+                                    ...current,
+                                    [field.key]: Number(event.target.value),
+                                  }))
+                                }
+                              />
+                            )}
+                          </label>
+                        ))}
+
+                        <button className="primary-button" disabled={busy} type="submit">
+                          {busy ? ui("syncingNow") : t("saveReadiness")}
+                        </button>
+                      </form>
+                    </div>
+                  ) : null}
+                </div>
+
+              {todayEntry ? (
+                <div className="entry-summary athlete-scene-card athlete-readiness-status-card">
+                  <div className="summary-topline">
+                    <strong>{readinessMeta[todayEntry.status].label}</strong>
+                    <span className={`status-chip ${todayEntry.status}`}>
+                      Score {todayEntry.score}
+                    </span>
+                    <span>{readinessMeta[todayEntry.status].loadRange}</span>
+                  </div>
+                  <p>{readinessMeta[todayEntry.status].summary}</p>
+                  <ul>
+                    {todayEntry.explanation.length ? (
+                      todayEntry.explanation.map((reason) => (
+                        <li key={reason.code}>
+                          {translateReadinessReason(reason, language)}
+                        </li>
+                      ))
+                    ) : (
+                      <li>
+                        {language === "ru"
+                          ? "Критических отклонений не найдено."
+                          : language === "bg"
+                            ? "Не са открити критични отклонения."
+                            : "No critical deviations were found."}
+                      </li>
+                    )}
+                  </ul>
+                </div>
+              ) : (
+                <p className="placeholder-copy">
+                  {copyFor(language, {
+                    en: "No readiness entry has been submitted yet for today.",
+                    ru: "Сегодня данные готовности ещё не отправлены.",
+                    bg: "Днес все още няма подадени данни за готовност.",
+                  })}
+                </p>
+              )}
+              </div>
+
+              <div className="athlete-scene-column athlete-scene-column-secondary">
+              <div className="entry-summary athlete-scene-card athlete-plan-card">
+                <div className="summary-topline">
+                  <strong>{t("assignedTrainingDay")}</strong>
+                  <span className={`status-chip ${primaryAssignedPlan ? "synced" : "idle"}`}>
+                    {primaryAssignedPlan
+                      ? copyFor(language, {
+                          en: `${relevantAssignedPlans.length} active`,
+                          ru: `${relevantAssignedPlans.length} активн.`,
+                          bg: `${relevantAssignedPlans.length} активни`,
+                        })
+                      : ui("noActivePlan")}
+                  </span>
+                </div>
+                {primaryAssignedPlan === null ? (
+                  <p className="placeholder-copy">
+                    {copyFor(language, {
+                      en: "No assigned plan is available yet for this athlete.",
+                      ru: "Для этого спортсмена пока нет назначенного плана.",
+                      bg: "За този спортист все още няма назначен план.",
+                    })}
+                  </p>
+                ) : (
+                    <ul>
+                      {primaryAssignedPlan.day.sessions.map((session) => (
+                        <li key={session.id}>
+                          {primaryAssignedPlan.templateName} / {primaryAssignedPlan.day.label} /{" "}
+                        {session.name}:{" "}
+                        {session.blocks
+                          .map(
+                            (block) =>
+                              `${block.name} (${t("targetDuration")}: ${
+                                block.targetDurationMinutes ?? "-"
+                              }, ${t("targetRpe")}: ${block.targetRpe ?? "-"})`,
+                          )
+                          .join(", ")}
+                        </li>
+                      ))}
+                    </ul>
+                )}
+              </div>
+
+              <div className="entry-summary athlete-scene-card athlete-adaptation-card">
+                <div className="summary-topline">
+                  <strong>{t("adaptedDay")}</strong>
+                  <span className={`status-chip ${adaptedPlan?.readinessStatus ?? "idle"}`}>
+                    {adaptedPlan
+                      ? `${adaptedPlan.readinessStatus} / ${adaptedPlan.readinessScore}`
+                      : ui("noAdaptationYet")}
+                  </span>
+                </div>
+                {adaptedPlan ? (
+                  <>
+                    {athleteChangedToday.length ? (
+                      <div className="athlete-change-list">
+                        {athleteChangedToday.slice(0, 5).map((item) => (
+                          <span className={`status-chip ${item.tone}`} key={item.id}>
+                            {item.label}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
+                    <p>
+                      {adaptedPlan.explanation.length
+                        ? adaptedPlan.explanation
+                            .map((item) => translateAdaptationText(item, language))
+                            .join(" ")
+                        : language === "ru"
+                          ? "Изменения адаптации не потребовались."
+                          : language === "bg"
+                            ? "Не бяха нужни промени по адаптацията."
+                            : "No adaptation changes were required."}
+                    </p>
+                    <ul>
+                      {adaptedPlan.sessions.flatMap((session) =>
+                        session.blocks.map((block) => (
+                          <li key={block.id}>
+                            {session.name}: {block.name} [{translateBlockAction(block.action, language)}] -{" "}
+                            {translateAdaptationText(block.adaptationReason, language)}
+                          </li>
+                        )),
+                      )}
+                    </ul>
+                  </>
+                ) : (
+                  <p className="placeholder-copy">
+                    {copyFor(language, {
+                      en: "Submit readiness and assign an active plan to generate the adapted day.",
+                      ru: "Отправьте готовность и назначьте активный план, чтобы сформировать адаптированный день.",
+                      bg: "Подайте готовност и назначете активен план, за да се генерира адаптиран ден.",
+                    })}
+                  </p>
+                )}
+              </div>
+              </div>
+
+              <div className="athlete-scene-column athlete-scene-column-tertiary">
+              <div className="entry-summary athlete-scene-card athlete-history-card">
+                <div className="summary-topline">
+                  <strong>
+                    {copyFor(language, {
+                      en: "Training history",
+                      ru: "История",
+                      bg: "История",
+                    })}
+                  </strong>
+                  <span>
+                    {analyticsOverview
+                      ? `${analyticsOverview.readinessTrend.length}/${executionResults.length}`
+                      : String(executionResults.length)}
+                  </span>
+                </div>
+                {analyticsOverview || executionResults.length ? (
+                  <>
+                    <div className="context-chip-grid">
+                      <article className="context-chip">
+                        <span>{ui("readinessTrend")}</span>
+                        <strong>{analyticsOverview?.readinessTrend.length ?? 0}</strong>
+                      </article>
+                      <article className="context-chip">
+                        <span>{t("executionTracking")}</span>
+                        <strong>{executionResults.length}</strong>
+                      </article>
+                      <article className="context-chip">
+                        <span>{ui("completionTrend")}</span>
+                        <strong>{athleteLatestCompletionPoint?.adherenceRate ?? "-"}%</strong>
+                      </article>
+                    </div>
+
+                    {analyticsOverview?.readinessTrend.length ? (
+                      <div className="analytics-trend-list">
+                        <strong>{ui("readinessTrend")}</strong>
+                        <ul>
+                          {analyticsOverview.readinessTrend.slice(-5).reverse().map((point) => (
+                            <li key={point.date}>
+                              {point.date}: {readinessMeta[point.status].label} / {point.score}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+
+                    {executionResults.length ? (
+                      <div className="analytics-trend-list">
+                        <strong>{t("executionTracking")}</strong>
+                        <ul>
+                          {executionResults.slice(0, 5).map((result) => (
+                            <li key={result.id}>
+                              {result.updatedAt.slice(0, 10)}:{" "}
+                              {result.completed ? t("completed") : ui("notSavedYet")} / RPE{" "}
+                              {result.rpe ?? "-"} / {t("durationMin")}{" "}
+                              {result.durationMinutes ?? "-"}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+                  </>
+                ) : (
+                  <p className="placeholder-copy">
+                    {copyFor(language, {
+                      en: "History will appear after readiness and execution entries are saved.",
+        ru: "История появится после сохранения готовности и выполнения тренировок.",
+        bg: "Историята ще се появи след записана готовност и отчетено изпълнение.",
+                    })}
+                  </p>
+                )}
+              </div>
+
+              <div className="entry-summary athlete-scene-card athlete-context-card">
+                <div className="summary-topline">
+                  <strong>
+                    {copyFor(language, {
+                      en: "Competition context",
+                      ru: "Соревновательный контекст",
+                      bg: "Състезателен контекст",
+                    })}
+                  </strong>
+                  <span className={`status-chip ${competitionContext ? "accent" : "idle"}`}>
+                    {competitionContext?.phase
+                      ? `${competitionContext.phase} / ${competitionContext.competitionPriority ?? "-"}`
+                      : "none"}
+                  </span>
+                </div>
+                {competitionContext ? (
+                  <ul>
+                    <li>Days to competition: {competitionContext.daysToCompetition ?? "-"}</li>
+                    <li>Phase: {competitionContext.phase ?? "-"}</li>
+                    <li>Priority: {competitionContext.competitionPriority ?? "-"}</li>
+                    <li>Taper: {competitionContext.taperState ? "yes" : "no"}</li>
+                    <li>Weight cut: {competitionContext.weightCutState ? "yes" : "no"}</li>
+                  </ul>
+                ) : (
+                  <p className="placeholder-copy">
+                    No active competition preparation context is linked to this athlete yet.
+                  </p>
+                )}
+              </div>
+
+              <div className="entry-summary athlete-scene-card athlete-execution-card">
+                <div className="summary-topline">
+                  <strong>{t("executionTracking")}</strong>
+                  <span className={`status-chip ${pendingExecutionBlockIds.size ? "pending" : "synced"}`}>
+                    {primaryAssignedPlan === null
+                      ? ui("noActivePlan")
+                      : `${athleteExecutionCompletedBlocks}/${athletePlannedBlocksCount}`}
+                  </span>
+                </div>
+                {primaryAssignedPlan === null ? (
+                  <p className="placeholder-copy">
+                    Assign an active plan before recording actual execution.
+                  </p>
+                ) : (
+                  <div className="stack athlete-execution-stack">
+                    {primaryAssignedPlan.day.sessions.map((session) => (
+                      <div className="session-card" key={session.id}>
+                        <strong>{session.name}</strong>
+                        <span>{primaryAssignedPlan.day.label}</span>
+                        {session.blocks.map((block) => {
+                          const draft = getExecutionDraft(block.id);
+                          const savedResult = executionResults.find(
+                            (item) => item.assignedBlockId === block.id,
+                          );
+                          const blockSyncLabel = pendingExecutionBlockIds.has(block.id)
+                            ? ui("pendingSync")
+                            : savedResult
+                              ? ui("synced")
+                              : ui("notSavedYet");
+                          const blockSyncTone = pendingExecutionBlockIds.has(block.id)
+                            ? "pending"
+                            : savedResult
+                              ? "synced"
+                              : "idle";
+
+                          return (
+                            <div className="entry-summary athlete-execution-block" key={block.id}>
+                              <div className="summary-topline">
+                                <strong>{block.name}</strong>
+                                <span className={`status-chip ${blockSyncTone}`}>{blockSyncLabel}</span>
+                              </div>
+                              <div className="context-chip-grid athlete-execution-target-grid">
+                                <article className="context-chip">
+                                  <span>{t("targetDuration")}</span>
+                                  <strong>
+                                    {block.targetDurationMinutes ?? "-"} {"->"}{" "}
+                                    {savedResult?.durationMinutes ?? draft.durationMinutes ?? "-"}
+                                  </strong>
+                                </article>
+                                <article className="context-chip">
+                                  <span>{t("targetRpe")}</span>
+                                  <strong>
+                                    {block.targetRpe ?? "-"} {"->"}{" "}
+                                    {savedResult?.rpe ?? draft.rpe ?? "-"}
+                                  </strong>
+                                </article>
+                                <article className="context-chip">
+                                  <span>{t("targetSets")}</span>
+                                  <strong>
+                                    {block.targetSets ?? "-"} {"->"}{" "}
+                                    {savedResult?.setsCompleted ?? draft.setsCompleted ?? "-"}
+                                  </strong>
+                                </article>
+                                <article className="context-chip">
+                                  <span>{t("targetReps")}</span>
+                                  <strong>
+                                    {block.targetReps ?? "-"} {"->"}{" "}
+                                    {savedResult?.repsCompleted ?? draft.repsCompleted ?? "-"}
+                                  </strong>
+                                </article>
+                              </div>
+
+                              <div className="readiness-form">
+                                <label className="field">
+                                  <span>{t("completed")}</span>
+                                  <input
+                                    checked={draft.completed}
+                                    onChange={(event) =>
+                                      updateExecutionDraft(block.id, {
+                                        completed: event.target.checked,
+                                      })
+                                    }
+                                    type="checkbox"
+                                  />
+                                </label>
+
+                                <label className="field">
+                                  <span>{t("sets")}</span>
+                                  <input
+                                    type="number"
+                                    value={draft.setsCompleted ?? ""}
+                                    onChange={(event) =>
+                                      updateExecutionDraft(block.id, {
+                                        setsCompleted:
+                                          event.target.value === ""
+                                            ? null
+                                            : Number(event.target.value),
+                                      })
+                                    }
+                                  />
+                                </label>
+
+                                <label className="field">
+                                  <span>{t("reps")}</span>
+                                  <input
+                                    type="number"
+                                    value={draft.repsCompleted ?? ""}
+                                    onChange={(event) =>
+                                      updateExecutionDraft(block.id, {
+                                        repsCompleted:
+                                          event.target.value === ""
+                                            ? null
+                                            : Number(event.target.value),
+                                      })
+                                    }
+                                  />
+                                </label>
+
+                                <label className="field">
+                                  <span>{t("weightKg")}</span>
+                                  <input
+                                    type="number"
+                                    step="0.5"
+                                    value={draft.weightKg ?? ""}
+                                    onChange={(event) =>
+                                      updateExecutionDraft(block.id, {
+                                        weightKg:
+                                          event.target.value === ""
+                                            ? null
+                                            : Number(event.target.value),
+                                      })
+                                    }
+                                  />
+                                </label>
+
+                                <label className="field">
+                                  <span>{t("durationMin")}</span>
+                                  <input
+                                    type="number"
+                                    step="0.5"
+                                    value={draft.durationMinutes ?? ""}
+                                    onChange={(event) =>
+                                      updateExecutionDraft(block.id, {
+                                        durationMinutes:
+                                          event.target.value === ""
+                                            ? null
+                                            : Number(event.target.value),
+                                      })
+                                    }
+                                  />
+                                </label>
+
+                                <label className="field">
+                                  <span>{t("rpe")}</span>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    max="10"
+                                    step="0.5"
+                                    value={draft.rpe ?? ""}
+                                    onChange={(event) =>
+                                      updateExecutionDraft(block.id, {
+                                        rpe:
+                                          event.target.value === ""
+                                            ? null
+                                            : Number(event.target.value),
+                                      })
+                                    }
+                                  />
+                                </label>
+
+                                <label className="field">
+                                  <span>{t("notes")}</span>
+                                  <input
+                                    value={draft.notes}
+                                    onChange={(event) =>
+                                      updateExecutionDraft(block.id, {
+                                        notes: event.target.value,
+                                      })
+                                    }
+                                  />
+                                </label>
+                              </div>
+
+                              <button
+                                className="primary-button"
+                                disabled={busy}
+                                onClick={() => void handleExecutionSave(primaryAssignedPlan.id, block.id)}
+                                type="button"
+                              >
+                                {busy ? ui("syncingNow") : t("saveExecution")}
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="entry-summary athlete-scene-card athlete-analytics-card">
+                <div className="summary-topline">
+                  <strong>{t("analytics")}</strong>
+                  <span>
+                    {analyticsOverview
+                      ? `${analyticsOverview.insights.length} / ${analyticsOverview.patterns.length}`
+                      : ui("noAnalyticsYet")}
+                  </span>
+                </div>
+                {analyticsOverview ? (
+                  <>
+                    <div className="coach-stat-strip analytics-mini-grid">
+                      <article className="scene-metric">
+                        <span>{ui("latestReadiness")}</span>
+                        <strong>{athleteLatestReadinessPoint?.score ?? "-"}</strong>
+                        <small>
+                          {athleteLatestReadinessPoint
+                            ? readinessMeta[athleteLatestReadinessPoint.status].label
+                            : ui("noEntriesYet")}
+                        </small>
+                      </article>
+                      <article className="scene-metric">
+                        <span>{ui("completionTrend")}</span>
+                        <strong>{athleteLatestCompletionPoint?.adherenceRate ?? "-"}%</strong>
+                        <small>
+                          {athleteLatestCompletionPoint
+                            ? `${athleteLatestCompletionPoint.completedBlocks}/${athleteLatestCompletionPoint.plannedBlocks} ${copyFor(language, {
+                                en: "blocks",
+                                ru: "блоков",
+                                bg: "блока",
+                              })}`
+                            : ui("noReviewYet")}
+                        </small>
+                      </article>
+                      <article className="scene-metric">
+                        <span>{ui("loadTrend")}</span>
+                        <strong>{athleteLatestLoadPoint?.actualLoad ?? "-"}</strong>
+                        <small>
+                          {athleteLatestLoadPoint
+                            ? `${copyFor(language, {
+                                en: "delta",
+                                ru: "дельта",
+                                bg: "делта",
+                              })} ${athleteLatestLoadPoint.loadDelta}`
+                            : ui("noAnalyticsYet")}
+                        </small>
+                      </article>
+                    </div>
+
+                    {athleteWeekSummary ? (
+                      <article className="entry-summary analytics-week-card">
+                        <div className="summary-topline">
+                          <strong>{ui("analyticsWeekSnapshot")}</strong>
+                          <span>{analyticsWeekStatus(athleteWeekSummary.status)}</span>
+                        </div>
+                        <div className="analytics-week-grid">
+                          <div>
+                            <span>{copyFor(language, { en: "Week", ru: "Неделя", bg: "Седмица" })}</span>
+                            <strong>{athleteWeekSummary.label}</strong>
+                          </div>
+                          <div>
+                            <span>{ui("loadTrend")}</span>
+                            <strong>{athleteWeekSummary.actualLoad}</strong>
+                          </div>
+                          <div>
+                            <span>{ui("completionTrend")}</span>
+                            <strong>{athleteWeekSummary.adherenceRate}%</strong>
+                          </div>
+                          <div>
+                            <span>{ui("latestReadiness")}</span>
+                            <strong>{athleteWeekSummary.averageReadiness ?? "-"}</strong>
+                          </div>
+                        </div>
+                      </article>
+                    ) : null}
+
+                    <div className="analytics-insight-stack analytics-insight-stack-compact">
+                      {analyticsOverview.insights.slice(0, 2).map((insight) => (
+                        <article className="analytics-insight-card" key={insight.code}>
+                          <div className="summary-topline">
+                            <strong>{analyticsInsightTitle(insight)}</strong>
+                            <span className={`analytics-severity-chip ${insight.level}`}>
+                              {analyticsInsightLevel(insight)}
+                            </span>
+                          </div>
+                          <p>{analyticsInsightSummary(insight)}</p>
+                          <p className="analytics-recommendation">
+                            <strong>{ui("analyticsRecommendation")}:</strong>{" "}
+                            {analyticsInsightRecommendation(insight)}
+                          </p>
+                        </article>
+                      ))}
+                    </div>
+
+                    <div className="analytics-trend-list">
+                      <strong>{ui("readinessTrend")}</strong>
+                      <ul>
+                        {analyticsOverview.readinessTrend.slice(-3).reverse().map((point) => (
+                          <li key={point.date}>
+                            {point.date}: {readinessMeta[point.status].label} / {point.score}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </>
+                ) : (
+                  <p className="placeholder-copy">
+                    {ui("analyticsAppearLater")}
+                  </p>
+                )}
+              </div>
+              </div>
+            </>
+          )}
+          </div>
+        </div>
+        )}
+        </AthleteWorkspace>
+        ) : null}
+      </AthleteWorkspaceScene>
+      ) : null}
+
+      {activeWorkspace === "offline-center" ? (
+      <OfflineSyncCenterScene>
+        <OfflineSyncCenter
+          action={
+            <button
+              className="secondary-button"
+              disabled={isSyncingNow || isOffline || offlineQueueSize === 0}
+              onClick={() => void handleSyncNow()}
+              type="button"
+            >
+              {isSyncingNow ? ui("syncingNow") : ui("syncNow")}
+            </button>
+          }
+          description={copyFor(language, {
+            en: "Review local queue items, sync state, and the latest cached readiness, plans, execution, and analytics snapshots.",
+        ru: "Проверьте локальные элементы очереди, состояние синхронизации и последние кэши готовности, плана, выполнения и аналитики.",
+        bg: "Прегледайте локалните елементи в опашката, състоянието на синхронизация и последните кешове на готовността, плана, изпълнението и анализа.",
+          })}
+          eyebrow={ui("offlineSyncCenter")}
+          metrics={offlineSceneMetrics}
+          title={copyFor(language, {
+            en: "Pending sync, stale cache, and queue recovery in one control surface.",
+        ru: "Ожидающая синхронизация, устаревший кэш и восстановление очереди в одной управляющей зоне.",
+        bg: "Чакаща синхронизация, остарял кеш и възстановяване на опашката в една работна зона.",
+          })}
+        >
+          <div className="offline-sync-grid">
+            <div className="entry-summary offline-sync-queue">
+              <div className="summary-topline">
+                <strong>{ui("pendingItems")}</strong>
+                <span>{offlineQueueSize}</span>
+              </div>
+              <div className="context-chip-grid">
+                <article className="context-chip">
+                  <span>{ui("pendingSync")}</span>
+                  <strong>{offlineQueueStatusCounts.pending}</strong>
+                </article>
+                <article className="context-chip">
+                  <span>{ui("syncingNow")}</span>
+                  <strong>{offlineQueueStatusCounts.syncing}</strong>
+                </article>
+                <article className="context-chip">
+                  <span>{copyFor(language, { en: "failed", ru: "ошибки", bg: "грешки" })}</span>
+                  <strong>{offlineQueueStatusCounts.failed}</strong>
+                </article>
+                <article className="context-chip">
+                  <span>{ui("synced")}</span>
+                  <strong>{offlineQueueStatusCounts.synced}</strong>
+                </article>
+              </div>
+              {offlineQueueItems.length === 0 ? (
+                <p className="placeholder-copy">{ui("queueEmpty")}</p>
+              ) : (
+                <div className="offline-sync-item-list">
+                  {offlineQueueItems.map((item) => (
+                    <button
+                      className={`offline-sync-item ${
+                        selectedOfflineItem?.id === item.id ? "offline-sync-item-active" : ""
+                      }`}
+                      key={item.id}
+                      onClick={() => setSelectedOfflineItemId(item.id)}
+                      type="button"
+                    >
+                      <div className="offline-sync-item-top">
+                        <strong>{importedFormatQueueItemLabel(item, language)}</strong>
+                        <span className={`status-chip ${item.status}`}>
+                          {importedQueueItemStatusLabel(item, language)}
+                        </span>
+                      </div>
+                      <div className="offline-sync-item-meta">
+                        <span>
+                          {offlineSyncErrors[item.id]
+                            ? `${ui("lastAttemptFailed")}: ${offlineSyncErrors[item.id]}`
+                            : ui("readyToSync")}
+                        </span>
+                        <span>
+                          {copyFor(language, { en: "attempts", ru: "попыток", bg: "опити" })}:{" "}
+                          {item.attemptCount}
+                        </span>
+                        <span>{importedQueueConflictLabel(item, language)}</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="offline-sync-meta">
+              <div className="summary-topline">
+                <strong>
+                  {selectedOfflineItem
+                    ? importedFormatQueueItemLabel(selectedOfflineItem, language)
+                    : queueItemLabelText}
+                </strong>
+                <span className={`status-chip ${selectedOfflineItem?.status ?? "idle"}`}>
+                  {selectedOfflineItem
+                    ? importedQueueItemStatusLabel(selectedOfflineItem, language)
+                    : importedSyncStateLabel(language, isOffline, offlineQueueSize)}
+                </span>
+              </div>
+              {selectedOfflineItem ? (
+                <div className="offline-sync-detail">
+                  <p className="placeholder-copy">
+                    {ui("createdAtLabel")}: {selectedOfflineItem.createdAt.slice(0, 16)}
+                  </p>
+                  <ul>
+                    <li>
+                      {copyFor(language, {
+                        en: "Conflict policy",
+                        ru: "Политика конфликта",
+                        bg: "Политика за конфликт",
+                      })}
+                      : {importedQueueConflictLabel(selectedOfflineItem, language)}
+                    </li>
+                    <li>
+                      {copyFor(language, {
+                        en: "Current sync status",
+                        ru: "Текущий статус синхронизации",
+                        bg: "Текущ статус на синхронизация",
+                      })}
+                      :{" "}
+                      {offlineSyncErrors[selectedOfflineItem.id]
+                        ? `${ui("lastAttemptFailed")}: ${offlineSyncErrors[selectedOfflineItem.id]}`
+                        : importedQueueItemStatusLabel(selectedOfflineItem, language)}
+                    </li>
+                    <li>
+                      {copyFor(language, {
+                        en: "Idempotency key",
+                        ru: "Ключ идемпотентности",
+                        bg: "Ключ за идемпотентност",
+                      })}
+                      : {selectedOfflineItem.clientRequestId}
+                    </li>
+                    <li>
+                      {copyFor(language, {
+                        en: "Last attempt",
+                        ru: "Последняя попытка",
+                        bg: "Последен опит",
+                      })}
+                      : {selectedOfflineItem.lastAttemptAt?.slice(0, 16) ?? "-"}
+                    </li>
+                    <li>
+                      {copyFor(language, {
+                        en: "Synced at",
+                        ru: "Синхронизировано",
+                        bg: "Синхронизирано",
+                      })}
+                      : {selectedOfflineItem.syncedAt?.slice(0, 16) ?? "-"}
+                    </li>
+                  </ul>
+                </div>
+              ) : (
+                <p className="placeholder-copy">
+                  {copyFor(language, {
+                    en: "Select a pending item to inspect sync details and conflict handling.",
+                    ru: "Выберите pending item, чтобы посмотреть детали синхронизации и обработку конфликта.",
+                    bg: "Изберете pending item, за да видите детайлите по синхронизация и конфликт.",
+                  })}
+                </p>
+              )}
+              <div className="offline-cache-grid">
+                <article className="scene-metric">
+                  <span>{ui("readinessCache")}</span>
+                  <strong>{readinessCacheSavedAt ?? "-"}</strong>
+                  <small>{stateLabelText}</small>
+                </article>
+                <article className="scene-metric">
+                  <span>{ui("assignedPlansCache")}</span>
+                  <strong>{assignedCacheSavedAt ?? "-"}</strong>
+                  <small>{ui("pendingItems")}</small>
+                </article>
+                <article className="scene-metric">
+                  <span>{ui("adaptedPlanCache")}</span>
+                  <strong>{adaptedCacheSavedAt ?? "-"}</strong>
+                  <small>{ui("offlineSyncCenter")}</small>
+                </article>
+                <article className="scene-metric">
+                  <span>{ui("executionCache")}</span>
+                  <strong>{executionCacheSavedAt ?? "-"}</strong>
+                  <small>{t("analytics")}</small>
+                </article>
+                <article className="scene-metric">
+                  <span>{ui("analyticsCache")}</span>
+                  <strong>{analyticsCacheSavedAt ?? "-"}</strong>
+                  <small>{importedQueueLabel(language, offlineQueueSize)}</small>
+                </article>
+              </div>
+              <p className="placeholder-copy">
+                {copyFor(language, {
+                  en: "When the network returns, the queue syncs automatically. Readiness keeps only the latest entry for the day, and execution keeps only the latest version per block.",
+        ru: "Когда сеть возвращается, очередь синхронизируется автоматически. Для готовности хранится только последняя запись за день, а для выполнения - только последняя версия по блоку.",
+        bg: "Когато мрежата се върне, опашката се синхронизира автоматично. За готовността се пази само последният запис за деня, а за изпълнението - само последната версия на блока.",
+                })}
+              </p>
+            </div>
+          </div>
+        </OfflineSyncCenter>
+      </OfflineSyncCenterScene>
+      ) : null}
+
+      {isCoachSceneWorkspace && (user?.role === "coach" || user?.role === "admin") ? (
+        <CoachDashboardScene>
+          <CoachDashboard
+            description={coachSceneDescription}
+            eyebrow={activeWorkspaceItem.label}
+            metrics={coachSceneMetrics}
+            showHeaderCopy={false}
+            title={workspaceTitle}
+          >
+            {coachAthletes.length === 0 ? (
+              <>
+                <p className="placeholder-copy">
+                  {ui("noCoachAthletes")}
+                </p>
+                {availableAthleteAttachmentPanel}
+              </>
+            ) : (
+              <>
+                <div
+                  className={`coach-dashboard-grid coach-dashboard-grid-${activeWorkspace.replace(
+                    "coach-",
+                    "",
+                  )}`}
+                >
+                  {isCoachAthletesWorkspace ? availableAthleteAttachmentPanel : null}
+                  {showCoachRosterColumn ? (
+                  <aside className="coach-roster-column">
+                    <div className="coach-roster-head">
+                      <strong>
+                        {copyFor(language, {
+                          en: "Athlete roster",
+                          ru: "Список спортсменов",
+                          bg: "Списък със спортисти",
+                        })}
+                      </strong>
+                      <span>{coachAthletes.length}</span>
+                    </div>
+                    {isCoachDashboardWorkspace ? (
+                      <label className="field coach-roster-select-field">
+                        <span>{t("athlete")}</span>
+                        <select
+                          value={selectedAthleteId}
+                          onChange={(event) => void handleCoachAthleteChange(event.target.value)}
+                        >
+                          <option value="">{ui("selectAthlete")}</option>
+                          {coachAthletes.map((athlete) => (
+                            <option key={athlete.athleteId} value={athlete.athleteId}>
+                              {athlete.fullName}
+                            </option>
+                          ))}
+                        </select>
+                        <small>
+                          {selectedCoachAthlete?.latestReadiness
+                            ? `${ui("latestReadiness")}: ${
+                                readinessMeta[selectedCoachAthlete.latestReadiness.status].label
+                              } (${selectedCoachAthlete.latestReadiness.score})`
+                            : ui("noEntriesYet")}
+                        </small>
+                      </label>
+                    ) : (
+                      <div className="role-grid coach-roster-grid">
+                        {coachAthletes.map((athlete) => (
+                          <article
+                            className={`role-card ${
+                              selectedAthleteId === athlete.athleteId
+                                ? "role-card-active"
+                                : ""
+                            }`}
+                            key={athlete.athleteId}
+                          >
+                            <div className="coach-roster-status">
+                              <strong>{athlete.fullName}</strong>
+                              <span
+                                className={`status-chip ${
+                                  athlete.latestReadiness?.status ?? "idle"
+                                }`}
+                              >
+                                {athlete.latestReadiness
+                                  ? readinessMeta[athlete.latestReadiness.status].label
+                                  : ui("noEntriesYet")}
+                              </span>
+                            </div>
+                            <span>{athlete.email}</span>
+                            <span>
+                              {language === "ru"
+        ? "Последняя готовность:"
+        : language === "bg"
+          ? "Последна готовност:"
+                                  : `${ui("latestReadiness")}:`}{" "}
+                              {athlete.latestReadiness
+                                ? `${readinessMeta[athlete.latestReadiness.status].label} (${athlete.latestReadiness.score})`
+                                : language === "ru"
+                                  ? "записей пока нет"
+                                  : language === "bg"
+                                    ? "още няма записи"
+                                    : ui("noEntriesYet")}
+                            </span>
+                            <button
+                              className="secondary-button"
+                              onClick={() => void handleCoachAthleteChange(athlete.athleteId)}
+                              type="button"
+                            >
+                              {ui("openAthlete")}
+                            </button>
+                          </article>
+                        ))}
+                      </div>
+                    )}
+                    {isCoachAthletesWorkspace ? availableAthleteAttachmentPanel : null}
+                  </aside>
+                  ) : null}
+                  <div className="coach-main-column">
+
+                {isCoachAthletesWorkspace && selectedCoachAthlete ? (
+                  <section className="coach-athlete-profile-card">
+                    <div className="coach-athlete-profile-head">
+                      <div
+                        aria-label={selectedCoachAthlete.fullName}
+                        className="coach-athlete-photo"
+                        role="img"
+                        style={
+                          selectedCoachAthlete.photoUrl
+                            ? { backgroundImage: `url("${selectedCoachAthlete.photoUrl}")` }
+                            : undefined
+                        }
+                      >
+                        {!selectedCoachAthlete.photoUrl ? (
+                          <span>{getAthleteInitials(selectedCoachAthlete.fullName)}</span>
+                        ) : null}
+                      </div>
+                      <div className="coach-athlete-profile-title">
+                        <span className="eyebrow eyebrow-muted">
+                          {copyFor(language, {
+                            en: "Athlete card",
+                            ru: "Карточка спортсмена",
+                            bg: "Карта на спортиста",
+                          })}
+                        </span>
+                        <strong>{selectedCoachAthlete.fullName}</strong>
+                        <small>{selectedCoachAthlete.email}</small>
+                      </div>
+                      <div className="coach-athlete-profile-actions">
+                        <span
+                          className={`status-chip ${
+                            selectedCoachAthlete.latestReadiness?.status ?? "idle"
+                          }`}
+                        >
+                          {selectedCoachAthlete.latestReadiness
+                            ? readinessMeta[selectedCoachAthlete.latestReadiness.status].label
+                            : ui("noEntriesYet")}
+                        </span>
+                        <button
+                          className="secondary-button coach-athlete-edit-button"
+                          onClick={() => setIsAthleteProfileEditorOpen((open) => !open)}
+                          type="button"
+                        >
+                          {showAthleteProfileEditor
+                            ? copyFor(language, {
+                                en: "Close editor",
+                                ru: "Скрыть форму",
+                                bg: "Скрий формата",
+                              })
+                            : copyFor(language, {
+                                en: "Edit card",
+                                ru: "Редактировать карточку",
+                                bg: "Редактирай картата",
+                              })}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="coach-athlete-profile-grid">
+                      <article>
+                        <span>{copyFor(language, { en: "Height", ru: "Рост", bg: "Ръст" })}</span>
+                        <strong>
+                          {selectedCoachAthlete.heightCm
+                            ? `${selectedCoachAthlete.heightCm} см`
+                            : "-"}
+                        </strong>
+                      </article>
+                      <article>
+                        <span>{copyFor(language, { en: "Base weight", ru: "Базовый вес", bg: "Базово тегло" })}</span>
+                        <strong>
+                          {selectedCoachAthlete.baselineWeightKg
+                            ? `${selectedCoachAthlete.baselineWeightKg} кг`
+                            : "-"}
+                        </strong>
+                      </article>
+                      <article>
+                        <span>{copyFor(language, { en: "Current weight", ru: "Текущий вес", bg: "Текущо тегло" })}</span>
+                        <strong>
+                          {selectedCoachAthlete.currentWeightKg
+                            ? `${selectedCoachAthlete.currentWeightKg} кг`
+                            : "-"}
+                        </strong>
+                        <small>{selectedCoachAthlete.currentWeightDate ?? ""}</small>
+                      </article>
+                      <article>
+                        <span>{copyFor(language, { en: "Weight class", ru: "Весовая категория", bg: "Категория" })}</span>
+                        <strong>{selectedCoachAthlete.weightClass || "-"}</strong>
+                      </article>
+                      <article>
+                        <span>{copyFor(language, { en: "Resting HR", ru: "ЧСС в покое", bg: "Пулс в покой" })}</span>
+                        <strong>{selectedCoachAthlete.baselineRestingHr ?? "-"}</strong>
+                      </article>
+                      <article>
+                        <span>{copyFor(language, { en: "Wrestling experience", ru: "Стаж борьбы", bg: "Стаж борба" })}</span>
+                        <strong>
+                          {selectedCoachAthlete.wrestlingExperienceYears !== null
+                            ? `${selectedCoachAthlete.wrestlingExperienceYears} ${copyFor(language, {
+                                en: "years",
+                                ru: "лет",
+                                bg: "год.",
+                              })}`
+                            : "-"}
+                        </strong>
+                      </article>
+                      <article>
+                        <span>{copyFor(language, { en: "Stance / side", ru: "Стойка / сторона", bg: "Стойка / страна" })}</span>
+                        <strong>{selectedCoachAthlete.dominantSide || "-"}</strong>
+                      </article>
+                      <article>
+                        <span>{copyFor(language, { en: "Age", ru: "Возраст", bg: "Възраст" })}</span>
+                        <strong>{getAthleteAge(selectedCoachAthlete.birthDate) ?? "-"}</strong>
+                      </article>
+                      <article>
+                        <span>{copyFor(language, { en: "Style", ru: "Стиль", bg: "Стил" })}</span>
+                        <strong>{selectedCoachAthlete.discipline || selectedCoachAthlete.sport || "-"}</strong>
+                      </article>
+                    </div>
+
+                    <div className="coach-athlete-profile-strength">
+                      <div className="summary-topline">
+                        <strong>
+                          {copyFor(language, {
+                            en: "Strength indicators",
+                            ru: "Силовые показатели",
+                            bg: "Силови показатели",
+                          })}
+                        </strong>
+                        <span>
+                          {copyFor(language, {
+                            en: "Wrestling profile",
+                            ru: "Профиль борца",
+                            bg: "Профил борец",
+                          })}
+                        </span>
+                      </div>
+                      <div className="coach-athlete-profile-grid">
+                        <article>
+                          <span>{copyFor(language, { en: "Squat", ru: "Присед", bg: "Клек" })}</span>
+                          <strong>{formatKgValue(selectedCoachAthlete.strengthSquatKg)}</strong>
+                        </article>
+                        <article>
+                          <span>{copyFor(language, { en: "Bench press", ru: "Жим лёжа", bg: "Лег" })}</span>
+                          <strong>{formatKgValue(selectedCoachAthlete.strengthBenchPressKg)}</strong>
+                        </article>
+                        <article>
+                          <span>{copyFor(language, { en: "Deadlift", ru: "Становая тяга", bg: "Тяга" })}</span>
+                          <strong>{formatKgValue(selectedCoachAthlete.strengthDeadliftKg)}</strong>
+                        </article>
+                        <article>
+                          <span>{copyFor(language, { en: "Pull-ups max", ru: "Подтягивания max", bg: "Набирания max" })}</span>
+                          <strong>{selectedCoachAthlete.strengthPullUpsMax ?? "-"}</strong>
+                        </article>
+                        <article>
+                          <span>{copyFor(language, { en: "Grip left", ru: "Хват левый", bg: "Хват ляв" })}</span>
+                          <strong>{formatKgValue(selectedCoachAthlete.strengthGripLeftKg)}</strong>
+                        </article>
+                        <article>
+                          <span>{copyFor(language, { en: "Grip right", ru: "Хват правый", bg: "Хват десен" })}</span>
+                          <strong>{formatKgValue(selectedCoachAthlete.strengthGripRightKg)}</strong>
+                        </article>
+                      </div>
+                      {selectedCoachAthlete.strengthNotes ? (
+                        <article className="coach-athlete-profile-note coach-athlete-profile-note-wide">
+                          <span>
+                            {copyFor(language, {
+                              en: "Strength notes",
+                              ru: "Заметки по силовой подготовке",
+                              bg: "Бележки за силова подготовка",
+                            })}
+                          </span>
+                          <p>{selectedCoachAthlete.strengthNotes}</p>
+                        </article>
+                      ) : null}
+                    </div>
+
+                    <div className="coach-athlete-profile-text-grid">
+                      <article className="coach-athlete-profile-note">
+                        <span>{copyFor(language, { en: "Strengths", ru: "Сильные стороны", bg: "Силни страни" })}</span>
+                        <p>{selectedCoachAthlete.strengths || "-"}</p>
+                      </article>
+                      <article className="coach-athlete-profile-note">
+                        <span>{copyFor(language, { en: "Weaknesses", ru: "Слабые стороны", bg: "Слаби страни" })}</span>
+                        <p>{selectedCoachAthlete.weaknesses || "-"}</p>
+                      </article>
+                      <article className="coach-athlete-profile-note">
+                        <span>{copyFor(language, { en: "Injuries / restrictions", ru: "Травмы / ограничения", bg: "Травми / ограничения" })}</span>
+                        <p>{selectedCoachAthlete.injuriesOrRestrictions || "-"}</p>
+                      </article>
+                      <article className="coach-athlete-profile-note">
+                        <span>{copyFor(language, { en: "Preparation goal", ru: "Цель подготовки", bg: "Цел на подготовката" })}</span>
+                        <p>{selectedCoachAthlete.preparationGoal || "-"}</p>
+                      </article>
+                      <article className="coach-athlete-profile-note coach-athlete-profile-note-wide">
+                        <span>{copyFor(language, { en: "Coach notes", ru: "Заметки тренера", bg: "Бележки на треньора" })}</span>
+                        <p>{selectedCoachAthlete.profileNotes || "-"}</p>
+                      </article>
+                    </div>
+
+                    {showAthleteProfileEditor ? (
+                      <form
+                        className="coach-athlete-profile-form"
+                        onSubmit={handleAthleteProfileSubmit}
+                      >
+                        {athleteProfileSaveMessage ? (
+                          <div
+                            className={`coach-athlete-profile-save-state coach-athlete-profile-save-state-${athleteProfileSaveState}`}
+                            role="status"
+                          >
+                            {athleteProfileSaveMessage}
+                          </div>
+                        ) : null}
+                        <label className="field">
+                          <span>{copyFor(language, { en: "Photo URL", ru: "URL фото", bg: "URL снимка" })}</span>
+                          <input
+                            value={athleteProfileForm.photoUrl}
+                            onChange={(event) =>
+                              setAthleteProfileForm((current) => ({
+                                ...current,
+                                photoUrl: event.target.value,
+                              }))
+                            }
+                            placeholder="https://..."
+                          />
+                        </label>
+                        <label className="field">
+                          <span>{copyFor(language, { en: "Birth date", ru: "Дата рождения", bg: "Дата на раждане" })}</span>
+                          <input
+                            type="date"
+                            max={getDateInputValue()}
+                            value={athleteProfileForm.birthDate ?? ""}
+                            onChange={(event) =>
+                              setAthleteProfileForm((current) => ({
+                                ...current,
+                                birthDate: event.target.value || null,
+                              }))
+                            }
+                          />
+                        </label>
+                        <label className="field">
+                          <span>{copyFor(language, { en: "Height, cm", ru: "Рост, см", bg: "Ръст, см" })}</span>
+                          <input
+                            type="number"
+                            value={athleteProfileForm.heightCm ?? ""}
+                            onChange={(event) =>
+                              setAthleteProfileForm((current) => ({
+                                ...current,
+                                heightCm: event.target.value ? Number(event.target.value) : null,
+                              }))
+                            }
+                          />
+                        </label>
+                        <label className="field">
+                          <span>{copyFor(language, { en: "Weight, kg", ru: "Вес, кг", bg: "Тегло, кг" })}</span>
+                          <input
+                            type="number"
+                            value={athleteProfileForm.baselineWeightKg ?? ""}
+                            onChange={(event) =>
+                              setAthleteProfileForm((current) => ({
+                                ...current,
+                                baselineWeightKg: event.target.value ? Number(event.target.value) : null,
+                              }))
+                            }
+                          />
+                        </label>
+                        <label className="field">
+                          <span>{copyFor(language, { en: "Resting HR", ru: "Пульс покоя", bg: "Пулс в покой" })}</span>
+                          <input
+                            type="number"
+                            value={athleteProfileForm.baselineRestingHr ?? ""}
+                            onChange={(event) =>
+                              setAthleteProfileForm((current) => ({
+                                ...current,
+                                baselineRestingHr: event.target.value ? Number(event.target.value) : null,
+                              }))
+                            }
+                          />
+                        </label>
+                        <label className="field">
+                          <span>{copyFor(language, { en: "Sport", ru: "Вид спорта", bg: "Спорт" })}</span>
+                          <input
+                            value={athleteProfileForm.sport}
+                            onChange={(event) =>
+                              setAthleteProfileForm((current) => ({
+                                ...current,
+                                sport: event.target.value,
+                              }))
+                            }
+                          />
+                        </label>
+                        <label className="field">
+                          <span>{copyFor(language, { en: "Discipline", ru: "Дисциплина", bg: "Дисциплина" })}</span>
+                          <input
+                            value={athleteProfileForm.discipline}
+                            onChange={(event) =>
+                              setAthleteProfileForm((current) => ({
+                                ...current,
+                                discipline: event.target.value,
+                              }))
+                            }
+                          />
+                        </label>
+                        <label className="field">
+                          <span>{copyFor(language, { en: "Weight class", ru: "Весовая категория", bg: "Категория" })}</span>
+                          <input
+                            value={athleteProfileForm.weightClass}
+                            onChange={(event) =>
+                              setAthleteProfileForm((current) => ({
+                                ...current,
+                                weightClass: event.target.value,
+                              }))
+                            }
+                          />
+                        </label>
+                        <label className="field">
+                          <span>{copyFor(language, { en: "Dominant side", ru: "Ведущая сторона", bg: "Водеща страна" })}</span>
+                          <input
+                            value={athleteProfileForm.dominantSide}
+                            onChange={(event) =>
+                              setAthleteProfileForm((current) => ({
+                                ...current,
+                                dominantSide: event.target.value,
+                              }))
+                            }
+                          />
+                        </label>
+                        <label className="field">
+                          <span>{copyFor(language, { en: "Wrestling experience, years", ru: "Стаж борьбы, лет", bg: "Стаж борба, години" })}</span>
+                          <input
+                            type="number"
+                            step="0.1"
+                            value={athleteProfileForm.wrestlingExperienceYears ?? ""}
+                            onChange={(event) =>
+                              setAthleteProfileForm((current) => ({
+                                ...current,
+                                wrestlingExperienceYears: event.target.value
+                                  ? Number(event.target.value)
+                                  : null,
+                              }))
+                            }
+                          />
+                        </label>
+                        <div className="coach-athlete-profile-form-section">
+                          <div className="summary-topline">
+                            <strong>
+                              {copyFor(language, {
+                                en: "Strength indicators",
+                                ru: "Силовые показатели",
+                                bg: "Силови показатели",
+                              })}
+                            </strong>
+                            <span>
+                              {copyFor(language, {
+                                en: "kg / reps",
+                                ru: "кг / повторы",
+                                bg: "кг / повторения",
+                              })}
+                            </span>
+                          </div>
+                          <div className="coach-athlete-profile-form">
+                            <label className="field">
+                              <span>{copyFor(language, { en: "Squat, kg", ru: "Присед, кг", bg: "Клек, кг" })}</span>
+                              <input
+                                type="number"
+                                step="0.5"
+                                value={athleteProfileForm.strengthSquatKg ?? ""}
+                                onChange={(event) =>
+                                  setAthleteProfileForm((current) => ({
+                                    ...current,
+                                    strengthSquatKg: parseOptionalNumberInput(event.target.value),
+                                  }))
+                                }
+                              />
+                            </label>
+                            <label className="field">
+                              <span>{copyFor(language, { en: "Bench press, kg", ru: "Жим лёжа, кг", bg: "Лег, кг" })}</span>
+                              <input
+                                type="number"
+                                step="0.5"
+                                value={athleteProfileForm.strengthBenchPressKg ?? ""}
+                                onChange={(event) =>
+                                  setAthleteProfileForm((current) => ({
+                                    ...current,
+                                    strengthBenchPressKg: parseOptionalNumberInput(event.target.value),
+                                  }))
+                                }
+                              />
+                            </label>
+                            <label className="field">
+                              <span>{copyFor(language, { en: "Deadlift, kg", ru: "Становая тяга, кг", bg: "Тяга, кг" })}</span>
+                              <input
+                                type="number"
+                                step="0.5"
+                                value={athleteProfileForm.strengthDeadliftKg ?? ""}
+                                onChange={(event) =>
+                                  setAthleteProfileForm((current) => ({
+                                    ...current,
+                                    strengthDeadliftKg: parseOptionalNumberInput(event.target.value),
+                                  }))
+                                }
+                              />
+                            </label>
+                            <label className="field">
+                              <span>{copyFor(language, { en: "Pull-ups max", ru: "Подтягивания max", bg: "Набирания max" })}</span>
+                              <input
+                                type="number"
+                                value={athleteProfileForm.strengthPullUpsMax ?? ""}
+                                onChange={(event) =>
+                                  setAthleteProfileForm((current) => ({
+                                    ...current,
+                                    strengthPullUpsMax: parseOptionalNumberInput(event.target.value),
+                                  }))
+                                }
+                              />
+                            </label>
+                            <label className="field">
+                              <span>{copyFor(language, { en: "Grip left, kg", ru: "Хват левый, кг", bg: "Хват ляв, кг" })}</span>
+                              <input
+                                type="number"
+                                step="0.5"
+                                value={athleteProfileForm.strengthGripLeftKg ?? ""}
+                                onChange={(event) =>
+                                  setAthleteProfileForm((current) => ({
+                                    ...current,
+                                    strengthGripLeftKg: parseOptionalNumberInput(event.target.value),
+                                  }))
+                                }
+                              />
+                            </label>
+                            <label className="field">
+                              <span>{copyFor(language, { en: "Grip right, kg", ru: "Хват правый, кг", bg: "Хват десен, кг" })}</span>
+                              <input
+                                type="number"
+                                step="0.5"
+                                value={athleteProfileForm.strengthGripRightKg ?? ""}
+                                onChange={(event) =>
+                                  setAthleteProfileForm((current) => ({
+                                    ...current,
+                                    strengthGripRightKg: parseOptionalNumberInput(event.target.value),
+                                  }))
+                                }
+                              />
+                            </label>
+                            <label className="field coach-athlete-profile-notes">
+                              <span>
+                                {copyFor(language, {
+                                  en: "Strength notes",
+                                  ru: "Заметки по силовой подготовке",
+                                  bg: "Бележки за силова подготовка",
+                                })}
+                              </span>
+                              <textarea
+                                value={athleteProfileForm.strengthNotes}
+                                onChange={(event) =>
+                                  setAthleteProfileForm((current) => ({
+                                    ...current,
+                                    strengthNotes: event.target.value,
+                                  }))
+                                }
+                              />
+                            </label>
+                          </div>
+                        </div>
+                        <label className="field coach-athlete-profile-notes">
+                          <span>{copyFor(language, { en: "Strengths", ru: "Сильные стороны", bg: "Силни страни" })}</span>
+                          <textarea
+                            value={athleteProfileForm.strengths}
+                            onChange={(event) =>
+                              setAthleteProfileForm((current) => ({
+                                ...current,
+                                strengths: event.target.value,
+                              }))
+                            }
+                          />
+                        </label>
+                        <label className="field coach-athlete-profile-notes">
+                          <span>{copyFor(language, { en: "Weaknesses", ru: "Слабые стороны", bg: "Слаби страни" })}</span>
+                          <textarea
+                            value={athleteProfileForm.weaknesses}
+                            onChange={(event) =>
+                              setAthleteProfileForm((current) => ({
+                                ...current,
+                                weaknesses: event.target.value,
+                              }))
+                            }
+                          />
+                        </label>
+                        <label className="field coach-athlete-profile-notes">
+                          <span>{copyFor(language, { en: "Injuries / restrictions", ru: "Травмы / ограничения", bg: "Травми / ограничения" })}</span>
+                          <textarea
+                            value={athleteProfileForm.injuriesOrRestrictions}
+                            onChange={(event) =>
+                              setAthleteProfileForm((current) => ({
+                                ...current,
+                                injuriesOrRestrictions: event.target.value,
+                              }))
+                            }
+                          />
+                        </label>
+                        <label className="field coach-athlete-profile-notes">
+                          <span>{copyFor(language, { en: "Preparation goal", ru: "Цель подготовки", bg: "Цел на подготовката" })}</span>
+                          <textarea
+                            value={athleteProfileForm.preparationGoal}
+                            onChange={(event) =>
+                              setAthleteProfileForm((current) => ({
+                                ...current,
+                                preparationGoal: event.target.value,
+                              }))
+                            }
+                          />
+                        </label>
+                        <label className="field coach-athlete-profile-notes">
+                          <span>{copyFor(language, { en: "Coach notes", ru: "Рабочие заметки", bg: "Работни бележки" })}</span>
+                          <textarea
+                            value={athleteProfileForm.profileNotes}
+                            onChange={(event) =>
+                              setAthleteProfileForm((current) => ({
+                                ...current,
+                                profileNotes: event.target.value,
+                              }))
+                            }
+                          />
+                        </label>
+                        <button
+                          className="primary-button"
+                          disabled={athleteProfileSaveState === "saving"}
+                          type="submit"
+                        >
+                          {athleteProfileSaveState === "saving"
+                            ? copyFor(language, {
+                                en: "Saving...",
+                                ru: "Сохранение...",
+                                bg: "Запазване...",
+                              })
+                            : copyFor(language, {
+                                en: "Save athlete card",
+                                ru: "Сохранить карточку",
+                                bg: "Запази картата",
+                              })}
+                        </button>
+                      </form>
+                    ) : null}
+                  </section>
+                ) : null}
+
+                {isCoachDashboardWorkspace && coachView === "readiness" ? (
+                <div className="entry-summary">
+                  <div className="summary-topline">
+                    <strong>{ui("athleteReadinessHistory")}</strong>
+                    <span>{selectedAthleteEntries.length} {ui("recentEntries")}</span>
+                  </div>
+
+                  {selectedAthleteEntries.length === 0 ? (
+                    <p className="placeholder-copy">
+                      {ui("athleteNoReadinessYet")}
+                    </p>
+                  ) : (
+                    <ul>
+                      {selectedAthleteEntries.map((entry) => (
+                        <li key={entry.id}>
+                          {entry.entryDate}: {readinessMeta[entry.status].label} /{" "}
+                          {copyFor(language, { en: "score", ru: "оценка", bg: "оценка" })}{" "}
+                          {entry.score} /{" "}
+                          {copyFor(language, { en: "HR", ru: "пульс", bg: "пулс" })}{" "}
+                          {entry.restingHr} /{" "}
+                          {copyFor(language, { en: "pain", ru: "боль", bg: "болка" })}{" "}
+                          {entry.painLevel}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+                ) : null}
+
+                {isCoachDashboardWorkspace && coachView === "adaptation" ? (
+                <div className="entry-summary">
+                  <div className="summary-topline">
+                    <strong>{ui("coachAdaptationTitle")}</strong>
+                    <span>
+                      {coachAdaptedPlan
+                        ? `${coachAdaptedPlan.readinessStatus} / ${coachAdaptedPlan.readinessScore}`
+                        : ui("notGenerated")}
+                    </span>
+                  </div>
+                  {coachAdaptedPlan ? (
+                    <>
+                      <p>
+                        {coachAdaptedPlan.explanation.length
+                          ? coachAdaptedPlan.explanation
+                              .map((item) => translateAdaptationText(item, language))
+                              .join(" ")
+                          : language === "ru"
+                            ? "Изменения блоков не потребовались."
+                            : language === "bg"
+                              ? "Не бяха нужни промени по блоковете."
+                              : ui("noCoachAdaptationChanges")}
+                      </p>
+                      <ul>
+                        {coachAdaptedPlan.sessions.flatMap((session) =>
+                          session.blocks.map((block) => (
+                            <li key={block.id}>
+                              {session.name}: {block.name} [{translateBlockAction(block.action, language)}] -{" "}
+                              {translateAdaptationText(block.adaptationReason, language)}
+                            </li>
+                          )),
+                        )}
+                      </ul>
+                    </>
+                  ) : (
+                    <p className="placeholder-copy">
+                      {ui("adaptationNeedsPlan")}
+                    </p>
+                  )}
+                </div>
+                ) : null}
+
+                {isCoachDashboardWorkspace && coachView === "competition" ? (
+                <div className="entry-summary">
+                  <div className="summary-topline">
+                    <strong>Competition context</strong>
+                    <span>
+                      {competitionContext?.phase
+                        ? `${competitionContext.phase} / ${competitionContext.competitionPriority ?? "-"}`
+                        : "not linked"}
+                    </span>
+                  </div>
+                  {competitionContext ? (
+                    <ul>
+                      <li>Days to competition: {competitionContext.daysToCompetition ?? "-"}</li>
+                      <li>Phase: {competitionContext.phase ?? "-"}</li>
+                      <li>Priority: {competitionContext.competitionPriority ?? "-"}</li>
+                      <li>Taper active: {competitionContext.taperState ? "yes" : "no"}</li>
+                      <li>Weight cut active: {competitionContext.weightCutState ? "yes" : "no"}</li>
+                    </ul>
+                  ) : (
+                    <p className="placeholder-copy">
+                      No competition preparation context is active for the selected athlete.
+                    </p>
+                  )}
+                </div>
+                ) : null}
+
+                {isCoachDashboardWorkspace && coachView === "competition" ? (
+                <div className="entry-summary">
+                  <div className="summary-topline">
+                    <strong>Competition review</strong>
+                    <span>
+                      {competitionReview
+                        ? `${competitionReview.seasons.length} season group(s)`
+                        : "not loaded"}
+                    </span>
+                  </div>
+                  {competitionReview &&
+                  (competitionReview.seasons.length > 0 ||
+                    competitionReview.unlinkedPlans.length > 0) ? (
+                    <>
+                      {competitionReview.seasons.length > 0 ? (
+                        <ul>
+                          {competitionReview.seasons.map((season) => (
+                            <li key={season.seasonId ?? `${season.seasonName}-${season.seasonYear ?? "na"}`}>
+                              {season.seasonYear ?? "-"} / {season.seasonName}:{" "}
+                              {season.plans
+                                .map((plan) =>
+                                  `${plan.competitionTitle} [${plan.priority}] -> ${
+                                    plan.result
+                                      ? `place ${plan.result.finalPlace ?? "-"}, matches ${
+                                          plan.result.matchesCount ?? "-"
+                                        }`
+                                      : "result pending"
+                                  }`,
+                                )
+                                .join("; ")}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
+                      {competitionReview.unlinkedPlans.length > 0 ? (
+                        <p>
+                          Unlinked plans:{" "}
+                          {competitionReview.unlinkedPlans
+                            .map((plan) => `${plan.competitionTitle} (${plan.priority})`)
+                            .join(", ")}
+                        </p>
+                      ) : null}
+                    </>
+                  ) : (
+                    <p className="placeholder-copy">
+                      No season/competition result chain exists yet for the selected athlete.
+                    </p>
+                  )}
+                </div>
+                ) : null}
+
+                {isCoachReviewWorkspace || (isCoachDashboardWorkspace && coachView === "execution") ? (
+                <div className="entry-summary">
+                  <div className="summary-topline">
+                    <strong>{t("executionReview")}</strong>
+                    <span>
+                      {coachExecutionReview
+                        ? `${coachExecutionReview.summary.completionRate}% ${ui("completionPercent")}`
+                        : ui("noReviewYet")}
+                    </span>
+                  </div>
+                  {coachExecutionReview ? (
+                    <>
+                      <p>
+                        Planned blocks: {coachExecutionReview.summary.plannedBlocks}. Completed:{" "}
+                        {coachExecutionReview.summary.completedBlocks}. Partial:{" "}
+                        {coachExecutionReview.summary.partialBlocks}. Missed:{" "}
+                        {coachExecutionReview.summary.missedBlocks}. Avg RPE:{" "}
+                        {coachExecutionReview.summary.averageRpe ?? "n/a"}. Total actual
+                        duration: {coachExecutionReview.summary.totalDurationMinutes} min.
+                      </p>
+                      <ul>
+                        {coachExecutionReview.sessions.flatMap((session) =>
+                          session.blocks.map((block) => (
+                          <li key={block.id}>
+                              {session.name}: {block.name} / {translateExecutionStatus(block.executionStatus, language)} /{" "}
+                              {t("targetSets")} {block.targetSets ?? "-"} {"->"}{" "}
+                              {block.actualResult?.setsCompleted ?? "-"} / {t("targetReps")}{" "}
+                              {block.targetReps ?? "-"} {"->"}{" "}
+                              {block.actualResult?.repsCompleted ?? "-"} /{" "}
+                              {t("targetDuration")} {block.targetDurationMinutes ?? "-"} {"->"}{" "}
+                              {block.actualResult?.durationMinutes ?? "-"} /{" "}
+                              {t("targetRpe")} {block.targetRpe ?? "-"} {"->"}{" "}
+                              {block.actualResult?.rpe ?? "-"}
+                            </li>
+                          )),
+                        )}
+                      </ul>
+                    </>
+                  ) : (
+                    <p className="placeholder-copy">
+                      {ui("coachReviewNeedsPlan")}
+                    </p>
+                  )}
+                </div>
+                ) : null}
+
+                {isCoachAnalyticsWorkspace || (isCoachDashboardWorkspace && coachView === "analytics") ? (
+                <div className="coach-focus-panel coach-analytics-stage">
+                  <div className="summary-topline">
+                    <strong>{t("analytics")}</strong>
+                    <span>
+                      {coachAnalyticsOverview
+                        ? `${coachAnalyticsOverview.insights.length} ${ui("analyticsCoachInsights").toLowerCase()}`
+                        : ui("noAnalyticsYet")}
+                    </span>
+                  </div>
+                  {coachAnalyticsOverview ? (
+                    <>
+                      <p>
+                        {ui("coachAnalyticsIntro")} {coachAnalyticsOverview.athleteName}.
+                      </p>
+                      <div className="coach-stat-strip">
+                        <article className="scene-metric">
+                          <span>{ui("latestReadiness")}</span>
+                          <strong>
+                            {coachLatestReadinessPoint?.score ?? "-"}
+                          </strong>
+                          <small>
+                            {coachLatestReadinessPoint
+                              ? readinessMeta[
+                                  coachLatestReadinessPoint.status
+                                ].label
+                              : ui("noEntriesYet")}
+                          </small>
+                        </article>
+                        <article className="scene-metric">
+                          <span>{ui("completionTrend")}</span>
+                          <strong>
+                            {coachLatestCompletionPoint?.adherenceRate ?? "-"}%
+                          </strong>
+                          <small>
+                            {coachLatestCompletionPoint
+                              ? `${coachLatestCompletionPoint.completedBlocks}/${coachLatestCompletionPoint.plannedBlocks} ${copyFor(language, {
+                                  en: "blocks",
+                                  ru: "блоков",
+                                  bg: "блока",
+                                })}`
+                              : ui("noReviewYet")}
+                          </small>
+                        </article>
+                        <article className="scene-metric">
+                          <span>{ui("analyticsWeekSnapshot")}</span>
+                          <strong>
+                            {coachWeekSummary?.actualLoad ?? "-"}
+                          </strong>
+                          <small>
+                            {coachWeekSummary
+                              ? `${copyFor(language, {
+                                  en: "expected",
+                                  ru: "ожидалось",
+                                  bg: "очаквано",
+                                })} ${coachWeekSummary.expectedLoadToDate ?? coachWeekSummary.targetLoad ?? "-"}`
+                              : ui("noAnalyticsYet")}
+                          </small>
+                        </article>
+                      </div>
+
+                      <div className="coach-analytics-grid coach-analytics-grid-v2">
+                        <article className="entry-summary coach-analytics-card coach-analytics-card-wide">
+                          <div className="summary-topline">
+                            <strong>{ui("analyticsCoachInsights")}</strong>
+                            <span>{coachAnalyticsOverview.insights.length}</span>
+                          </div>
+                          <div className="analytics-insight-stack">
+                            {coachAnalyticsOverview.insights.map((insight) => (
+                              <article className="analytics-insight-card" key={insight.code}>
+                                <div className="summary-topline">
+                                  <strong>{analyticsInsightTitle(insight)}</strong>
+                                  <span className={`analytics-severity-chip ${insight.level}`}>
+                                    {analyticsInsightLevel(insight)}
+                                  </span>
+                                </div>
+                                <p>{analyticsInsightSummary(insight)}</p>
+                                <div className="analytics-evidence-list">
+                                  {insight.evidence.map((item) => (
+                                    <div className="analytics-evidence-row" key={`${insight.code}-${item.label}`}>
+                                      <span>{analyticsEvidenceLabel(item.label)}</span>
+                                      <strong>{item.label === "missing_links"
+                                        ? item.value
+                                            .split(",")
+                                            .map((value) => analyticsMissingLink(value.trim()))
+                                            .join(", ")
+                                        : item.value}</strong>
+                                    </div>
+                                  ))}
+                                </div>
+                                <p className="analytics-recommendation">
+                                  <strong>{ui("analyticsRecommendation")}:</strong>{" "}
+                                  {analyticsInsightRecommendation(insight)}
+                                </p>
+                              </article>
+                            ))}
+                          </div>
+                        </article>
+
+                        <article className="entry-summary coach-analytics-card">
+                          <div className="summary-topline">
+                            <strong>{ui("analyticsPatterns")}</strong>
+                            <span>{coachAnalyticsOverview.patterns.length}</span>
+                          </div>
+                          {coachAnalyticsOverview.patterns.length ? (
+                            <div className="analytics-pattern-stack">
+                              {coachAnalyticsOverview.patterns.map((pattern) => (
+                                <article className="analytics-pattern-card" key={pattern.code}>
+                                  <div className="summary-topline">
+                                    <strong>{analyticsPatternTitle(pattern)}</strong>
+                                    <span className={`analytics-severity-chip ${pattern.level}`}>
+                                      {analyticsSeverityLabel(pattern.level)}
+                                    </span>
+                                  </div>
+                                  <p>{analyticsPatternSummary(pattern)}</p>
+                                  <div className="analytics-evidence-list">
+                                    {pattern.evidence.map((item) => (
+                                      <div className="analytics-evidence-row" key={`${pattern.code}-${item.label}`}>
+                                        <span>{analyticsEvidenceLabel(item.label)}</span>
+                                        <strong>{item.value}</strong>
+                                      </div>
+                                    ))}
+                                  </div>
+                                  <small className="analytics-pattern-meta">
+                                    {pattern.weekLabel ?? "-"}
+                                    {pattern.blockType ? ` / ${pattern.blockType}` : ""}
+                                    {pattern.dayOffset !== null
+                                      ? ` / ${copyFor(language, {
+                                          en: "Day",
+                                          ru: "День",
+                                          bg: "Ден",
+                                        })} ${pattern.dayOffset + 1}`
+                                      : ""}
+                                  </small>
+                                </article>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="placeholder-copy">{ui("noAnalyticsYet")}</p>
+                          )}
+                        </article>
+
+                        <article className="entry-summary coach-analytics-card">
+                          <div className="summary-topline">
+                            <strong>{ui("analyticsCoachActions")}</strong>
+                            <span>{coachAnalyticsOverview.coachSuggestions.length}</span>
+                          </div>
+                          {coachAnalyticsOverview.coachSuggestions.length ? (
+                            <div className="analytics-action-stack">
+                              {coachAnalyticsOverview.coachSuggestions.map((suggestion) => {
+                                const plannerLink = resolveAnalyticsSuggestionPlannerLink(
+                                  suggestion,
+                                  templatePack,
+                                  templatePackContext,
+                                );
+
+                                return (
+                                  <article className="analytics-action-card" key={suggestion.id}>
+                                    <div className="summary-topline">
+                                      <strong>{analyticsCoachSuggestionTitle(suggestion)}</strong>
+                                      <span className={`analytics-severity-chip ${suggestion.level}`}>
+                                        {analyticsSeverityLabel(suggestion.level)}
+                                      </span>
+                                    </div>
+                                    <p>{analyticsCoachSuggestionSummary(suggestion)}</p>
+                                    <p className="analytics-recommendation">
+                                      <strong>{ui("analyticsRecommendation")}:</strong>{" "}
+                                      {analyticsCoachSuggestionRecommendation(suggestion)}
+                                    </p>
+
+                                    {suggestion.plannerBridge ? (
+                                      <div className="analytics-selection-flow">
+                                        <article className="analytics-selection-stage">
+                                          <span className="analytics-selection-kicker">
+                                            {copyFor(language, {
+                                              en: "Pack choice",
+                                              ru: "Выбор пакета",
+        bg: "Избор на пакет",
+                                            })}
+                                          </span>
+                                          {plannerLink.hasMatchingPack ? (
+                                            plannerLink.packItem ? (
+                                              <>
+                                                <strong>
+                                                  {plannerLink.packItem.dayLabel} ·{" "}
+                                                  {plannerLink.packItem.templateName}
+                                                </strong>
+                                                <small className="analytics-selection-meta">
+                                                  {copyFor(language, {
+                                                    en: `Load ${plannerLink.packItem.estimatedLoad} · score ${plannerLink.packItem.score}`,
+                                                    ru: `Нагрузка ${plannerLink.packItem.estimatedLoad} · оценка ${plannerLink.packItem.score}`,
+                                                    bg: `Натоварване ${plannerLink.packItem.estimatedLoad} · оценка ${plannerLink.packItem.score}`,
+                                                  })}
+                                                </small>
+                                                {plannerLink.packItem.historyBiases.length ? (
+                                                  <div className="analytics-selection-signal-list">
+                                                    {plannerLink.packItem.historyBiases.map(
+                                                      (bias, index) => (
+                                                        <small
+                                                          className={`planner-feedback-badge ${bias.label}`}
+                                                          key={`${suggestion.id}-${bias.code}-${bias.action}-${index}`}
+                                                        >
+                                                          {plannerHistoryBiasSummary(bias)}
+                                                        </small>
+                                                      ),
+                                                    )}
+                                                  </div>
+                                                ) : (
+                                                  <p className="analytics-selection-placeholder">
+                                                    {copyFor(language, {
+                                                      en: "This slot stayed mostly phase/load-driven without a strong history override.",
+          ru: "Этот слот остался в основном выбранным по фазе и нагрузке без сильной исторической поправки.",
+          bg: "Този слот остана избран основно според фазата и натоварването без силна историческа корекция.",
+                                                    })}
+                                                  </p>
+                                                )}
+                                                <p className="analytics-selection-note">
+                                                  {plannerLink.packItem.reason}
+                                                </p>
+                                              </>
+                                            ) : (
+                                              <p className="analytics-selection-placeholder">
+                                                {copyFor(language, {
+                                                  en: "The linked planner day is no longer present in the loaded pack.",
+          ru: "Связанный день планировщика больше не присутствует в загруженном пакете.",
+          bg: "Свързаният ден от планирането вече не присъства в заредения пакет.",
+                                                })}
+                                              </p>
+                                            )
+                                          ) : (
+                                            <p className="analytics-selection-placeholder">
+                                              {copyFor(language, {
+                                                en: "Open the matching planner week to inspect the current pack choice and its selection signals.",
+          ru: "Откройте соответствующую неделю планирования, чтобы увидеть текущий выбор пакета и его сигналы отбора.",
+          bg: "Отворете съответната седмица в планирането, за да видите текущия избор на пакет и сигналите за подбор.",
+                                              })}
+                                            </p>
+                                          )}
+                                        </article>
+
+                                        <article className="analytics-selection-stage">
+                                          <span className="analytics-selection-kicker">
+                                            {copyFor(language, {
+                                              en: "Suggestion refinement",
+                                              ru: "Уточнение совета",
+                                              bg: "Уточняване на предложението",
+                                            })}
+                                          </span>
+                                          {plannerLink.hasMatchingPack ? (
+                                            plannerLink.plannerSuggestion ? (
+                                              <>
+                                                <strong>
+                                                  {plannerLink.plannerSuggestion.recommendedTemplateName ??
+                                                    copyFor(language, {
+                                                      en: "Planner action ready",
+        ru: "Действие планирования готово",
+        bg: "Действието за планиране е готово",
+                                                    })}
+                                                </strong>
+                                                <small className="analytics-selection-meta">
+                                                  {plannerLink.plannerSuggestion.message}
+                                                </small>
+                                                {plannerLink.plannerSuggestion.feedback ? (
+                                                  <small
+                                                    className={`planner-feedback-badge ${plannerLink.plannerSuggestion.feedback.label}`}
+                                                  >
+                                                    {plannerSuggestionFeedbackSummary(
+                                                      plannerLink.plannerSuggestion.feedback,
+                                                    )}
+                                                  </small>
+                                                ) : (
+                                                  <p className="analytics-selection-placeholder">
+                                                    {copyFor(language, {
+                                                      en: "This refinement has no extra coach feedback signal yet.",
+                                                      ru: "У этого уточнения пока нет дополнительного coach-feedback сигнала.",
+                                                      bg: "Това уточнение все още няма допълнителен coach-feedback сигнал.",
+                                                    })}
+                                                  </p>
+                                                )}
+                                              </>
+                                            ) : (
+                                              <p className="analytics-selection-placeholder">
+                                                {copyFor(language, {
+                                                  en: "The loaded pack does not currently surface this refinement in its suggestion list.",
+          ru: "Загруженный пакет сейчас не показывает это уточнение в списке предложений.",
+          bg: "Зареденият пакет в момента не показва това уточнение в списъка с предложения.",
+                                                })}
+                                              </p>
+                                            )
+                                          ) : (
+                                            <p className="analytics-selection-placeholder">
+                                              {copyFor(language, {
+                                                en: "Load the same planner week to see how analytics refines the pack choice into a planner action.",
+        ru: "Загрузите ту же неделю планирования, чтобы увидеть, как аналитика превращает выбор пакета в действие планирования.",
+        bg: "Заредете същата седмица в планирането, за да видите как анализът превръща избора на пакет в действие за планиране.",
+                                              })}
+                                            </p>
+                                          )}
+                                        </article>
+
+                                        <article className="analytics-selection-stage outcome">
+                                          <span className="analytics-selection-kicker">
+                                            {copyFor(language, {
+                                              en: "Applied outcome",
+                                              ru: "Итог применения",
+                                              bg: "Резултат от прилагането",
+                                            })}
+                                          </span>
+                                          {suggestion.latestDecision ? (
+                                            <>
+                                              <strong>
+                                                {analyticsDecisionStatus(
+                                                  suggestion.latestDecision.decisionStatus,
+                                                )}{" "}
+                                                ·{" "}
+                                                {analyticsDecisionOutcome(
+                                                  suggestion.latestDecision.outcome,
+                                                )}
+                                              </strong>
+                                              <small className="analytics-selection-meta">
+                                                {analyticsDecisionOutcomeSource(
+                                                  suggestion.latestDecision.outcomeSource,
+                                                )}
+                                              </small>
+                                              <p className="analytics-selection-note">
+                                                {analyticsDecisionExplanation(
+                                                  suggestion.latestDecision,
+                                                )}
+                                              </p>
+                                            </>
+                                          ) : (
+                                            <p className="analytics-selection-placeholder">
+                                              {copyFor(language, {
+                                                en: "Awaiting coach action and outcome feedback for this chain.",
+                                                ru: "Для этой цепочки ещё ожидаются действие тренера и outcome-feedback.",
+                                                bg: "За тази верига все още се чака треньорско действие и outcome-feedback.",
+                                              })}
+                                            </p>
+                                          )}
+                                        </article>
+                                      </div>
+                                    ) : null}
+
+                                    {suggestion.latestDecision ? (
+                                      <div className="analytics-decision-panel">
+                                        <div className="analytics-decision-row">
+                                          <span>{ui("analyticsDecisionState")}</span>
+                                          <strong>
+                                            {analyticsDecisionStatus(
+                                              suggestion.latestDecision.decisionStatus,
+                                            )}
+                                          </strong>
+                                        </div>
+                                        <div className="analytics-decision-row">
+                                          <span>{ui("analyticsOutcome")}</span>
+                                          <strong>
+                                            {analyticsDecisionOutcome(suggestion.latestDecision.outcome)}
+                                          </strong>
+                                        </div>
+                                        <small className="analytics-decision-caption">
+                                          {analyticsDecisionOutcomeSource(
+                                            suggestion.latestDecision.outcomeSource,
+                                          )}
+                                        </small>
+                                        <p className="analytics-decision-caption">
+                                          {analyticsDecisionExplanation(suggestion.latestDecision)}
+                                        </p>
+                                        <div className="analytics-outcome-actions">
+                                          {(["positive", "neutral", "negative"] as const).map(
+                                            (outcome) => (
+                                              <button
+                                                className={`tertiary-button analytics-outcome-button ${
+                                                  suggestion.latestDecision?.outcome === outcome
+                                                    ? "is-active"
+                                                    : ""
+                                                }`}
+                                                disabled={busy}
+                                                key={`${suggestion.id}-${outcome}`}
+                                                onClick={() =>
+                                                  void handleSetAnalyticsDecisionOutcome(
+                                                    suggestion.latestDecision!,
+                                                    outcome,
+                                                  )
+                                                }
+                                                type="button"
+                                              >
+                                                {analyticsDecisionOutcome(outcome)}
+                                              </button>
+                                            ),
+                                          )}
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <p className="analytics-decision-caption">
+                                        {copyFor(language, {
+                                          en: "No coach decision has been logged for this action yet.",
+                                          ru: "Для этого действия тренерское решение пока не зафиксировано.",
+                                          bg: "За това действие все още няма записано треньорско решение.",
+                                        })}
+                                      </p>
+                                    )}
+                                    <div className="analytics-action-footer">
+                                      <small>
+                                        {suggestion.plannerBridge
+                                          ? `${suggestion.plannerBridge.startDate} / ${suggestion.plannerBridge.plannedPhase ?? "-"}`
+                                          : copyFor(language, {
+                                              en: "Planner bridge unavailable",
+        ru: "Связь с планированием недоступна",
+        bg: "Връзката с планирането не е налична",
+                                            })}
+                                      </small>
+                                      <div className="analytics-action-buttons">
+                                        <button
+                                          className="secondary-button analytics-action-button"
+                                          disabled={busy || !suggestion.plannerBridge}
+                                          onClick={() => void handleApplyAnalyticsCoachSuggestion(suggestion)}
+                                          type="button"
+                                        >
+                                          {suggestion.plannerBridge?.autoApply
+                                            ? ui("analyticsOpenAndApply")
+                                            : ui("analyticsOpenInPlanner")}
+                                        </button>
+                                        <button
+                                          className="tertiary-button analytics-action-button"
+                                          disabled={busy}
+                                          onClick={() =>
+                                            void handleMarkAnalyticsCoachSuggestionNotApplied(
+                                              suggestion,
+                                            )
+                                          }
+                                          type="button"
+                                        >
+                                          {ui("analyticsMarkNotApplied")}
+                                        </button>
+                                      </div>
+                                    </div>
+                                  </article>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <p className="placeholder-copy">{ui("noAnalyticsYet")}</p>
+                          )}
+                        </article>
+
+                        <article className="entry-summary coach-analytics-card">
+                          <div className="summary-topline">
+                            <strong>{ui("analyticsDecisionHistory")}</strong>
+                            <span>{coachAnalyticsOverview.decisionHistory.length}</span>
+                          </div>
+                          {coachAnalyticsOverview.decisionHistory.length ? (
+                            <div className="analytics-decision-history">
+                              {coachAnalyticsOverview.decisionHistory.slice(0, 4).map((decision) => (
+                                <article className="analytics-decision-history-card" key={decision.id}>
+                                  <div className="summary-topline">
+                                    <strong>{decision.suggestionTitle}</strong>
+                                    <span
+                                      className={`analytics-decision-chip ${decision.decisionStatus}`}
+                                    >
+                                      {analyticsDecisionStatus(decision.decisionStatus)}
+                                    </span>
+                                  </div>
+                                  <div className="analytics-decision-meta">
+                                    <strong>{analyticsDecisionOutcome(decision.outcome)}</strong>
+                                    <span>{decision.weekLabel ?? decision.weekStartDate}</span>
+                                  </div>
+                                  <small className="analytics-decision-caption">
+                                    {analyticsDecisionOutcomeSource(decision.outcomeSource)}
+                                  </small>
+                                  <p className="analytics-decision-caption">
+                                    {analyticsDecisionExplanation(decision)}
+                                  </p>
+                                  {decision.baselineSnapshot || decision.latestSnapshot ? (
+                                    <div className="analytics-decision-snapshot">
+                                      <span>
+                                        {copyFor(language, {
+                                          en: "Readiness",
+                                          ru: "Readiness",
+                                          bg: "Readiness",
+                                        })}{" "}
+                                        {decision.baselineSnapshot?.readinessScore ?? "-"} {"->"}{" "}
+                                        {decision.latestSnapshot?.readinessScore ?? "-"}
+                                      </span>
+                                      <span>
+                                        {copyFor(language, {
+                                          en: "Adherence",
+                                          ru: "Выполнение",
+                                          bg: "Изпълнение",
+                                        })}{" "}
+                                        {decision.baselineSnapshot?.adherenceRate ?? "-"}% {"->"}{" "}
+                                        {decision.latestSnapshot?.adherenceRate ?? "-"}%
+                                      </span>
+                                    </div>
+                                  ) : null}
+                                </article>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="placeholder-copy">{ui("analyticsNoDecisionHistory")}</p>
+                          )}
+                        </article>
+
+                        <article className="entry-summary coach-analytics-card">
+                          <div className="summary-topline">
+                            <strong>{ui("analyticsPlanningChain")}</strong>
+                            <span>
+                              {coachAnalyticsOverview.chain.mesocycleWeek?.weekLabel ??
+                                copyFor(language, {
+                                  en: "No week",
+                                  ru: "Нет недели",
+                                  bg: "Няма седмица",
+                                })}
+                            </span>
+                          </div>
+                          <div className="analytics-chain-list">
+                            <div className="analytics-chain-row">
+                              <span>{copyFor(language, { en: "Season", ru: "Сезон", bg: "Сезон" })}</span>
+                              <strong>
+                                {coachAnalyticsOverview.chain.season
+                                  ? `${coachAnalyticsOverview.chain.season.name} / ${coachAnalyticsOverview.chain.season.year}`
+                                  : "-"}
+                              </strong>
+                            </div>
+                            <div className="analytics-chain-row">
+                              <span>{copyFor(language, {
+                                en: "Competition plan",
+                                ru: "План старта",
+                                bg: "План за състезание",
+                              })}</span>
+                              <strong>
+                                {coachAnalyticsOverview.chain.competitionPlan
+                                  ? `${coachAnalyticsOverview.chain.competitionPlan.competitionTitle} / ${coachAnalyticsOverview.chain.competitionPlan.priority}`
+                                  : "-"}
+                              </strong>
+                            </div>
+                            <div className="analytics-chain-row">
+                              <span>{copyFor(language, { en: "Mesocycle", ru: "Мезоцикл", bg: "Мезоцикъл" })}</span>
+                              <strong>
+                                {coachAnalyticsOverview.chain.mesocycle
+                                  ? `${coachAnalyticsOverview.chain.mesocycle.name} / ${coachAnalyticsOverview.chain.mesocycle.phase}`
+                                  : "-"}
+                              </strong>
+                            </div>
+                            <div className="analytics-chain-row">
+                              <span>{copyFor(language, { en: "Week", ru: "Неделя", bg: "Седмица" })}</span>
+                              <strong>
+                                {coachWeekSummary
+                                  ? `${coachWeekSummary.label} / ${analyticsWeekStatus(coachWeekSummary.status)}`
+                                  : "-"}
+                              </strong>
+                            </div>
+                            {coachAnalyticsOverview.chain.missingLinks.length > 0 ? (
+                              <div className="analytics-chain-note">
+                                <span>{ui("analyticsMissingLinks")}</span>
+                                <strong>
+                                  {coachAnalyticsOverview.chain.missingLinks
+                                    .map((link) => analyticsMissingLink(link))
+                                    .join(", ")}
+                                </strong>
+                              </div>
+                            ) : null}
+                          </div>
+                        </article>
+
+                        {coachWeekSummary ? (
+                          <article className="entry-summary coach-analytics-card analytics-week-card">
+                            <div className="summary-topline">
+                              <strong>{ui("analyticsWeekSnapshot")}</strong>
+                              <span>{analyticsWeekStatus(coachWeekSummary.status)}</span>
+                            </div>
+                            <div className="analytics-week-grid">
+                              <div>
+                                <span>{copyFor(language, { en: "Microcycle", ru: "Микроцикл", bg: "Микроцикъл" })}</span>
+                                <strong>{coachWeekSummary.microcycleType ?? "-"}</strong>
+                              </div>
+                              <div>
+                                <span>{copyFor(language, { en: "Target", ru: "Цель", bg: "Цел" })}</span>
+                                <strong>{coachWeekSummary.targetLoad ?? "-"}</strong>
+                              </div>
+                              <div>
+                                <span>{copyFor(language, { en: "Expected", ru: "Ожидалось", bg: "Очаквано" })}</span>
+                                <strong>{coachWeekSummary.expectedLoadToDate ?? "-"}</strong>
+                              </div>
+                              <div>
+                                <span>{copyFor(language, { en: "Actual", ru: "Факт", bg: "Факт" })}</span>
+                                <strong>{coachWeekSummary.actualLoad}</strong>
+                              </div>
+                              <div>
+                                <span>{copyFor(language, { en: "Adherence", ru: "Выполнение", bg: "Изпълнение" })}</span>
+                                <strong>{coachWeekSummary.adherenceRate}%</strong>
+                              </div>
+                              <div>
+                                <span>{ui("latestReadiness")}</span>
+                                <strong>{coachWeekSummary.averageReadiness ?? "-"}</strong>
+                              </div>
+                            </div>
+                          </article>
+                        ) : null}
+
+                        <article className="entry-summary coach-analytics-card">
+                          <div className="summary-topline">
+                            <strong>{ui("readinessTrend")}</strong>
+                            <span>{coachAnalyticsOverview.readinessTrend.length}</span>
+                          </div>
+                          <ul className="analytics-trend-list">
+                            {coachAnalyticsOverview.readinessTrend.slice(-4).reverse().map((point) => (
+                              <li key={point.date}>
+                                {point.date}: {point.score} / {readinessMeta[point.status].label}
+                              </li>
+                            ))}
+                          </ul>
+                        </article>
+
+                        <article className="entry-summary coach-analytics-card">
+                          <div className="summary-topline">
+                            <strong>{ui("completionTrend")}</strong>
+                            <span>{coachAnalyticsOverview.completionTrend.length}</span>
+                          </div>
+                          <ul className="analytics-trend-list">
+                            {coachAnalyticsOverview.completionTrend.slice(-4).reverse().map((point) => (
+                              <li key={point.date}>
+                                {point.date}: {point.adherenceRate}% / {point.completedBlocks}/{point.plannedBlocks}
+                              </li>
+                            ))}
+                          </ul>
+                        </article>
+
+                        <article className="entry-summary coach-analytics-card">
+                          <div className="summary-topline">
+                            <strong>{ui("loadTrend")}</strong>
+                            <span>{coachAnalyticsOverview.loadTrend.length}</span>
+                          </div>
+                          <ul className="analytics-trend-list">
+                            {coachAnalyticsOverview.loadTrend.slice(-4).reverse().map((point) => (
+                              <li key={point.date}>
+                                {point.date}: {point.actualLoad} / {copyFor(language, {
+                                  en: "delta",
+                                  ru: "дельта",
+                                  bg: "делта",
+                                })} {point.loadDelta}
+                              </li>
+                            ))}
+                          </ul>
+                        </article>
+                      </div>
+                    </>
+                  ) : (
+                    <p className="placeholder-copy">
+                      {ui("coachAnalyticsNeedData")}
+                    </p>
+                  )}
+                </div>
+                ) : null}
+                  </div>
+                  {showCoachInspectorColumn ? (
+                  <aside className="coach-inspector-column">
+                    <div className="coach-inspector-card">
+                      <div className="summary-topline">
+                        <strong>
+                          {copyFor(language, {
+                            en: "Competition context",
+                            ru: "Соревновательный контекст",
+                            bg: "Състезателен контекст",
+                          })}
+                        </strong>
+                        <span>
+                          {competitionContext?.phase
+                            ? `${competitionContext.phase} / ${competitionContext.competitionPriority ?? "-"}`
+                            : ui("notGenerated")}
+                        </span>
+                      </div>
+                      {competitionContext ? (
+                        <ul>
+                          <li>
+                            {copyFor(language, {
+                              en: "Days to competition",
+                              ru: "До старта",
+                              bg: "До старт",
+                            })}
+                            : {competitionContext.daysToCompetition ?? "-"}
+                          </li>
+                          <li>
+                            {copyFor(language, {
+                              en: "Phase",
+                              ru: "Фаза",
+                              bg: "Фаза",
+                            })}
+                            : {competitionContext.phase ?? "-"}
+                          </li>
+                          <li>
+                            {copyFor(language, {
+                              en: "Priority",
+                              ru: "Приоритет",
+                              bg: "Приоритет",
+                            })}
+                            : {competitionContext.competitionPriority ?? "-"}
+                          </li>
+                        </ul>
+                      ) : (
+                        <p className="placeholder-copy">
+                          {copyFor(language, {
+                            en: "No active competition preparation context is linked to the selected athlete yet.",
+                            ru: "У выбранного спортсмена пока нет активного контекста подготовки к старту.",
+                            bg: "Избраният спортист все още няма активен контекст за подготовка към старт.",
+                          })}
+                        </p>
+                      )}
+                    </div>
+                  </aside>
+                  ) : null}
+                </div>
+              </>
+            )}
+          </CoachDashboard>
+          </CoachDashboardScene>
+      ) : null}
+
+      {activeWorkspace === "planning-studio" && (user?.role === "coach" || user?.role === "admin") ? (
+        <PlanningStudioScene>
+          <PlanningStudio
+            compact
+            description={planningViewDescription}
+            eyebrow={planningViewLabel}
+            metrics={planningSceneMetrics}
+            title={workspaceTitle}
+          >
+            <div
+              className={`planning-workgrid planning-workgrid-${planningView} ${
+                planningView === "weekly" ? "planning-workgrid-weekly" : ""
+              } ${
+                planningView === "season"
+                  ? `planning-workgrid-season-${seasonDisplayMode}`
+                  : ""
+              }`.trim()}
+            >
+            {planningView === "preparation" ? (
+            <section className="preparation-plan-builder wide-card">
+              <aside className="preparation-exercise-library">
+                <header>
+                  <h3>
+                    {copyFor(language, {
+                      en: "Exercise library",
+                      ru: "Библиотека упражнений",
+                      bg: "Библиотека с упражнения",
+                    })}
+                  </h3>
+                  <p className="placeholder-copy">
+                    {copyFor(language, {
+                      en: "Pick the active day and session on the right, then click an exercise here to add it to the plan.",
+                      ru: "Выберите справа день и сессию, затем нажмите упражнение слева — оно появится в плане.",
+                      bg: "Изберете ден и сесия вдясно, после натиснете упражнение тук, за да влезе в плана.",
+                    })}
+                  </p>
+                </header>
+
+                <div className="preparation-exercise-library-groups">
+                  {PLAN_BLOCK_TYPE_VALUES.map((blockType) => {
+                    const presets = getBlockExercisePresets(blockType);
+
+                    return (
+                      <details className="preparation-exercise-group" key={blockType} open>
+                        <summary>
+                          <span>{localizedOptionLabel(blockType, language, BLOCK_TYPE_LABELS)}</span>
+                          <strong>{presets.length}</strong>
+                        </summary>
+                        <div className="preparation-exercise-group-list">
+                          {presets.map((preset) => (
+                            <button
+                              className="preparation-exercise-preset"
+                              disabled={!selectedPreparationSession}
+                              key={`${blockType}-${preset.id}`}
+                              onClick={() => addPreparationExerciseFromPreset(preset)}
+                              type="button"
+                            >
+                              <strong>{copyFor(language, preset.label)}</strong>
+                              <span>{formatExercisePresetVolume(preset, language)}</span>
+                              <small>{copyFor(language, preset.notes)}</small>
+                            </button>
+                          ))}
+                        </div>
+                      </details>
+                    );
+                  })}
+                </div>
+              </aside>
+
+              <div className="preparation-plan-workspace">
+                <section className="preparation-plan-config-panel">
+                  <div className="summary-topline">
+                    <div>
+                      <strong>
+                        {copyFor(language, {
+                          en: "Plan setup",
+                          ru: "Настройка плана",
+                          bg: "Настройка на плана",
+                        })}
+                      </strong>
+                      <p className="placeholder-copy">
+                        {copyFor(language, {
+                          en: "Build the plan from editable modules, timeline checkpoints, and the session structure below.",
+                          ru: "Соберите план из редактируемых модулей, этапов и структуры сессий ниже.",
+                          bg: "Сглобете плана от редактируеми модули, етапи и структурата на сесиите по-долу.",
+                        })}
+                      </p>
+                    </div>
+                    <span>{preparationPlanDraft.period}</span>
+                  </div>
+
+                  <div className="preparation-plan-setup-stats">
+                    {preparationPlanSetupStats.map((item) => (
+                      <article className="preparation-plan-stat-chip" key={item.label}>
+                        <span>{item.label}</span>
+                        <strong>{item.value}</strong>
+                      </article>
+                    ))}
+                  </div>
+
+                  <div className="preparation-plan-config-grid">
+                    <label className="field">
+                      <span>{copyFor(language, { en: "Plan name", ru: "Название плана", bg: "Име на плана" })}</span>
+                      <input
+                        value={preparationPlanDraft.title}
+                        onChange={(event) => updatePreparationPlanDraft({ title: event.target.value })}
+                      />
+                    </label>
+                    <label className="field">
+                      <span>{copyFor(language, { en: "Period", ru: "Период", bg: "Период" })}</span>
+                      <input
+                        value={preparationPlanDraft.period}
+                        onChange={(event) => updatePreparationPlanDraft({ period: event.target.value })}
+                      />
+                    </label>
+                    <label className="field preparation-plan-config-description">
+                      <span>{copyFor(language, { en: "Description", ru: "Описание", bg: "Описание" })}</span>
+                      <textarea
+                        rows={2}
+                        value={preparationPlanDraft.subtitle}
+                        onChange={(event) => updatePreparationPlanDraft({ subtitle: event.target.value })}
+                      />
+                    </label>
+                  </div>
+
+                  <section className="preparation-plan-editor-section">
+                    <div className="summary-topline">
+                      <strong>
+                        {copyFor(language, {
+                          en: "Plan modules",
+                          ru: "Модули плана",
+                          bg: "Модули на плана",
+                        })}
+                      </strong>
+                      <button className="tertiary-button" onClick={addPreparationMetric} type="button">
+                        {copyFor(language, { en: "Add module", ru: "Добавить модуль", bg: "Добави модул" })}
+                      </button>
+                    </div>
+                    {preparationPlanDraft.metrics.length === 0 ? (
+                      <p className="placeholder-copy">
+                        {copyFor(language, {
+                          en: "Add the modules that matter for this plan: goal, load, monitoring, nutrition, recovery, taper, or any custom block.",
+                          ru: "Добавьте нужные модули: цель, нагрузка, мониторинг, питание, восстановление, подводка или любой свой блок.",
+        bg: "Добавете нужните модули: цел, натоварване, мониторинг, хранене, възстановяване, тейпър или собствен блок.",
+                        })}
+                      </p>
+                    ) : (
+                      <div className="preparation-plan-priority-grid">
+                        {preparationPlanDraft.metrics.map((metric, metricIndex) => (
+                          <article className="preparation-plan-priority-item" key={`${metric.label}-${metricIndex}`}>
+                            <div className="summary-topline preparation-plan-module-header">
+                              <strong>
+                                {copyFor(language, { en: "Module", ru: "Модуль", bg: "Модул" })} {metricIndex + 1}
+                              </strong>
+                              <button
+                                className="tertiary-button preparation-plan-small-action"
+                                onClick={() => removePreparationMetric(metricIndex)}
+                                type="button"
+                              >
+                                {copyFor(language, { en: "Remove", ru: "Удалить", bg: "Премахни" })}
+                              </button>
+                            </div>
+                            <label className="field">
+                              <span>{copyFor(language, { en: "Module name", ru: "Название модуля", bg: "Име на модул" })}</span>
+                              <input
+                                value={metric.label}
+                                onChange={(event) =>
+                                  updatePreparationMetric(metricIndex, { label: event.target.value })
+                                }
+                              />
+                            </label>
+                            <label className="field">
+                              <span>{copyFor(language, { en: "Content", ru: "Содержание", bg: "Съдържание" })}</span>
+                              <textarea
+                                rows={2}
+                                value={metric.value}
+                                onChange={(event) =>
+                                  updatePreparationMetric(metricIndex, { value: event.target.value })
+                                }
+                              />
+                            </label>
+                          </article>
+                        ))}
+                      </div>
+                    )}
+                  </section>
+
+                  <section className="preparation-plan-editor-section">
+                    <div className="summary-topline">
+                      <strong>
+                        {copyFor(language, {
+                          en: "Block phases",
+                          ru: "Этапы блока",
+                          bg: "Етапи на блока",
+                        })}
+                      </strong>
+                      <button className="tertiary-button" onClick={addPreparationPhase} type="button">
+                        {copyFor(language, { en: "Add phase", ru: "Добавить этап", bg: "Добави етап" })}
+                      </button>
+                    </div>
+                    <div className="preparation-plan-phase-list">
+                      {preparationPlanDraft.phases.map((phase, phaseIndex) => (
+                        <div className="preparation-plan-phase-row" key={`${phase}-${phaseIndex}`}>
+                          <label className="field preparation-plan-phase-field">
+                            <span>
+                              {copyFor(language, { en: "Phase", ru: "Этап", bg: "Етап" })} {phaseIndex + 1}
+                            </span>
+                            <input
+                              value={phase}
+                              onChange={(event) => updatePreparationPhase(phaseIndex, event.target.value)}
+                            />
+                          </label>
+                          <button
+                            className="tertiary-button preparation-plan-small-action"
+                            onClick={() => removePreparationPhase(phaseIndex)}
+                            type="button"
+                          >
+                            {copyFor(language, { en: "Remove", ru: "Удалить", bg: "Премахни" })}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                </section>
+
+                <section className="preparation-plan-target-panel">
+                  <div className="summary-topline">
+                    <strong>
+                      {copyFor(language, {
+                        en: "Where to add",
+                        ru: "Куда добавлять",
+                        bg: "Къде да се добавя",
+                      })}
+                    </strong>
+                    <span>
+                      {selectedPreparationSession?.rows.length ?? 0}{" "}
+                      {copyFor(language, { en: "exercises", ru: "упр.", bg: "упр." })}
+                    </span>
+                  </div>
+
+                  <span className="preparation-plan-target-label">
+                    {copyFor(language, { en: "Week", ru: "Неделя", bg: "Седмица" })}
+                  </span>
+                  <div className="preparation-plan-picker preparation-plan-week-picker">
+                    {preparationPlanDraft.weeks.map((week, weekIndex) => (
+                      <button
+                        className={weekIndex === selectedPreparationWeekIndex ? "is-active" : ""}
+                        key={`${week.title}-${weekIndex}`}
+                        onClick={() => {
+                          setSelectedPreparationWeekIndex(weekIndex);
+                          setSelectedPreparationDayIndex(0);
+                          setSelectedPreparationSessionIndex(0);
+                        }}
+                        type="button"
+                      >
+                        {week.title}
+                      </button>
+                    ))}
+                  </div>
+
+                  {selectedPreparationWeek ? (
+                    <>
+                      <span className="preparation-plan-target-label">
+                        {copyFor(language, { en: "Day", ru: "День", bg: "Ден" })}
+                      </span>
+                      <div className="preparation-plan-picker preparation-plan-day-picker">
+                        {selectedPreparationWeek.days.map((day, dayIndex) => (
+                          <button
+                            className={dayIndex === selectedPreparationDayIndex ? "is-active" : ""}
+                            key={`${day.title}-${dayIndex}`}
+                            onClick={() => {
+                              setSelectedPreparationDayIndex(dayIndex);
+                              setSelectedPreparationSessionIndex(0);
+                            }}
+                            type="button"
+                          >
+                            <strong>{day.title}</strong>
+                            <span>{day.type}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  ) : null}
+
+                  {selectedPreparationDay ? (
+                    <>
+                      <span className="preparation-plan-target-label">
+                        {copyFor(language, { en: "Session", ru: "Сессия", bg: "Сесия" })}
+                      </span>
+                      <div className="preparation-plan-picker preparation-plan-session-picker">
+                        {selectedPreparationDay.sessions.map((session, sessionIndex) => (
+                          <button
+                            className={sessionIndex === selectedPreparationSessionIndex ? "is-active" : ""}
+                            key={`${session.title}-${sessionIndex}`}
+                            onClick={() => setSelectedPreparationSessionIndex(sessionIndex)}
+                            type="button"
+                          >
+                            {session.title}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  ) : null}
+
+                  <div className="preparation-plan-action-row">
+                    <button className="tertiary-button" onClick={addPreparationWeek} type="button">
+                      {copyFor(language, { en: "Add week", ru: "Добавить неделю", bg: "Добави седмица" })}
+                    </button>
+                    {selectedPreparationWeek ? (
+                      <button className="tertiary-button" onClick={addPreparationDay} type="button">
+                        {copyFor(language, { en: "Add day", ru: "Добавить день", bg: "Добави ден" })}
+                      </button>
+                    ) : null}
+                    {selectedPreparationDay ? (
+                      <button className="tertiary-button" onClick={addPreparationSession} type="button">
+                        {copyFor(language, { en: "Add session", ru: "Добавить сессию", bg: "Добави сесия" })}
+                      </button>
+                    ) : null}
+                  </div>
+                </section>
+
+                <section className="preparation-session-canvas">
+                  <div className="summary-topline">
+                    <div>
+                      <strong>
+                        {selectedPreparationSession?.title ??
+                          copyFor(language, {
+                            en: "No session selected",
+                            ru: "Сессия не выбрана",
+                            bg: "Няма избрана сесия",
+                          })}
+                      </strong>
+                      <p className="placeholder-copy">
+                        {selectedPreparationDay
+                          ? `${selectedPreparationDay.title} / ${selectedPreparationDay.type}`
+                          : copyFor(language, {
+                              en: "Select a day to start building the session.",
+                              ru: "Выберите день, чтобы начать собирать сессию.",
+                              bg: "Изберете ден, за да започнете сесията.",
+                            })}
+                      </p>
+                    </div>
+                    <button
+                      className="secondary-button"
+                      disabled={!selectedPreparationSession}
+                      onClick={addPreparationRow}
+                      type="button"
+                    >
+                      {copyFor(language, { en: "Custom row", ru: "Своя строка", bg: "Свой ред" })}
+                    </button>
+                  </div>
+
+                  {selectedPreparationSession ? (
+                    <>
+                      <label className="field">
+                        <span>{copyFor(language, { en: "Session title", ru: "Название сессии", bg: "Име на сесия" })}</span>
+                        <input
+                          value={selectedPreparationSession.title}
+                          onChange={(event) => updatePreparationSessionTitle(event.target.value)}
+                        />
+                      </label>
+
+                      {selectedPreparationDay ? (
+                        <div className="preparation-plan-guidance-editor">
+                          <label className="field">
+                            <span>GREEN</span>
+                            <input
+                              value={selectedPreparationDay.guidance?.green ?? ""}
+                              onChange={(event) => updatePreparationGuidance("green", event.target.value)}
+                            />
+                          </label>
+                          <label className="field">
+                            <span>YELLOW</span>
+                            <input
+                              value={selectedPreparationDay.guidance?.yellow ?? ""}
+                              onChange={(event) => updatePreparationGuidance("yellow", event.target.value)}
+                            />
+                          </label>
+                          <label className="field">
+                            <span>RED</span>
+                            <input
+                              value={selectedPreparationDay.guidance?.red ?? ""}
+                              onChange={(event) => updatePreparationGuidance("red", event.target.value)}
+                            />
+                          </label>
+                        </div>
+                      ) : null}
+
+                      {selectedPreparationSession.rows.length === 0 ? (
+                        <p className="placeholder-copy">
+                          {copyFor(language, {
+                            en: "Click an exercise in the left library to add it here.",
+                            ru: "Нажмите упражнение в библиотеке слева, чтобы добавить его сюда.",
+                            bg: "Натиснете упражнение вляво, за да го добавите тук.",
+                          })}
+                        </p>
+                      ) : (
+                        <div className="preparation-session-exercise-list">
+                          {selectedPreparationSession.rows.map((row, rowIndex) => (
+                            <article
+                              className="preparation-session-exercise-card"
+                              key={`${row.block}-${rowIndex}`}
+                            >
+                              <div className="summary-topline">
+                                <strong>
+                                  {rowIndex + 1}.{" "}
+                                  {row.block ||
+                                    copyFor(language, {
+                                      en: "Exercise",
+                                      ru: "Упражнение",
+                                      bg: "Упражнение",
+                                    })}
+                                </strong>
+                                <button
+                                  className="tertiary-button"
+                                  onClick={() => removePreparationRow(rowIndex)}
+                                  type="button"
+                                >
+                                  {copyFor(language, { en: "Remove", ru: "Удалить", bg: "Премахни" })}
+                                </button>
+                              </div>
+                              <div className="readiness-form preparation-session-exercise-fields">
+                                <label className="field">
+                                  <span>{copyFor(language, { en: "Exercise", ru: "Упражнение", bg: "Упражнение" })}</span>
+                                  <input
+                                    value={row.block}
+                                    onChange={(event) => updatePreparationRow(rowIndex, { block: event.target.value })}
+                                  />
+                                </label>
+                                <label className="field">
+                                  <span>{copyFor(language, { en: "Volume", ru: "Объём", bg: "Обем" })}</span>
+                                  <input
+                                    value={row.volume}
+                                    onChange={(event) => updatePreparationRow(rowIndex, { volume: event.target.value })}
+                                  />
+                                </label>
+                                <label className="field preparation-session-control-field">
+                                  <span>{copyFor(language, { en: "Control", ru: "Контроль", bg: "Контрол" })}</span>
+                                  <input
+                                    value={row.control}
+                                    onChange={(event) => updatePreparationRow(rowIndex, { control: event.target.value })}
+                                  />
+                                </label>
+                              </div>
+                            </article>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  ) : null}
+                </section>
+
+                <details className="preparation-plan-preview-panel">
+                  <summary>
+                    <span>
+                      {copyFor(language, {
+                        en: "Full preparation document",
+                        ru: "Весь документ плана",
+                        bg: "Целият документ на плана",
+                      })}
+                    </span>
+                    <strong>{preparationPlanDraft.weeks.length}</strong>
+                  </summary>
+                <section className="preparation-plan-document">
+              <header className="preparation-plan-hero">
+                <div>
+                  <h3>{preparationPlanDraft.title}</h3>
+                  <p>{preparationPlanDraft.subtitle}</p>
+                  <div className="preparation-plan-phase-line">
+                    {preparationPlanDraft.phases.map((phase) => (
+                      <span key={phase}>{phase}</span>
+                    ))}
+                  </div>
+                </div>
+                <strong>{preparationPlanDraft.period}</strong>
+              </header>
+
+              <div className="preparation-plan-top-grid">
+                {preparationPlanDraft.metrics.map((metric) => (
+                  <article className={`preparation-plan-box ${metric.tone}`} key={metric.label}>
+                    <span>{metric.label}</span>
+                    <strong>{metric.value}</strong>
+                  </article>
+                ))}
+              </div>
+
+              <article className="preparation-plan-monitor">
+                <div className="preparation-plan-week-header">
+                  {copyFor(language, {
+                    en: "Daily monitoring",
+                    ru: "Ежедневный мониторинг состояния",
+                    bg: "Ежедневен мониторинг на състоянието",
+                  })}
+                </div>
+                <div className="preparation-plan-table-scroll">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>{copyFor(language, { en: "Date", ru: "Дата", bg: "Дата" })}</th>
+                        <th>{copyFor(language, { en: "Weight", ru: "Вес", bg: "Тегло" })}</th>
+                        <th>{copyFor(language, { en: "Pulse", ru: "Пульс", bg: "Пулс" })}</th>
+                        <th>{copyFor(language, { en: "Sleep", ru: "Сон", bg: "Сън" })}</th>
+                        <th>{copyFor(language, { en: "Readiness", ru: "Готовность", bg: "Готовност" })}</th>
+                        <th>{copyFor(language, { en: "Action", ru: "Что делать", bg: "Действие" })}</th>
+                        <th>{copyFor(language, { en: "Remove", ru: "Что убрать", bg: "Какво да се махне" })}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {preparationPlanDraft.monitoringDates.map((date) => (
+                        <tr key={date}>
+                          <td>{date}</td>
+                          <td className="preparation-plan-muted-cell">кг</td>
+                          <td className="preparation-plan-muted-cell">уд/мин</td>
+                          <td className="preparation-plan-muted-cell">часы</td>
+                          <td><span className="preparation-plan-status neutral">-</span></td>
+                      <td className="preparation-plan-muted-cell">
+                        {copyFor(language, { en: "by readiness", ru: "по готовности", bg: "по готовност" })}
+                      </td>
+                          <td className="preparation-plan-muted-cell">по adaptation</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </article>
+
+              <div className="preparation-plan-zones">
+                {preparationPlanDraft.zones.map((zone) => (
+                  <article className="preparation-plan-zone-card" key={zone.title}>
+                    <strong>{zone.title}</strong>
+                    <span>{zone.value}</span>
+                    <small>{zone.note}</small>
+                  </article>
+                ))}
+              </div>
+
+              {preparationPlanDraft.weeks.map((week) => (
+                <section className="preparation-plan-week" key={week.title}>
+                  <div className="preparation-plan-week-header">{week.title}</div>
+                  {week.days.map((day) => (
+                    <article className="preparation-plan-day-card" key={`${week.title}-${day.title}`}>
+                      <div className="preparation-plan-day-header">
+                        <strong>{day.title}</strong>
+                        <span>{day.type}</span>
+                      </div>
+                      {day.guidance ? (
+                        <div className="preparation-plan-guidance">
+                          <span className="green">GREEN / {day.guidance.green}</span>
+                          <span className="yellow">YELLOW / {day.guidance.yellow}</span>
+                          <span className="red">RED / {day.guidance.red}</span>
+                        </div>
+                      ) : null}
+                      {day.sessions.map((session) => (
+                        <section className="preparation-plan-session" key={`${day.title}-${session.title}`}>
+                          <h4>{session.title}</h4>
+                          <div className="preparation-plan-table-scroll">
+                            <table>
+                              <thead>
+                                <tr>
+                                  {session.columns.map((column) => (
+                                    <th key={column}>{column}</th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {session.rows.map((row) => (
+                                  <tr key={`${session.title}-${row.block}-${row.volume}`}>
+                                    <td>{row.block}</td>
+                                    <td>{row.volume}</td>
+                                    <td>{row.control}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                          {session.notes?.map((note) => (
+                            <p className={`preparation-plan-note ${note.tone}`} key={note.text}>
+                              {note.text}
+                            </p>
+                          ))}
+                        </section>
+                      ))}
+                    </article>
+                  ))}
+                </section>
+              ))}
+
+              <section className="preparation-plan-week">
+                <div className="preparation-plan-week-header">
+                  {copyFor(language, {
+                    en: "Nutrition and weight cut protocol",
+                    ru: "Питание и сгонка / короткий протокол",
+                    bg: "Хранене и сваляне на тегло / кратък протокол",
+                  })}
+                </div>
+                <article className="preparation-plan-day-card">
+                  <div className="preparation-plan-table-scroll">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>{copyFor(language, { en: "Phase", ru: "Фаза", bg: "Фаза" })}</th>
+                          <th>{copyFor(language, { en: "Nutrition", ru: "Питание", bg: "Хранене" })}</th>
+                          <th>{copyFor(language, { en: "Goal", ru: "Задача", bg: "Цел" })}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {preparationPlanDraft.nutrition.map((item) => (
+                          <tr key={item.phase}>
+                            <td>{item.phase}</td>
+                            <td>{item.nutrition}</td>
+                            <td>{item.goal}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </article>
+              </section>
+
+              <footer className="preparation-plan-summary">
+                <h3>
+                  {copyFor(language, {
+                    en: "Final structure",
+                    ru: "Итоговая структура",
+                    bg: "Финална структура",
+                  })}
+                </h3>
+                <div>
+                  {preparationPlanDraft.summary.map((item) => (
+                    <span key={item}>{item}</span>
+                  ))}
+                </div>
+              </footer>
+                </section>
+                </details>
+              </div>
+            </section>
+            ) : null}
+
+            {planningView === "calendar" ? (
+            <form
+              className="auth-form planning-main-form planning-calendar-primary-form"
+              onSubmit={handleCompetitionSubmit}
+            >
+              <div className="summary-topline">
+                <div>
+                  <span className="eyebrow eyebrow-muted">
+                    {copyFor(language, {
+                      en: "Step 1",
+                      ru: "Шаг 1",
+                      bg: "Стъпка 1",
+                    })}
+                  </span>
+                  <h3>
+                    {copyFor(language, {
+                      en: "Add competition",
+                      ru: "Добавить соревнование",
+                      bg: "Добави състезание",
+                    })}
+                  </h3>
+                </div>
+                <span>
+                  {copyFor(language, {
+                    en: "Calendar input",
+                    ru: "Ввод в календарь",
+                    bg: "Въвеждане в календар",
+                  })}
+                </span>
+              </div>
+              <div className="uww-sync-panel">
+                <header className="uww-sync-head">
+                  <div className="uww-sync-title">
+                    <strong>UWW</strong>
+                    <a href="https://uww.org/events" rel="noreferrer" target="_blank">
+                      uww.org/events
+                    </a>
+                  </div>
+                  <div className="uww-sync-actions">
+                    <button
+                      className="secondary-button"
+                      disabled={busy}
+                      onClick={handleUwwEventSync}
+                      type="button"
+                    >
+                      {busy
+                        ? ui("syncingNow")
+                        : copyFor(language, {
+                            en: "Sync UWW",
+                            ru: "Обновить из UWW",
+                            bg: "Обнови от UWW",
+                          })}
+                    </button>
+                    <button
+                      className="tertiary-button"
+                      disabled={busy}
+                      onClick={() => setUwwSyncFilters(initialUwwSyncFilters)}
+                      type="button"
+                    >
+                      {copyFor(language, {
+                        en: "Reset",
+                        ru: "Сбросить",
+                        bg: "Изчисти",
+                      })}
+                    </button>
+                  </div>
+                </header>
+                <div className="uww-sync-fields">
+                  <label className="field">
+                    <span>
+                      {copyFor(language, { en: "Year", ru: "Год", bg: "Година" })}
+                    </span>
+                    <select
+                      value={uwwSyncFilters.year}
+                      onChange={(event) =>
+                        setUwwSyncFilters((current) => ({
+                          ...current,
+                          year: event.target.value,
+                        }))
+                      }
+                    >
+                      <option value="">
+                        {copyFor(language, { en: "All", ru: "Все", bg: "Всички" })}
+                      </option>
+                      {uwwYearOptions.map((year) => (
+                        <option key={year} value={year}>
+                          {year}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>
+                      {copyFor(language, {
+                        en: "Age",
+                        ru: "Возраст",
+                        bg: "Възраст",
+                      })}
+                    </span>
+                    <select
+                      value={uwwSyncFilters.ageGroup}
+                      onChange={(event) =>
+                        setUwwSyncFilters((current) => ({
+                          ...current,
+                          ageGroup: event.target.value,
+                        }))
+                      }
+                    >
+                      <option value="">
+                        {copyFor(language, { en: "All", ru: "Все", bg: "Всички" })}
+                      </option>
+                      {uwwAgeGroupOptions.map((ageGroup) => (
+                        <option key={ageGroup} value={ageGroup}>
+                          {ageGroup}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>
+                      {copyFor(language, {
+                        en: "Style",
+                        ru: "Стиль",
+                        bg: "Стил",
+                      })}
+                    </span>
+                    <select
+                      value={uwwSyncFilters.style}
+                      onChange={(event) =>
+                        setUwwSyncFilters((current) => ({
+                          ...current,
+                          style: event.target.value,
+                        }))
+                      }
+                    >
+                      <option value="">
+                        {copyFor(language, { en: "All", ru: "Все", bg: "Всички" })}
+                      </option>
+                      {uwwStyleOptions.map((style) => (
+                        <option key={style} value={style}>
+                          {style}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>
+                      {copyFor(language, {
+                        en: "Type",
+                        ru: "Тип",
+                        bg: "Тип",
+                      })}
+                    </span>
+                    <select
+                      value={uwwSyncFilters.eventType}
+                      onChange={(event) =>
+                        setUwwSyncFilters((current) => ({
+                          ...current,
+                          eventType: event.target.value,
+                        }))
+                      }
+                    >
+                      <option value="">
+                        {copyFor(language, { en: "All", ru: "Все", bg: "Всички" })}
+                      </option>
+                      {uwwEventTypeOptions.map((eventType) => (
+                        <option key={eventType} value={eventType}>
+                          {eventType}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>
+                      {copyFor(language, {
+                        en: "Country",
+                        ru: "Страна",
+                        bg: "Държава",
+                      })}
+                    </span>
+                    <select
+                      value={uwwSyncFilters.country}
+                      onChange={(event) =>
+                        setUwwSyncFilters((current) => ({
+                          ...current,
+                          country: event.target.value,
+                        }))
+                      }
+                    >
+                      <option value="">
+                        {copyFor(language, { en: "All", ru: "Все", bg: "Всички" })}
+                      </option>
+                      {uwwCountryOptions.map((country) => (
+                        <option key={country} value={country}>
+                          {country}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                {uwwSyncSummary ? (
+                  <div className="uww-sync-result">
+                    <span>
+                      {copyFor(language, {
+                        en: "Found",
+                        ru: "Найдено",
+                        bg: "Намерени",
+                      })}
+                      : {uwwSyncSummary.totalFound}
+                    </span>
+                    <span>
+                      {copyFor(language, {
+                        en: "Added",
+                        ru: "Добавлено",
+                        bg: "Добавени",
+                      })}
+                      : {uwwSyncSummary.addedCount}
+                    </span>
+                    <span>
+                      {copyFor(language, {
+                        en: "Updated",
+                        ru: "Обновлено",
+                        bg: "Обновени",
+                      })}
+                      : {uwwSyncSummary.updatedCount}
+                    </span>
+                  </div>
+                ) : null}
+              </div>
+              <label className="field">
+                <span>
+                  {copyFor(language, {
+                    en: "Competition name",
+                    ru: "Название соревнования",
+                    bg: "Име на състезанието",
+                  })}
+                </span>
+                <input
+                  value={competitionForm.title}
+                  onChange={(event) =>
+                    setCompetitionForm((current) => ({ ...current, title: event.target.value }))
+                  }
+                  required
+                />
+              </label>
+              <label className="field">
+                <span>
+                  {copyFor(language, {
+                    en: "Location",
+                    ru: "Место проведения",
+                    bg: "Място",
+                  })}
+                </span>
+                <input
+                  value={competitionForm.location}
+                  onChange={(event) =>
+                    setCompetitionForm((current) => ({ ...current, location: event.target.value }))
+                  }
+                />
+              </label>
+              <label className="field">
+                <span>
+                  {copyFor(language, {
+                    en: "Federation",
+                    ru: "Федерация",
+                    bg: "Федерация",
+                  })}
+                </span>
+                <input
+                  value={competitionForm.federation}
+                  onChange={(event) =>
+                    setCompetitionForm((current) => ({
+                      ...current,
+                      federation: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+              <label className="field">
+                <span>
+                  {copyFor(language, {
+                    en: "Start date",
+                    ru: "Дата начала",
+                    bg: "Начална дата",
+                  })}
+                </span>
+                <input
+                  type="date"
+                  value={competitionForm.startDate}
+                  onChange={(event) =>
+                    setCompetitionForm((current) => ({
+                      ...current,
+                      startDate: event.target.value,
+                    }))
+                  }
+                  required
+                />
+              </label>
+              <label className="field">
+                <span>
+                  {copyFor(language, {
+                    en: "End date",
+                    ru: "Дата окончания",
+                    bg: "Крайна дата",
+                  })}
+                </span>
+                <input
+                  type="date"
+                  value={competitionForm.endDate}
+                  onChange={(event) =>
+                    setCompetitionForm((current) => ({ ...current, endDate: event.target.value }))
+                  }
+                  required
+                />
+              </label>
+              <label className="field">
+                <span>
+                  {copyFor(language, {
+                    en: "Level",
+                    ru: "Уровень",
+                    bg: "Ниво",
+                  })}
+                </span>
+                <select
+                  value={competitionForm.level}
+                  onChange={(event) =>
+                    setCompetitionForm((current) => ({
+                      ...current,
+                      level: event.target.value as CompetitionSummary["level"],
+                    }))
+                  }
+                >
+                  {["local", "national", "continental", "world", "olympics"].map((level) => (
+                    <option key={level} value={level}>
+                      {level}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span>
+                  {copyFor(language, {
+                    en: "Age group",
+                    ru: "Возрастная группа",
+                    bg: "Възрастова група",
+                  })}
+                </span>
+                <input
+                  value={competitionForm.ageGroup}
+                  onChange={(event) =>
+                    setCompetitionForm((current) => ({
+                      ...current,
+                      ageGroup: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+              <label className="field">
+                <span>
+                  {copyFor(language, {
+                    en: "Description",
+                    ru: "Описание",
+                    bg: "Описание",
+                  })}
+                </span>
+                <input
+                  value={competitionForm.description}
+                  onChange={(event) =>
+                    setCompetitionForm((current) => ({
+                      ...current,
+                      description: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+              <button className="primary-button" disabled={busy} type="submit">
+                {busy
+                  ? ui("syncingNow")
+                  : copyFor(language, {
+                      en: "Create competition",
+                      ru: "Создать соревнование",
+                      bg: "Създай състезание",
+                    })}
+              </button>
+            </form>
+            ) : null}
+
+            {planningView === "calendar" ? (
+            <div className="entry-summary planning-side-card planning-calendar-list">
+              <div className="summary-topline">
+                <strong>
+                  {copyFor(language, {
+                    en: "Competition calendar",
+                    ru: "Календарь соревнований",
+                    bg: "Календар на състезанията",
+                  })}
+                </strong>
+                <span>{competitions.length}</span>
+              </div>
+              {competitions.length > 0 ? (
+                <div className="planning-calendar-select-bar">
+                  <label className="planning-calendar-select-all">
+                    <input
+                      checked={allCalendarCompetitionsSelected}
+                      onChange={(event) =>
+                        setSelectedCompetitionIds(
+                          event.target.checked
+                            ? competitions.map((competition) => competition.id)
+                            : [],
+                        )
+                      }
+                      type="checkbox"
+                    />
+                    <span>
+                      {copyFor(language, {
+                        en: "Select all",
+                        ru: "Выбрать все",
+                        bg: "Избери всички",
+                      })}
+                    </span>
+                  </label>
+                  <button
+                    className="tertiary-button planning-calendar-delete-selected"
+                    disabled={busy || selectedCalendarCompetitionCount === 0}
+                    onClick={handleDeleteSelectedCompetitions}
+                    type="button"
+                  >
+                    {copyFor(language, {
+                      en: `Delete selected (${selectedCalendarCompetitionCount})`,
+                      ru: `Удалить выбранные (${selectedCalendarCompetitionCount})`,
+                      bg: `Изтрий избраните (${selectedCalendarCompetitionCount})`,
+                    })}
+                  </button>
+                </div>
+              ) : null}
+              {competitions.length === 0 ? (
+                <p className="placeholder-copy">
+                  {copyFor(language, {
+                    en: "No competitions created yet. Fill the form on the left.",
+                    ru: "Соревнований пока нет. Заполните форму слева.",
+                    bg: "Все още няма състезания. Попълнете формата вляво.",
+                  })}
+                </p>
+              ) : (
+                <ul>
+                  {competitions.map((competition) => (
+                    <li className="planning-calendar-item" key={competition.id}>
+                      <div className="planning-calendar-item-main">
+                        <label className="planning-calendar-check">
+                          <input
+                            checked={selectedCompetitionIds.includes(competition.id)}
+                            onChange={(event) =>
+                              setSelectedCompetitionIds((current) =>
+                                event.target.checked
+                                  ? [...current, competition.id]
+                                  : current.filter((id) => id !== competition.id),
+                              )
+                            }
+                            type="checkbox"
+                          />
+                        </label>
+                        <div>
+                          <strong>{competition.title}</strong>
+                          <span>
+                            {competition.federation || competition.level} /{" "}
+                            {competition.level} / {competition.startDate}
+                            {competition.endDate !== competition.startDate
+                              ? ` - ${competition.endDate}`
+                              : ""}{" "}
+                            / {competition.location || "n/a"}
+                            {competition.ageGroup ? ` / ${competition.ageGroup}` : ""}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="planning-calendar-actions">
+                        <button
+                          className="secondary-button planning-calendar-attach-button"
+                          onClick={() => handlePrepareCompetitionPlan(competition)}
+                          type="button"
+                        >
+                          {copyFor(language, {
+                            en: "Add to season",
+                            ru: "В сезон",
+                            bg: "Към сезона",
+                          })}
+                        </button>
+                        <button
+                          className="tertiary-button planning-calendar-delete-button"
+                          disabled={busy}
+                          onClick={() => handleDeleteCompetition(competition)}
+                          type="button"
+                        >
+                          {copyFor(language, {
+                            en: "Delete",
+                            ru: "Удалить",
+                            bg: "Изтрий",
+                          })}
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            ) : null}
+
+            {planningView === "season" && seasonEditorMode === "cycles" ? (
+            <form
+              className="auth-form planning-main-form planning-season-cycle-form"
+              onSubmit={handleOlympicCycleSubmit}
+            >
+              <div className="summary-topline">
+                <div>
+                  <h3>
+                    {copyFor(language, {
+                      en: "Long-term cycles",
+                      ru: "Долгосрочные циклы",
+                      bg: "Дългосрочни цикли",
+                    })}
+                  </h3>
+                </div>
+                <span>{olympicCycles.length}</span>
+              </div>
+              <label className="field">
+                <span>
+                  {copyFor(language, {
+                    en: "Cycle name",
+                    ru: "Название цикла",
+                    bg: "Име на цикъла",
+                  })}
+                </span>
+                <input
+                  value={olympicCycleForm.name}
+                  onChange={(event) =>
+                    setOlympicCycleForm((current) => ({ ...current, name: event.target.value }))
+                  }
+                  required
+                />
+              </label>
+              <label className="field">
+                <span>
+                  {copyFor(language, {
+                    en: "Start date",
+                    ru: "Дата начала",
+                    bg: "Начална дата",
+                  })}
+                </span>
+                <input
+                  type="date"
+                  value={olympicCycleForm.startDate}
+                  onChange={(event) =>
+                    setOlympicCycleForm((current) => ({
+                      ...current,
+                      startDate: event.target.value,
+                    }))
+                  }
+                  required
+                />
+              </label>
+              <label className="field">
+                <span>
+                  {copyFor(language, {
+                    en: "End date",
+                    ru: "Дата окончания",
+                    bg: "Крайна дата",
+                  })}
+                </span>
+                <input
+                  type="date"
+                  value={olympicCycleForm.endDate}
+                  onChange={(event) =>
+                    setOlympicCycleForm((current) => ({ ...current, endDate: event.target.value }))
+                  }
+                  required
+                />
+              </label>
+              <label className="field">
+                <span>
+                  {copyFor(language, {
+                    en: "Main start",
+                    ru: "Главный старт",
+                    bg: "Основен старт",
+                  })}
+                </span>
+                <input
+                  value={olympicCycleForm.targetEvent}
+                  onChange={(event) =>
+                    setOlympicCycleForm((current) => ({
+                      ...current,
+                      targetEvent: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+              <label className="field planning-season-cycle-description">
+                <span>
+                  {copyFor(language, {
+                    en: "Note",
+                    ru: "Заметка",
+                    bg: "Бележка",
+                  })}
+                </span>
+                <input
+                  value={olympicCycleForm.description}
+                  onChange={(event) =>
+                    setOlympicCycleForm((current) => ({
+                      ...current,
+                      description: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+              <button className="secondary-button" disabled={busy} type="submit">
+                {copyFor(language, {
+                  en: "Save cycle",
+                  ru: "Сохранить цикл",
+                  bg: "Запази цикъл",
+                })}
+              </button>
+              <div className="planning-season-cycle-list">
+                <div className="summary-topline">
+                  <strong>
+                    {copyFor(language, {
+                      en: "Saved cycles",
+                      ru: "Сохранённые циклы",
+                      bg: "Запазени цикли",
+                    })}
+                  </strong>
+                  <span>{olympicCycles.length}</span>
+                </div>
+                {olympicCycles.length === 0 ? (
+                  <p className="placeholder-copy">
+                    {copyFor(language, {
+                      en: "No cycles yet.",
+                      ru: "Циклов пока нет.",
+                      bg: "Все още няма цикли.",
+                    })}
+                  </p>
+                ) : (
+                  <ul className="planning-season-card-list">
+                    {olympicCycles.map((cycle) => (
+                      <li className="planning-season-mini-card" key={cycle.id}>
+                        <strong>{cycle.name}</strong>
+                        <span>
+                          {cycle.startDate} - {cycle.endDate}
+                          {cycle.targetEvent ? ` / ${cycle.targetEvent}` : ""}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </form>
+            ) : null}
+
+            {planningView === "season" ? (
+            <div className="entry-summary wide-card planning-season-modebar">
+              <div>
+                <strong>
+                  {selectedCoachAthlete?.fullName ?? ui("selectAthlete")}
+                </strong>
+                <span>
+                  {copyFor(language, {
+                    en: `Year ${seasonDisplayYear} / ${visibleSeasonStarts.length} starts`,
+                    ru: `${seasonDisplayYear} год / стартов: ${visibleSeasonStarts.length}`,
+                    bg: `${seasonDisplayYear} година / стартове: ${visibleSeasonStarts.length}`,
+                  })}
+                </span>
+              </div>
+              <div className="planning-season-view-toggle" role="group">
+                {(["timeline", "hybrid"] as const).map((mode) => (
+                  <button
+                    className={
+                      seasonDisplayMode === mode ? "tab-active" : "tab-button"
+                    }
+                    key={mode}
+                    onClick={() => setSeasonDisplayMode(mode)}
+                    type="button"
+                  >
+                    {mode === "timeline"
+                      ? copyFor(language, {
+                          en: "Season timeline",
+                          ru: "Лента сезона",
+                          bg: "Лента на сезона",
+                        })
+                      : copyFor(language, {
+                          en: "Hybrid",
+                          ru: "Гибрид",
+                          bg: "Хибрид",
+                        })}
+                  </button>
+                ))}
+              </div>
+            </div>
+            ) : null}
+
+            {planningView === "season" ? (
+            <form
+              className="auth-form planning-side-form planning-season-form"
+              onSubmit={handleSeasonSubmit}
+            >
+              <h3>
+                {copyFor(language, {
+                  en: "Season",
+                  ru: "Сезон",
+                  bg: "Сезон",
+                })}
+              </h3>
+              <label className="field">
+                <span>
+                  {copyFor(language, { en: "Year", ru: "Год", bg: "Година" })}
+                </span>
+                <input
+                  type="number"
+                  value={seasonForm.year}
+                  onChange={(event) =>
+                    setSeasonForm((current) => ({
+                      ...current,
+                      year: Number(event.target.value),
+                    }))
+                  }
+                  required
+                />
+              </label>
+              <label className="field">
+                <span>
+                  {copyFor(language, {
+                    en: "Name",
+                    ru: "Название",
+                    bg: "Име",
+                  })}
+                </span>
+                <input
+                  value={seasonForm.name}
+                  onChange={(event) =>
+                    setSeasonForm((current) => ({ ...current, name: event.target.value }))
+                  }
+                  required
+                />
+              </label>
+              <label className="field">
+                <span>
+                  {copyFor(language, {
+                    en: "Strategy",
+                    ru: "Стратегия",
+                    bg: "Стратегия",
+                  })}
+                </span>
+                <select
+                  value={seasonForm.strategyType}
+                  onChange={(event) =>
+                    setSeasonForm((current) => ({
+                      ...current,
+                      strategyType: event.target.value as SeasonSummary["strategyType"],
+                    }))
+                  }
+                >
+                  {["single_peak", "double_peak", "multi_peak"].map((type) => (
+                    <option key={type} value={type}>
+                      {type}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span>
+                  {copyFor(language, {
+                    en: "Cycle",
+                    ru: "Цикл",
+                    bg: "Цикъл",
+                  })}
+                </span>
+                <select
+                  value={seasonForm.olympicCycleId ?? ""}
+                  onChange={(event) =>
+                    setSeasonForm((current) => ({
+                      ...current,
+                      olympicCycleId: event.target.value || null,
+                    }))
+                  }
+                >
+                  <option value="">
+                    {copyFor(language, {
+                      en: "No cycle",
+                      ru: "Без цикла",
+                      bg: "Без цикъл",
+                    })}
+                  </option>
+                  {olympicCycles.map((cycle) => (
+                    <option key={cycle.id} value={cycle.id}>
+                      {cycle.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                className="secondary-button"
+                disabled={busy || !seasonForm.athleteId}
+                type="submit"
+              >
+                {copyFor(language, {
+                  en: "Save season",
+                  ru: "Сохранить сезон",
+                  bg: "Запази сезон",
+                })}
+              </button>
+              <div className="planning-season-inline-list">
+                <div className="summary-topline">
+                  <strong>
+                    {copyFor(language, {
+                      en: "Seasons",
+                      ru: "Сезоны",
+                      bg: "Сезони",
+                    })}
+                  </strong>
+                  <span>{visibleSeasons.length}</span>
+                </div>
+                {visibleSeasons.length === 0 ? (
+                  <p className="placeholder-copy">
+                    {copyFor(language, {
+                      en: "No seasons yet.",
+                      ru: "Сезонов пока нет.",
+                      bg: "Все още няма сезони.",
+                    })}
+                  </p>
+                ) : (
+                  <ul className="planning-season-card-list">
+                    {visibleSeasons.map((season) => (
+                      <li className="planning-season-mini-card" key={season.id}>
+                        <strong>
+                          {season.year} / {season.name}
+                        </strong>
+                        <span>{season.strategyType}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </form>
+            ) : null}
+
+            {planningView === "season" && seasonDisplayMode === "timeline" ? (
+            <div className="entry-summary wide-card planning-season-timeline-card">
+              <div className="summary-topline">
+                <strong>
+                  {copyFor(language, {
+                    en: "Season timeline",
+                    ru: "Лента сезона",
+                    bg: "Лента на сезона",
+                  })}
+                </strong>
+                <span>{seasonDisplayYear}</span>
+              </div>
+              <div className="planning-season-phase-row">
+                {["base", "specific", "taper", "competition", "recovery"].map((phase) => (
+                  <span className={`planning-season-phase planning-season-phase-${phase}`} key={phase}>
+                    {copyFor(language, SEASON_PHASE_LABELS[phase])}
+                  </span>
+                ))}
+              </div>
+              <div className="planning-season-timeline-months">
+                {seasonMonthLabels.map((month) => (
+                  <span key={month}>{month}</span>
+                ))}
+              </div>
+              <div className="planning-season-timeline-track">
+                {visibleSeasonStarts.map((plan) => (
+                  <button
+                    className={`planning-season-timeline-marker priority-${plan.priority.toLowerCase()} ${
+                      selectedSeasonStart?.id === plan.id ? "is-active" : ""
+                    }`}
+                    key={plan.id}
+                    onClick={() => handleSelectSeasonStart(plan)}
+                    style={{ left: `${getSeasonTimelinePosition(plan.competitionStartDate)}%` }}
+                    type="button"
+                  >
+                    <span>{plan.priority}</span>
+                    <strong>{plan.competitionTitle}</strong>
+                    <small>{plan.competitionStartDate.slice(5)}</small>
+                  </button>
+                ))}
+              </div>
+            </div>
+            ) : null}
+
+            {planningView === "season" && seasonDisplayMode === "hybrid" ? (
+            <div className="entry-summary planning-main-form planning-season-calendar-card">
+              <div className="summary-topline">
+                <strong>
+                  {copyFor(language, {
+                    en: "Year calendar",
+                    ru: "Календарь года",
+                    bg: "Годишен календар",
+                  })}
+                </strong>
+                <span>{seasonDisplayYear}</span>
+              </div>
+              <div className="planning-season-year-grid">
+                {seasonMonthLabels.map((month, monthIndex) => {
+                  const monthStarts = visibleSeasonStarts.filter(
+                    (plan) => getDateMonthIndex(plan.competitionStartDate) === monthIndex,
+                  );
+
+                  return (
+                    <div className="planning-season-month-card" key={month}>
+                      <div className="planning-season-month-head">
+                        <strong>{month}</strong>
+                        <span>{monthStarts.length}</span>
+                      </div>
+                      <div className="planning-season-month-events">
+                        {monthStarts.length === 0 ? (
+                          <span className="planning-season-empty-dot" />
+                        ) : (
+                          monthStarts.map((plan) => (
+                            <button
+                              className={`planning-season-month-event priority-${plan.priority.toLowerCase()} ${
+                                selectedSeasonStart?.id === plan.id ? "is-active" : ""
+                              }`}
+                              key={plan.id}
+                              onClick={() => handleSelectSeasonStart(plan)}
+                              type="button"
+                            >
+                              <span>{plan.competitionStartDate.slice(8, 10)}</span>
+                              <strong>{plan.competitionTitle}</strong>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            ) : null}
+
+            {planningView === "season" ? (
+            <div
+              aria-label={copyFor(language, {
+                en: "Season sections",
+                ru: "Разделы сезона",
+                bg: "Раздели на сезона",
+              })}
+              className="planning-season-work-tabs"
+              role="group"
+            >
+              {(["starts", "plan", "result", "cycles"] as const).map((mode) => {
+                const label =
+                  mode === "starts"
+                    ? copyFor(language, {
+                        en: "Starts",
+                        ru: "Старты",
+                        bg: "Стартове",
+                      })
+                    : mode === "plan"
+                      ? copyFor(language, {
+                          en: "Start plan",
+                          ru: "План старта",
+                          bg: "План старт",
+                        })
+                      : mode === "result"
+                        ? copyFor(language, {
+                          en: "Result",
+                          ru: "Результат",
+                          bg: "Резултат",
+                        })
+                        : copyFor(language, {
+                            en: "Cycles",
+                            ru: "Циклы",
+                            bg: "Цикли",
+                          });
+
+                return (
+                  <button
+                    aria-pressed={seasonEditorMode === mode}
+                    className={seasonEditorMode === mode ? "tab-active" : "tab-button"}
+                    key={mode}
+                    onClick={() => setSeasonEditorMode(mode)}
+                    type="button"
+                  >
+                    <span>{label}</span>
+                    {mode === "starts" ? <small>{visibleSeasonStarts.length}</small> : null}
+                    {mode === "cycles" ? <small>{olympicCycles.length}</small> : null}
+                  </button>
+                );
+              })}
+            </div>
+            ) : null}
+
+            {planningView === "season" && seasonEditorMode === "plan" ? (
+            <form
+              className="auth-form planning-main-form planning-season-start-form"
+              onSubmit={handleCompetitionPlanSubmit}
+            >
+              <h3>
+                {copyFor(language, {
+                  en: "Add start",
+                  ru: "Добавить старт",
+                  bg: "Добави старт",
+                })}
+              </h3>
+              <label className="field">
+                <span>
+                  {copyFor(language, {
+                    en: "Competition",
+                    ru: "Соревнование",
+                    bg: "Състезание",
+                  })}
+                </span>
+                <select
+                  value={competitionPlanForm.competitionId}
+                  onChange={(event) =>
+                    setCompetitionPlanForm((current) => ({
+                      ...current,
+                      competitionId: event.target.value,
+                    }))
+                  }
+                  required
+                >
+                  <option value="">
+                    {copyFor(language, {
+                      en: "Select competition",
+                      ru: "Выберите соревнование",
+                      bg: "Изберете състезание",
+                    })}
+                  </option>
+                  {competitions.map((competition) => (
+                    <option key={competition.id} value={competition.id}>
+                      {competition.title} ({competition.startDate})
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span>
+                  {copyFor(language, {
+                    en: "Priority",
+                    ru: "Приоритет",
+                    bg: "Приоритет",
+                  })}
+                </span>
+                <select
+                  value={competitionPlanForm.priority}
+                  onChange={(event) =>
+                    setCompetitionPlanForm((current) => ({
+                      ...current,
+                      priority: event.target.value as CompetitionPlanSummary["priority"],
+                    }))
+                  }
+                >
+                  {["A", "B", "C"].map((priority) => (
+                    <option key={priority} value={priority}>
+                      {priority}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span>
+                  {copyFor(language, {
+                    en: "Plan type",
+                    ru: "Тип плана",
+                    bg: "Тип план",
+                  })}
+                </span>
+                <select
+                  value={competitionPlanForm.planType}
+                  onChange={(event) =>
+                    setCompetitionPlanForm((current) => ({
+                      ...current,
+                      planType: event.target.value as CompetitionPlanSummary["planType"],
+                    }))
+                  }
+                >
+                  {["main", "secondary", "qualifying", "control"].map((type) => (
+                    <option key={type} value={type}>
+                      {type}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span>
+                  {copyFor(language, {
+                    en: "Preparation start",
+                    ru: "Начало подготовки",
+                    bg: "Начало на подготовката",
+                  })}
+                </span>
+                <input
+                  type="date"
+                  value={competitionPlanForm.prepStartDate}
+                  onChange={(event) =>
+                    setCompetitionPlanForm((current) => ({
+                      ...current,
+                      prepStartDate: event.target.value,
+                    }))
+                  }
+                  required
+                />
+              </label>
+              <label className="field">
+                <span>
+                  {copyFor(language, {
+                    en: "Preparation end",
+                    ru: "Конец подготовки",
+                    bg: "Край на подготовката",
+                  })}
+                </span>
+                <input
+                  type="date"
+                  value={competitionPlanForm.prepEndDate}
+                  onChange={(event) =>
+                    setCompetitionPlanForm((current) => ({
+                      ...current,
+                      prepEndDate: event.target.value,
+                    }))
+                  }
+                  required
+                />
+              </label>
+              <label className="field">
+                <span>
+                  {copyFor(language, {
+                    en: "Taper days",
+                    ru: "Дней подводки",
+        bg: "Дни за тейпър",
+                  })}
+                </span>
+                <input
+                  type="number"
+                  value={competitionPlanForm.taperDays}
+                  onChange={(event) =>
+                    setCompetitionPlanForm((current) => ({
+                      ...current,
+                      taperDays: Number(event.target.value),
+                    }))
+                  }
+                />
+              </label>
+              <details className="planning-season-advanced-fields">
+                <summary>
+                  {copyFor(language, {
+                    en: "Advanced",
+                    ru: "Дополнительно",
+                    bg: "Допълнително",
+                  })}
+                </summary>
+                <div className="planning-season-advanced-grid">
+                <label className="field">
+                  <span>
+                    {copyFor(language, {
+                      en: "Season",
+                      ru: "Сезон",
+                      bg: "Сезон",
+                    })}
+                  </span>
+                  <select
+                    value={competitionPlanForm.seasonId ?? ""}
+                    onChange={(event) =>
+                      setCompetitionPlanForm((current) => ({
+                        ...current,
+                        seasonId: event.target.value || null,
+                      }))
+                    }
+                  >
+                    <option value="">
+                      {copyFor(language, {
+                        en: "No season link",
+                        ru: "Без сезона",
+                        bg: "Без връзка със сезон",
+                      })}
+                    </option>
+                    {visibleSeasons
+                      .filter(
+                        (season) =>
+                          !competitionPlanForm.athleteId ||
+                          season.athleteId === competitionPlanForm.athleteId,
+                      )
+                      .map((season) => (
+                        <option key={season.id} value={season.id}>
+                          {season.year} / {season.name}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+                <label className="field">
+                  <span>
+                    {copyFor(language, {
+                      en: "Target weight",
+                      ru: "Целевой вес",
+                      bg: "Целево тегло",
+                    })}
+                  </span>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={competitionPlanForm.targetWeight ?? ""}
+                    onChange={(event) =>
+                      setCompetitionPlanForm((current) => ({
+                        ...current,
+                        targetWeight:
+                          event.target.value === "" ? null : Number(event.target.value),
+                      }))
+                    }
+                  />
+                </label>
+                <label className="field">
+                  <span>
+                    {copyFor(language, {
+                      en: "Expected matches",
+                      ru: "Ожидаемые схватки",
+                      bg: "Очаквани срещи",
+                    })}
+                  </span>
+                  <input
+                    type="number"
+                    value={competitionPlanForm.expectedMatches ?? ""}
+                    onChange={(event) =>
+                      setCompetitionPlanForm((current) => ({
+                        ...current,
+                        expectedMatches:
+                          event.target.value === "" ? null : Number(event.target.value),
+                      }))
+                    }
+                  />
+                </label>
+                </div>
+              </details>
+              <button
+                className="primary-button planning-season-submit"
+                disabled={busy || !competitionPlanForm.athleteId}
+                type="submit"
+              >
+                {busy
+                  ? ui("syncingNow")
+                  : copyFor(language, {
+                      en: "Save season start",
+                      ru: "Сохранить старт",
+                      bg: "Запази старт",
+                    })}
+              </button>
+            </form>
+            ) : null}
+
+            {planningView === "season" && seasonEditorMode === "starts" ? (
+            <div className="entry-summary planning-inspector-card planning-season-start-list">
+              <div className="summary-topline">
+                <strong>
+                  {copyFor(language, {
+                    en: "Starts",
+                    ru: "Старты",
+                    bg: "Стартове",
+                  })}
+                </strong>
+                <span>{visibleSeasonStarts.length}</span>
+              </div>
+              {selectedSeasonStart ? (
+                <div className="planning-season-selected-start">
+                  <strong>{selectedSeasonStart.competitionTitle}</strong>
+                  <span>
+                    {selectedSeasonStart.competitionStartDate}
+                    {selectedSeasonCompetition?.location
+                      ? ` / ${selectedSeasonCompetition.location}`
+                      : ""}
+                  </span>
+                  <div>
+                    <span>{selectedSeasonStart.priority}</span>
+                    <span>{selectedSeasonStart.planType}</span>
+                    <span>
+                {copyFor(language, { en: "Taper", ru: "Подводка", bg: "Тейпър" })}:{" "}
+                      {selectedSeasonStart.taperDays}
+                    </span>
+                  </div>
+                  <div className="planning-season-start-actions">
+                    <button className="tertiary-button" onClick={handleNewSeasonStart} type="button">
+                      {copyFor(language, {
+                        en: "New",
+                        ru: "Новый",
+                        bg: "Нов",
+                      })}
+                    </button>
+                    <button
+                      className="secondary-button"
+                      onClick={() => handleSelectSeasonStart(selectedSeasonStart)}
+                      type="button"
+                    >
+                      {copyFor(language, {
+                        en: "Result",
+                        ru: "Результат",
+                        bg: "Резултат",
+                      })}
+                    </button>
+                    <button
+                      className="tertiary-button planning-season-start-delete"
+                      disabled={busy}
+                      onClick={() => handleDeleteSeasonStart(selectedSeasonStart)}
+                      type="button"
+                    >
+                      {copyFor(language, {
+                        en: "Delete",
+                        ru: "Удалить",
+                        bg: "Изтрий",
+                      })}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <p className="placeholder-copy">
+                  {copyFor(language, {
+                    en: "No starts in this year.",
+                    ru: "В этом году стартов пока нет.",
+                    bg: "Все още няма стартове за тази година.",
+                  })}
+                </p>
+              )}
+              {visibleSeasonStarts.length > 0 ? (
+                <details className="planning-season-starts-details">
+                  <summary>
+                    {copyFor(language, {
+                      en: "All starts",
+                      ru: "Все старты",
+                      bg: "Всички стартове",
+                    })}
+                  </summary>
+                  <ul className="planning-season-card-list">
+                    {visibleSeasonStarts.map((plan) => (
+                      <li key={plan.id}>
+                        <button
+                          className={`planning-season-start-card ${
+                            selectedSeasonStart?.id === plan.id ? "is-active" : ""
+                          }`}
+                          onClick={() => handleSelectSeasonStart(plan, "starts")}
+                          type="button"
+                        >
+                          <strong>{plan.competitionTitle}</strong>
+                          <span>
+                            {plan.priority} / {plan.planType}
+                          </span>
+                          <small>
+                            {plan.prepStartDate} - {plan.prepEndDate}
+                          </small>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              ) : null}
+            </div>
+            ) : null}
+
+            {planningView === "mesocycle" ? (
+            <form
+              className="auth-form wide-form planning-main-form planning-mesocycle-form"
+              onSubmit={handleMesocycleSubmit}
+            >
+              <div className="summary-topline planning-mesocycle-form-head">
+                <h3>
+                  {copyFor(language, {
+                    en: "Mesocycle plan",
+                    ru: "План мезоцикла",
+                    bg: "План на мезоцикъл",
+                  })}
+                </h3>
+                <span>{selectedCoachAthlete?.fullName ?? activeAthleteLabel}</span>
+              </div>
+              <label className="field planning-mesocycle-name-field">
+                <span>
+                  {copyFor(language, {
+                    en: "Name",
+                    ru: "Название",
+                    bg: "Име",
+                  })}
+                </span>
+                <input
+                  value={mesocycleForm.name}
+                  onChange={(event) =>
+                    setMesocycleForm((current) => ({ ...current, name: event.target.value }))
+                  }
+                  placeholder={copyFor(language, {
+                    en: "Specific preparation block",
+                    ru: "Блок специальной подготовки",
+                    bg: "Блок за специална подготовка",
+                  })}
+                  required
+                />
+              </label>
+              <label className="field planning-mesocycle-season-field">
+                <span>
+                  {copyFor(language, {
+                    en: "Season",
+                    ru: "Сезон",
+                    bg: "Сезон",
+                  })}
+                </span>
+                <select
+                  value={mesocycleForm.seasonId ?? ""}
+                  onChange={(event) =>
+                    setMesocycleForm((current) => ({
+                      ...current,
+                      seasonId: event.target.value || null,
+                    }))
+                  }
+                >
+                  <option value="">
+                    {copyFor(language, {
+                      en: "Unlinked",
+                      ru: "Без сезона",
+                      bg: "Без сезон",
+                    })}
+                  </option>
+                  {seasons
+                    .filter((season) => season.athleteId === activeMesocycleAthleteId)
+                    .map((season) => (
+                      <option key={season.id} value={season.id}>
+                        {season.year} / {season.name}
+                      </option>
+                    ))}
+                </select>
+              </label>
+              <label className="field planning-mesocycle-competition-field">
+                <span>
+                  {copyFor(language, {
+                    en: "Competition plan",
+                    ru: "План старта",
+                    bg: "План за старт",
+                  })}
+                </span>
+                <select
+                  value={mesocycleForm.competitionPlanId ?? ""}
+                  onChange={(event) =>
+                    setMesocycleForm((current) => ({
+                      ...current,
+                      competitionPlanId: event.target.value || null,
+                    }))
+                  }
+                >
+                  <option value="">
+                    {copyFor(language, {
+                      en: "Optional link",
+                      ru: "Без плана старта",
+                      bg: "Без план за старт",
+                    })}
+                  </option>
+                  {competitionPlans
+                    .filter((plan) => plan.athleteId === activeMesocycleAthleteId)
+                    .map((plan) => (
+                      <option key={plan.id} value={plan.id}>
+                        {plan.competitionTitle} / {plan.priority} / {plan.prepStartDate}
+                      </option>
+                    ))}
+                </select>
+              </label>
+              <label className="field planning-mesocycle-phase-field">
+                <span>
+                  {copyFor(language, {
+                    en: "Phase",
+                    ru: "Фаза",
+                    bg: "Фаза",
+                  })}
+                </span>
+                <select
+                  value={mesocycleForm.phase}
+                  onChange={(event) =>
+                    setMesocycleForm((current) => ({
+                      ...current,
+                      phase: event.target.value as CreateMesocyclePayload["phase"],
+                    }))
+                  }
+                >
+                  {["base", "strength", "specific", "taper", "competition", "recovery"].map(
+                    (phase) => (
+                      <option key={phase} value={phase}>
+                        {localizedOptionLabel(phase, language, PREPARATION_PHASE_LABELS)}
+                      </option>
+                    ),
+                  )}
+                </select>
+              </label>
+              <label className="field planning-mesocycle-progression-field">
+                <span>
+                  {copyFor(language, {
+                    en: "Progression",
+                    ru: "Прогрессия",
+                    bg: "Прогресия",
+                  })}
+                </span>
+                <select
+                  value={mesocycleForm.progressionType}
+                  onChange={(event) =>
+                    setMesocycleForm((current) => ({
+                      ...current,
+                      progressionType:
+                        event.target.value as CreateMesocyclePayload["progressionType"],
+                    }))
+                  }
+                >
+                  {["linear", "wave", "taper", "recovery"].map((type) => (
+                    <option key={type} value={type}>
+                      {localizedOptionLabel(type, language, PROGRESSION_TYPE_LABELS)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field planning-mesocycle-weeks-field">
+                <span>
+                  {copyFor(language, {
+                    en: "Weeks",
+                    ru: "Недель",
+                    bg: "Седмици",
+                  })}
+                </span>
+                <input
+                  type="number"
+                  min="3"
+                  max="6"
+                  value={mesocycleForm.weeksCount}
+                  onChange={(event) =>
+                    setMesocycleForm((current) => ({
+                      ...current,
+                      weeksCount: Number(event.target.value),
+                    }))
+                  }
+                />
+              </label>
+              <label className="field planning-mesocycle-date-field">
+                <span>
+                  {copyFor(language, {
+                    en: "Start",
+                    ru: "Начало",
+                    bg: "Начало",
+                  })}
+                </span>
+                <input
+                  type="date"
+                  value={mesocycleForm.startDate}
+                  onChange={(event) =>
+                    setMesocycleForm((current) => ({
+                      ...current,
+                      startDate: event.target.value,
+                    }))
+                  }
+                  required
+                />
+              </label>
+              <label className="field planning-mesocycle-date-field">
+                <span>
+                  {copyFor(language, {
+                    en: "End",
+                    ru: "Конец",
+                    bg: "Край",
+                  })}
+                </span>
+                <input
+                  type="date"
+                  value={mesocycleForm.endDate}
+                  onChange={(event) =>
+                    setMesocycleForm((current) => ({
+                      ...current,
+                      endDate: event.target.value,
+                    }))
+                  }
+                  required
+                />
+              </label>
+              <label className="field planning-mesocycle-goal-field">
+                <span>
+                  {copyFor(language, {
+                    en: "Goal",
+                    ru: "Цель",
+                    bg: "Цел",
+                  })}
+                </span>
+                <input
+                  value={mesocycleForm.goal}
+                  onChange={(event) =>
+                    setMesocycleForm((current) => ({ ...current, goal: event.target.value }))
+                  }
+                  placeholder={copyFor(language, {
+                    en: "Raise specific work capacity before taper",
+                    ru: "Поднять специальную работоспособность перед подводкой",
+                    bg: "Повишаване на специфичната работоспособност преди тейпър",
+                  })}
+                />
+              </label>
+              <label className="field planning-mesocycle-notes-field">
+                <span>{t("coachNotes")}</span>
+                <input
+                  value={mesocycleForm.notes}
+                  onChange={(event) =>
+                    setMesocycleForm((current) => ({ ...current, notes: event.target.value }))
+                  }
+                />
+              </label>
+              <button
+                className="primary-button planning-mesocycle-submit"
+                disabled={busy || !activeMesocycleAthleteId}
+                type="submit"
+              >
+                {busy
+                  ? ui("syncingNow")
+                  : copyFor(language, {
+                      en: "Save mesocycle",
+                      ru: "Сохранить мезоцикл",
+                      bg: "Запази мезоцикъл",
+                    })}
+              </button>
+            </form>
+            ) : null}
+
+            {planningView === "mesocycle" ? (
+            <div className="entry-summary wide-card planning-review-card planning-mesocycle-board">
+              <div className="summary-topline">
+                <strong>
+                  {copyFor(language, {
+                    en: "Mesocycles",
+                    ru: "Мезоциклы",
+                    bg: "Мезоцикли",
+                  })}
+                </strong>
+                <span>{visibleMesocycles.length}</span>
+              </div>
+              {visibleMesocycles.length === 0 ? (
+                <p className="placeholder-copy">
+                  {copyFor(language, {
+                    en: "No mesocycle blocks yet. Create one to bridge competition planning and weekly assignment.",
+                    ru: "Мезоциклов пока нет. Создайте блок, чтобы связать соревновательное планирование и недельное назначение.",
+                    bg: "Все още няма мезоцикли. Създайте блок, за да свържете състезателното планиране и седмичното назначаване.",
+                  })}
+                </p>
+              ) : (
+                <ul className="mesocycle-plan-list">
+                  {visibleMesocycles.map((mesocycle) => {
+                    const totalTargetLoad = mesocycle.weeks.reduce(
+                      (sum, week) => sum + week.targetLoad,
+                      0,
+                    );
+                    const maxWeekLoad = Math.max(
+                      1,
+                      ...mesocycle.weeks.map((week) => week.targetLoad),
+                    );
+                    const goalText = translateKnownMesocycleText(mesocycle.goal, language);
+
+                    return (
+                      <li className="mesocycle-plan-item" key={mesocycle.id}>
+                        <div className="mesocycle-plan-head">
+                          <div className="mesocycle-plan-title">
+                            <strong>{translateKnownMesocycleText(mesocycle.name, language)}</strong>
+                            <small>
+                              {mesocycle.athleteName}
+                              {mesocycle.seasonName ? ` / ${mesocycle.seasonName}` : ""}
+                            </small>
+                          </div>
+                          <div className="mesocycle-plan-tags">
+                            <span className="status-chip accent">
+                              {localizedOptionLabel(
+                                mesocycle.phase,
+                                language,
+                                PREPARATION_PHASE_LABELS,
+                              )}
+                            </span>
+                            <span className="status-chip idle">
+                              {localizedOptionLabel(
+                                mesocycle.progressionType,
+                                language,
+                                PROGRESSION_TYPE_LABELS,
+                              )}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="mesocycle-plan-meta">
+                          <article>
+                            <span>
+                              {copyFor(language, {
+                                en: "Period",
+                                ru: "Период",
+                                bg: "Период",
+                              })}
+                            </span>
+                            <strong>
+                              {mesocycle.startDate} - {mesocycle.endDate}
+                            </strong>
+                          </article>
+                          <article>
+                            <span>
+                              {copyFor(language, {
+                                en: "Weeks",
+                                ru: "Недели",
+                                bg: "Седмици",
+                              })}
+                            </span>
+                            <strong>{mesocycle.weeksCount}</strong>
+                          </article>
+                          <article>
+                            <span>
+                              {copyFor(language, {
+                                en: "Target load",
+                                ru: "Целевая нагрузка",
+                                bg: "Целево натоварване",
+                              })}
+                            </span>
+                            <strong>{Math.round(totalTargetLoad)}</strong>
+                          </article>
+                          <article>
+                            <span>
+                              {copyFor(language, {
+                                en: "Start",
+                                ru: "Старт",
+                                bg: "Старт",
+                              })}
+                            </span>
+                            <strong>
+                              {mesocycle.competitionTitle ||
+                                copyFor(language, {
+                                  en: "Not linked",
+                                  ru: "Не привязан",
+                                  bg: "Няма връзка",
+                                })}
+                            </strong>
+                          </article>
+                        </div>
+
+                        <p className="mesocycle-plan-goal">
+                          <span>
+                            {copyFor(language, {
+                              en: "Goal",
+                              ru: "Цель",
+                              bg: "Цел",
+                            })}
+                          </span>
+                          {goalText ||
+                            copyFor(language, {
+                              en: "not set",
+                              ru: "не задана",
+                              bg: "не е зададена",
+                            })}
+                        </p>
+
+                        <div className="mesocycle-week-grid">
+                          {mesocycle.weeks.map((week) => {
+                            const loadWidth = Math.min(
+                              100,
+                              Math.max(4, (week.targetLoad / maxWeekLoad) * 100),
+                            );
+
+                            return (
+                              <article
+                                className="mesocycle-week-item"
+                                key={`${mesocycle.id}-${week.weekIndex}`}
+                              >
+                                <div className="mesocycle-week-head">
+                                  <strong>{localizedWeekLabel(week.label, language)}</strong>
+                                  <span>
+                                    {week.startDate} - {week.endDate}
+                                  </span>
+                                </div>
+                                <div className="mesocycle-load-bar" aria-hidden="true">
+                                  <span style={{ width: `${loadWidth}%` }} />
+                                </div>
+                                <div className="mesocycle-week-meta">
+                                  <span>
+                                    {localizedOptionLabel(
+                                      week.microcycleType,
+                                      language,
+                                      MICROCYCLE_TYPE_LABELS,
+                                    )}
+                                  </span>
+                                  <strong>{Math.round(week.targetLoad)}</strong>
+                                </div>
+                                <p>{translateKnownMesocycleText(week.focus, language)}</p>
+                                <button
+                                  className="secondary-button"
+                                  onClick={() => handleUseMesocycleWeek(mesocycle, week)}
+                                  type="button"
+                                >
+                                  {copyFor(language, {
+                                    en: "Use in week",
+                                    ru: "В недельный план",
+                                    bg: "Към седмичния план",
+                                  })}
+                                </button>
+                              </article>
+                            );
+                          })}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+            ) : null}
+
+            {planningView === "season" && seasonEditorMode === "result" ? (
+            <form
+              className="auth-form planning-main-form planning-season-result-form"
+              onSubmit={handleCompetitionResultSubmit}
+            >
+              <h3>
+                {copyFor(language, {
+                  en: "Start result",
+                  ru: "Результат старта",
+                  bg: "Резултат от старт",
+                })}
+              </h3>
+              <label className="field">
+                <span>
+                  {copyFor(language, {
+                    en: "Start",
+                    ru: "Старт",
+                    bg: "Старт",
+                  })}
+                </span>
+                <select
+                  value={competitionResultForm.competitionPlanId || selectedSeasonStart?.id || ""}
+                  onChange={(event) => {
+                    setSelectedSeasonStartId(event.target.value);
+                    setCompetitionResultForm((current) => ({
+                      ...current,
+                      competitionPlanId: event.target.value,
+                    }));
+                  }}
+                  required
+                >
+                  <option value="">
+                    {copyFor(language, {
+                      en: "Select start",
+                      ru: "Выберите старт",
+                      bg: "Изберете старт",
+                    })}
+                  </option>
+                  {visibleSeasonStarts.map((plan) => (
+                    <option key={plan.id} value={plan.id}>
+                      {plan.competitionTitle} / {plan.prepStartDate}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span>
+                  {copyFor(language, {
+                    en: "Place",
+                    ru: "Место",
+                    bg: "Място",
+                  })}
+                </span>
+                <input
+                  type="number"
+                  value={competitionResultForm.finalPlace ?? ""}
+                  onChange={(event) =>
+                    setCompetitionResultForm((current) => ({
+                      ...current,
+                      finalPlace: event.target.value === "" ? null : Number(event.target.value),
+                    }))
+                  }
+                />
+              </label>
+              <label className="field">
+                <span>
+                  {copyFor(language, {
+                    en: "Matches",
+                    ru: "Схватки",
+                    bg: "Срещи",
+                  })}
+                </span>
+                <input
+                  type="number"
+                  value={competitionResultForm.matchesCount ?? ""}
+                  onChange={(event) =>
+                    setCompetitionResultForm((current) => ({
+                      ...current,
+                      matchesCount:
+                        event.target.value === "" ? null : Number(event.target.value),
+                    }))
+                  }
+                />
+              </label>
+              <label className="field">
+                <span>
+                  {copyFor(language, {
+                    en: "Weigh-in",
+                    ru: "Вес на взвешивании",
+                    bg: "Тегло на кантар",
+                  })}
+                </span>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={competitionResultForm.weightAtWeighIn ?? ""}
+                  onChange={(event) =>
+                    setCompetitionResultForm((current) => ({
+                      ...current,
+                      weightAtWeighIn:
+                        event.target.value === "" ? null : Number(event.target.value),
+                    }))
+                  }
+                />
+              </label>
+              <label className="field">
+                <span>
+                  {copyFor(language, {
+                    en: "Weight after",
+                    ru: "Вес после",
+                    bg: "Тегло след",
+                  })}
+                </span>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={competitionResultForm.weightAfter ?? ""}
+                  onChange={(event) =>
+                    setCompetitionResultForm((current) => ({
+                      ...current,
+                      weightAfter: event.target.value === "" ? null : Number(event.target.value),
+                    }))
+                  }
+                />
+              </label>
+              <details className="planning-season-advanced-fields">
+                <summary>
+                  {copyFor(language, {
+                    en: "Notes",
+                    ru: "Заметки",
+                    bg: "Бележки",
+                  })}
+                </summary>
+                <label className="field">
+                  <span>
+                    {copyFor(language, {
+                      en: "Performance",
+                      ru: "Выступление",
+                      bg: "Представяне",
+                    })}
+                  </span>
+                  <input
+                    value={competitionResultForm.performanceNotes}
+                    onChange={(event) =>
+                      setCompetitionResultForm((current) => ({
+                        ...current,
+                        performanceNotes: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+                <label className="field">
+                  <span>{t("coachNotes")}</span>
+                  <input
+                    value={competitionResultForm.coachNotes}
+                    onChange={(event) =>
+                      setCompetitionResultForm((current) => ({
+                        ...current,
+                        coachNotes: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+              </details>
+              <button className="primary-button planning-season-submit" disabled={busy} type="submit">
+                {busy
+                  ? ui("syncingNow")
+                  : copyFor(language, {
+                      en: "Save result",
+                      ru: "Сохранить результат",
+                      bg: "Запази резултат",
+                    })}
+              </button>
+            </form>
+            ) : null}
+
+            {planningView === "templates" ? (
+            <form
+              className="auth-form wide-form planning-main-form planning-template-builder"
+              onSubmit={handlePlanTemplateSubmit}
+            >
+              <div className="planning-template-editor-head">
+                <div>
+                  <h3>
+                    {copyFor(language, {
+                      en: "Template editor",
+                      ru: "Редактор шаблона",
+                      bg: "Редактор на шаблон",
+                    })}
+                  </h3>
+                  <p className="placeholder-copy">
+                    {copyFor(language, {
+                      en: "Configure the day structure, block rules, and exercise list before assigning it to an athlete.",
+                      ru: "Настройте структуру дня, правила блоков и список упражнений перед назначением спортсмену.",
+                      bg: "Настройте структурата на деня, правилата на блоковете и списъка с упражнения преди назначаване.",
+                    })}
+                  </p>
+                </div>
+                <button
+                  className="secondary-button"
+                  onClick={() => setPlanForm(createLocalizedDefaultPlanTemplate(language))}
+                  type="button"
+                >
+                  {copyFor(language, {
+                    en: "New template",
+                    ru: "Новый шаблон",
+                    bg: "Нов шаблон",
+                  })}
+                </button>
+              </div>
+
+              <div className="planning-template-meta-grid">
+              <label className="field">
+                <span>{t("templateName")}</span>
+                <input
+                  value={planForm.name}
+                  onChange={(event) =>
+                    setPlanForm((current) => ({
+                      ...current,
+                      name: event.target.value,
+                    }))
+                  }
+                  required
+                />
+              </label>
+
+              <label className="field">
+                <span>{t("description")}</span>
+                <input
+                  value={planForm.description}
+                  onChange={(event) =>
+                    setPlanForm((current) => ({
+                      ...current,
+                      description: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+
+              <label className="field">
+                <span>{t("sportType")}</span>
+                <input
+                  value={planForm.sportType}
+                  onChange={(event) =>
+                    setPlanForm((current) => ({
+                      ...current,
+                      sportType: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+
+              <label className="field">
+                <span>{t("phaseFocus")}</span>
+                <select
+                  value={planForm.phaseFocus ?? ""}
+                  onChange={(event) =>
+                    setPlanForm((current) => ({
+                      ...current,
+                      phaseFocus:
+                        event.target.value === ""
+                          ? null
+                          : (event.target.value as PlanTemplatePayload["phaseFocus"]),
+                    }))
+                  }
+                >
+                  <option value="">{t("general")}</option>
+                  {PREPARATION_PHASE_VALUES.map(
+                    (phase) => (
+                      <option key={phase} value={phase}>
+                        {localizedOptionLabel(phase, language, PREPARATION_PHASE_LABELS)}
+                      </option>
+                    ),
+                  )}
+                </select>
+              </label>
+
+              <label className="field">
+                <span>{t("priorityFocus")}</span>
+                <select
+                  value={planForm.competitionPriorityFocus ?? ""}
+                  onChange={(event) =>
+                    setPlanForm((current) => ({
+                      ...current,
+                      competitionPriorityFocus:
+                        event.target.value === ""
+                          ? null
+                          : (event.target.value as PlanTemplatePayload["competitionPriorityFocus"]),
+                    }))
+                  }
+                >
+                  <option value="">{t("general")}</option>
+                  {["A", "B", "C"].map((priority) => (
+                    <option key={priority} value={priority}>
+                      {priority}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="field">
+                <span>{t("templateGoal")}</span>
+                <input
+                  value={planForm.templateGoal}
+                  onChange={(event) =>
+                    setPlanForm((current) => ({
+                      ...current,
+                      templateGoal: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+
+              <label className="field">
+                <span>{t("microcycleType")}</span>
+                <select
+                  value={planForm.microcycleType}
+                  onChange={(event) =>
+                    setPlanForm((current) => ({
+                      ...current,
+                      microcycleType: event.target.value,
+                    }))
+                  }
+                >
+                  {!TEMPLATE_MICROCYCLE_TYPES.includes(
+                    planForm.microcycleType as (typeof TEMPLATE_MICROCYCLE_TYPES)[number],
+                  ) ? (
+                    <option value={planForm.microcycleType}>{planForm.microcycleType}</option>
+                  ) : null}
+                  {TEMPLATE_MICROCYCLE_TYPES.map((type) => (
+                    <option key={type} value={type}>
+                      {localizedOptionLabel(type, language, MICROCYCLE_TYPE_LABELS)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="field">
+                <span>{t("competitionSpecific")}</span>
+                <input
+                  type="checkbox"
+                  checked={planForm.competitionSpecific}
+                  onChange={(event) =>
+                    setPlanForm((current) => ({
+                      ...current,
+                      competitionSpecific: event.target.checked,
+                    }))
+                  }
+                />
+              </label>
+              </div>
+
+              <div className="entry-summary">
+                <div className="summary-topline">
+                  <strong>{t("templateBlocks")}</strong>
+                  <span>{blocksCountLabel(planForm.blocks.length, language)}</span>
+                </div>
+                <div className="stack">
+                  {planForm.blocks.map((block, index) => (
+                    <details
+                      className="entry-summary planning-template-block"
+                      key={`${block.name}-${index}`}
+                      open={index === 0}
+                    >
+                      <summary className="summary-topline planning-template-block-summary">
+                        <div>
+                          <strong>{block.name}</strong>
+                          <small>
+                            {localizedOptionLabel(block.blockType, language, BLOCK_TYPE_LABELS)} /{" "}
+                            {block.targetDurationMinutes ?? "-"} {copyFor(language, {
+                              en: "min",
+                              ru: "мин",
+                              bg: "мин",
+                            })}{" "}
+                            / RPE {block.targetRpe ?? "-"}
+                          </small>
+                        </div>
+                        <span>
+                          {copyFor(language, {
+                            en: "Exercises",
+                            ru: "Упражнения",
+                            bg: "Упражнения",
+                          })}: {block.exercises?.length ?? 0}
+                        </span>
+                      </summary>
+                      <div className="readiness-form">
+                        <label className="field">
+                          <span>{t("blockName")}</span>
+                          <input
+                            value={block.name}
+                            onChange={(event) =>
+                              setPlanForm((current) => ({
+                                ...current,
+                                blocks: current.blocks.map((item, itemIndex) =>
+                                  itemIndex === index
+                                    ? { ...item, name: event.target.value }
+                                    : item,
+                                ),
+                              }))
+                            }
+                          />
+                        </label>
+                        <label className="field">
+                          <span>{t("blockType")}</span>
+                          <select
+                            value={block.blockType}
+                            onChange={(event) =>
+                              setPlanForm((current) => ({
+                                ...current,
+                                blocks: current.blocks.map((item, itemIndex) =>
+                                  itemIndex === index
+                                    ? {
+                                        ...item,
+                                        blockType: event.target
+                                          .value as PlanTemplatePayload["blocks"][number]["blockType"],
+                                      }
+                                    : item,
+                                ),
+                              }))
+                            }
+                          >
+                            {block.blockType &&
+                              PLAN_BLOCK_TYPE_VALUES.map((type) => (
+                                <option key={type} value={type}>
+                                  {localizedOptionLabel(type, language, BLOCK_TYPE_LABELS)}
+                                </option>
+                              ))}
+                          </select>
+                        </label>
+                        <label className="field">
+                          <span>{t("blockPriority")}</span>
+                          <input
+                            type="number"
+                            value={block.blockPriority}
+                            onChange={(event) =>
+                              setPlanForm((current) => ({
+                                ...current,
+                                blocks: current.blocks.map((item, itemIndex) =>
+                                  itemIndex === index
+                                    ? {
+                                        ...item,
+                                        blockPriority: Number(event.target.value),
+                                      }
+                                    : item,
+                                ),
+                              }))
+                            }
+                          />
+                        </label>
+                        <label className="field">
+                          <span>{t("mandatory")}</span>
+                          <input
+                            type="checkbox"
+                            checked={block.isMandatory}
+                            onChange={(event) =>
+                              setPlanForm((current) => ({
+                                ...current,
+                                blocks: current.blocks.map((item, itemIndex) =>
+                                  itemIndex === index
+                                    ? { ...item, isMandatory: event.target.checked }
+                                    : item,
+                                ),
+                              }))
+                            }
+                          />
+                        </label>
+                        <label className="field">
+                          <span>{t("targetDuration")}</span>
+                          <input
+                            type="number"
+                            step="0.5"
+                            value={block.targetDurationMinutes ?? ""}
+                            onChange={(event) =>
+                              setPlanForm((current) => ({
+                                ...current,
+                                blocks: current.blocks.map((item, itemIndex) =>
+                                  itemIndex === index
+                                    ? {
+                                        ...item,
+                                        targetDurationMinutes:
+                                          event.target.value === ""
+                                            ? null
+                                            : Number(event.target.value),
+                                      }
+                                    : item,
+                                ),
+                              }))
+                            }
+                          />
+                        </label>
+                        <label className="field">
+                          <span>{t("targetRpe")}</span>
+                          <input
+                            type="number"
+                            step="0.5"
+                            value={block.targetRpe ?? ""}
+                            onChange={(event) =>
+                              setPlanForm((current) => ({
+                                ...current,
+                                blocks: current.blocks.map((item, itemIndex) =>
+                                  itemIndex === index
+                                    ? {
+                                        ...item,
+                                        targetRpe:
+                                          event.target.value === ""
+                                            ? null
+                                            : Number(event.target.value),
+                                      }
+                                    : item,
+                                ),
+                              }))
+                            }
+                          />
+                        </label>
+                        <label className="field">
+                          <span>{t("targetSets")}</span>
+                          <input
+                            type="number"
+                            value={block.targetSets ?? ""}
+                            onChange={(event) =>
+                              setPlanForm((current) => ({
+                                ...current,
+                                blocks: current.blocks.map((item, itemIndex) =>
+                                  itemIndex === index
+                                    ? {
+                                        ...item,
+                                        targetSets:
+                                          event.target.value === ""
+                                            ? null
+                                            : Number(event.target.value),
+                                      }
+                                    : item,
+                                ),
+                              }))
+                            }
+                          />
+                        </label>
+                        <label className="field">
+                          <span>{t("targetReps")}</span>
+                          <input
+                            type="number"
+                            value={block.targetReps ?? ""}
+                            onChange={(event) =>
+                              setPlanForm((current) => ({
+                                ...current,
+                                blocks: current.blocks.map((item, itemIndex) =>
+                                  itemIndex === index
+                                    ? {
+                                        ...item,
+                                        targetReps:
+                                          event.target.value === ""
+                                            ? null
+                                            : Number(event.target.value),
+                                      }
+                                    : item,
+                                ),
+                              }))
+                            }
+                          />
+                        </label>
+                        <label className="field">
+                          <span>{t("notes")}</span>
+                          <input
+                            value={block.notes}
+                            onChange={(event) =>
+                              setPlanForm((current) => ({
+                                ...current,
+                                blocks: current.blocks.map((item, itemIndex) =>
+                                  itemIndex === index
+                                    ? { ...item, notes: event.target.value }
+                                    : item,
+                                ),
+                              }))
+                            }
+                          />
+                        </label>
+                      </div>
+                      {(() => {
+                        const exercisePresets = getBlockExercisePresets(block.blockType);
+
+                        return (
+                          <div className="strength-exercise-builder">
+                          <div className="summary-topline">
+                            <div>
+                              <strong>
+                                {copyFor(language, {
+                                  en: "Block exercises",
+                                  ru: "Упражнения блока",
+                                  bg: "Упражнения на блока",
+                                })}
+                              </strong>
+                              <p className="placeholder-copy">
+                                {copyFor(language, {
+                                  en: "Select exercises for this block type. They will be assigned to the athlete and tracked in execution.",
+                                  ru: "Выберите упражнения для этого типа блока. Они попадут спортсмену в план и будут учитываться при фиксации выполнения.",
+                                  bg: "Изберете упражнения за този тип блок. Те ще влязат в плана на спортиста и ще се следят при изпълнение.",
+                                })}
+                              </p>
+                            </div>
+                            <span>{block.exercises?.length ?? 0}</span>
+                          </div>
+
+                          <div className="strength-exercise-actions">
+                            <label className="field">
+                              <span>
+                                {copyFor(language, {
+                                  en: "Exercise list",
+                                  ru: "Список упражнений",
+                                  bg: "Списък с упражнения",
+                                })}
+                              </span>
+                              <select
+                                onChange={(event) => {
+                                  const preset = exercisePresets.find(
+                                    (item) => item.id === event.target.value,
+                                  );
+
+                                  if (preset) {
+                                    addPlanBlockExercise(
+                                      index,
+                                      buildBlockExerciseFromPreset(preset, language),
+                                    );
+                                  }
+                                }}
+                                value=""
+                              >
+                                <option value="">
+                                  {copyFor(language, {
+                                    en: "Add exercise from list",
+                                    ru: "Добавить упражнение из списка",
+                                    bg: "Добави упражнение от списъка",
+                                  })}
+                                </option>
+                                {exercisePresets.map((preset) => (
+                                  <option key={preset.id} value={preset.id}>
+                                    {copyFor(language, preset.label)}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                            <button
+                              className="secondary-button"
+                              onClick={() =>
+                                addPlanBlockExercise(
+                                  index,
+                                  buildEmptyBlockExercise(language, block.blockType),
+                                )
+                              }
+                              type="button"
+                            >
+                              {copyFor(language, {
+                                en: "Add custom",
+                                ru: "Добавить своё",
+                                bg: "Добави свое",
+                              })}
+                            </button>
+                          </div>
+
+                          {(block.exercises ?? []).length === 0 ? (
+                            <p className="placeholder-copy">
+                              {copyFor(language, {
+                                en: "No exercises selected yet.",
+                                ru: "Пока упражнения не выбраны.",
+                                bg: "Все още няма избрани упражнения.",
+                              })}
+                            </p>
+                          ) : (
+                            <div className="strength-exercise-list">
+                              {(block.exercises ?? []).map((exercise, exerciseIndex) => (
+                                <article
+                                  className="strength-exercise-card"
+                                  key={`${exercise.name}-${exerciseIndex}`}
+                                >
+                                  <div className="summary-topline">
+                                    <strong>
+                                      {copyFor(language, {
+                                        en: "Exercise",
+                                        ru: "Упражнение",
+                                        bg: "Упражнение",
+                                      })}{" "}
+                                      {exerciseIndex + 1}
+                                    </strong>
+                                    <button
+                                      className="tertiary-button"
+                                      onClick={() => removePlanBlockExercise(index, exerciseIndex)}
+                                      type="button"
+                                    >
+                                      {copyFor(language, {
+                                        en: "Remove",
+                                        ru: "Удалить",
+                                        bg: "Премахни",
+                                      })}
+                                    </button>
+                                  </div>
+                                  <div className="readiness-form strength-exercise-fields">
+                                    <label className="field">
+                                      <span>
+                                        {copyFor(language, {
+                                          en: "Name",
+                                          ru: "Название",
+                                          bg: "Име",
+                                        })}
+                                      </span>
+                                      <input
+                                        value={exercise.name}
+                                        onChange={(event) =>
+                                          updatePlanBlockExercise(index, exerciseIndex, {
+                                            name: event.target.value,
+                                          })
+                                        }
+                                      />
+                                    </label>
+                                    <label className="field">
+                                      <span>{t("targetSets")}</span>
+                                      <input
+                                        type="number"
+                                        value={exercise.targetSets ?? ""}
+                                        onChange={(event) =>
+                                          updatePlanBlockExercise(index, exerciseIndex, {
+                                            targetSets: parseOptionalNumberInput(event.target.value),
+                                          })
+                                        }
+                                      />
+                                    </label>
+                                    <label className="field">
+                                      <span>{t("targetReps")}</span>
+                                      <input
+                                        type="number"
+                                        value={exercise.targetReps ?? ""}
+                                        onChange={(event) =>
+                                          updatePlanBlockExercise(index, exerciseIndex, {
+                                            targetReps: parseOptionalNumberInput(event.target.value),
+                                          })
+                                        }
+                                      />
+                                    </label>
+                                    <label className="field">
+                                      <span>
+                                        {copyFor(language, {
+                                          en: "Weight, kg",
+                                          ru: "Вес, кг",
+                                          bg: "Тегло, кг",
+                                        })}
+                                      </span>
+                                      <input
+                                        step="0.5"
+                                        type="number"
+                                        value={exercise.targetWeightKg ?? ""}
+                                        onChange={(event) =>
+                                          updatePlanBlockExercise(index, exerciseIndex, {
+                                            targetWeightKg: parseOptionalNumberInput(event.target.value),
+                                          })
+                                        }
+                                      />
+                                    </label>
+                                    <label className="field">
+                                      <span>{t("targetDuration")}</span>
+                                      <input
+                                        step="0.5"
+                                        type="number"
+                                        value={exercise.targetDurationMinutes ?? ""}
+                                        onChange={(event) =>
+                                          updatePlanBlockExercise(index, exerciseIndex, {
+                                            targetDurationMinutes: parseOptionalNumberInput(
+                                              event.target.value,
+                                            ),
+                                          })
+                                        }
+                                      />
+                                    </label>
+                                    <label className="field">
+                                      <span>{t("targetRpe")}</span>
+                                      <input
+                                        step="0.5"
+                                        type="number"
+                                        value={exercise.targetRpe ?? ""}
+                                        onChange={(event) =>
+                                          updatePlanBlockExercise(index, exerciseIndex, {
+                                            targetRpe: parseOptionalNumberInput(event.target.value),
+                                          })
+                                        }
+                                      />
+                                    </label>
+                                    <label className="field strength-exercise-notes">
+                                      <span>{t("notes")}</span>
+                                      <input
+                                        value={exercise.notes}
+                                        onChange={(event) =>
+                                          updatePlanBlockExercise(index, exerciseIndex, {
+                                            notes: event.target.value,
+                                          })
+                                        }
+                                      />
+                                    </label>
+                                  </div>
+                                </article>
+                              ))}
+                            </div>
+                          )}
+                          </div>
+                        );
+                      })()}
+                    </details>
+                  ))}
+                </div>
+              </div>
+
+              <button className="primary-button" disabled={busy} type="submit">
+                {busy ? ui("syncingNow") : t("createTemplate")}
+              </button>
+            </form>
+            ) : null}
+
+            {planningView === "templates" ? (
+            <div className="entry-summary planning-side-card planning-template-list">
+              <div className="planning-template-library-head">
+                <div>
+                  <strong>{t("savedTemplates")}</strong>
+                  <p className="placeholder-copy">
+                    {copyFor(language, {
+                      en: "Choose a template to assign it or load it into the editor as a copy.",
+                      ru: "Выберите шаблон, чтобы назначить его или загрузить в редактор как копию.",
+                      bg: "Изберете шаблон за назначаване или зареждане в редактора като копие.",
+                    })}
+                  </p>
+                </div>
+                <span>{planTemplates.length}</span>
+              </div>
+              {planTemplates.length === 0 ? (
+                <p className="placeholder-copy">
+                  {t("noPlanTemplates")}
+                </p>
+              ) : (
+                <div className="planning-template-library-list">
+                  {planTemplates.map((template) => (
+                    <button
+                      className={`planning-template-library-card ${
+                        assignedPlanForm.templateId === template.id ? "is-active" : ""
+                      }`}
+                      key={template.id}
+                      onClick={() => {
+                        setAssignedPlanForm((current) => ({
+                          ...current,
+                          templateId: template.id,
+                        }));
+                        setPlanForm(templateSummaryToPayload(template, language));
+                      }}
+                      type="button"
+                    >
+                      <strong>{translateKnownTemplateText(template.name, language)}</strong>
+                      <span>{translateKnownTemplateText(template.sportType, language)}</span>
+                      <small>
+                        {localizedOptionLabel(template.phaseFocus, language, PREPARATION_PHASE_LABELS)} /{" "}
+                        {localizedOptionLabel(template.microcycleType, language, MICROCYCLE_TYPE_LABELS)}
+                      </small>
+                      <em>
+                        {blocksCountLabel(template.blockCount, language)} /{" "}
+                        {copyFor(language, {
+                          en: "load",
+                          ru: "нагрузка",
+                          bg: "натоварване",
+                        })}{" "}
+                        {template.estimatedLoad}
+                      </em>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            ) : null}
+
+            {planningView === "templates" ? (
+            <form
+              className="auth-form wide-form planning-inspector-form planning-template-assign"
+              onSubmit={handleAssignPlanSubmit}
+            >
+              <div className="planning-template-assign-head">
+                <h3>{t("assignTemplate")}</h3>
+                <p className="placeholder-copy">
+                  {copyFor(language, {
+                    en: "Select an athlete, date, and template. Recommendations can preselect the best match.",
+                    ru: "Выберите спортсмена, дату и шаблон. Рекомендации могут сразу выбрать лучший вариант.",
+                    bg: "Изберете спортист, дата и шаблон. Препоръките могат да изберат най-добрия вариант.",
+                  })}
+                </p>
+              </div>
+              <div className="entry-summary planning-template-recommendations">
+                <div className="summary-topline">
+                  <strong>{t("phaseDrivenRecommendations")}</strong>
+                  <span>{templateRecommendations.length}</span>
+                </div>
+                {templateRecommendations.length === 0 ? (
+                  <p className="placeholder-copy">
+                    {t("selectAthleteDateForRecommendations")}
+                  </p>
+                ) : (
+                  <ul>
+                    {templateRecommendations.slice(0, 3).map((recommendation) => (
+                      <li key={recommendation.templateId}>
+                        <button
+                          className={`planning-template-recommendation ${
+                            assignedPlanForm.templateId === recommendation.templateId ? "is-active" : ""
+                          }`}
+                          onClick={() => {
+                            const selectedTemplate = planTemplates.find(
+                              (template) => template.id === recommendation.templateId,
+                            );
+                            setAssignedPlanForm((current) => ({
+                              ...current,
+                              templateId: recommendation.templateId,
+                            }));
+                            if (selectedTemplate) {
+                              setPlanForm(templateSummaryToPayload(selectedTemplate, language));
+                            }
+                          }}
+                          type="button"
+                        >
+                          <strong>{translateKnownTemplateText(recommendation.templateName, language)}</strong>
+                          <span>
+                            {t("score")} {recommendation.score}
+                          </span>
+                          <small>{translateTemplateRecommendationReason(recommendation.reason, language)}</small>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <label className="field">
+                <span>{t("athlete")}</span>
+                <select
+                  value={assignedPlanForm.athleteId}
+                  onChange={(event) =>
+                    {
+                      const athleteId = event.target.value;
+                      setAssignedPlanForm((current) => ({
+                        ...current,
+                        athleteId,
+                      }));
+                      if (canLoadCoachScopedAthleteData(athleteId)) {
+                        void loadTemplateRecommendations(
+                          athleteId,
+                          assignedPlanForm.startDate,
+                          coachAthletes,
+                        );
+                      }
+                    }
+                  }
+                  required
+                >
+                  <option value="">{ui("selectAthlete")}</option>
+                  {coachAthletes.map((athlete) => (
+                    <option key={athlete.athleteId} value={athlete.athleteId}>
+                      {athlete.fullName}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="field">
+                <span>{t("template")}</span>
+                <select
+                  value={assignedPlanForm.templateId}
+                  onChange={(event) => {
+                    const templateId = event.target.value;
+                    const selectedTemplate = planTemplates.find((template) => template.id === templateId);
+                    setAssignedPlanForm((current) => ({
+                      ...current,
+                      templateId,
+                    }));
+                    if (selectedTemplate) {
+                      setPlanForm(templateSummaryToPayload(selectedTemplate, language));
+                    }
+                  }}
+                  required
+                >
+                  <option value="">{ui("selectTemplate")}</option>
+                  {planTemplates.map((template) => (
+                    <option key={template.id} value={template.id}>
+                      {translateKnownTemplateText(template.name, language)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="field">
+                <span>{t("startDate")}</span>
+                <input
+                  type="date"
+                  value={assignedPlanForm.startDate}
+                  onChange={(event) =>
+                    {
+                      const startDate = event.target.value;
+                      setAssignedPlanForm((current) => ({
+                        ...current,
+                        startDate,
+                      }));
+                      if (canLoadCoachScopedAthleteData(assignedPlanForm.athleteId)) {
+                        void loadTemplateRecommendations(
+                          assignedPlanForm.athleteId,
+                          startDate,
+                          coachAthletes,
+                        );
+                      }
+                    }
+                  }
+                  required
+                />
+              </label>
+
+              <label className="field">
+                <span>{t("plannedPhase")}</span>
+                <select
+                  value={assignedPlanForm.plannedPhase ?? ""}
+                  onChange={(event) =>
+                    setAssignedPlanForm((current) => ({
+                      ...current,
+                      plannedPhase:
+                        event.target.value === ""
+                          ? null
+                          : (event.target.value as AssignedPlanPayload["plannedPhase"]),
+                    }))
+                  }
+                >
+                  <option value="">{t("autoFromCompetitionContext")}</option>
+                  {PREPARATION_PHASE_VALUES.map(
+                    (phase) => (
+                      <option key={phase} value={phase}>
+                        {localizedOptionLabel(phase, language, PREPARATION_PHASE_LABELS)}
+                      </option>
+                    ),
+                  )}
+                </select>
+              </label>
+
+              <label className="field">
+                <span>{t("dayLabel")}</span>
+                <input
+                  value={assignedPlanForm.dayLabel}
+                  onChange={(event) =>
+                    setAssignedPlanForm((current) => ({
+                      ...current,
+                      dayLabel: event.target.value,
+                    }))
+                  }
+                  required
+                />
+              </label>
+
+              <label className="field">
+                <span>{t("coachNotes")}</span>
+                <input
+                  value={assignedPlanForm.notes}
+                  onChange={(event) =>
+                    setAssignedPlanForm((current) => ({
+                      ...current,
+                      notes: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+
+              <button className="primary-button" disabled={busy} type="submit">
+                {busy ? ui("assigning") : t("assignPlan")}
+              </button>
+            </form>
+            ) : null}
+
+            {planningView === "weekly" ? (
+            <form className="auth-form wide-form planning-main-form planning-weekly-form" onSubmit={handleAutoAssignMicrocycleSubmit}>
+              <h3>
+                {copyFor(language, {
+                  en: "Weekly planner v1",
+                  ru: "Недельный планировщик v1",
+                  bg: "Седмичен планировчик v1",
+                })}
+              </h3>
+              <div className="planning-weekly-stage">
+                <div className="entry-summary planning-weekly-pack-card">
+                  <div className="summary-topline">
+                    <strong>
+                      {copyFor(language, {
+                        en: "Template pack",
+                        ru: "Пакет шаблонов",
+                        bg: "Пакет шаблони",
+                      })}
+                    </strong>
+                    <span>{templatePack?.suggestedDays ?? 0}</span>
+                  </div>
+                  {templatePack ? (
+                    <>
+                      <p>
+                        {t("phase")}{" "}
+                        {localizedOptionLabel(
+                          templatePack.phase,
+                          language,
+                          PREPARATION_PHASE_LABELS,
+                        )}{" "}
+                        / {t("priority")} {templatePack.competitionPriority ?? t("allPriorities")} /{" "}
+                        {copyFor(language, {
+                          en: "total planned load",
+                          ru: "общая плановая нагрузка",
+                          bg: "общо планирано натоварване",
+                        })}{" "}
+                        {templatePack.totalPlannedLoad}
+                        {templatePack.targetLoadDelta !== null
+                          ? ` / ${copyFor(language, {
+                              en: "target delta",
+                              ru: "отклонение от цели",
+                              bg: "отклонение от целта",
+                            })} ${templatePack.targetLoadDelta}`
+                          : ""}
+                      </p>
+                      <div className="context-chip-grid">
+                        <article className="context-chip">
+                          <span>
+                            {copyFor(language, {
+                              en: "Variety",
+                              ru: "Вариативность",
+                              bg: "Вариативност",
+                            })}
+                          </span>
+                          <strong>{templatePack.varietyScore}</strong>
+                        </article>
+                        <article className="context-chip">
+                          <span>
+                            {copyFor(language, {
+                              en: "Balance",
+                              ru: "Баланс",
+                              bg: "Баланс",
+                            })}
+                          </span>
+                          <strong>{templatePack.loadBalanceLabel}</strong>
+                        </article>
+                        <article className="context-chip">
+                          <span>
+                            {copyFor(language, {
+                              en: "Nearby days",
+                              ru: "Ближайшие дни",
+                              bg: "Близки дни",
+                            })}
+                          </span>
+                          <strong>{templatePack.nearbyAssignedDays}</strong>
+                        </article>
+                        <article className="context-chip">
+                          <span>
+                            {copyFor(language, {
+                              en: "Pack slots",
+                              ru: "Слоты пакета",
+                              bg: "Слотове в пакета",
+                            })}
+                          </span>
+                          <strong>{templatePack.items.length}</strong>
+                        </article>
+                      </div>
+                      {templatePackHistorySummary ? (
+                        <div className="planner-pack-intelligence-grid">
+                          <article className="planner-pack-intelligence-card">
+                            <span>
+                              {copyFor(language, {
+                                en: "History-informed slots",
+                                ru: "Слоты с историей решений",
+                                bg: "Слотове с история на решенията",
+                              })}
+                            </span>
+                            <strong>
+                              {templatePackHistorySummary.informedSlots}/{templatePack.items.length}
+                            </strong>
+                            <small>
+                              {copyFor(language, {
+                                en: "Templates already influenced by coach outcome history.",
+                                ru: "Шаблоны уже учитывают историю исходов coach-решений.",
+                                bg: "Шаблоните вече отчитат историята на coach решенията.",
+                              })}
+                            </small>
+                          </article>
+                          <article className="planner-pack-intelligence-card">
+                            <span>
+                              {copyFor(language, {
+                                en: "Positive boosts",
+                                ru: "Позитивные усиления",
+                                bg: "Положителни усилвания",
+                              })}
+                            </span>
+                            <strong>{templatePackHistorySummary.boostSignals}</strong>
+                            <small>
+                              {copyFor(language, {
+                                en: "Patterns that pushed the pack toward proven template choices.",
+                                ru: "Паттерны, которые усилили выбор проверенных шаблонов.",
+                                bg: "Патерни, които подсилиха избора на доказани шаблони.",
+                              })}
+                            </small>
+                          </article>
+                          <article className="planner-pack-intelligence-card">
+                            <span>
+                              {copyFor(language, {
+                                en: "Exact-context hits",
+                                ru: "Совпадения точного контекста",
+                                bg: "Съвпадения по точен контекст",
+                              })}
+                            </span>
+                            <strong>{templatePackHistorySummary.exactContextSignals}</strong>
+                            <small>
+                              {copyFor(language, {
+                                en: "Signals coming from the same phase and competition priority.",
+                                ru: "Сигналы из той же фазы и того же приоритета соревнования.",
+                                bg: "Сигнали от същата фаза и същия приоритет на състезанието.",
+                              })}
+                            </small>
+                          </article>
+                          <article className="planner-pack-intelligence-card caution">
+                            <span>
+                              {copyFor(language, {
+                                en: "Caution signals",
+                                ru: "Сигналы осторожности",
+                                bg: "Сигнали за внимание",
+                              })}
+                            </span>
+                            <strong>{templatePackHistorySummary.cautionSignals}</strong>
+                            <small>
+                              {copyFor(language, {
+                                en: "History that warned the planner away from weaker template paths.",
+                                ru: "История, которая отвела планировщик от более слабых шаблонных веток.",
+          bg: "История, която отклони планирането от по-слабите шаблонни пътища.",
+                              })}
+                            </small>
+                          </article>
+                        </div>
+                      ) : null}
+                      {templatePack.mesocycleWeek ? (
+                        <p>
+                          {copyFor(language, {
+                            en: "Mesocycle",
+                            ru: "Мезоцикл",
+                            bg: "Мезоцикъл",
+                          })}: {templatePack.mesocycleWeek.mesocycleName} /{" "}
+                          {templatePack.mesocycleWeek.weekLabel} /{" "}
+                          {localizedOptionLabel(
+                            templatePack.mesocycleWeek.microcycleType,
+                            language,
+                            MICROCYCLE_TYPE_LABELS,
+                          )}{" "}
+                          / {copyFor(language, {
+                            en: "target load",
+                            ru: "целевая нагрузка",
+                            bg: "целева натовареност",
+                          })}{" "}
+                          {templatePack.mesocycleWeek.targetLoad} /{" "}
+                          {copyFor(language, {
+                            en: "modifier",
+                            ru: "модификатор",
+                            bg: "модификатор",
+                          })}{" "}
+                          {templatePack.mesocycleWeek.loadModifier}
+                        </p>
+                      ) : null}
+                    </>
+                  ) : (
+                    <p className="placeholder-copy">
+                      {copyFor(language, {
+                        en: "Load an athlete and start date to build a recommended phase-aware and mesocycle-aware template pack.",
+                        ru: "Выберите спортсмена и дату старта, чтобы собрать пакет шаблонов с учётом фазы и мезоцикла.",
+                        bg: "Изберете спортист и начална дата, за да създадете пакет шаблони според фазата и мезоцикъла.",
+                      })}
+                    </p>
+                  )}
+                </div>
+
+                <div className="planning-weekly-grid">
+                  <div className="entry-summary planning-weekly-signal-card">
+                    <div className="summary-topline">
+                      <strong>
+                        {copyFor(language, {
+                          en: "Coach warnings",
+                          ru: "Предупреждения тренеру",
+                          bg: "Предупреждения за треньора",
+                        })}
+                      </strong>
+                      <span>{templatePack?.warnings?.length ?? 0}</span>
+                    </div>
+                    {templatePack?.warnings?.length ? (
+                      <ul>
+                        {templatePack.warnings.map((warning) => (
+                          <li key={`${warning.code}-${warning.message}`}>
+                            {warning.level.toUpperCase()}: {warning.message}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="placeholder-copy">
+                        {copyFor(language, {
+                          en: "No planner warnings right now.",
+                          ru: "Сейчас нет предупреждений планировщика.",
+                          bg: "В момента няма предупреждения от планировчика.",
+                        })}
+                      </p>
+                    )}
+
+                    <div className="summary-topline">
+                      <strong>
+                        {copyFor(language, {
+                          en: "Coach suggestions",
+                          ru: "Советы тренеру",
+                          bg: "Предложения за треньора",
+                        })}
+                      </strong>
+                      <span>{templatePack?.suggestions?.length ?? 0}</span>
+                    </div>
+                    {templatePack?.suggestions?.length ? (
+                      <ul className="planner-suggestion-list">
+                        {templatePack.suggestions.map((suggestion) => (
+                          <li
+                            className="planner-suggestion-item"
+                            key={`${suggestion.code}-${suggestion.dayOffset}-${suggestion.targetDayOffset}-${suggestion.recommendedTemplateId}`}
+                          >
+                            <div className="planner-suggestion-copy">
+                              <span>{suggestion.message}</span>
+                              {suggestion.recommendedTemplateName ? (
+                                <small>
+                                  {copyFor(language, {
+                                    en: `Recommended template: ${suggestion.recommendedTemplateName}.`,
+                                    ru: `Рекомендованный шаблон: ${suggestion.recommendedTemplateName}.`,
+                                    bg: `Препоръчан шаблон: ${suggestion.recommendedTemplateName}.`,
+                                  })}
+                                </small>
+                              ) : null}
+                              {suggestion.feedback ? (
+                                <small
+                                  className={`planner-feedback-badge ${suggestion.feedback.label}`}
+                                >
+                                  {plannerSuggestionFeedbackSummary(suggestion.feedback)}
+                                </small>
+                              ) : null}
+                            </div>
+                            <button
+                              className="secondary-button"
+                              disabled={busy}
+                              onClick={() => handleApplyPlannerSuggestion(suggestion)}
+                              type="button"
+                            >
+                              {copyFor(language, {
+                                en: "Apply suggestion",
+                                ru: "Применить совет",
+                                bg: "Приложи предложението",
+                              })}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="placeholder-copy">
+                        {copyFor(language, {
+                          en: "No automatic coach suggestions yet.",
+                          ru: "Автоматических советов тренеру пока нет.",
+                          bg: "Все още няма автоматични предложения за треньора.",
+                        })}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="entry-summary planning-weekly-nearby-card">
+                    <div className="summary-topline">
+                      <strong>
+                        {copyFor(language, {
+                          en: "Nearby assigned days",
+                          ru: "Ближайшие назначенные дни",
+                          bg: "Близки назначени дни",
+                        })}
+                      </strong>
+                      <span>{templatePack?.nearbyAssignedPlanSummaries?.length ?? 0}</span>
+                    </div>
+                    {templatePack?.nearbyAssignedPlanSummaries?.length ? (
+                      <ul>
+                        {templatePack.nearbyAssignedPlanSummaries.map((day) => (
+                          <li key={`${day.assignedPlanId}-${day.date}`}>
+                            {day.date}: {translateKnownTemplateText(day.templateName, language)} /{" "}
+                            {t("phase")}{" "}
+                            {localizedOptionLabel(
+                              day.plannedPhase,
+                              language,
+                              PREPARATION_PHASE_LABELS,
+                            )}{" "}
+                            / {copyFor(language, {
+                              en: "load",
+                              ru: "нагрузка",
+                              bg: "натоварване",
+                            })}{" "}
+                            {day.estimatedLoad}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="placeholder-copy">
+                        {copyFor(language, {
+                          en: "No nearby assigned days were detected.",
+                          ru: "Ближайшие назначенные дни не найдены.",
+                          bg: "Не са открити близки назначени дни.",
+                        })}
+                      </p>
+                    )}
+
+                    <div className="summary-topline">
+                      <strong>
+                        {copyFor(language, {
+                          en: "Recommended days",
+                          ru: "Рекомендованные дни",
+                          bg: "Препоръчани дни",
+                        })}
+                      </strong>
+                      <span>{templatePack?.items?.length ?? 0}</span>
+                    </div>
+                    {templatePack?.items?.length ? (
+                      <div className="planner-pack-days-grid">
+                        {templatePack.items.map((item) => (
+                          <article
+                            className="planner-pack-day-card"
+                            key={`${item.dayOffset}-${item.templateId}`}
+                          >
+                            <div className="planner-pack-day-header">
+                              <div className="planner-pack-day-copy">
+                                <span className="planner-pack-day-label">{item.dayLabel}</span>
+                                <strong>{translateKnownTemplateText(item.templateName, language)}</strong>
+                                <small>
+                                  {localizedOptionLabel(
+                                    item.microcycleType,
+                                    language,
+                                    MICROCYCLE_TYPE_LABELS,
+                                  )}
+                                </small>
+                              </div>
+                              <div className="planner-pack-day-metrics">
+                                <strong>
+                                  {copyFor(language, {
+                                    en: `Load ${item.estimatedLoad}`,
+                                    ru: `Нагрузка ${item.estimatedLoad}`,
+                                    bg: `Натоварване ${item.estimatedLoad}`,
+                                  })}
+                                </strong>
+                                <span>
+                                  {copyFor(language, {
+                                    en: `Score ${item.score}`,
+                                    ru: `Оценка ${item.score}`,
+                                    bg: `Оценка ${item.score}`,
+                                  })}
+                                </span>
+                              </div>
+                            </div>
+
+                            {item.historyBiases.length ? (
+                              <div className="planner-pack-history-list">
+                                {item.historyBiases.map((bias, index) => (
+                                  <article
+                                    className={`planner-pack-history-chip ${bias.effect}`}
+                                    key={`${item.templateId}-${bias.code}-${bias.action}-${index}`}
+                                  >
+                                    <span>{plannerHistoryBiasEffectLabel(bias)}</span>
+                                    <strong>{plannerHistoryBiasAction(bias)}</strong>
+                                    <small>{plannerHistoryBiasSummary(bias)}</small>
+                                  </article>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="planner-pack-rationale planner-pack-rationale-muted">
+                                {copyFor(language, {
+                                  en: "No strong historical bias was needed for this slot, so the choice stayed mostly phase/load-driven.",
+        ru: "Для этого слота не понадобилась сильная историческая поправка, поэтому выбор остался в основном завязанным на фазу и нагрузку.",
+        bg: "За този слот не беше нужна силна историческа корекция, така че изборът остана основно според фазата и натоварването.",
+                                })}
+                              </p>
+                            )}
+
+                            <p className="planner-pack-rationale">
+                              <span>
+                                {copyFor(language, {
+                                  en: "Why chosen",
+                                  ru: "Почему выбран",
+                                  bg: "Защо е избран",
+                                })}
+                              </span>
+                              <strong>{item.reason}</strong>
+                            </p>
+                          </article>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="placeholder-copy">
+                        {copyFor(language, {
+                          en: "No recommended days are loaded yet.",
+                          ru: "Рекомендованные дни пока не загружены.",
+                          bg: "Все още няма заредени препоръчани дни.",
+                        })}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="planning-weekly-controls">
+                  <label className="field">
+                    <span>{t("athlete")}</span>
+                    <select
+                      value={microcycleForm.athleteId}
+                      onChange={(event) => {
+                        const athleteId = event.target.value;
+                        setMicrocycleForm((current) => ({ ...current, athleteId }));
+                        if (canLoadCoachScopedAthleteData(athleteId)) {
+                          void loadTemplatePackRecommendations(
+                            athleteId,
+                            microcycleForm.startDate,
+                            coachAthletes,
+                          );
+                        }
+                      }}
+                      required
+                    >
+                      <option value="">{ui("selectAthlete")}</option>
+                      {coachAthletes.map((athlete) => (
+                        <option key={athlete.athleteId} value={athlete.athleteId}>
+                          {athlete.fullName}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="field">
+                    <span>{t("startDate")}</span>
+                    <input
+                      type="date"
+                      value={microcycleForm.startDate}
+                      onChange={(event) => {
+                        const startDate = event.target.value;
+                        setMicrocycleForm((current) => ({ ...current, startDate }));
+                        if (canLoadCoachScopedAthleteData(microcycleForm.athleteId)) {
+                          void loadTemplatePackRecommendations(
+                            microcycleForm.athleteId,
+                            startDate,
+                            coachAthletes,
+                          );
+                        }
+                      }}
+                      required
+                    />
+                  </label>
+
+                  <label className="field">
+                    <span>
+                      {copyFor(language, {
+                        en: "Days count",
+                        ru: "Количество дней",
+                        bg: "Брой дни",
+                      })}
+                    </span>
+                    <input
+                      type="number"
+                      min="1"
+                      max="14"
+                      value={microcycleForm.daysCount}
+                      onChange={(event) =>
+                        setMicrocycleForm((current) => ({
+                          ...current,
+                          daysCount: Number(event.target.value),
+                        }))
+                      }
+                    />
+                  </label>
+
+                  <label className="field">
+                    <span>{t("plannedPhase")}</span>
+                    <select
+                      value={microcycleForm.plannedPhase ?? ""}
+                      onChange={(event) =>
+                        setMicrocycleForm((current) => ({
+                          ...current,
+                          plannedPhase:
+                            event.target.value === ""
+                              ? null
+                              : (event.target.value as AutoAssignMicrocyclePayload["plannedPhase"]),
+                        }))
+                      }
+                    >
+                      <option value="">{t("autoFromCompetitionContext")}</option>
+                  {PREPARATION_PHASE_VALUES.map(
+                        (phase) => (
+                          <option key={phase} value={phase}>
+                            {localizedOptionLabel(phase, language, PREPARATION_PHASE_LABELS)}
+                          </option>
+                        ),
+                      )}
+                    </select>
+                  </label>
+
+                  <label className="field planning-weekly-notes">
+                    <span>{t("coachNotes")}</span>
+                    <input
+                      value={microcycleForm.notes}
+                      onChange={(event) =>
+                        setMicrocycleForm((current) => ({
+                          ...current,
+                          notes: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+
+                  <button className="primary-button planning-weekly-submit" disabled={busy} type="submit">
+                    {busy
+                      ? ui("syncingNow")
+                      : copyFor(language, {
+                          en: "Auto-assign weekly plan",
+                          ru: "Автоназначить недельный план",
+                          bg: "Автоматично назначи седмичен план",
+                        })}
+                  </button>
+                </div>
+              </div>
+            </form>
+            ) : null}
+
+            {planningView === "weekly" ? (
+            <div className="entry-summary wide-card planning-review-card">
+                <div className="summary-topline">
+                <strong>{t("activeAssignments")}</strong>
+                <span>{assignedPlans.length}</span>
+              </div>
+              {assignedPlans.length === 0 ? (
+                <p className="placeholder-copy">
+                  {ui("noActiveAssignments")}
+                </p>
+              ) : (
+                <ul>
+                  {assignedPlans.map((plan) => (
+                    <li key={plan.id}>
+                      {plan.athleteName}: {translateKnownTemplateText(plan.templateName, language)} /{" "}
+                      {t("phase")}{" "}
+                      {plan.plannedPhase
+                        ? localizedOptionLabel(
+                            plan.plannedPhase,
+                            language,
+                            PREPARATION_PHASE_LABELS,
+                          )
+                        : copyFor(language, {
+                            en: "Auto",
+                            ru: "Авто",
+                            bg: "Авто",
+                          })}{" "}
+                      / {plan.day.label} /{" "}
+                      {plan.day.sessions
+                        .flatMap((session) =>
+                          session.blocks.map((block) =>
+                            translateKnownTemplateText(block.name, language),
+                          ),
+                        )
+                        .join(", ")}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            ) : null}
+            </div>
+          </PlanningStudio>
+          </PlanningStudioScene>
+      ) : null}
+          </div>
+        </div>
+
+        {!isAthleteSceneWorkspace && !isCoachSceneWorkspace ? (
+          <WorkspaceContextDock>
+            <WorkspaceContextSection
+              className={!user && isAthleteSceneWorkspace ? "workspace-context-access" : undefined}
+            >
+              <div className="summary-topline">
+                <strong>
+                  {language === "ru"
+                    ? "Контекст"
+                    : language === "bg"
+                      ? "Контекст"
+                      : "Context"}
+                </strong>
+                <span>{activeWorkspaceItem.label}</span>
+              </div>
+              <div className="context-chip-grid">
+                <article className="context-chip">
+                  <span>
+                    {language === "ru"
+                      ? "Фаза"
+                      : language === "bg"
+                        ? "Фаза"
+                        : "Phase"}
+                  </span>
+                  <strong>{activePhaseLabel}</strong>
+                </article>
+                <article className="context-chip">
+                  <span>
+                    {language === "ru"
+                      ? "Приоритет"
+                      : language === "bg"
+                        ? "Приоритет"
+                        : "Priority"}
+                  </span>
+                  <strong>{competitionContext?.competitionPriority ?? "-"}</strong>
+                </article>
+                <article className="context-chip">
+                  <span>
+                    {language === "ru"
+                      ? "До старта"
+                      : language === "bg"
+                        ? "До старт"
+                        : "Days to comp"}
+                  </span>
+                  <strong>{competitionContext?.daysToCompetition ?? "-"}</strong>
+                </article>
+                <article className="context-chip">
+                  <span>{stateLabelText}</span>
+                  <strong>{importedSyncStateLabel(language, isOffline, offlineQueueSize)}</strong>
+                </article>
+              </div>
+            </WorkspaceContextSection>
+
+            {!isCoachSceneWorkspace ? (
+              <WorkspaceContextSection>
+                <div className="summary-topline">
+                  <strong>
+                    {activeWorkspace === "offline-center"
+                      ? ui("pendingItems")
+                      : activeWorkspace === "planning-studio"
+                        ? warningsLabel
+                        : language === "ru"
+                          ? "Сегодня"
+                          : language === "bg"
+                            ? "Днес"
+                            : "Today"}
+                  </strong>
+                  <span>
+                    {activeWorkspace === "offline-center"
+                      ? offlineQueueSize
+                      : activeWorkspace === "planning-studio"
+                        ? templatePack?.warnings?.length ?? 0
+                        : primaryAssignedPlan?.day.label ?? ui("noActivePlan")}
+                  </span>
+                </div>
+
+                {isAthleteSceneWorkspace ? (
+                  <>
+                    <p className="placeholder-copy">
+                      {adaptedPlan
+                        ? adaptedPlan.explanation
+                            .slice(0, 2)
+                            .map((item) => translateAdaptationText(item, language))
+                            .join(" ")
+                        : ui("noAdaptationYet")}
+                    </p>
+                    <ul>
+                      <li>{t("assignedTrainingDay")}: {primaryAssignedPlan?.day.label ?? ui("noActivePlan")}</li>
+                      <li>{t("executionTracking")}: {executionResults.filter((item) => item.completed).length}</li>
+                      <li>{t("analytics")}: {analyticsOverview?.loadTrend.length ?? 0}</li>
+                    </ul>
+                  </>
+                ) : null}
+
+                {activeWorkspace === "offline-center" ? (
+                  offlineQueueItems.length === 0 ? (
+                    <p className="placeholder-copy">{ui("queueEmpty")}</p>
+                  ) : (
+                    <ul>
+                      {offlineQueueItems.slice(0, 5).map((item) => (
+                        <li key={item.id}>
+                          {importedFormatQueueItemLabel(item, language)}{" "}
+                          {offlineSyncErrors[item.id]
+                            ? `- ${offlineSyncErrors[item.id]}`
+                            : `- ${importedQueueItemStatusLabel(item, language)}`}
+                        </li>
+                      ))}
+                    </ul>
+                  )
+                ) : null}
+
+                {activeWorkspace === "planning-studio" ? (
+                  templatePack?.warnings?.length ? (
+                    <ul>
+                      {templatePack.warnings.slice(0, 5).map((warning) => (
+                        <li key={`${warning.code}-${warning.message}`}>
+                          {warning.level.toUpperCase()}: {warning.message}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="placeholder-copy">
+                      {language === "ru"
+          ? "Предупреждения планирования появятся после подбора недельного пакета."
+        : language === "bg"
+          ? "Предупрежденията на планирането ще се покажат след избор на седмичния пакет."
+                          : "Planner intelligence warnings appear after building a weekly pack."}
+                    </p>
+                  )
+                ) : null}
+              </WorkspaceContextSection>
+            ) : null}
+
+            {!user ? (
+              <WorkspaceContextSection>
+                <div className="summary-topline">
+                  <strong>
+                    {copyFor(language, {
+                      en: "Access",
+                      ru: "Доступ",
+                      bg: "Достъп",
+                    })}
+                  </strong>
+                  <span>{ui("guest")}</span>
+                </div>
+                <p className="placeholder-copy">
+                  {copyFor(language, {
+                    en: "Use Sign in or Register in the top bar to open the access form.",
+                    ru: "Используйте Войти или Регистрация в верхнем меню, чтобы открыть форму доступа.",
+                    bg: "Използвайте Вход или Регистрация в горното меню, за да отворите формата за достъп.",
+                  })}
+                </p>
+              </WorkspaceContextSection>
+            ) : null}
+          </WorkspaceContextDock>
+        ) : null}
+      </div>
+    </main>
+  );
+}
+
+
