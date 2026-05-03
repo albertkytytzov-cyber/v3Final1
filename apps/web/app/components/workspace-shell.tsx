@@ -139,7 +139,11 @@ export function WorkspaceTopBar({
         <strong>{title}</strong>
       </div>
 
-      <div className="topbar-side">
+      <div
+        className={`topbar-side ${
+          authActions ? "topbar-side-with-auth" : ""
+        }`.trim()}
+      >
         {selects.map((select) => (
           <label className="field compact-field" key={select.label}>
             <span>{select.label}</span>
