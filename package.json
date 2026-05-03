@@ -17,6 +17,11 @@
     "dev:api": "npm run dev --workspace @training-platform/api",
     "build": "npm run build --workspace @training-platform/shared && npm run build --workspace @training-platform/api && npm run build --workspace @training-platform/web",
     "lint": "npm run lint --workspace @training-platform/web",
+    "mobile:sync": "npm run sync --workspace @training-platform/mobile",
+    "mobile:sync:android": "npm run sync:android --workspace @training-platform/mobile",
+    "mobile:sync:ios": "npm run sync:ios --workspace @training-platform/mobile",
+    "mobile:open:android": "npm run open:android --workspace @training-platform/mobile",
+    "mobile:open:ios": "npm run open:ios --workspace @training-platform/mobile",
     "typecheck": "npm run typecheck --workspace @training-platform/shared && npm run typecheck --workspace @training-platform/api && npm run typecheck --workspace @training-platform/web"
   },
   "devDependencies": {

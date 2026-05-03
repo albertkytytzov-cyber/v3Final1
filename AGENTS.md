@@ -10,6 +10,7 @@ PERFORM is a training-process platform for coaches and athletes. The app covers 
 - Language: TypeScript.
 - Web: Next.js App Router, React, global CSS.
 - API: Fastify, PostgreSQL, cookie sessions.
+- Mobile: Capacitor shell in `apps/mobile`.
 - Shared package: `@training-platform/shared`.
 - Runtime services: PostgreSQL, Redis, worker, scheduler, Caddy via Docker Compose.
 
@@ -43,6 +44,12 @@ Build:
 
 ```bash
 npm run build
+```
+
+Mobile sync:
+
+```bash
+npm run mobile:sync
 ```
 
 Self-host install/update:

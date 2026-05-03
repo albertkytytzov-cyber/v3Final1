@@ -18,6 +18,7 @@ PERFORM is a training-process management platform for coaches and athletes. It c
 apps/
   api/                 Fastify API, background worker, scheduler, database bootstrap
   web/                 Next.js application and static assets
+  mobile/              Capacitor shell for Android and iOS
 packages/
   shared/              Shared TypeScript domain types and constants
 infra/
@@ -131,6 +132,34 @@ Individual commands:
 npm run lint
 npm run typecheck
 npm run build
+```
+
+## Mobile App
+
+The mobile shell lives in `apps/mobile` and uses Capacitor to load the deployed PERFORM web app on Android and iOS.
+
+Configure a local mobile server URL without committing it:
+
+```bash
+cp apps/mobile/mobile.env.example apps/mobile/.env.mobile.local
+```
+
+Then set `MOBILE_SERVER_URL` in `apps/mobile/.env.mobile.local` and sync native projects:
+
+```bash
+npm run mobile:sync
+```
+
+Android can be opened on Windows with Android Studio:
+
+```bash
+npm run mobile:open:android
+```
+
+iOS requires Xcode on macOS or a cloud build flow:
+
+```bash
+npm run mobile:open:ios
 ```
 
 ## Development Rules
