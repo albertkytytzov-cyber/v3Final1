@@ -3,6 +3,7 @@ import {
   autoAssignMicrocycle,
   assignPlan,
   createPlanTemplate,
+  deletePlanTemplate,
   PlanningCommandServiceError,
 } from "../../services/planning/planning-command.service";
 import {
@@ -122,6 +123,41 @@ export function registerPlanningRoutes(
       coachUserId: user.id,
       payload: body,
     });
+  });
+
+  app.delete("/api/v1/plans/templates/:templateId", async (request) => {
+    const user = await dependencies.guards.requireUser(request);
+
+    if (user.role !== "coach" && user.role !== "admin") {
+      throw dependencies.httpError(403, "Only coach or admin accounts can delete plan templates");
+    }
+
+    const params = request.params as { templateId?: string };
+    const templateId = params.templateId ?? "";
+
+    if (!templateId) {
+      throw dependencies.httpError(400, "templateId is required");
+    }
+
+    try {
+      return await deletePlanTemplate({
+        coachUserId: user.id,
+        role: user.role,
+        templateId,
+      });
+    } catch (error) {
+      if (error instanceof PlanningCommandServiceError) {
+        if (error.code === "template_not_found") {
+          throw dependencies.httpError(404, error.message);
+        }
+
+        if (error.code === "template_in_use") {
+          throw dependencies.httpError(409, error.message);
+        }
+      }
+
+      throw error;
+    }
   });
 
   app.get("/api/v1/plans/assigned", async (request) => {

@@ -21,7 +21,10 @@ import {
 
 export class PlanningCommandServiceError extends Error {
   constructor(
-    public readonly code: "template_blocks_not_found",
+    public readonly code:
+      | "template_blocks_not_found"
+      | "template_not_found"
+      | "template_in_use",
     message: string,
   ) {
     super(message);
@@ -479,6 +482,53 @@ export async function createPlanTemplate(input: {
       blocks: normalizedBlocks,
       days: normalizedDays,
     },
+  };
+}
+
+export async function deletePlanTemplate(input: {
+  coachUserId: string;
+  role: string;
+  templateId: string;
+}) {
+  const template = await pool.query<{ id: string }>(
+    `
+      SELECT id
+      FROM plan_templates
+      WHERE id = $1 AND (coach_user_id = $2 OR $3 = 'admin')
+      LIMIT 1
+    `,
+    [input.templateId, input.coachUserId, input.role],
+  );
+
+  if (!template.rowCount) {
+    throw new PlanningCommandServiceError(
+      "template_not_found",
+      "Plan template was not found",
+    );
+  }
+
+  const usage = await pool.query<{ assigned_count: string }>(
+    `
+      SELECT COUNT(*)::text AS assigned_count
+      FROM assigned_plans
+      WHERE template_id = $1
+    `,
+    [input.templateId],
+  );
+  const assignedCount = Number(usage.rows[0]?.assigned_count ?? 0);
+
+  if (assignedCount > 0) {
+    throw new PlanningCommandServiceError(
+      "template_in_use",
+      "Template is already assigned to athletes and cannot be deleted",
+    );
+  }
+
+  await pool.query("DELETE FROM plan_templates WHERE id = $1", [input.templateId]);
+
+  return {
+    deleted: true,
+    templateId: input.templateId,
   };
 }
 

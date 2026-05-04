@@ -4508,6 +4508,61 @@ export function PageClient({
     }
   }
 
+  async function handleDeletePlanTemplate(template: PlanTemplateSummary) {
+    const confirmed = globalThis.confirm(
+      copyFor(language, {
+        en: `Delete template "${translateKnownTemplateText(template.name, language)}"?`,
+        ru: `Удалить шаблон «${translateKnownTemplateText(template.name, language)}»?`,
+        bg: `Да се изтрие ли шаблонът „${translateKnownTemplateText(template.name, language)}“?`,
+      }),
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setBusy(true);
+    setErrorMessage("");
+
+    try {
+      await apiRequest(`/plans/templates/${template.id}`, {
+        method: "DELETE",
+      });
+      setStatusMessage(
+        copyFor(language, {
+          en: "Template deleted.",
+          ru: "Шаблон удалён.",
+          bg: "Шаблонът е изтрит.",
+        }),
+      );
+      setPlanTemplates((current) => current.filter((item) => item.id !== template.id));
+      setAssignedPlanForm((current) =>
+        current.templateId === template.id ? { ...current, templateId: "" } : current,
+      );
+      await loadPlanTemplates();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      const templateInUseMessage = copyFor(language, {
+        en: "This template is already assigned to athletes. Remove or archive those assignments before deleting the template.",
+        ru: "Этот шаблон уже назначен спортсменам. Сначала уберите или заархивируйте эти назначения.",
+        bg: "Този шаблон вече е назначен на спортисти. Първо премахнете или архивирайте тези назначения.",
+      });
+      const fallback = copyFor(language, {
+        en: "Failed to delete template. If it is already assigned to athletes, archive or remove those assignments first.",
+        ru: "Не удалось удалить шаблон. Если он уже назначен спортсменам, сначала уберите или заархивируйте эти назначения.",
+        bg: "Шаблонът не можа да бъде изтрит. Ако вече е назначен на спортисти, първо премахнете или архивирайте тези назначения.",
+      });
+
+      setErrorMessage(
+        message.includes("already assigned") || message.includes("cannot be deleted")
+          ? templateInUseMessage
+          : message || fallback,
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function handlePlanFileImport(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
 
@@ -14051,36 +14106,52 @@ export function PageClient({
               ) : (
                 <div className="planning-template-library-list">
                   {planTemplates.map((template) => (
-                    <button
+                    <article
                       className={`planning-template-library-card ${
                         assignedPlanForm.templateId === template.id ? "is-active" : ""
                       }`}
                       key={template.id}
-                      onClick={() => {
-                        setAssignedPlanForm((current) => ({
-                          ...current,
-                          templateId: template.id,
-                        }));
-                        setPlanForm(templateSummaryToPayload(template, language));
-                      }}
-                      type="button"
                     >
-                      <strong>{translateKnownTemplateText(template.name, language)}</strong>
-                      <span>{translateKnownTemplateText(template.sportType, language)}</span>
-                      <small>
-                        {localizedOptionLabel(template.phaseFocus, language, PREPARATION_PHASE_LABELS)} /{" "}
-                        {localizedOptionLabel(template.microcycleType, language, MICROCYCLE_TYPE_LABELS)}
-                      </small>
-                      <em>
-                        {blocksCountLabel(template.blockCount, language)} /{" "}
+                      <button
+                        className="planning-template-library-select"
+                        onClick={() => {
+                          setAssignedPlanForm((current) => ({
+                            ...current,
+                            templateId: template.id,
+                          }));
+                          setPlanForm(templateSummaryToPayload(template, language));
+                        }}
+                        type="button"
+                      >
+                        <strong>{translateKnownTemplateText(template.name, language)}</strong>
+                        <span>{translateKnownTemplateText(template.sportType, language)}</span>
+                        <small>
+                          {localizedOptionLabel(template.phaseFocus, language, PREPARATION_PHASE_LABELS)} /{" "}
+                          {localizedOptionLabel(template.microcycleType, language, MICROCYCLE_TYPE_LABELS)}
+                        </small>
+                        <em>
+                          {blocksCountLabel(template.blockCount, language)} /{" "}
+                          {copyFor(language, {
+                            en: "load",
+                            ru: "нагрузка",
+                            bg: "натоварване",
+                          })}{" "}
+                          {template.estimatedLoad}
+                        </em>
+                      </button>
+                      <button
+                        className="planning-template-delete-button"
+                        disabled={busy}
+                        onClick={() => void handleDeletePlanTemplate(template)}
+                        type="button"
+                      >
                         {copyFor(language, {
-                          en: "load",
-                          ru: "нагрузка",
-                          bg: "натоварване",
-                        })}{" "}
-                        {template.estimatedLoad}
-                      </em>
-                    </button>
+                          en: "Delete",
+                          ru: "Удалить",
+                          bg: "Изтрий",
+                        })}
+                      </button>
+                    </article>
                   ))}
                 </div>
               )}
