@@ -6659,23 +6659,34 @@ export function PageClient({
     setErrorMessage("");
 
     try {
+      const athleteId = selectedAthleteId || microcycleForm.athleteId;
+
+      if (!athleteId) {
+        throw new Error(ui("selectAthlete"));
+      }
+
+      const payload: AutoAssignMicrocyclePayload = {
+        ...microcycleForm,
+        athleteId,
+      };
+
       const response = await apiRequest<{ assignedPlans: AssignedPlanSummary[] }>(
         "/plans/auto-assign-microcycle",
         {
           method: "POST",
-          body: JSON.stringify(microcycleForm),
+          body: JSON.stringify(payload),
         },
       );
       setStatusMessage(`Microcycle assigned: ${response.assignedPlans.length} day(s).`);
       await loadAssignedPlans();
-      if (canLoadCoachScopedAthleteData(microcycleForm.athleteId)) {
+      if (canLoadCoachScopedAthleteData(athleteId)) {
         await Promise.all([
           loadCoachAthletes(),
-          loadCoachAdaptedPlan(microcycleForm.athleteId),
-          loadCoachExecutionReview(microcycleForm.athleteId),
-          loadCoachAnalyticsOverview(microcycleForm.athleteId),
+          loadCoachAdaptedPlan(athleteId),
+          loadCoachExecutionReview(athleteId),
+          loadCoachAnalyticsOverview(athleteId),
           loadTemplatePackRecommendations(
-            microcycleForm.athleteId,
+            athleteId,
             microcycleForm.startDate,
             coachAthletes,
           ),
@@ -6988,6 +6999,11 @@ export function PageClient({
   const canSeeCoachWorkspace = user?.role === "coach" || user?.role === "admin";
   const selectedCoachAthlete =
     coachAthletes.find((athlete) => athlete.athleteId === selectedAthleteId) ?? null;
+  const weeklyPlanAthleteId = selectedAthleteId || microcycleForm.athleteId;
+  const weeklyPlanAthlete =
+    selectedCoachAthlete ??
+    coachAthletes.find((athlete) => athlete.athleteId === weeklyPlanAthleteId) ??
+    null;
   const visibleSeasons = seasons.filter(
     (season) => !selectedAthleteId || season.athleteId === selectedAthleteId,
   );
@@ -7549,22 +7565,31 @@ export function PageClient({
   ];
   const planningTabs: Array<{ id: PlanningStudioView; label: string }> = [
     {
-      id: "calendar",
+      id: "preparation",
       label:
         language === "ru"
-          ? "Календарь"
+          ? "План подготовки"
           : language === "bg"
-            ? "Календар"
-            : "Calendar",
+            ? "План за подготовка"
+            : "Preparation plan",
     },
     {
-      id: "season",
+      id: "weekly",
       label:
         language === "ru"
-          ? "Сезон и старты"
+          ? "Недельный план"
           : language === "bg"
-            ? "Сезон и стартове"
-            : "Season & starts",
+            ? "Седмичен план"
+            : "Weekly planner",
+    },
+    {
+      id: "templates",
+      label:
+        language === "ru"
+          ? "Библиотека шаблонов"
+          : language === "bg"
+            ? "Библиотека с шаблони"
+            : "Template library",
     },
     {
       id: "mesocycle",
@@ -7576,31 +7601,22 @@ export function PageClient({
             : "Mesocycles",
     },
     {
-      id: "preparation",
+      id: "season",
       label:
         language === "ru"
-          ? "План подготовки"
+          ? "Сезон и старты"
           : language === "bg"
-            ? "План за подготовка"
-            : "Preparation plan",
+            ? "Сезон и стартове"
+            : "Season & starts",
     },
     {
-      id: "templates",
+      id: "calendar",
       label:
         language === "ru"
-          ? "Шаблоны"
+          ? "Календарь"
           : language === "bg"
-            ? "Шаблони"
-            : "Templates",
-    },
-    {
-      id: "weekly",
-      label:
-        language === "ru"
-          ? "Недельный план"
-          : language === "bg"
-            ? "Седмичен план"
-            : "Weekly planner",
+            ? "Календар"
+            : "Calendar",
     },
   ];
   const topOverviewItems = [
@@ -7744,10 +7760,10 @@ export function PageClient({
         ? "Review"
         : activeWorkspace === "planning-studio"
           ? language === "ru"
-            ? "Планировочная студия"
+            ? "Планирование"
             : language === "bg"
-              ? "Планиращо студио"
-              : "Planning studio"
+              ? "Планиране"
+              : "Planning"
           : ui("offlineSyncCenter");
   const topbarTitle =
     !user && isAthleteSceneWorkspace ? ui("guestTopbarTitle") : workspaceTitle;
@@ -7802,10 +7818,10 @@ export function PageClient({
             : "Execution review, plan vs actual, and deviations for the selected athlete."
         : activeWorkspace === "planning-studio"
           ? language === "ru"
-            ? "Планирование по фазе, шаблоны, мезоциклы и недельная сборка в одном studio-режиме."
+            ? "План подготовки, недельная работа и библиотека шаблонов."
             : language === "bg"
-              ? "Планиране по фаза, шаблони, мезоцикли и седмично сглобяване в един studio режим."
-              : "Phase-led planning, templates, mesocycles, and weekly assembly in one studio mode."
+              ? "План за подготовка, седмична работа и библиотека с шаблони."
+              : "Preparation plan, weekly work, and template library."
           : language === "ru"
             ? "Очередь синхронизации, локальные данные и конфликты восстановления сети."
             : language === "bg"
@@ -7969,20 +7985,20 @@ export function PageClient({
             })
         : planningView === "preparation"
           ? copyFor(language, {
-              en: "Review the full preparation document: monitoring, weeks, days, sessions, load zones, and taper rules.",
-              ru: "Смотрите полный документ подготовки: мониторинг, недели, дни, сессии, зоны нагрузки и правила подводки.",
-        bg: "Прегледайте пълния документ за подготовка: мониторинг, седмици, дни, сесии, зони и правила за тейпър.",
+              en: "Set the period: goal, dates, phase, target starts, and weekly load.",
+              ru: "Настройте период: цель, даты, фазу, главные старты и нагрузку по неделям.",
+        bg: "Настройте периода: цел, дати, фаза, основни стартове и седмично натоварване.",
             })
           : planningView === "templates"
             ? copyFor(language, {
-                en: "Curate phase-aware templates and direct assignment logic before they reach the athlete.",
-                ru: "Настройте шаблоны с учётом фаз и логику назначения до того, как они попадут спортсмену.",
-                bg: "Настройте шаблоните според фазите и логиката за назначаване преди да стигнат до спортиста.",
+                en: "Keep reusable days, weeks, and full plans here. Edit first, assign only when needed.",
+                ru: "Храните здесь дни, недели и полные планы. Сначала редактируйте, назначайте только нужное.",
+                bg: "Съхранявайте тук дни, седмици и цели планове. Първо редактирайте, назначавайте само нужното.",
               })
             : copyFor(language, {
-                en: "Assemble the weekly pack, evaluate warnings, and apply planner suggestions directly.",
-        ru: "Соберите недельный пакет, проверьте предупреждения и примените предложения планирования напрямую.",
-        bg: "Сглобете седмичния пакет, проверете предупрежденията и приложете предложенията за планиране директно.",
+                en: "Build the working week: days, sessions, exercises, control, and assigned plans.",
+        ru: "Соберите рабочую неделю: дни, тренировки, упражнения, контроль и назначенные планы.",
+        bg: "Сглобете работната седмица: дни, тренировки, упражнения, контрол и назначени планове.",
               });
   const uwwYearOptions = withFallbackOptions(
     uwwSyncOptions.years,
@@ -8205,9 +8221,9 @@ export function PageClient({
     },
     {
       label: copyFor(language, {
-        en: "Templates",
-        ru: "Шаблоны",
-        bg: "Шаблони",
+        en: "Library",
+        ru: "Библиотека",
+        bg: "Библиотека",
       }),
       value: String(planTemplates.length),
       note: t("savedTemplates"),
@@ -14325,16 +14341,16 @@ export function PageClient({
                 <div>
                   <h3>
                     {copyFor(language, {
-                      en: "Plan structure",
-                      ru: "Структура плана",
-                      bg: "Структура на плана",
+                      en: "Template editor",
+                      ru: "Редактор шаблона",
+                      bg: "Редактор на шаблон",
                     })}
                   </h3>
                   <p className="placeholder-copy">
                     {copyFor(language, {
-                      en: "The uploaded file is kept as one full plan: weeks, days, sessions, blocks, and exercises stay inside it.",
-                      ru: "Загруженный файл хранится одним полным планом: недели, дни, тренировки, блоки и упражнения остаются внутри него.",
-                      bg: "Каченият файл се пази като един пълен план: седмици, дни, тренировки, блокове и упражнения остават вътре в него.",
+                      en: "Edit a day, week, or full plan before it becomes a working assignment.",
+                      ru: "Редактируйте день, неделю или полный план до назначения спортсмену.",
+                      bg: "Редактирайте ден, седмица или цял план преди назначаване на спортист.",
                     })}
                   </p>
                 </div>
@@ -14368,9 +14384,9 @@ export function PageClient({
                   </strong>
                   <p className="placeholder-copy">
                     {copyFor(language, {
-                      en: "Upload an HTML plan. The app will save it as one multi-day template and assign all training days to the selected athlete.",
-                      ru: "Загрузите HTML-план. Система сохранит его одним многодневным шаблоном и назначит все тренировочные дни выбранному спортсмену.",
-                      bg: "Качете HTML план. Системата ще го запази като един многодневен шаблон и ще назначи всички тренировъчни дни на избрания спортист.",
+                      en: "Upload an HTML plan. It will stay as one multi-day template with all days and exercises inside.",
+                      ru: "Загрузите HTML-план. Он сохранится одним многодневным шаблоном со всеми днями и упражнениями.",
+                      bg: "Качете HTML план. Той ще се запази като един многодневен шаблон с всички дни и упражнения.",
                     })}
                   </p>
                 </div>
@@ -15415,16 +15431,16 @@ export function PageClient({
                 <div>
                   <strong>
                     {copyFor(language, {
-                      en: "Plan library",
-                      ru: "Библиотека планов",
-                      bg: "Библиотека с планове",
+                      en: "Template library",
+                      ru: "Библиотека шаблонов",
+                      bg: "Библиотека с шаблони",
                     })}
                   </strong>
                   <p className="placeholder-copy">
                     {copyFor(language, {
-                      en: "One uploaded file is shown here as one full plan.",
-                      ru: "Один загруженный файл отображается здесь как один полный план.",
-                      bg: "Един качен файл се показва тук като един пълен план.",
+                      en: "Saved reusable days, weeks, and full plans.",
+                      ru: "Сохранённые дни, недели и полные планы.",
+                      bg: "Запазени дни, седмици и цели планове.",
                     })}
                   </p>
                 </div>
@@ -15587,9 +15603,9 @@ export function PageClient({
                       <details className="planning-template-exercise-details">
                         <summary>
                           {copyFor(language, {
-                            en: "Plan structure",
-                            ru: "Структура плана",
-                            bg: "Структура на плана",
+                            en: "Contents",
+                            ru: "Содержимое",
+                            bg: "Съдържание",
                           })}{" "}
                           ({dayCount} / {template.blockCount} / {exerciseCount})
                         </summary>
@@ -15659,9 +15675,9 @@ export function PageClient({
               <div className="planning-template-assign-head">
                 <h3>
                   {copyFor(language, {
-                    en: "Assignment",
-                    ru: "Назначение",
-                    bg: "Назначаване",
+                    en: "Assign selected",
+                    ru: "Назначить выбранное",
+                    bg: "Назначи избраното",
                   })}
                 </h3>
                 <p className="placeholder-copy">
@@ -15842,9 +15858,9 @@ export function PageClient({
                 type="button"
               >
                 {copyFor(language, {
-                  en: "Save without assignment",
-                  ru: "Сохранить без назначения",
-                  bg: "Запази без назначаване",
+                  en: "Save to library",
+                  ru: "Сохранить в библиотеку",
+                  bg: "Запази в библиотеката",
                 })}
               </button>
 
@@ -15862,9 +15878,9 @@ export function PageClient({
             <form className="auth-form wide-form planning-main-form planning-weekly-form" onSubmit={handleAutoAssignMicrocycleSubmit}>
               <h3>
                 {copyFor(language, {
-                  en: "Weekly planner v1",
-                  ru: "Недельный планировщик v1",
-                  bg: "Седмичен планировчик v1",
+                  en: "Weekly plan",
+                  ru: "Недельный план",
+                  bg: "Седмичен план",
                 })}
               </h3>
               <div className="planning-weekly-stage">
@@ -15872,9 +15888,9 @@ export function PageClient({
                   <div className="summary-topline">
                     <strong>
                       {copyFor(language, {
-                        en: "Template pack",
-                        ru: "Пакет шаблонов",
-                        bg: "Пакет шаблони",
+                        en: "Recommended week",
+                        ru: "Рекомендованная неделя",
+                        bg: "Препоръчана седмица",
                       })}
                     </strong>
                     <span>{templatePack?.suggestedDays ?? 0}</span>
@@ -16050,9 +16066,9 @@ export function PageClient({
                   ) : (
                     <p className="placeholder-copy">
                       {copyFor(language, {
-                        en: "Load an athlete and start date to build a recommended phase-aware and mesocycle-aware template pack.",
-                        ru: "Выберите спортсмена и дату старта, чтобы собрать пакет шаблонов с учётом фазы и мезоцикла.",
-                        bg: "Изберете спортист и начална дата, за да създадете пакет шаблони според фазата и мезоцикъла.",
+                        en: "Select an athlete in the top menu and set the week start date.",
+                        ru: "Выберите спортсмена в верхнем меню и задайте дату начала недели.",
+                        bg: "Изберете спортист от горното меню и задайте началната дата на седмицата.",
                       })}
                     </p>
                   )}
@@ -16287,31 +16303,23 @@ export function PageClient({
                 </div>
 
                 <div className="planning-weekly-controls">
-                  <label className="field">
+                  <div className="planning-weekly-athlete-chip" aria-live="polite">
                     <span>{t("athlete")}</span>
-                    <select
-                      value={microcycleForm.athleteId}
-                      onChange={(event) => {
-                        const athleteId = event.target.value;
-                        setMicrocycleForm((current) => ({ ...current, athleteId }));
-                        if (canLoadCoachScopedAthleteData(athleteId)) {
-                          void loadTemplatePackRecommendations(
-                            athleteId,
-                            microcycleForm.startDate,
-                            coachAthletes,
-                          );
-                        }
-                      }}
-                      required
-                    >
-                      <option value="">{ui("selectAthlete")}</option>
-                      {coachAthletes.map((athlete) => (
-                        <option key={athlete.athleteId} value={athlete.athleteId}>
-                          {athlete.fullName}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                    <strong>{weeklyPlanAthlete?.fullName ?? ui("selectAthlete")}</strong>
+                    <small>
+                      {weeklyPlanAthlete
+                        ? copyFor(language, {
+                            en: "Active athlete for this week",
+                            ru: "Активный спортсмен недели",
+                            bg: "Активен спортист за седмицата",
+                          })
+                        : copyFor(language, {
+                            en: "Select an athlete above first",
+                            ru: "Сначала выберите спортсмена сверху",
+                            bg: "Първо изберете спортист горе",
+                          })}
+                    </small>
+                  </div>
 
                   <label className="field">
                     <span>{t("startDate")}</span>
@@ -16393,13 +16401,13 @@ export function PageClient({
                     />
                   </label>
 
-                  <button className="primary-button planning-weekly-submit" disabled={busy} type="submit">
+                  <button className="primary-button planning-weekly-submit" disabled={busy || !weeklyPlanAthleteId} type="submit">
                     {busy
                       ? ui("syncingNow")
                       : copyFor(language, {
-                          en: "Auto-assign weekly plan",
-                          ru: "Автоназначить недельный план",
-                          bg: "Автоматично назначи седмичен план",
+                          en: "Assign weekly plan",
+                          ru: "Назначить недельный план",
+                          bg: "Назначи седмичен план",
                         })}
                   </button>
                 </div>
@@ -16410,7 +16418,13 @@ export function PageClient({
             {planningView === "weekly" ? (
             <div className="entry-summary wide-card planning-review-card">
                 <div className="summary-topline">
-                <strong>{t("activeAssignments")}</strong>
+                <strong>
+                  {copyFor(language, {
+                    en: "Assigned plans",
+                    ru: "Назначенные планы",
+                    bg: "Назначени планове",
+                  })}
+                </strong>
                 <span>{assignedPlans.length}</span>
               </div>
               {assignedPlans.length === 0 ? (

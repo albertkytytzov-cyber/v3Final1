@@ -3201,7 +3201,7 @@ select {
 }
 
 .planning-workgrid.planning-workgrid-templates {
-  grid-template-columns: minmax(240px, 0.68fr) minmax(500px, 1.42fr) minmax(280px, 0.72fr);
+  grid-template-columns: minmax(250px, 0.7fr) minmax(500px, 1.36fr) minmax(320px, 0.82fr);
   grid-auto-rows: min-content;
   gap: 14px;
   align-items: start;
@@ -3714,7 +3714,7 @@ select {
 
 .planning-template-import-card {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
   align-items: start;
   padding: 14px;
@@ -6745,7 +6745,13 @@ select {
 
 .planning-weekly-controls {
   display: grid;
-  grid-template-columns: repeat(4, minmax(150px, 1fr));
+  grid-template-columns:
+    minmax(178px, 0.92fr)
+    minmax(138px, 0.64fr)
+    minmax(116px, 0.48fr)
+    minmax(220px, 1.08fr)
+    minmax(180px, 0.86fr)
+    minmax(190px, 0.82fr);
   gap: 8px;
   padding: 12px;
   border-radius: 14px;
@@ -6754,6 +6760,40 @@ select {
   box-shadow: var(--shadow-soft);
   min-width: 0;
   max-width: 100%;
+}
+
+.planning-weekly-athlete-chip {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  min-height: 58px;
+  align-content: center;
+  padding: 8px 10px;
+  border: 1px solid rgba(15, 118, 110, 0.16);
+  border-radius: 12px;
+  background: rgba(240, 253, 250, 0.72);
+}
+
+.planning-weekly-athlete-chip span,
+.planning-weekly-athlete-chip small {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted-strong);
+  font-size: 0.76rem;
+  font-weight: 850;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.planning-weekly-athlete-chip strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 0.92rem;
+  line-height: 1.18;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .planning-weekly-form .field,
@@ -6777,8 +6817,13 @@ select {
   min-height: 38px;
 }
 
+.planning-weekly-controls select,
+.planning-template-assign select {
+  font-size: 0.84rem;
+}
+
 .planning-weekly-notes {
-  grid-column: span 2;
+  grid-column: auto;
 }
 
 .planning-weekly-submit {
