@@ -3970,6 +3970,48 @@ select {
   text-transform: uppercase;
 }
 
+.planning-template-card-title-input,
+.planning-template-card-note-input,
+.planning-template-session-name-input,
+.planning-template-exercise-table input {
+  min-width: 0;
+  width: 100%;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: rgba(255, 255, 255, 0.76);
+  color: var(--text);
+  font: inherit;
+  outline: none;
+}
+
+.planning-template-card-title-input:focus,
+.planning-template-card-note-input:focus,
+.planning-template-session-name-input:focus,
+.planning-template-exercise-table input:focus {
+  border-color: rgba(15, 118, 110, 0.42);
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.1);
+}
+
+.planning-template-card-title-input {
+  max-width: 44%;
+  border-color: transparent;
+  background: transparent;
+  font-size: 1.18rem;
+  font-weight: 950;
+  line-height: 1.15;
+  text-transform: uppercase;
+}
+
+.planning-template-card-note-input {
+  max-width: 54%;
+  padding: 7px 14px;
+  border-color: rgba(180, 110, 43, 0.5);
+  border-radius: 999px;
+  color: #7c4a20;
+  font-size: 0.82rem;
+  font-weight: 800;
+  text-align: center;
+}
+
 .planning-template-day-card-head span {
   min-width: 0;
   max-width: 54%;
@@ -4000,6 +4042,17 @@ select {
 
 .planning-template-day-session h4 {
   margin: 0;
+  color: #b45309;
+  font-size: 1rem;
+  font-weight: 950;
+  line-height: 1.2;
+}
+
+.planning-template-session-name-input {
+  width: min(100%, 560px);
+  padding: 8px 10px;
+  border-color: transparent;
+  background: transparent;
   color: #b45309;
   font-size: 1rem;
   font-weight: 950;
@@ -4038,17 +4091,60 @@ select {
 
 .planning-template-exercise-table th:nth-child(1),
 .planning-template-exercise-table td:nth-child(1) {
-  width: 44%;
+  width: 40%;
 }
 
 .planning-template-exercise-table th:nth-child(2),
 .planning-template-exercise-table td:nth-child(2) {
-  width: 28%;
+  width: 25%;
 }
 
 .planning-template-exercise-table th:nth-child(3),
 .planning-template-exercise-table td:nth-child(3) {
-  width: 28%;
+  width: 27%;
+}
+
+.planning-template-exercise-table th:nth-child(4),
+.planning-template-exercise-table td:nth-child(4) {
+  width: 8%;
+}
+
+.planning-template-exercise-table input {
+  min-height: 36px;
+  padding: 7px 8px;
+  border-radius: 8px;
+}
+
+.planning-template-exercise-action-cell {
+  text-align: right;
+}
+
+.planning-template-row-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid rgba(220, 38, 38, 0.22);
+  border-radius: 999px;
+  background: rgba(254, 242, 242, 0.86);
+  color: #b91c1c;
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 950;
+}
+
+.planning-template-add-row-button {
+  justify-self: start;
+  min-height: 34px;
+  padding: 7px 11px;
+  border: 1px solid rgba(15, 118, 110, 0.2);
+  border-radius: 999px;
+  background: rgba(240, 253, 250, 0.9);
+  color: #0f766e;
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 850;
 }
 
 .planning-template-session-card,

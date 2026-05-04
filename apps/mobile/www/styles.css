@@ -481,6 +481,186 @@ button {
   border-top: 1px solid var(--line);
 }
 
+.mobile-plan-day-card {
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 18px;
+  background: #eff8fb;
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.06);
+}
+
+.mobile-plan-day-card-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 14px;
+  border-bottom: 2px solid #c9792b;
+  background: rgba(248, 252, 255, 0.92);
+}
+
+.mobile-plan-day-card-head div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.mobile-plan-day-card-head strong {
+  color: var(--text);
+  font-size: 1.02rem;
+  font-weight: 950;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.mobile-plan-day-card-head span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 750;
+  overflow-wrap: anywhere;
+}
+
+.mobile-plan-day-card-head em {
+  max-width: 46%;
+  padding: 7px 11px;
+  overflow: hidden;
+  border: 1px solid rgba(180, 110, 43, 0.46);
+  border-radius: 999px;
+  color: #7c4a20;
+  font-size: 0.78rem;
+  font-style: normal;
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mobile-plan-day-card-body {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  padding: 14px 12px 14px 16px;
+  border-left: 4px solid #31a6d8;
+}
+
+.mobile-plan-session {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.mobile-plan-session h4 {
+  margin: 0;
+  color: #b45309;
+  font-size: 0.95rem;
+  font-weight: 950;
+}
+
+.mobile-plan-table {
+  display: grid;
+  min-width: 0;
+}
+
+.mobile-plan-table-head,
+.mobile-plan-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(72px, 0.72fr) minmax(80px, 0.86fr);
+  gap: 8px;
+  align-items: center;
+}
+
+.mobile-plan-table-head {
+  padding: 0 0 8px;
+  border-bottom: 2px solid #c9792b;
+  color: var(--text);
+  font-size: 0.78rem;
+  font-weight: 950;
+}
+
+.mobile-plan-row {
+  padding: 9px 0;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+  color: var(--text);
+  font-size: 0.83rem;
+  line-height: 1.3;
+}
+
+.mobile-plan-row:last-child {
+  border-bottom: 0;
+}
+
+.mobile-plan-row > span,
+.mobile-plan-cell {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.mobile-plan-row > span:first-child {
+  font-weight: 820;
+}
+
+.mobile-plan-block-form {
+  gap: 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.mobile-plan-block-form .execution-block-head {
+  padding: 8px 0 0;
+}
+
+.execution-exercise-card.mobile-plan-row {
+  padding: 9px 0;
+  border: 0;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 0;
+  background: transparent;
+}
+
+.execution-exercise-card.mobile-plan-row:last-child {
+  border-bottom: 0;
+}
+
+.mobile-plan-exercise-name {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.mobile-plan-exercise-name.execution-exercise-check {
+  padding: 0;
+}
+
+.mobile-plan-exercise-name input {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+}
+
+.mobile-plan-exercise-name span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.mobile-plan-exercise-name strong {
+  overflow-wrap: anywhere;
+}
+
+.mobile-plan-exercise-name small {
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 750;
+}
+
+.execution-exercise-card.mobile-plan-row .execution-exercise-fields,
+.execution-exercise-card.mobile-plan-row .exercise-note {
+  grid-column: 1 / -1;
+}
+
 .execution-block-form {
   gap: 10px;
 }
@@ -948,6 +1128,15 @@ button.list-card {
   .readiness-flags,
   .choice-group {
     grid-template-columns: 1fr;
+  }
+
+  .mobile-plan-day-card-head {
+    display: grid;
+  }
+
+  .mobile-plan-day-card-head em {
+    max-width: 100%;
+    width: fit-content;
   }
 
   .execution-block-head,

@@ -1005,7 +1005,27 @@ function renderExecutionPlanGroup(
         <small>${blockCount} блоков · ${exerciseCount} упр.</small>
       </summary>
       <div class="execution-block-stack">
-        ${group.blockItems.map((item) => renderExecutionBlockForm(item, getExecutionResultForBlock(state, item.plan.id, item.block.id))).join("")}
+        <article class="mobile-plan-day-card mobile-execution-day-card">
+          <div class="mobile-plan-day-card-body">
+            ${group.plan.day.sessions.map((session) => `
+              <section class="mobile-plan-session">
+                <h4>${escapeHtml(session.name)}</h4>
+                ${session.blocks
+                  .map((block) =>
+                    renderExecutionBlockForm(
+                      {
+                        block,
+                        plan: group.plan,
+                        sessionName: session.name,
+                      },
+                      getExecutionResultForBlock(state, group.plan.id, block.id),
+                    ),
+                  )
+                  .join("")}
+              </section>
+            `).join("")}
+          </div>
+        </article>
       </div>
     </details>
   `;
@@ -1021,7 +1041,7 @@ function renderExecutionBlockForm(item: ExecutionBlockItem, result: ExecutionRes
     : "Не заполнено";
 
   return `
-    <form class="mobile-form compact-form execution-block-form" data-execution-form>
+    <form class="mobile-form compact-form execution-block-form mobile-plan-block-form" data-execution-form>
       <input name="assignedPlanId" type="hidden" value="${escapeHtml(item.plan.id)}" />
       <input name="assignedBlockId" type="hidden" value="${escapeHtml(item.block.id)}" />
       <div class="execution-block-head wide-field">
@@ -1032,7 +1052,12 @@ function renderExecutionBlockForm(item: ExecutionBlockItem, result: ExecutionRes
         <em>${escapeHtml(statusText)}</em>
       </div>
       ${exercises.length > 0 ? `
-        <div class="execution-exercise-list wide-field">
+        <div class="mobile-plan-table execution-exercise-list wide-field">
+          <div class="mobile-plan-table-head">
+            <span>Упр.</span>
+            <span>Подходы</span>
+            <span>Контроль</span>
+          </div>
           ${exercises
             .slice()
             .sort((a, b) => a.orderIndex - b.orderIndex)
@@ -1054,14 +1079,16 @@ function renderExecutionExerciseRow(
   result: ExecutionExerciseResult | null,
 ) {
   return `
-    <article class="execution-exercise-card" data-execution-exercise data-exercise-id="${escapeHtml(exercise.id)}">
-      <label class="check-row execution-exercise-check">
+    <article class="mobile-plan-row execution-exercise-card" data-execution-exercise data-exercise-id="${escapeHtml(exercise.id)}">
+      <label class="execution-exercise-check mobile-plan-exercise-name">
         <input name="exerciseCompleted:${escapeHtml(exercise.id)}" type="checkbox" ${result?.completed ? "checked" : ""} />
         <span>
           <strong>${escapeHtml(exercise.name)}</strong>
-          <small>${escapeHtml(formatExerciseTarget(exercise))}</small>
+          <small>${result?.completed ? "выполнено" : "не отмечено"}</small>
         </span>
       </label>
+      <span class="mobile-plan-cell">${escapeHtml(formatExerciseWorkCell(exercise))}</span>
+      <span class="mobile-plan-cell">${escapeHtml(formatExerciseControlCell(exercise))}</span>
       <div class="execution-exercise-fields">
         <label><span>Подх.</span><input inputmode="numeric" name="exerciseSets:${escapeHtml(exercise.id)}" placeholder="${escapeHtml(exercise.targetSets)}" type="number" min="0" value="${formatInputValue(result?.setsCompleted)}" /></label>
         <label><span>Повт.</span><input inputmode="numeric" name="exerciseReps:${escapeHtml(exercise.id)}" placeholder="${escapeHtml(exercise.targetReps)}" type="number" min="0" value="${formatInputValue(result?.repsCompleted)}" /></label>
@@ -1137,15 +1164,26 @@ function renderPlanCard(plan: AssignedPlanSummary) {
   const exerciseCount = countPlanExercises(plan);
 
   return `
-    <article class="list-card plan-card">
-      <strong>${escapeHtml(plan.templateName)}</strong>
-      <span>${formatDate(plan.startDate)} · ${escapeHtml(plan.day.label)}</span>
-      <small>${escapeHtml(plan.plannedPhase ?? "фаза не задана")} · ${blocks.length} блоков · ${exerciseCount} упражнений</small>
-      <div class="plan-session-list">
+    <article class="mobile-plan-day-card plan-card">
+      <header class="mobile-plan-day-card-head">
+        <div>
+          <strong>${formatDate(plan.day.dayDate)} · ${escapeHtml(plan.day.label)}</strong>
+          <span>${escapeHtml(plan.templateName)} · ${blocks.length} блоков · ${exerciseCount} упражнений</span>
+        </div>
+        <em>${escapeHtml(plan.day.notes || plan.plannedPhase || "план")}</em>
+      </header>
+      <div class="mobile-plan-day-card-body">
         ${plan.day.sessions.map((session) => `
-          <section class="plan-session-card">
-            <strong>${escapeHtml(session.name)}</strong>
-            ${session.blocks.map((block) => renderPlanBlock(block)).join("")}
+          <section class="mobile-plan-session">
+            <h4>${escapeHtml(session.name)}</h4>
+            <div class="mobile-plan-table">
+              <div class="mobile-plan-table-head">
+                <span>Упр.</span>
+                <span>Подходы</span>
+                <span>Контроль</span>
+              </div>
+              ${session.blocks.map((block) => renderPlanBlock(block)).join("")}
+            </div>
           </section>
         `).join("")}
       </div>
@@ -1157,22 +1195,19 @@ function renderPlanBlock(block: AssignedPlanBlock) {
   const exercises = (block.exercises ?? []).slice().sort((a, b) => a.orderIndex - b.orderIndex);
 
   return `
-    <div class="plan-block-card">
-      <div>
-        <strong>${escapeHtml(block.name)}</strong>
-        <small>${escapeHtml(formatBlockTarget(block))}</small>
+    ${exercises.length > 0 ? exercises.map((exercise) => `
+      <div class="mobile-plan-row">
+        <span>${escapeHtml(exercise.name)}</span>
+        <span>${escapeHtml(formatExerciseWorkCell(exercise))}</span>
+        <span>${escapeHtml(formatExerciseControlCell(exercise))}</span>
       </div>
-      ${exercises.length > 0 ? `
-        <div class="plan-exercise-list">
-          ${exercises.map((exercise) => `
-            <div class="plan-exercise-row">
-              <span>${escapeHtml(exercise.name)}</span>
-              <small>${escapeHtml(formatExerciseTarget(exercise))}</small>
-            </div>
-          `).join("")}
-        </div>
-      ` : `<small>Упражнения не заданы</small>`}
-    </div>
+    `).join("") : `
+      <div class="mobile-plan-row">
+        <span>${escapeHtml(block.name)}</span>
+        <span>${escapeHtml(formatBlockTarget(block))}</span>
+        <span>-</span>
+      </div>
+    `}
   `;
 }
 
@@ -1343,6 +1378,58 @@ function countPlanExercises(plan: AssignedPlanSummary) {
       blockTotal + (block.exercises?.length ?? 0),
     0),
   0);
+}
+
+function splitExerciseNoteParts(notes?: string | null) {
+  return (notes ?? "")
+    .split(/\s*\/\s*/u)
+    .map((part) => part.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+}
+
+function formatExerciseWorkCell(exercise: AssignedBlockExercise) {
+  const noteParts = splitExerciseNoteParts(exercise.notes);
+
+  if (exercise.targetSets !== null && exercise.targetReps !== null) {
+    return `${exercise.targetSets}×${exercise.targetReps}`;
+  }
+
+  if (exercise.targetSets !== null) {
+    return `${exercise.targetSets} подх.`;
+  }
+
+  if (exercise.targetReps !== null) {
+    return `${exercise.targetReps} повт.`;
+  }
+
+  if (noteParts[0]) {
+    return noteParts[0];
+  }
+
+  if (exercise.targetDurationMinutes !== null) {
+    return `${exercise.targetDurationMinutes} мин.`;
+  }
+
+  return "-";
+}
+
+function formatExerciseControlCell(exercise: AssignedBlockExercise) {
+  const noteParts = splitExerciseNoteParts(exercise.notes);
+  const controlParts = noteParts.length > 1 ? noteParts.slice(1) : [];
+
+  if (exercise.targetWeightKg !== null) {
+    controlParts.unshift(`${exercise.targetWeightKg} кг`);
+  }
+
+  if (exercise.targetRpe !== null) {
+    controlParts.push(`RPE ${exercise.targetRpe}`);
+  }
+
+  if (controlParts.length === 0 && noteParts.length === 1 && exercise.targetDurationMinutes === null) {
+    controlParts.push(noteParts[0]);
+  }
+
+  return controlParts.length ? controlParts.join(" / ") : "-";
 }
 
 function formatBlockTarget(block: AssignedPlanBlock) {

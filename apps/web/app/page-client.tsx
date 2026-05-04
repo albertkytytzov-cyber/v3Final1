@@ -3230,6 +3230,7 @@ export function PageClient({
   const [planForm, setPlanForm] =
     useState<PlanTemplatePayload>(() => createLocalizedDefaultPlanTemplate(language));
   const [importedPlanDraft, setImportedPlanDraft] = useState<ImportedPlanDraft | null>(null);
+  const [isTemplateDraftActive, setIsTemplateDraftActive] = useState(false);
   const [selectedTemplateDayIndex, setSelectedTemplateDayIndex] = useState(0);
   const [selectedTemplateAssignMode, setSelectedTemplateAssignMode] =
     useState<PlanAssignmentMode>("full");
@@ -4860,7 +4861,239 @@ export function PageClient({
     setSelectedTemplateDayIndex(0);
     setSelectedTemplateAssignDayIndexes([]);
     setImportedPlanDraft(null);
+    setIsTemplateDraftActive(false);
     return response.template;
+  }
+
+  function getCurrentTemplatePayload() {
+    if (importedPlanDraft) {
+      return importedPlanDraft.template;
+    }
+
+    if (isTemplateDraftActive) {
+      return planForm;
+    }
+
+    return activePlanTemplate
+      ? templateSummaryToPayload(activePlanTemplate, language)
+      : planForm;
+  }
+
+  function syncImportedDraftTemplate(
+    draft: ImportedPlanDraft,
+    template: PlanTemplatePayload,
+  ): ImportedPlanDraft {
+    const days = template.days ?? [];
+
+    return {
+      ...draft,
+      title: template.name || draft.title,
+      description: template.description || draft.description,
+      template,
+      days: draft.days.map((day, index) => {
+        const templateDay = days[index];
+
+        return {
+          ...day,
+          label: templateDay?.label ?? day.label,
+          template: {
+            ...template,
+            days: templateDay ? [templateDay] : day.template.days,
+          },
+        };
+      }),
+    };
+  }
+
+  function updateTemplateWorkspaceDraft(
+    updater: (template: PlanTemplatePayload) => PlanTemplatePayload,
+  ) {
+    const nextTemplate = updater(getCurrentTemplatePayload());
+
+    setPlanForm(nextTemplate);
+    setIsTemplateDraftActive(true);
+
+    if (importedPlanDraft) {
+      setImportedPlanDraft((current) =>
+        current ? syncImportedDraftTemplate(current, nextTemplate) : current,
+      );
+    }
+  }
+
+  function getEditableTemplateDays(template: PlanTemplatePayload) {
+    return template.days?.length ? template.days : getTemplateStructureDays(template, language);
+  }
+
+  function updateTemplateDayDraft(
+    dayIndex: number,
+    updater: (day: PlanTemplateDayInput) => PlanTemplateDayInput,
+  ) {
+    updateTemplateWorkspaceDraft((template) => {
+      const days = getEditableTemplateDays(template);
+
+      if (!days.length) {
+        return template;
+      }
+
+      return {
+        ...template,
+        days: days.map((day, index) => (index === dayIndex ? updater(day) : day)),
+      };
+    });
+  }
+
+  function updateTemplateSessionDraft(
+    dayIndex: number,
+    sessionIndex: number,
+    updater: (session: PlanTemplateSessionInput) => PlanTemplateSessionInput,
+  ) {
+    updateTemplateDayDraft(dayIndex, (day) => ({
+      ...day,
+      sessions: day.sessions.map((session, index) =>
+        index === sessionIndex ? updater(session) : session,
+      ),
+    }));
+  }
+
+  function getEditableBlockExercises(
+    block: PlanTemplatePayload["blocks"][number],
+    blockIndex: number,
+  ): PlanExerciseInput[] {
+    if (block.exercises?.length) {
+      return block.exercises;
+    }
+
+    return [
+      {
+        name: block.name,
+        targetSets: block.targetSets,
+        targetReps: block.targetReps,
+        targetWeightKg: null,
+        targetDurationMinutes: block.targetDurationMinutes,
+        targetRpe: block.targetRpe,
+        notes: block.notes,
+        displayOrder: blockIndex,
+      },
+    ];
+  }
+
+  function rebuildTemplateExerciseBlock(
+    block: PlanTemplatePayload["blocks"][number],
+    exerciseIndex: number,
+    patch: Partial<{
+      name: string;
+      work: string;
+      control: string;
+    }>,
+  ) {
+    const exercises = getEditableBlockExercises(block, exerciseIndex);
+    const currentExercise = exercises[exerciseIndex] ?? exercises[0];
+    const nextName = patch.name ?? currentExercise.name;
+    const nextWork =
+      patch.work ??
+      formatExerciseWorkCell(currentExercise, language).replace(/^-$/u, "");
+    const nextControl =
+      patch.control ??
+      formatExerciseControlCell(currentExercise, language).replace(/^-$/u, "");
+    const parsedBlock = createImportedPlanBlock(
+      nextName,
+      nextWork,
+      nextControl,
+      currentExercise.displayOrder ?? exerciseIndex,
+    );
+    const parsedExercise = {
+      ...(parsedBlock.exercises?.[0] ?? currentExercise),
+      name: nextName,
+    };
+    const nextExercises = exercises.map((exercise, index) =>
+      index === exerciseIndex
+        ? {
+            ...parsedExercise,
+            displayOrder: exercise.displayOrder ?? index,
+          }
+        : exercise,
+    );
+
+    return exerciseIndex === 0
+      ? {
+          ...block,
+          ...parsedBlock,
+          name: nextName || parsedBlock.name,
+          exercises: nextExercises,
+        }
+      : {
+          ...block,
+          exercises: nextExercises,
+        };
+  }
+
+  function updateTemplateExerciseRow(
+    dayIndex: number,
+    sessionIndex: number,
+    blockIndex: number,
+    exerciseIndex: number,
+    patch: Partial<{
+      name: string;
+      work: string;
+      control: string;
+    }>,
+  ) {
+    updateTemplateSessionDraft(dayIndex, sessionIndex, (session) => ({
+      ...session,
+      blocks: session.blocks.map((block, index) =>
+        index === blockIndex
+          ? rebuildTemplateExerciseBlock(block, exerciseIndex, patch)
+          : block,
+      ),
+    }));
+  }
+
+  function addTemplateExerciseRow(dayIndex: number, sessionIndex: number) {
+    updateTemplateSessionDraft(dayIndex, sessionIndex, (session) => ({
+      ...session,
+      blocks: [
+        ...session.blocks,
+        createImportedPlanBlock(
+          copyFor(language, {
+            en: "New exercise",
+            ru: "Новое упражнение",
+            bg: "Ново упражнение",
+          }),
+          "",
+          "",
+          session.blocks.length,
+        ),
+      ],
+    }));
+  }
+
+  function removeTemplateExerciseRow(
+    dayIndex: number,
+    sessionIndex: number,
+    blockIndex: number,
+    exerciseIndex: number,
+  ) {
+    updateTemplateSessionDraft(dayIndex, sessionIndex, (session) => ({
+      ...session,
+      blocks: session.blocks.flatMap((block, index) => {
+        if (index !== blockIndex) {
+          return [block];
+        }
+
+        const exercises = getEditableBlockExercises(block, blockIndex);
+
+        if (exercises.length <= 1) {
+          return [];
+        }
+
+        return [
+          {
+            ...block,
+            exercises: exercises.filter((_, itemIndex) => itemIndex !== exerciseIndex),
+          },
+        ];
+      }),
+    }));
   }
 
   async function handlePlanTemplateSubmit(event: FormEvent<HTMLFormElement>) {
@@ -4885,7 +5118,7 @@ export function PageClient({
     setErrorMessage("");
 
     try {
-      await createPlanTemplateFromDraft(planForm);
+      await createPlanTemplateFromDraft(getCurrentTemplatePayload());
       setStatusMessage(ui("templateCreated"));
     } catch (error) {
       setErrorMessage(
@@ -5190,6 +5423,7 @@ export function PageClient({
 
       setImportedPlanDraft(draft);
       setPlanForm(draft.template);
+      setIsTemplateDraftActive(true);
       setSelectedTemplateDayIndex(0);
       setSelectedTemplateAssignMode("full");
       setSelectedTemplateAssignDayIndexes([]);
@@ -5213,6 +5447,7 @@ export function PageClient({
       );
     } catch (error) {
       setImportedPlanDraft(null);
+      setIsTemplateDraftActive(false);
       setErrorMessage(
         error instanceof Error
           ? error.message
@@ -5327,7 +5562,9 @@ export function PageClient({
   }
 
   async function handleAssignActivePlanTemplate() {
-    if (!activePlanTemplate) {
+    const draftTemplatePayload = isTemplateDraftActive ? planForm : null;
+
+    if (!draftTemplatePayload && !activePlanTemplate) {
       return;
     }
 
@@ -5344,15 +5581,11 @@ export function PageClient({
       return;
     }
 
-    const items = buildTemplateAssignmentItems({
-      template: activePlanTemplate,
-      days: activeTemplateDays,
-      mode: selectedTemplateAssignMode,
-      selectedDayIndex: selectedTemplateDayIndex,
-      selectedDayIndexes: selectedTemplateAssignDayIndexes,
-    });
+    const sourceDays = draftTemplatePayload
+      ? getTemplateStructureDays(draftTemplatePayload, language)
+      : activeTemplateDays;
 
-    if (!items.length) {
+    if (!sourceDays.length) {
       setErrorMessage(
         copyFor(language, {
           en: "The selected plan has no training days to assign.",
@@ -5367,6 +5600,32 @@ export function PageClient({
     setErrorMessage("");
 
     try {
+      const sourceTemplate = draftTemplatePayload
+        ? await createPlanTemplateFromDraft(draftTemplatePayload)
+        : activePlanTemplate;
+
+      if (!sourceTemplate) {
+        return;
+      }
+
+      const items = buildTemplateAssignmentItems({
+        template: sourceTemplate,
+        days: sourceDays,
+        mode: selectedTemplateAssignMode,
+        selectedDayIndex: selectedTemplateDayIndex,
+        selectedDayIndexes: selectedTemplateAssignDayIndexes,
+      });
+
+      if (!items.length) {
+        throw new Error(
+          copyFor(language, {
+            en: "The selected plan has no training days to assign.",
+            ru: "В выбранном плане нет тренировочных дней для назначения.",
+            bg: "Избраният план няма тренировъчни дни за назначаване.",
+          }),
+        );
+      }
+
       const maxOffset = Math.max(...items.map((item) => item.dayOffset), 0);
       const payload: AutoAssignMicrocyclePayload = {
         athleteId,
@@ -5375,9 +5634,9 @@ export function PageClient({
         notes:
           assignedPlanForm.notes ||
           copyFor(language, {
-            en: `Assigned from ${activePlanTemplate.name}`,
-            ru: `Назначено из плана ${activePlanTemplate.name}`,
-            bg: `Назначено от плана ${activePlanTemplate.name}`,
+            en: `Assigned from ${sourceTemplate.name}`,
+            ru: `Назначено из плана ${sourceTemplate.name}`,
+            bg: `Назначено от плана ${sourceTemplate.name}`,
           }),
         plannedPhase: assignedPlanForm.plannedPhase,
         items,
@@ -5393,7 +5652,7 @@ export function PageClient({
       setAssignedPlanForm((current) => ({
         ...current,
         athleteId,
-        templateId: activePlanTemplate.id,
+        templateId: sourceTemplate.id,
         dayLabel: items[0]?.dayLabel ?? current.dayLabel,
       }));
       setMicrocycleForm((current) => ({
@@ -7774,7 +8033,8 @@ export function PageClient({
   const activeTemplateDays = activePlanTemplate
     ? getTemplateStructureDays(activePlanTemplate, language)
     : [];
-  const templateWorkspaceSource = importedPlanDraft?.template ?? activePlanTemplate ?? planForm;
+  const templateWorkspaceSource =
+    importedPlanDraft?.template ?? (isTemplateDraftActive ? planForm : activePlanTemplate ?? planForm);
   const templateWorkspaceDays = getTemplateStructureDays(templateWorkspaceSource, language);
   const templateWorkspaceWeeks = groupTemplateDaysByWeek(templateWorkspaceDays);
   const normalizedSelectedTemplateDayIndex = normalizeTemplateDayIndex(
@@ -7790,7 +8050,8 @@ export function PageClient({
     (total, day) => total + countTemplateDayExercises(day),
     0,
   );
-  const assignmentTemplateDays = importedPlanDraft ? templateWorkspaceDays : activeTemplateDays;
+  const assignmentTemplateDays =
+    importedPlanDraft || isTemplateDraftActive ? templateWorkspaceDays : activeTemplateDays;
   const selectedTemplateAssignmentIndexes = getAssignmentDayIndexes(
     assignmentTemplateDays,
     selectedTemplateAssignMode,
@@ -14092,6 +14353,9 @@ export function PageClient({
                   onClick={() => {
                     setPlanForm(createLocalizedDefaultPlanTemplate(language));
                     setImportedPlanDraft(null);
+                    setIsTemplateDraftActive(true);
+                    setSelectedTemplateDayIndex(0);
+                    setSelectedTemplateAssignDayIndexes([]);
                   }}
                   type="button"
                 >
@@ -14247,14 +14511,17 @@ export function PageClient({
                   <div>
                     <strong>
                       {translateKnownTemplateText(
-                        importedPlanDraft?.title ?? activePlanTemplate?.name ?? planForm.name,
+                        importedPlanDraft?.title ??
+                          (isTemplateDraftActive ? planForm.name : activePlanTemplate?.name ?? planForm.name),
                         language,
                       )}
                     </strong>
                     <small>
                       {importedPlanDraft?.sourceFileName ??
                         translateKnownTemplateText(
-                          activePlanTemplate?.description ?? planForm.description,
+                          isTemplateDraftActive
+                            ? planForm.description
+                            : activePlanTemplate?.description ?? planForm.description,
                           language,
                         ) ??
                         ""}
@@ -14362,10 +14629,36 @@ export function PageClient({
                           <div className="planning-template-session-preview">
                             <article className="planning-template-day-card">
                               <header className="planning-template-day-card-head">
-                                <strong>{translateKnownTemplateText(selectedTemplateDay.label, language)}</strong>
-                                {selectedTemplateDay.notes ? (
-                                  <span>{translateKnownTemplateText(selectedTemplateDay.notes, language)}</span>
-                                ) : null}
+                                <input
+                                  aria-label={copyFor(language, {
+                                    en: "Day",
+                                    ru: "День",
+                                    bg: "Ден",
+                                  })}
+                                  className="planning-template-card-title-input"
+                                  value={selectedTemplateDay.label}
+                                  onChange={(event) =>
+                                    updateTemplateDayDraft(normalizedSelectedTemplateDayIndex, (day) => ({
+                                      ...day,
+                                      label: event.target.value,
+                                    }))
+                                  }
+                                />
+                                <input
+                                  aria-label={copyFor(language, {
+                                    en: "Day focus",
+                                    ru: "Фокус дня",
+                                    bg: "Фокус на деня",
+                                  })}
+                                  className="planning-template-card-note-input"
+                                  value={selectedTemplateDay.notes ?? ""}
+                                  onChange={(event) =>
+                                    updateTemplateDayDraft(normalizedSelectedTemplateDayIndex, (day) => ({
+                                      ...day,
+                                      notes: event.target.value,
+                                    }))
+                                  }
+                                />
                               </header>
                               <div className="planning-template-day-card-body">
                                 {selectedTemplateDay.sessions.map((session, sessionIndex) => (
@@ -14373,7 +14666,25 @@ export function PageClient({
                                     className="planning-template-day-session"
                                     key={`${session.name}-${sessionIndex}`}
                                   >
-                                    <h4>{translateKnownTemplateText(session.name, language)}</h4>
+                                    <input
+                                      aria-label={copyFor(language, {
+                                        en: "Session name",
+                                        ru: "Название тренировки",
+                                        bg: "Име на тренировката",
+                                      })}
+                                      className="planning-template-session-name-input"
+                                      value={session.name}
+                                      onChange={(event) =>
+                                        updateTemplateSessionDraft(
+                                          normalizedSelectedTemplateDayIndex,
+                                          sessionIndex,
+                                          (currentSession) => ({
+                                            ...currentSession,
+                                            name: event.target.value,
+                                          }),
+                                        )
+                                      }
+                                    />
                                     <table className="planning-template-exercise-table">
                                       <thead>
                                         <tr>
@@ -14386,36 +14697,94 @@ export function PageClient({
                                           <th>
                                             {copyFor(language, { en: "Control", ru: "Контроль", bg: "Контрол" })}
                                           </th>
+                                          <th aria-label={copyFor(language, { en: "Actions", ru: "Действия", bg: "Действия" })} />
                                         </tr>
                                       </thead>
                                       <tbody>
-                                        {session.blocks.flatMap((block, blockIndex) => {
-                                          const rows =
-                                            block.exercises?.length
-                                              ? block.exercises
-                                              : [
-                                                  {
-                                                    name: block.name,
-                                                    targetSets: block.targetSets,
-                                                    targetReps: block.targetReps,
-                                                    targetWeightKg: null,
-                                                    targetDurationMinutes: block.targetDurationMinutes,
-                                                    targetRpe: block.targetRpe,
-                                                    notes: block.notes,
-                                                    displayOrder: blockIndex,
-                                                  } satisfies PlanExerciseInput,
-                                                ];
-
-                                          return rows.map((exercise, exerciseIndex) => (
+                                        {session.blocks.flatMap((block, blockIndex) =>
+                                          getEditableBlockExercises(block, blockIndex).map((exercise, exerciseIndex) => (
                                             <tr key={`${block.name}-${exercise.name}-${blockIndex}-${exerciseIndex}`}>
-                                              <td>{translateKnownTemplateText(exercise.name, language)}</td>
-                                              <td>{formatExerciseWorkCell(exercise, language)}</td>
-                                              <td>{formatExerciseControlCell(exercise, language)}</td>
+                                              <td>
+                                                <input
+                                                  value={exercise.name}
+                                                  onChange={(event) =>
+                                                    updateTemplateExerciseRow(
+                                                      normalizedSelectedTemplateDayIndex,
+                                                      sessionIndex,
+                                                      blockIndex,
+                                                      exerciseIndex,
+                                                      { name: event.target.value },
+                                                    )
+                                                  }
+                                                />
+                                              </td>
+                                              <td>
+                                                <input
+                                                  value={formatExerciseWorkCell(exercise, language).replace(/^-$/u, "")}
+                                                  onChange={(event) =>
+                                                    updateTemplateExerciseRow(
+                                                      normalizedSelectedTemplateDayIndex,
+                                                      sessionIndex,
+                                                      blockIndex,
+                                                      exerciseIndex,
+                                                      { work: event.target.value },
+                                                    )
+                                                  }
+                                                />
+                                              </td>
+                                              <td>
+                                                <input
+                                                  value={formatExerciseControlCell(exercise, language).replace(/^-$/u, "")}
+                                                  onChange={(event) =>
+                                                    updateTemplateExerciseRow(
+                                                      normalizedSelectedTemplateDayIndex,
+                                                      sessionIndex,
+                                                      blockIndex,
+                                                      exerciseIndex,
+                                                      { control: event.target.value },
+                                                    )
+                                                  }
+                                                />
+                                              </td>
+                                              <td className="planning-template-exercise-action-cell">
+                                                <button
+                                                  aria-label={copyFor(language, {
+                                                    en: "Remove exercise",
+                                                    ru: "Удалить упражнение",
+                                                    bg: "Изтрий упражнение",
+                                                  })}
+                                                  className="planning-template-row-action"
+                                                  onClick={() =>
+                                                    removeTemplateExerciseRow(
+                                                      normalizedSelectedTemplateDayIndex,
+                                                      sessionIndex,
+                                                      blockIndex,
+                                                      exerciseIndex,
+                                                    )
+                                                  }
+                                                  type="button"
+                                                >
+                                                  ×
+                                                </button>
+                                              </td>
                                             </tr>
-                                          ));
-                                        })}
+                                          )),
+                                        )}
                                       </tbody>
                                     </table>
+                                    <button
+                                      className="planning-template-add-row-button"
+                                      onClick={() =>
+                                        addTemplateExerciseRow(normalizedSelectedTemplateDayIndex, sessionIndex)
+                                      }
+                                      type="button"
+                                    >
+                                      {copyFor(language, {
+                                        en: "Add exercise",
+                                        ru: "Добавить упражнение",
+                                        bg: "Добави упражнение",
+                                      })}
+                                    </button>
                                   </section>
                                 ))}
                               </div>
@@ -15174,6 +15543,7 @@ export function PageClient({
                           }));
                           setPlanForm(templateSummaryToPayload(template, language));
                           setImportedPlanDraft(null);
+                          setIsTemplateDraftActive(false);
                           setSelectedTemplateDayIndex(0);
                           setSelectedTemplateAssignDayIndexes([]);
                         }}
@@ -15323,7 +15693,8 @@ export function PageClient({
                 <span>{copyFor(language, { en: "Selected plan", ru: "Выбранный план", bg: "Избран план" })}</span>
                 <strong>
                   {translateKnownTemplateText(
-                    importedPlanDraft?.title ?? activePlanTemplate?.name ?? planForm.name,
+                    importedPlanDraft?.title ??
+                      (isTemplateDraftActive ? planForm.name : activePlanTemplate?.name ?? planForm.name),
                     language,
                   )}
                 </strong>
@@ -15456,7 +15827,11 @@ export function PageClient({
 
               <button
                 className="primary-button"
-                disabled={busy || (!importedPlanDraft && !activePlanTemplate) || !selectedAthleteId}
+                disabled={
+                  busy ||
+                  (!importedPlanDraft && !isTemplateDraftActive && !activePlanTemplate) ||
+                  !selectedAthleteId
+                }
                 onClick={() =>
                   void (importedPlanDraft ? handleAssignImportedPlan() : handleAssignActivePlanTemplate())
                 }
