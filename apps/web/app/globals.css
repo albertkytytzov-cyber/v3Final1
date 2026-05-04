@@ -3642,6 +3642,101 @@ select {
   gap: 12px;
 }
 
+.planning-template-import-card {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+  gap: 12px;
+  align-items: start;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(15, 118, 110, 0.16);
+  background: rgba(240, 253, 250, 0.58);
+}
+
+.planning-template-import-copy {
+  display: grid;
+  gap: 6px;
+}
+
+.planning-template-import-copy strong {
+  color: var(--text);
+}
+
+.planning-template-import-file {
+  min-width: 0;
+}
+
+.planning-template-import-file input {
+  width: 100%;
+  min-width: 0;
+}
+
+.planning-template-import-preview {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.planning-template-import-days {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+  gap: 8px;
+}
+
+.planning-template-import-day {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 9px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  background: rgba(255, 255, 255, 0.84);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.planning-template-import-day:hover,
+.planning-template-import-day.is-active {
+  border-color: rgba(15, 118, 110, 0.34);
+  background: rgba(255, 255, 255, 0.96);
+}
+
+.planning-template-import-day strong,
+.planning-template-import-day span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.planning-template-import-day span,
+.planning-template-import-preview small,
+.planning-template-import-more {
+  color: var(--muted-strong);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.planning-template-import-more {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 46px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 1px dashed rgba(148, 163, 184, 0.34);
+}
+
+.planning-template-import-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr));
+  gap: 10px;
+  align-items: end;
+}
+
 .planning-template-library-list {
   display: grid;
   gap: 10px;

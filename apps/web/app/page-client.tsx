@@ -59,7 +59,7 @@ import {
   type UwwEventSyncOptionsResponse,
   type UwwEventSyncResponse,
 } from "@training-platform/shared";
-import { startTransition, type FormEvent, useEffect, useState } from "react";
+import { startTransition, type ChangeEvent, type FormEvent, useEffect, useState } from "react";
 import {
   LANGUAGE_OPTIONS as I18N_LANGUAGE_OPTIONS,
   type Language as I18nLanguage,
@@ -623,6 +623,345 @@ const PLAN_BLOCK_TYPE_VALUES = [
 ] as const satisfies readonly PlanTemplatePayload["blocks"][number]["blockType"][];
 
 type PlanBlockType = PlanTemplatePayload["blocks"][number]["blockType"];
+type PlanTemplateDayInput = NonNullable<PlanTemplatePayload["days"]>[number];
+type PlanTemplateSessionInput = PlanTemplateDayInput["sessions"][number];
+
+type ImportedPlanDayDraft = {
+  label: string;
+  dayDate: string | null;
+  dayOffset: number;
+  template: PlanTemplatePayload;
+  blockCount: number;
+};
+
+type ImportedPlanDraft = {
+  sourceFileName: string;
+  title: string;
+  description: string;
+  startDate: string;
+  days: ImportedPlanDayDraft[];
+};
+
+function normalizeImportedPlanText(value: string) {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function stripFileExtension(fileName: string) {
+  return fileName.replace(/\.[^.]+$/, "");
+}
+
+function formatImportedDateValue(year: number, day: number, month: number) {
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function parseImportedPlanYear(...values: string[]) {
+  for (const value of values) {
+    const match = value.match(/\b(20\d{2})\b/);
+
+    if (match) {
+      return Number(match[1]);
+    }
+  }
+
+  return new Date().getFullYear();
+}
+
+function parseImportedPlanDate(label: string, fallbackYear: number) {
+  const match = label.match(/(\d{1,2})[./-](\d{1,2})/);
+
+  if (!match) {
+    return null;
+  }
+
+  return formatImportedDateValue(fallbackYear, Number(match[1]), Number(match[2]));
+}
+
+function extractImportedDurationMinutes(value: string) {
+  const normalized = value.toLowerCase();
+  const minuteMatch = normalized.match(/(\d+(?:[.,]\d+)?)\s*(?:мин|m|min)\b/u);
+
+  if (minuteMatch) {
+    return Number(minuteMatch[1].replace(",", "."));
+  }
+
+  const secondMatch = normalized.match(/(\d+(?:[.,]\d+)?)\s*(?:сек|s|sec)\b/u);
+
+  if (secondMatch) {
+    return Math.round((Number(secondMatch[1].replace(",", ".")) / 60) * 10) / 10;
+  }
+
+  return null;
+}
+
+function extractImportedSetsReps(value: string) {
+  const match = value.match(/(\d+)\s*[xх×*]\s*(\d+)/iu);
+
+  if (!match) {
+    return { sets: null, reps: null };
+  }
+
+  return {
+    sets: Number(match[1]),
+    reps: Number(match[2]),
+  };
+}
+
+function extractImportedRpe(value: string) {
+  const match = value.match(/rpe\s*(\d+(?:[.,]\d+)?)/iu);
+
+  if (!match) {
+    return null;
+  }
+
+  return Number(match[1].replace(",", "."));
+}
+
+function inferImportedBlockType(value: string): PlanBlockType {
+  const normalized = value.toLowerCase();
+
+  if (/отдых|восстанов|прогул|дыхани|замин|recovery|z1/u.test(normalized)) {
+    return "recovery";
+  }
+
+  if (/мобил|растяж|таз|плеч|спина/u.test(normalized)) {
+    return "mobility";
+  }
+
+  if (/техник|вход|стойк|борьб|ситуац|схват/u.test(normalized)) {
+    return "technical";
+  }
+
+  if (/присед|тяга|жим|подтяг|канат|полотен|фермер|сгибан|резина руками|сил/u.test(normalized)) {
+    return "strength";
+  }
+
+  if (/ускор|прыж|спринт|скорост/u.test(normalized)) {
+    return "speed";
+  }
+
+  if (/пано|180|185|188|190|пульс|повтор|круг|кросс|функцион/u.test(normalized)) {
+    return "conditioning";
+  }
+
+  if (/активац|размин/u.test(normalized)) {
+    return "activation";
+  }
+
+  return "metabolic";
+}
+
+function createImportedPlanBlock(
+  name: string,
+  volume: string,
+  control: string,
+  displayOrder: number,
+): PlanTemplatePayload["blocks"][number] {
+  const notes = normalizeImportedPlanText([volume, control].filter(Boolean).join(" / "));
+  const details = normalizeImportedPlanText(`${name} ${notes}`);
+  const blockType = inferImportedBlockType(details);
+  const duration = extractImportedDurationMinutes(details);
+  const rpe = extractImportedRpe(details);
+  const { sets, reps } = extractImportedSetsReps(details);
+  const isMandatory = blockType !== "recovery" && blockType !== "mobility";
+
+  return {
+    name: name || "Импортированный блок",
+    blockType,
+    blockPriority: isMandatory ? 1 : 3,
+    isMandatory,
+    removePriorityYellow: isMandatory ? 5 : 2,
+    removePriorityRed: isMandatory ? 4 : 1,
+    reductionPercentYellow: isMandatory ? 30 : 50,
+    reductionPercentRed: isMandatory ? 55 : 100,
+    targetDurationMinutes: duration,
+    targetRpe: rpe,
+    targetSets: sets,
+    targetReps: reps,
+    notes,
+    exercises: [
+      {
+        name: name || "Импортированное упражнение",
+        targetSets: sets,
+        targetReps: reps,
+        targetWeightKg: null,
+        targetDurationMinutes: duration,
+        targetRpe: rpe,
+        notes,
+        displayOrder,
+      },
+    ],
+  };
+}
+
+function parseImportedPlanTableBlocks(table: HTMLTableElement, startOrderIndex: number) {
+  const blocks: PlanTemplatePayload["blocks"] = [];
+  const rows = Array.from(table.querySelectorAll("tr"));
+
+  rows.forEach((row) => {
+    if (row.querySelector("th") && !row.querySelector("td")) {
+      return;
+    }
+
+    const cells = Array.from(row.querySelectorAll("td")).map((cell) =>
+      normalizeImportedPlanText(cell.textContent ?? ""),
+    );
+    const [name, volume, ...controlCells] = cells;
+
+    if (!name) {
+      return;
+    }
+
+    blocks.push(
+      createImportedPlanBlock(
+        name,
+        volume ?? "",
+        controlCells.join(" / "),
+        startOrderIndex + blocks.length,
+      ),
+    );
+  });
+
+  return blocks;
+}
+
+function parseImportedPlanHtml(
+  html: string,
+  sourceFileName: string,
+  language: Language,
+): ImportedPlanDraft {
+  const parser = new DOMParser();
+  const document = parser.parseFromString(html, "text/html");
+  const title =
+    normalizeImportedPlanText(document.querySelector("h1")?.textContent ?? "") ||
+    stripFileExtension(sourceFileName);
+  const description =
+    normalizeImportedPlanText(document.querySelector(".subtitle")?.textContent ?? "") ||
+    copyFor(language, {
+      en: `Imported from ${sourceFileName}`,
+      ru: `Импортировано из файла ${sourceFileName}`,
+      bg: `Импортирано от файла ${sourceFileName}`,
+    });
+  const fallbackYear = parseImportedPlanYear(title, sourceFileName, description);
+  const cards = Array.from(document.querySelectorAll<HTMLElement>(".card"));
+  const firstParsedDate = cards
+    .map((card) =>
+      parseImportedPlanDate(
+        normalizeImportedPlanText(card.querySelector(".head .title")?.textContent ?? ""),
+        fallbackYear,
+      ),
+    )
+    .find((date): date is string => Boolean(date));
+  const days: ImportedPlanDayDraft[] = [];
+
+  cards.forEach((card, cardIndex) => {
+    const rawLabel =
+      normalizeImportedPlanText(card.querySelector(".head .title")?.textContent ?? "") ||
+      copyFor(language, {
+        en: `Day ${cardIndex + 1}`,
+        ru: `День ${cardIndex + 1}`,
+        bg: `Ден ${cardIndex + 1}`,
+      });
+    const dayType = normalizeImportedPlanText(card.querySelector(".head .type")?.textContent ?? "");
+    const dayDate = parseImportedPlanDate(rawLabel, fallbackYear);
+    const sessions: PlanTemplateSessionInput[] = Array.from(card.querySelectorAll<HTMLElement>(".session"))
+      .map((session, sessionIndex) => {
+        const sessionName =
+          normalizeImportedPlanText(session.querySelector(".stime")?.textContent ?? "") ||
+          dayType ||
+          copyFor(language, {
+            en: `Session ${sessionIndex + 1}`,
+            ru: `Сессия ${sessionIndex + 1}`,
+            bg: `Сесия ${sessionIndex + 1}`,
+          });
+        const tableBlocks = Array.from(session.querySelectorAll<HTMLTableElement>("table")).flatMap(
+          (table, tableIndex) => parseImportedPlanTableBlocks(table, tableIndex * 100),
+        );
+        const noteBlocks = Array.from(session.querySelectorAll(".note, .ok, .warn, .info"))
+          .map((note) => normalizeImportedPlanText(note.textContent ?? ""))
+          .filter(Boolean)
+          .map((note, noteIndex) =>
+            createImportedPlanBlock(
+              copyFor(language, {
+                en: "Coach note",
+                ru: "Заметка тренера",
+                bg: "Бележка на треньора",
+              }),
+              "",
+              note,
+              tableBlocks.length + noteIndex,
+            ),
+          );
+        const blocks = [...tableBlocks, ...noteBlocks];
+
+        return {
+          name: sessionName,
+          notes: dayType,
+          orderIndex: sessionIndex,
+          blocks,
+        };
+      })
+      .filter((session) => session.blocks.length > 0);
+
+    if (sessions.length === 0) {
+      return;
+    }
+
+    const blocks = sessions.flatMap((session) => session.blocks);
+    const dayOffset =
+      firstParsedDate && dayDate ? diffDateInputDays(firstParsedDate, dayDate) : cardIndex;
+    const normalizedDayOffset = dayOffset === null || dayOffset < 0 ? cardIndex : dayOffset;
+    const templateName = dayType ? `${title} - ${rawLabel} (${dayType})` : `${title} - ${rawLabel}`;
+    const template: PlanTemplatePayload = {
+      name: templateName,
+      description,
+      sportType: copyFor(language, {
+        en: "Wrestling",
+        ru: "Борьба",
+        bg: "Борба",
+      }),
+      phaseFocus: null,
+      competitionPriorityFocus: null,
+      templateGoal: dayType || title,
+      microcycleType: "imported-plan",
+      competitionSpecific: false,
+      blocks,
+      days: [
+        {
+          label: rawLabel,
+          notes: dayType,
+          orderIndex: 0,
+          sessions,
+        },
+      ],
+    };
+
+    days.push({
+      label: rawLabel,
+      dayDate,
+      dayOffset: normalizedDayOffset,
+      template,
+      blockCount: blocks.length,
+    });
+  });
+
+  if (days.length === 0) {
+    throw new Error(
+      copyFor(language, {
+        en: "No training days were found in this HTML file.",
+        ru: "В HTML-файле не найдены тренировочные дни.",
+        bg: "В HTML файла не са намерени тренировъчни дни.",
+      }),
+    );
+  }
+
+  return {
+    sourceFileName,
+    title,
+    description,
+    startDate: firstParsedDate ?? getDateInputValue(),
+    days,
+  };
+}
 
 type BlockExercisePreset = Omit<PlanExerciseInput, "name" | "notes" | "id"> & {
   id: string;
@@ -2469,6 +2808,7 @@ export function PageClient({
   );
   const [planForm, setPlanForm] =
     useState<PlanTemplatePayload>(() => createLocalizedDefaultPlanTemplate(language));
+  const [importedPlanDraft, setImportedPlanDraft] = useState<ImportedPlanDraft | null>(null);
   const [assignedPlans, setAssignedPlans] = useState<AssignedPlanSummary[]>(
     previewState?.assignedPlans ?? [],
   );
@@ -4088,6 +4428,158 @@ export function PageClient({
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : ui("templateRequestFailed"),
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handlePlanFileImport(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    setErrorMessage("");
+
+    try {
+      const text = await file.text();
+      const draft = parseImportedPlanHtml(text, file.name, language);
+      const firstDay = draft.days[0];
+
+      setImportedPlanDraft(draft);
+      setPlanForm(firstDay.template);
+      setAssignedPlanForm((current) => ({
+        ...current,
+        startDate: draft.startDate,
+        dayLabel: firstDay.label,
+        notes: copyFor(language, {
+          en: `Imported from ${draft.sourceFileName}`,
+          ru: `Импорт из файла ${draft.sourceFileName}`,
+          bg: `Импорт от файла ${draft.sourceFileName}`,
+        }),
+      }));
+      setStatusMessage(
+        copyFor(language, {
+          en: `Imported ${draft.days.length} training day(s). Review the first day, then save and assign the full plan.`,
+          ru: `Импортировано дней: ${draft.days.length}. Проверьте первый день, затем сохраните и назначьте весь план.`,
+          bg: `Импортирани дни: ${draft.days.length}. Прегледайте първия ден, след това запазете и назначете целия план.`,
+        }),
+      );
+    } catch (error) {
+      setImportedPlanDraft(null);
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : copyFor(language, {
+              en: "Plan import failed.",
+              ru: "Не удалось импортировать план.",
+              bg: "Планът не можа да бъде импортиран.",
+            }),
+      );
+    } finally {
+      event.target.value = "";
+    }
+  }
+
+  async function handleAssignImportedPlan() {
+    if (!importedPlanDraft) {
+      return;
+    }
+
+    setBusy(true);
+    setErrorMessage("");
+
+    try {
+      const athleteId = selectedAthleteId || assignedPlanForm.athleteId;
+
+      if (!athleteId) {
+        throw new Error(
+          copyFor(language, {
+            en: "Select an athlete in the top menu first.",
+            ru: "Сначала выберите спортсмена в верхнем меню.",
+            bg: "Първо изберете спортист от горното меню.",
+          }),
+        );
+      }
+
+      const createdItems: TemplatePackItem[] = [];
+
+      for (const day of importedPlanDraft.days) {
+        const response = await apiRequest<{ template: PlanTemplateSummary }>("/plans/templates", {
+          method: "POST",
+          body: JSON.stringify(day.template),
+        });
+
+        createdItems.push({
+          templateId: response.template.id,
+          dayOffset: day.dayOffset,
+          dayLabel: day.label,
+          microcycleType: day.template.microcycleType,
+        });
+      }
+
+      const startDate = assignedPlanForm.startDate || importedPlanDraft.startDate;
+      const maxOffset = Math.max(...createdItems.map((item) => item.dayOffset), 0);
+      const payload: AutoAssignMicrocyclePayload = {
+        athleteId,
+        startDate,
+        daysCount: maxOffset + 1,
+        notes:
+          assignedPlanForm.notes ||
+          copyFor(language, {
+            en: `Imported from ${importedPlanDraft.sourceFileName}`,
+            ru: `Импорт из файла ${importedPlanDraft.sourceFileName}`,
+            bg: `Импорт от файла ${importedPlanDraft.sourceFileName}`,
+          }),
+        plannedPhase: assignedPlanForm.plannedPhase,
+        items: createdItems,
+      };
+      const response = await apiRequest<{ assignedPlans: AssignedPlanSummary[] }>(
+        "/plans/auto-assign-microcycle",
+        {
+          method: "POST",
+          body: JSON.stringify(payload),
+        },
+      );
+
+      setAssignedPlanForm((current) => ({
+        ...current,
+        athleteId,
+        startDate,
+        templateId: createdItems[0]?.templateId ?? current.templateId,
+        dayLabel: createdItems[0]?.dayLabel ?? current.dayLabel,
+      }));
+      setMicrocycleForm((current) => ({
+        ...current,
+        ...payload,
+      }));
+      setStatusMessage(
+        copyFor(language, {
+          en: `Full plan assigned: ${response.assignedPlans.length} day(s).`,
+          ru: `План назначен полностью: ${response.assignedPlans.length} дн.`,
+          bg: `Планът е назначен изцяло: ${response.assignedPlans.length} дни.`,
+        }),
+      );
+      await Promise.all([loadPlanTemplates(), loadAssignedPlans(), loadCoachAthletes()]);
+      if (canLoadCoachScopedAthleteData(athleteId)) {
+        await Promise.all([
+          loadCoachAdaptedPlan(athleteId),
+          loadCoachExecutionReview(athleteId),
+          loadCoachAnalyticsOverview(athleteId),
+          loadTemplatePackRecommendations(athleteId, startDate, coachAthletes),
+        ]);
+      }
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : copyFor(language, {
+              en: "Imported plan assignment failed.",
+              ru: "Не удалось назначить импортированный план.",
+              bg: "Импортираният план не можа да бъде назначен.",
+            }),
       );
     } finally {
       setBusy(false);
@@ -12675,7 +13167,10 @@ export function PageClient({
                 </div>
                 <button
                   className="secondary-button"
-                  onClick={() => setPlanForm(createLocalizedDefaultPlanTemplate(language))}
+                  onClick={() => {
+                    setPlanForm(createLocalizedDefaultPlanTemplate(language));
+                    setImportedPlanDraft(null);
+                  }}
                   type="button"
                 >
                   {copyFor(language, {
@@ -12684,6 +13179,145 @@ export function PageClient({
                     bg: "Нов шаблон",
                   })}
                 </button>
+              </div>
+
+              <div className="planning-template-import-card">
+                <div className="planning-template-import-copy">
+                  <strong>
+                    {copyFor(language, {
+                      en: "Import work plan",
+                      ru: "Импорт плана работы",
+                      bg: "Импорт на работен план",
+                    })}
+                  </strong>
+                  <p className="placeholder-copy">
+                    {copyFor(language, {
+                      en: "Upload an HTML plan. The app will split it into training days, load the first day into the editor, and let you assign the whole plan to the selected athlete.",
+                      ru: "Загрузите HTML-план. Система разделит его на тренировочные дни, откроет первый день в редакторе и позволит назначить весь план выбранному спортсмену.",
+                      bg: "Качете HTML план. Системата ще го раздели на тренировъчни дни, ще отвори първия ден в редактора и ще позволи назначаване на целия план на избрания спортист.",
+                    })}
+                  </p>
+                </div>
+                <label className="field planning-template-import-file">
+                  <span>
+                    {copyFor(language, {
+                      en: "Plan file",
+                      ru: "Файл плана",
+                      bg: "Файл на плана",
+                    })}
+                  </span>
+                  <input accept=".html,text/html" onChange={handlePlanFileImport} type="file" />
+                </label>
+                {importedPlanDraft ? (
+                  <div className="planning-template-import-preview">
+                    <div className="summary-topline">
+                      <div>
+                        <strong>{importedPlanDraft.title}</strong>
+                        <small>{importedPlanDraft.sourceFileName}</small>
+                      </div>
+                      <span>
+                        {copyFor(language, {
+                          en: `${importedPlanDraft.days.length} day(s)`,
+                          ru: `${importedPlanDraft.days.length} дн.`,
+                          bg: `${importedPlanDraft.days.length} дни`,
+                        })}
+                      </span>
+                    </div>
+                    <div className="planning-template-import-days">
+                      {importedPlanDraft.days.slice(0, 8).map((day) => (
+                        <button
+                          className={`planning-template-import-day ${
+                            planForm.name === day.template.name ? "is-active" : ""
+                          }`}
+                          key={`${day.label}-${day.dayOffset}`}
+                          onClick={() => {
+                            setPlanForm(day.template);
+                            setAssignedPlanForm((current) => ({
+                              ...current,
+                              dayLabel: day.label,
+                            }));
+                          }}
+                          type="button"
+                        >
+                          <strong>{day.label}</strong>
+                          <span>
+                            {day.dayDate ?? `+${day.dayOffset}`} /{" "}
+                            {blocksCountLabel(day.blockCount, language)}
+                          </span>
+                        </button>
+                      ))}
+                      {importedPlanDraft.days.length > 8 ? (
+                        <span className="planning-template-import-more">
+                          +{importedPlanDraft.days.length - 8}
+                        </span>
+                      ) : null}
+                    </div>
+                    <div className="planning-template-import-actions">
+                      <label className="field">
+                        <span>{t("startDate")}</span>
+                        <input
+                          type="date"
+                          value={assignedPlanForm.startDate}
+                          onChange={(event) =>
+                            setAssignedPlanForm((current) => ({
+                              ...current,
+                              startDate: event.target.value,
+                            }))
+                          }
+                        />
+                      </label>
+                      <label className="field">
+                        <span>{t("plannedPhase")}</span>
+                        <select
+                          value={assignedPlanForm.plannedPhase ?? ""}
+                          onChange={(event) =>
+                            setAssignedPlanForm((current) => ({
+                              ...current,
+                              plannedPhase:
+                                event.target.value === ""
+                                  ? null
+                                  : (event.target.value as AssignedPlanPayload["plannedPhase"]),
+                            }))
+                          }
+                        >
+                          <option value="">{t("autoFromCompetitionContext")}</option>
+                          {PREPARATION_PHASE_VALUES.map((phase) => (
+                            <option key={phase} value={phase}>
+                              {localizedOptionLabel(phase, language, PREPARATION_PHASE_LABELS)}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <button
+                        className="primary-button"
+                        disabled={busy || !importedPlanDraft || (!selectedAthleteId && !assignedPlanForm.athleteId)}
+                        onClick={handleAssignImportedPlan}
+                        type="button"
+                      >
+                        {busy
+                          ? ui("assigning")
+                          : copyFor(language, {
+                              en: "Save and assign full plan",
+                              ru: "Сохранить и назначить весь план",
+                              bg: "Запази и назначи целия план",
+                            })}
+                      </button>
+                    </div>
+                    <p className="placeholder-copy">
+                      {copyFor(language, {
+                        en: selectedAthleteId
+                          ? "The plan will be assigned to the athlete selected in the top menu."
+                          : "Select an athlete in the top menu or in the assignment panel.",
+                        ru: selectedAthleteId
+                          ? "План будет назначен спортсмену, выбранному в верхнем меню."
+                          : "Выберите спортсмена в верхнем меню или в блоке назначения.",
+                        bg: selectedAthleteId
+                          ? "Планът ще бъде назначен на спортиста, избран в горното меню."
+                          : "Изберете спортист от горното меню или от блока за назначаване.",
+                      })}
+                    </p>
+                  </div>
+                ) : null}
               </div>
 
               <div className="planning-template-meta-grid">
