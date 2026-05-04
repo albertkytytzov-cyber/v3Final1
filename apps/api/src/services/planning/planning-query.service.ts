@@ -343,7 +343,6 @@ function buildPlanTemplateStructureMap(rows: PlanTemplateRow[]) {
   }
 
   for (const template of templateSummaryMap.values()) {
-    template.blocks.sort((left, right) => left.name.localeCompare(right.name));
     template.blockCount = template.blocks.length;
     template.estimatedLoad = Number(
       template.blocks
@@ -357,9 +356,6 @@ function buildPlanTemplateStructureMap(rows: PlanTemplateRow[]) {
     template.days?.sort((left, right) => (left.orderIndex ?? 0) - (right.orderIndex ?? 0));
     for (const day of template.days ?? []) {
       day.sessions.sort((left, right) => (left.orderIndex ?? 0) - (right.orderIndex ?? 0));
-      for (const session of day.sessions) {
-        session.blocks.sort((left, right) => left.name.localeCompare(right.name));
-      }
     }
   }
 
@@ -636,7 +632,8 @@ export async function loadAssignedPlans(
         ON assigned_block_exercises.assigned_block_id = assigned_day_blocks.id
       WHERE ${whereSql}
       ORDER BY
-        assigned_plans.created_at DESC,
+        assigned_plan_days.day_date ASC,
+        assigned_plans.created_at ASC,
         assigned_day_sessions.display_order ASC,
         assigned_day_blocks.display_order ASC,
         assigned_block_exercises.display_order ASC
@@ -644,7 +641,10 @@ export async function loadAssignedPlans(
     params,
   );
 
-  return mapAssignedPlans(result.rows);
+  return mapAssignedPlans(result.rows).sort((left, right) =>
+    left.day.dayDate.localeCompare(right.day.dayDate) ||
+    left.createdAt.localeCompare(right.createdAt)
+  );
 }
 
 export async function loadAssignedPlansForWindow(
