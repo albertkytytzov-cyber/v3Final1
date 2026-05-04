@@ -133,7 +133,9 @@ export function registerPlanningRoutes(
     }
 
     const params = request.params as { templateId?: string };
+    const query = request.query as { force?: string | boolean };
     const templateId = params.templateId ?? "";
+    const force = query.force === true || query.force === "true";
 
     if (!templateId) {
       throw dependencies.httpError(400, "templateId is required");
@@ -144,6 +146,7 @@ export function registerPlanningRoutes(
         coachUserId: user.id,
         role: user.role,
         templateId,
+        force,
       });
     } catch (error) {
       if (error instanceof PlanningCommandServiceError) {

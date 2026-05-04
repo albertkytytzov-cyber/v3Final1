@@ -489,6 +489,7 @@ export async function deletePlanTemplate(input: {
   coachUserId: string;
   role: string;
   templateId: string;
+  force?: boolean;
 }) {
   const template = await pool.query<{ id: string }>(
     `
@@ -517,7 +518,7 @@ export async function deletePlanTemplate(input: {
   );
   const assignedCount = Number(usage.rows[0]?.assigned_count ?? 0);
 
-  if (assignedCount > 0) {
+  if (assignedCount > 0 && !input.force) {
     throw new PlanningCommandServiceError(
       "template_in_use",
       "Template is already assigned to athletes and cannot be deleted",

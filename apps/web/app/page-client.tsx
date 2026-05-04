@@ -4509,6 +4509,31 @@ export function PageClient({
   }
 
   async function handleDeletePlanTemplate(template: PlanTemplateSummary) {
+    async function deleteTemplate(force = false) {
+      await apiRequest(`/plans/templates/${template.id}${force ? "?force=true" : ""}`, {
+        method: "DELETE",
+      });
+      setStatusMessage(
+        force
+          ? copyFor(language, {
+              en: "Template and assigned plans deleted.",
+              ru: "Шаблон и его назначения удалены.",
+              bg: "Шаблонът и назначенията му са изтрити.",
+            })
+          : copyFor(language, {
+              en: "Template deleted.",
+              ru: "Шаблон удалён.",
+              bg: "Шаблонът е изтрит.",
+            }),
+      );
+      setPlanTemplates((current) => current.filter((item) => item.id !== template.id));
+      setAssignedPlans((current) => current.filter((plan) => plan.templateId !== template.id));
+      setAssignedPlanForm((current) =>
+        current.templateId === template.id ? { ...current, templateId: "" } : current,
+      );
+      await Promise.all([loadPlanTemplates(), loadAssignedPlans()]);
+    }
+
     const confirmed = globalThis.confirm(
       copyFor(language, {
         en: `Delete template "${translateKnownTemplateText(template.name, language)}"?`,
@@ -4525,39 +4550,47 @@ export function PageClient({
     setErrorMessage("");
 
     try {
-      await apiRequest(`/plans/templates/${template.id}`, {
-        method: "DELETE",
-      });
-      setStatusMessage(
-        copyFor(language, {
-          en: "Template deleted.",
-          ru: "Шаблон удалён.",
-          bg: "Шаблонът е изтрит.",
-        }),
-      );
-      setPlanTemplates((current) => current.filter((item) => item.id !== template.id));
-      setAssignedPlanForm((current) =>
-        current.templateId === template.id ? { ...current, templateId: "" } : current,
-      );
-      await loadPlanTemplates();
+      await deleteTemplate(false);
     } catch (error) {
       const message = error instanceof Error ? error.message : "";
-      const templateInUseMessage = copyFor(language, {
-        en: "This template is already assigned to athletes. Remove or archive those assignments before deleting the template.",
-        ru: "Этот шаблон уже назначен спортсменам. Сначала уберите или заархивируйте эти назначения.",
-        bg: "Този шаблон вече е назначен на спортисти. Първо премахнете или архивирайте тези назначения.",
-      });
+      const isTemplateInUse =
+        message.includes("already assigned") || message.includes("cannot be deleted");
+
+      if (isTemplateInUse) {
+        const forceConfirmed = globalThis.confirm(
+          copyFor(language, {
+            en: "This template is already assigned to athletes. Delete it together with all assigned training days?",
+            ru: "Этот шаблон уже назначен спортсменам. Удалить его вместе со всеми назначенными тренировочными днями?",
+            bg: "Този шаблон вече е назначен на спортисти. Да се изтрие ли заедно с всички назначени тренировъчни дни?",
+          }),
+        );
+
+        if (forceConfirmed) {
+          try {
+            await deleteTemplate(true);
+          } catch (forceError) {
+            setErrorMessage(
+              forceError instanceof Error
+                ? forceError.message
+                : copyFor(language, {
+                    en: "Failed to delete assigned template.",
+                    ru: "Не удалось удалить назначенный шаблон.",
+                    bg: "Назначеният шаблон не можа да бъде изтрит.",
+                  }),
+            );
+          }
+        }
+
+        return;
+      }
+
       const fallback = copyFor(language, {
-        en: "Failed to delete template. If it is already assigned to athletes, archive or remove those assignments first.",
-        ru: "Не удалось удалить шаблон. Если он уже назначен спортсменам, сначала уберите или заархивируйте эти назначения.",
-        bg: "Шаблонът не можа да бъде изтрит. Ако вече е назначен на спортисти, първо премахнете или архивирайте тези назначения.",
+        en: "Failed to delete template.",
+        ru: "Не удалось удалить шаблон.",
+        bg: "Шаблонът не можа да бъде изтрит.",
       });
 
-      setErrorMessage(
-        message.includes("already assigned") || message.includes("cannot be deleted")
-          ? templateInUseMessage
-          : message || fallback,
-      );
+      setErrorMessage(message || fallback);
     } finally {
       setBusy(false);
     }
