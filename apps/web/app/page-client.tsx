@@ -2934,6 +2934,70 @@ function formatExerciseTarget(
   return parts.length ? parts.join(" / ") : "-";
 }
 
+function splitExerciseNoteParts(notes?: string | null) {
+  return (notes ?? "")
+    .split(/\s*\/\s*/u)
+    .map(normalizeImportedPlanText)
+    .filter(Boolean);
+}
+
+function formatExerciseWorkCell(
+  item: Pick<
+    AssignedBlockExercise,
+    "targetSets" | "targetReps" | "targetDurationMinutes" | "notes"
+  >,
+  language: Language,
+) {
+  const noteParts = splitExerciseNoteParts(item.notes);
+
+  if (item.targetSets !== null && item.targetReps !== null) {
+    return `${item.targetSets}×${item.targetReps}`;
+  }
+
+  if (item.targetSets !== null) {
+    return `${copyFor(language, { en: "sets", ru: "подходы", bg: "серии" })}: ${item.targetSets}`;
+  }
+
+  if (item.targetReps !== null) {
+    return `${copyFor(language, { en: "reps", ru: "повторы", bg: "повторения" })}: ${item.targetReps}`;
+  }
+
+  if (noteParts[0]) {
+    return noteParts[0];
+  }
+
+  if (item.targetDurationMinutes !== null) {
+    return `${item.targetDurationMinutes} ${copyFor(language, { en: "min", ru: "мин", bg: "мин" })}`;
+  }
+
+  return "-";
+}
+
+function formatExerciseControlCell(
+  item: Pick<
+    AssignedBlockExercise,
+    "targetWeightKg" | "targetDurationMinutes" | "targetRpe" | "notes"
+  >,
+  language: Language,
+) {
+  const noteParts = splitExerciseNoteParts(item.notes);
+  const controlParts = noteParts.length > 1 ? noteParts.slice(1) : [];
+
+  if (item.targetWeightKg !== null) {
+    controlParts.unshift(`${item.targetWeightKg} ${copyFor(language, { en: "kg", ru: "кг", bg: "кг" })}`);
+  }
+
+  if (item.targetRpe !== null) {
+    controlParts.push(`RPE ${item.targetRpe}`);
+  }
+
+  if (controlParts.length === 0 && noteParts.length === 1 && item.targetDurationMinutes === null) {
+    controlParts.push(noteParts[0]);
+  }
+
+  return controlParts.length ? controlParts.join(" / ") : "-";
+}
+
 function historyBiasesFromPlannerSuggestion(
   suggestion: PlannerSuggestion,
 ): TemplatePackHistoryBiasItem[] {
@@ -14295,54 +14359,67 @@ export function PageClient({
                     <div className="planning-template-day-detail">
                       {selectedTemplateDay ? (
                         <>
-                          <div className="summary-topline">
-                            <div>
-                              <strong>{translateKnownTemplateText(selectedTemplateDay.label, language)}</strong>
-                              <small>{translateKnownTemplateText(selectedTemplateDay.notes, language)}</small>
-                            </div>
-                            <span>
-                              {countTemplateDayExercises(selectedTemplateDay)}{" "}
-                              {copyFor(language, { en: "exercises", ru: "упр.", bg: "упр." })}
-                            </span>
-                          </div>
                           <div className="planning-template-session-preview">
-                            {selectedTemplateDay.sessions.map((session, sessionIndex) => (
-                              <section
-                                className="planning-template-session-card"
-                                key={`${session.name}-${sessionIndex}`}
-                              >
-                                <strong>{translateKnownTemplateText(session.name, language)}</strong>
-                                {session.blocks.map((block, blockIndex) => (
-                                  <div
-                                    className="planning-template-block-row"
-                                    key={`${block.name}-${blockIndex}`}
+                            <article className="planning-template-day-card">
+                              <header className="planning-template-day-card-head">
+                                <strong>{translateKnownTemplateText(selectedTemplateDay.label, language)}</strong>
+                                {selectedTemplateDay.notes ? (
+                                  <span>{translateKnownTemplateText(selectedTemplateDay.notes, language)}</span>
+                                ) : null}
+                              </header>
+                              <div className="planning-template-day-card-body">
+                                {selectedTemplateDay.sessions.map((session, sessionIndex) => (
+                                  <section
+                                    className="planning-template-day-session"
+                                    key={`${session.name}-${sessionIndex}`}
                                   >
-                                    <div>
-                                      <span>{translateKnownTemplateText(block.name, language)}</span>
-                                      <small>
-                                        {localizedOptionLabel(block.blockType, language, BLOCK_TYPE_LABELS)} /{" "}
-                                        RPE {block.targetRpe ?? "-"}
-                                      </small>
-                                    </div>
-                                    {(block.exercises ?? []).length ? (
-                                      <div className="planning-template-exercise-chip-list">
-                                        {(block.exercises ?? []).slice(0, 5).map((exercise, exerciseIndex) => (
-                                          <span key={`${exercise.name}-${exerciseIndex}`}>
-                                            {translateKnownTemplateText(exercise.name, language)} ·{" "}
-                                            {formatExerciseTarget(exercise, language)}
-                                          </span>
-                                        ))}
-                                        {(block.exercises ?? []).length > 5 ? (
-                                          <em>+{(block.exercises ?? []).length - 5}</em>
-                                        ) : null}
-                                      </div>
-                                    ) : (
-                                      <small>{translateKnownTemplateText(block.notes, language)}</small>
-                                    )}
-                                  </div>
+                                    <h4>{translateKnownTemplateText(session.name, language)}</h4>
+                                    <table className="planning-template-exercise-table">
+                                      <thead>
+                                        <tr>
+                                          <th>
+                                            {copyFor(language, { en: "Exercise", ru: "Упр.", bg: "Упр." })}
+                                          </th>
+                                          <th>
+                                            {copyFor(language, { en: "Sets", ru: "Подходы", bg: "Серии" })}
+                                          </th>
+                                          <th>
+                                            {copyFor(language, { en: "Control", ru: "Контроль", bg: "Контрол" })}
+                                          </th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {session.blocks.flatMap((block, blockIndex) => {
+                                          const rows =
+                                            block.exercises?.length
+                                              ? block.exercises
+                                              : [
+                                                  {
+                                                    name: block.name,
+                                                    targetSets: block.targetSets,
+                                                    targetReps: block.targetReps,
+                                                    targetWeightKg: null,
+                                                    targetDurationMinutes: block.targetDurationMinutes,
+                                                    targetRpe: block.targetRpe,
+                                                    notes: block.notes,
+                                                    displayOrder: blockIndex,
+                                                  } satisfies PlanExerciseInput,
+                                                ];
+
+                                          return rows.map((exercise, exerciseIndex) => (
+                                            <tr key={`${block.name}-${exercise.name}-${blockIndex}-${exerciseIndex}`}>
+                                              <td>{translateKnownTemplateText(exercise.name, language)}</td>
+                                              <td>{formatExerciseWorkCell(exercise, language)}</td>
+                                              <td>{formatExerciseControlCell(exercise, language)}</td>
+                                            </tr>
+                                          ));
+                                        })}
+                                      </tbody>
+                                    </table>
+                                  </section>
                                 ))}
-                              </section>
-                            ))}
+                              </div>
+                            </article>
                           </div>
                         </>
                       ) : null}
