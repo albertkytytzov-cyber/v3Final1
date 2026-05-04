@@ -647,6 +647,7 @@ type ImportedPlanDayDraft = {
   label: string;
   dayDate: string | null;
   dayOffset: number;
+  templateDayIndex: number;
   template: PlanTemplatePayload;
   blockCount: number;
 };
@@ -656,6 +657,7 @@ type ImportedPlanDraft = {
   title: string;
   description: string;
   startDate: string;
+  template: PlanTemplatePayload;
   days: ImportedPlanDayDraft[];
 };
 
@@ -1041,6 +1043,7 @@ function parseImportedPlanHtml(
       label: rawLabel,
       dayDate,
       dayOffset: normalizedDayOffset,
+      templateDayIndex: days.length,
       template,
       blockCount: blocks.length,
     });
@@ -1056,11 +1059,36 @@ function parseImportedPlanHtml(
     );
   }
 
+  const templateDays = days.map((day, dayIndex) => ({
+    ...day.template.days![0],
+    orderIndex: dayIndex,
+  }));
+  const templateBlocks = templateDays.flatMap((day) =>
+    day.sessions.flatMap((session) => session.blocks),
+  );
+  const fullTemplate: PlanTemplatePayload = {
+    name: title,
+    description,
+    sportType: copyFor(language, {
+      en: "Wrestling",
+      ru: "Борьба",
+      bg: "Борба",
+    }),
+    phaseFocus: null,
+    competitionPriorityFocus: null,
+    templateGoal: title,
+    microcycleType: "imported-plan",
+    competitionSpecific: false,
+    blocks: templateBlocks,
+    days: templateDays,
+  };
+
   return {
     sourceFileName,
     title,
     description,
     startDate: firstParsedDate ?? getDateInputValue(),
+    template: fullTemplate,
     days,
   };
 }
@@ -4917,7 +4945,7 @@ export function PageClient({
       const firstDay = draft.days[0];
 
       setImportedPlanDraft(draft);
-      setPlanForm(firstDay.template);
+      setPlanForm(draft.template);
       setAssignedPlanForm((current) => ({
         ...current,
         startDate: draft.startDate,
@@ -4930,9 +4958,9 @@ export function PageClient({
       }));
       setStatusMessage(
         copyFor(language, {
-          en: `Imported ${draft.days.length} training day(s). Review the first day, then save and assign the full plan.`,
-          ru: `Импортировано дней: ${draft.days.length}. Проверьте первый день, затем сохраните и назначьте весь план.`,
-          bg: `Импортирани дни: ${draft.days.length}. Прегледайте първия ден, след това запазете и назначете целия план.`,
+          en: `Imported ${draft.days.length} training day(s) as one plan template. Save and assign the full plan.`,
+          ru: `Импортировано дней: ${draft.days.length}. План будет сохранён одним шаблоном и назначен полностью.`,
+          bg: `Импортирани дни: ${draft.days.length}. Планът ще бъде запазен като един шаблон и назначен изцяло.`,
         }),
       );
     } catch (error) {
@@ -4972,21 +5000,17 @@ export function PageClient({
         );
       }
 
-      const createdItems: TemplatePackItem[] = [];
-
-      for (const day of importedPlanDraft.days) {
-        const response = await apiRequest<{ template: PlanTemplateSummary }>("/plans/templates", {
-          method: "POST",
-          body: JSON.stringify(day.template),
-        });
-
-        createdItems.push({
-          templateId: response.template.id,
-          dayOffset: day.dayOffset,
-          dayLabel: day.label,
-          microcycleType: day.template.microcycleType,
-        });
-      }
+      const templateResponse = await apiRequest<{ template: PlanTemplateSummary }>("/plans/templates", {
+        method: "POST",
+        body: JSON.stringify(importedPlanDraft.template),
+      });
+      const createdItems: TemplatePackItem[] = importedPlanDraft.days.map((day) => ({
+        templateId: templateResponse.template.id,
+        templateDayIndex: day.templateDayIndex,
+        dayOffset: day.dayOffset,
+        dayLabel: day.label,
+        microcycleType: day.template.templateGoal || day.template.microcycleType,
+      }));
 
       const startDate = assignedPlanForm.startDate || importedPlanDraft.startDate;
       const maxOffset = Math.max(...createdItems.map((item) => item.dayOffset), 0);
@@ -5016,7 +5040,7 @@ export function PageClient({
         ...current,
         athleteId,
         startDate,
-        templateId: createdItems[0]?.templateId ?? current.templateId,
+        templateId: templateResponse.template.id,
         dayLabel: createdItems[0]?.dayLabel ?? current.dayLabel,
       }));
       setMicrocycleForm((current) => ({
@@ -13705,9 +13729,9 @@ export function PageClient({
                   </strong>
                   <p className="placeholder-copy">
                     {copyFor(language, {
-                      en: "Upload an HTML plan. The app will split it into training days, load the first day into the editor, and let you assign the whole plan to the selected athlete.",
-                      ru: "Загрузите HTML-план. Система разделит его на тренировочные дни, откроет первый день в редакторе и позволит назначить весь план выбранному спортсмену.",
-                      bg: "Качете HTML план. Системата ще го раздели на тренировъчни дни, ще отвори първия ден в редактора и ще позволи назначаване на целия план на избрания спортист.",
+                      en: "Upload an HTML plan. The app will save it as one multi-day template and assign all training days to the selected athlete.",
+                      ru: "Загрузите HTML-план. Система сохранит его одним многодневным шаблоном и назначит все тренировочные дни выбранному спортсмену.",
+                      bg: "Качете HTML план. Системата ще го запази като един многодневен шаблон и ще назначи всички тренировъчни дни на избрания спортист.",
                     })}
                   </p>
                 </div>
@@ -13740,11 +13764,10 @@ export function PageClient({
                       {importedPlanDraft.days.map((day) => (
                         <button
                           className={`planning-template-import-day ${
-                            planForm.name === day.template.name ? "is-active" : ""
+                            assignedPlanForm.dayLabel === day.label ? "is-active" : ""
                           }`}
                           key={`${day.label}-${day.dayOffset}`}
                           onClick={() => {
-                            setPlanForm(day.template);
                             setAssignedPlanForm((current) => ({
                               ...current,
                               dayLabel: day.label,

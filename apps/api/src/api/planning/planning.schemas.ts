@@ -136,6 +136,10 @@ export function parseAutoAssignMicrocycleBody(body: unknown): AutoAssignMicrocyc
           dayLabel: typeof value.dayLabel === "string" ? value.dayLabel : "",
           microcycleType:
             typeof value.microcycleType === "string" ? value.microcycleType : "",
+          templateDayIndex:
+            value.templateDayIndex === undefined || value.templateDayIndex === null
+              ? undefined
+              : Number(value.templateDayIndex),
         };
       })
     : [];

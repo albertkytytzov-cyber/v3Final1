@@ -344,6 +344,7 @@ export interface TemplatePackItem {
   dayOffset: number;
   dayLabel: string;
   microcycleType: string;
+  templateDayIndex?: number;
 }
 
 export type PlannerWarningLevel = "info" | "warning" | "critical";

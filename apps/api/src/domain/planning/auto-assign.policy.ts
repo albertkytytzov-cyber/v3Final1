@@ -7,6 +7,7 @@ import { shiftDate } from "./load-balance.policy";
 
 export interface PreparedAutoAssignItem {
   templateId: string;
+  templateDayIndex: number | null;
   dayOffset: number;
   dayLabel: string;
   microcycleType: string;
@@ -34,6 +35,9 @@ export function prepareAutoAssignItems(
 
   return selectedItems.map((item) => ({
     templateId: item.templateId,
+    templateDayIndex: Number.isFinite(item.templateDayIndex ?? NaN)
+      ? Number(item.templateDayIndex)
+      : null,
     dayOffset: item.dayOffset,
     dayLabel: item.dayLabel,
     microcycleType: item.microcycleType,

@@ -104,10 +104,21 @@ async function insertAssignedPlanFromTemplate(input: {
   dayNotes: string;
   plannedPhase: AssignedPlanSummary["plannedPhase"];
   competitionContext: AssignedPlanSummary["competitionContextSnapshot"];
+  templateDayIndex?: number | null;
 }) {
   const templateStructure = await loadPlanTemplateStructure(input.templateId);
-  const templateDay = templateStructure?.days[0] ?? null;
-  const templateBlocks = templateStructure?.flatBlocks ?? [];
+  const requestedDayIndex =
+    input.templateDayIndex !== null &&
+    input.templateDayIndex !== undefined &&
+    Number.isFinite(input.templateDayIndex)
+      ? Math.max(0, input.templateDayIndex)
+      : 0;
+  const templateDay =
+    templateStructure?.days[requestedDayIndex] ?? templateStructure?.days[0] ?? null;
+  const templateBlocks =
+    templateDay?.sessions.flatMap((session) => session.blocks) ??
+    templateStructure?.flatBlocks ??
+    [];
 
   if (!templateBlocks.length) {
     throw new PlanningCommandServiceError(
@@ -585,6 +596,7 @@ export async function assignPlan(input: {
     dayNotes: input.payload.notes ?? "",
     plannedPhase,
     competitionContext,
+    templateDayIndex: null,
   });
 
   return {
@@ -618,6 +630,7 @@ export async function autoAssignMicrocycle(input: {
         dayNotes: item.assignedDayNotes,
         plannedPhase,
         competitionContext,
+        templateDayIndex: item.templateDayIndex,
       });
       const createdPlan = await getAssignedPlanById(assignedPlanId);
 
