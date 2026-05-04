@@ -13,13 +13,25 @@ export interface AdaptedPlanResult {
 export async function buildAdaptedPlanForAthlete(
   athleteId: string,
 ): Promise<AdaptedPlanResult | null> {
-  const [assignedPlan] = await loadAssignedPlans(
+  const readiness = await getLatestReadinessEntryRecord(athleteId);
+
+  if (!readiness) {
+    return null;
+  }
+
+  const assignedPlans = await loadAssignedPlans(
     "assigned_plans.athlete_id = $1 AND assigned_plans.status = 'active'",
     [athleteId],
   );
-  const readiness = await getLatestReadinessEntryRecord(athleteId);
+  const assignedPlan =
+    assignedPlans.find((plan) => plan.day.dayDate === readiness.entryDate) ??
+    assignedPlans
+      .filter((plan) => plan.day.dayDate >= readiness.entryDate)
+      .sort((left, right) => left.day.dayDate.localeCompare(right.day.dayDate))[0] ??
+    assignedPlans.sort((left, right) => right.day.dayDate.localeCompare(left.day.dayDate))[0] ??
+    null;
 
-  if (!assignedPlan || !readiness) {
+  if (!assignedPlan) {
     return null;
   }
 

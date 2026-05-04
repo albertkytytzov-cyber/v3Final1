@@ -2130,6 +2130,47 @@ select {
   background: rgba(255, 255, 255, 0.9);
 }
 
+.assigned-block-note {
+  margin: 0;
+  color: var(--muted-strong);
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+.assigned-exercise-list {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0 2px;
+}
+
+.assigned-exercise-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(160px, 100%), 1fr));
+  gap: 10px;
+  align-items: start;
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  background: rgba(248, 250, 252, 0.82);
+}
+
+.assigned-exercise-row strong,
+.assigned-exercise-row span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.assigned-exercise-row strong {
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+.assigned-exercise-row span {
+  color: var(--muted-strong);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
 .coach-dashboard-shell {
   display: grid;
   gap: 18px;
@@ -3740,6 +3781,64 @@ select {
 .planning-template-library-list {
   display: grid;
   gap: 10px;
+}
+
+.planning-assigned-plan-list {
+  display: grid;
+  gap: 10px;
+}
+
+.planning-assigned-plan-card {
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.planning-assigned-plan-card summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  cursor: pointer;
+}
+
+.planning-assigned-plan-card summary strong,
+.planning-assigned-plan-card summary span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.planning-assigned-plan-card summary span {
+  color: var(--muted-strong);
+  font-size: 0.82rem;
+}
+
+.planning-assigned-session-list {
+  display: grid;
+  gap: 10px;
+  padding-top: 12px;
+}
+
+.planning-assigned-session {
+  display: grid;
+  gap: 8px;
+}
+
+.planning-assigned-block {
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  background: rgba(248, 250, 252, 0.78);
+}
+
+.planning-assigned-block small,
+.planning-assigned-block p {
+  margin: 0;
+  color: var(--muted-strong);
+  line-height: 1.45;
 }
 
 .planning-template-library-card,

@@ -97,11 +97,7 @@ export function adaptAssignedPlan(input: AdaptationEngineInput): AdaptationEngin
           return [];
         }
 
-        if (
-          block.blockType === "strength" ||
-          block.blockType === "speed" ||
-          block.blockType === "CNS_high"
-        ) {
+        if (isFatiguingBlock(block.blockType)) {
           reducedBlocks.push(block.name);
           explanation.push(
             `${block.name} volume/intensity was reduced for a yellow readiness day.`,

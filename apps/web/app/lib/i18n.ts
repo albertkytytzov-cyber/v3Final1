@@ -354,9 +354,13 @@ export function translateExecutionStatus(status: string, language: Language) {
 export function translateBlockAction(action: string, language: Language) {
   const map: Record<string, Record<Language, string>> = {
     keep: { en: "keep", ru: "оставить", bg: "запази" },
+    kept: { en: "kept", ru: "оставлено", bg: "запазено" },
     reduce: { en: "reduce", ru: "снизить", bg: "намали" },
+    reduced: { en: "reduced", ru: "снижено", bg: "намалено" },
     replace: { en: "replace", ru: "заменить", bg: "замени" },
+    replaced: { en: "replaced", ru: "заменено", bg: "заменено" },
     remove: { en: "remove", ru: "убрать", bg: "премахни" },
+    removed: { en: "removed", ru: "убрано", bg: "премахнато" },
   };
   return map[action]?.[language] ?? action;
 }
