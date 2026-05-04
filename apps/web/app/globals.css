@@ -3201,7 +3201,9 @@ select {
 }
 
 .planning-workgrid.planning-workgrid-templates {
-  grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 380px);
+  grid-auto-rows: min-content;
+  gap: 14px;
   align-items: start;
 }
 
@@ -3643,13 +3645,17 @@ select {
 .planning-workgrid.planning-workgrid-templates > .planning-template-builder {
   grid-column: 1;
   grid-row: 2 / span 2;
+  align-content: start;
+  min-height: 0;
 }
 
 .planning-workgrid.planning-workgrid-templates > .planning-template-list {
   grid-column: 2;
   grid-row: 2;
   align-self: start;
+  align-content: start;
   max-height: none;
+  min-height: 0;
   overflow: visible;
 }
 
@@ -3657,8 +3663,25 @@ select {
   grid-column: 2;
   grid-row: 3;
   align-self: start;
+  align-content: start;
   max-height: none;
+  min-height: 0;
   overflow: visible;
+}
+
+.auth-form.planning-template-builder,
+.auth-form.planning-template-assign {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.auth-form.planning-template-builder > .planning-template-editor-head,
+.auth-form.planning-template-builder > .planning-template-import-card,
+.auth-form.planning-template-builder > .planning-template-meta-grid,
+.auth-form.planning-template-assign > .planning-template-assign-head,
+.auth-form.planning-template-assign > .planning-template-recommendations {
+  grid-column: 1 / -1;
+  width: 100%;
+  min-width: 0;
 }
 
 .planning-template-editor-head,
@@ -3779,10 +3802,12 @@ select {
 .planning-template-library-list {
   display: grid;
   gap: 10px;
-  max-height: min(660px, calc(100dvh - 220px));
+  align-content: start;
+  max-height: clamp(420px, 56dvh, 660px);
   min-width: 0;
   overflow: auto;
   padding-right: 2px;
+  overscroll-behavior: contain;
 }
 
 .planning-template-delete-bar {
@@ -4075,6 +4100,7 @@ select {
 .planning-template-library-card {
   cursor: default;
   min-width: 0;
+  align-content: start;
 }
 
 .planning-template-recommendation {
@@ -4084,6 +4110,7 @@ select {
 .planning-template-library-select {
   display: grid;
   gap: 6px;
+  width: 100%;
   min-width: 0;
   padding: 0;
   border: 0;
@@ -4166,6 +4193,11 @@ select {
 
 .planning-template-library-card:hover {
   border-color: rgba(21, 128, 61, 0.26);
+}
+
+.planning-template-library-card > .planning-template-delete-button {
+  width: 100%;
+  justify-self: stretch;
 }
 
 .planning-template-library-card span,
