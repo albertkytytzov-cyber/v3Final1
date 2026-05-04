@@ -3648,19 +3648,17 @@ select {
 .planning-workgrid.planning-workgrid-templates > .planning-template-list {
   grid-column: 2;
   grid-row: 2;
-  position: sticky;
-  top: 18px;
-  max-height: calc(52vh - 86px);
-  overflow: auto;
+  align-self: start;
+  max-height: none;
+  overflow: visible;
 }
 
 .planning-workgrid.planning-workgrid-templates > .planning-template-assign {
   grid-column: 2;
   grid-row: 3;
-  position: sticky;
-  top: calc(52vh + 8px);
-  max-height: calc(48vh - 42px);
-  overflow: auto;
+  align-self: start;
+  max-height: none;
+  overflow: visible;
 }
 
 .planning-template-editor-head,
@@ -3781,6 +3779,10 @@ select {
 .planning-template-library-list {
   display: grid;
   gap: 10px;
+  max-height: min(660px, calc(100dvh - 220px));
+  min-width: 0;
+  overflow: auto;
+  padding-right: 2px;
 }
 
 .planning-template-delete-bar {
@@ -3877,6 +3879,8 @@ select {
 .planning-template-exercise-preview {
   display: grid;
   gap: 10px;
+  max-height: 280px;
+  overflow: auto;
   padding-top: 8px;
 }
 
@@ -4070,6 +4074,7 @@ select {
 
 .planning-template-library-card {
   cursor: default;
+  min-width: 0;
 }
 
 .planning-template-recommendation {
@@ -4087,6 +4092,46 @@ select {
   font: inherit;
   text-align: left;
   cursor: pointer;
+}
+
+.planning-template-library-kind {
+  width: fit-content;
+  max-width: 100%;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(240, 253, 250, 0.86);
+  color: #0f766e !important;
+  font-size: 0.74rem !important;
+  font-weight: 850;
+  line-height: 1.2;
+}
+
+.planning-template-library-select > strong,
+.planning-template-library-meta {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.planning-template-library-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  min-width: 0;
+}
+
+.planning-template-library-stats span {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+  padding: 7px 8px;
+  border-radius: 10px;
+  background: rgba(248, 250, 252, 0.86);
+}
+
+.planning-template-library-stats strong {
+  color: var(--text);
+  font-size: 0.95rem;
+  line-height: 1;
 }
 
 .planning-template-delete-button {
@@ -4107,13 +4152,20 @@ select {
   opacity: 0.58;
 }
 
-.planning-template-library-card:hover,
 .planning-template-library-card.is-active,
 .planning-template-recommendation:hover,
 .planning-template-recommendation.is-active {
   border-color: rgba(21, 128, 61, 0.34);
   box-shadow: 0 14px 32px rgba(15, 23, 42, 0.1);
+}
+
+.planning-template-recommendation:hover,
+.planning-template-recommendation.is-active {
   transform: translateY(-1px);
+}
+
+.planning-template-library-card:hover {
+  border-color: rgba(21, 128, 61, 0.26);
 }
 
 .planning-template-library-card span,

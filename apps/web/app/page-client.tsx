@@ -701,6 +701,17 @@ function countTemplateExercises(template: Pick<PlanTemplateSummary, "blocks" | "
   );
 }
 
+function countTemplateDays(template: Pick<PlanTemplateSummary, "blocks" | "days">) {
+  return template.days?.length || 1;
+}
+
+function countTemplateSessions(template: Pick<PlanTemplateSummary, "blocks" | "days">) {
+  return template.days?.reduce(
+    (total, day) => total + day.sessions.length,
+    0,
+  ) || (template.blocks.length ? 1 : 0);
+}
+
 function normalizeImportedPlanText(value: string) {
   return value.replace(/\s+/g, " ").trim();
 }
@@ -14536,6 +14547,8 @@ export function PageClient({
                   {planTemplates.map((template) => {
                     const previewSessions = getTemplateExercisePreviewSessions(template);
                     const exerciseCount = countTemplateExercises(template);
+                    const dayCount = countTemplateDays(template);
+                    const sessionCount = countTemplateSessions(template);
 
                     return (
                     <article
@@ -14577,36 +14590,59 @@ export function PageClient({
                         }}
                         type="button"
                       >
+                        <span className="planning-template-library-kind">
+                          {dayCount > 1
+                            ? copyFor(language, {
+                                en: "Multi-day plan",
+                                ru: "План на несколько дней",
+                                bg: "Многодневен план",
+                              })
+                            : copyFor(language, {
+                                en: "Day template",
+                                ru: "Шаблон дня",
+                                bg: "Шаблон за ден",
+                              })}
+                        </span>
                         <strong>{translateKnownTemplateText(template.name, language)}</strong>
-                        <span>{translateKnownTemplateText(template.sportType, language)}</span>
-                        <small>
+                        <small className="planning-template-library-meta">
+                          {translateKnownTemplateText(template.sportType, language) || "-"} /{" "}
                           {localizedOptionLabel(template.phaseFocus, language, PREPARATION_PHASE_LABELS)} /{" "}
                           {localizedOptionLabel(template.microcycleType, language, MICROCYCLE_TYPE_LABELS)}
                         </small>
+                        <div className="planning-template-library-stats">
+                          <span>
+                            <strong>{dayCount}</strong>
+                            {copyFor(language, { en: "days", ru: "дней", bg: "дни" })}
+                          </span>
+                          <span>
+                            <strong>{sessionCount}</strong>
+                            {copyFor(language, { en: "sessions", ru: "сессий", bg: "сесии" })}
+                          </span>
+                          <span>
+                            <strong>{template.blockCount}</strong>
+                            {copyFor(language, { en: "blocks", ru: "блоков", bg: "блокове" })}
+                          </span>
+                          <span>
+                            <strong>{exerciseCount}</strong>
+                            {copyFor(language, { en: "exercises", ru: "упр.", bg: "упр." })}
+                          </span>
+                        </div>
                         <em>
-                          {blocksCountLabel(template.blockCount, language)} /{" "}
                           {copyFor(language, {
-                            en: "exercises",
-                            ru: "упражнений",
-                            bg: "упражнения",
-                          })}{" "}
-                          {exerciseCount} /{" "}
-                          {copyFor(language, {
-                            en: "load",
-                            ru: "нагрузка",
-                            bg: "натоварване",
-                          })}{" "}
-                          {template.estimatedLoad}
+                            en: "Load",
+                            ru: "Нагрузка",
+                            bg: "Натоварване",
+                          })}: {template.estimatedLoad}
                         </em>
                       </button>
                       <details className="planning-template-exercise-details">
                         <summary>
                           {copyFor(language, {
-                            en: "Show exercises",
-                            ru: "Показать упражнения",
-                            bg: "Покажи упражненията",
+                            en: "Plan structure",
+                            ru: "Структура плана",
+                            bg: "Структура на плана",
                           })}{" "}
-                          ({exerciseCount})
+                          ({dayCount} / {template.blockCount} / {exerciseCount})
                         </summary>
                         <div className="planning-template-exercise-preview">
                           {previewSessions.map((session, sessionIndex) => (
