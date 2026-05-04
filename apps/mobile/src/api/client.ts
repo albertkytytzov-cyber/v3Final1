@@ -106,8 +106,7 @@ export class MobileApiClient {
       readiness,
       execution,
     ] = await Promise.all([
-      this.request<{ assignedPlans: AssignedPlanSummary[] }>("/plans/assigned")
-        .catch(() => ({ assignedPlans: [] })),
+      this.request<{ assignedPlans: AssignedPlanSummary[] }>("/plans/assigned"),
       this.request<{ competitions: CompetitionSummary[] }>("/competitions")
         .catch(() => ({ competitions: [] })),
       this.request<{ competitionPlans: CompetitionPlanSummary[] }>("/competition-plans")

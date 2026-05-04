@@ -92,7 +92,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
         data: snapshot,
         error: null,
         isBusy: false,
-        message: "Данные обновлены",
+        message: `Данные обновлены · планов: ${snapshot.assignedPlans.length}`,
         selectedAthleteId,
         session: nextSession,
       });
@@ -791,10 +791,24 @@ interface ExecutionBlockItem {
   block: AssignedPlanBlock;
 }
 
-function renderExecutionForm(state: MobileAppState, plans: AssignedPlanSummary[]) {
-  const blockItems = getExecutionBlockItems(plans);
+interface ExecutionPlanGroup {
+  plan: AssignedPlanSummary;
+  blockItems: ExecutionBlockItem[];
+}
 
-  if (blockItems.length === 0) {
+function renderExecutionForm(state: MobileAppState, plans: AssignedPlanSummary[]) {
+  const planGroups = getExecutionPlanGroups(plans);
+  const blockCount = planGroups.reduce((total, group) => total + group.blockItems.length, 0);
+  const exerciseCount = planGroups.reduce(
+    (total, group) =>
+      total + group.blockItems.reduce(
+        (blockTotal, item) => blockTotal + (item.block.exercises?.length ?? 0),
+        0,
+      ),
+    0,
+  );
+
+  if (blockCount === 0) {
     return renderEmpty("Нет блоков для результата", "Назначенный план появится после обновления данных.");
   }
 
@@ -802,12 +816,43 @@ function renderExecutionForm(state: MobileAppState, plans: AssignedPlanSummary[]
     <section class="execution-panel">
       <div class="section-title">
         <h3>Результат тренировки</h3>
-        <p>Откройте нужный блок, отметьте выполненные упражнения и сохраните факт.</p>
+        <p>${plans.length} назначенных дней · ${blockCount} блоков · ${exerciseCount} упражнений. Ближайший день открыт сверху.</p>
       </div>
-      <div class="execution-block-stack">
-        ${blockItems.map((item) => renderExecutionBlockForm(item, getExecutionResultForBlock(state, item.plan.id, item.block.id))).join("")}
+      <div class="execution-plan-stack">
+        ${planGroups.map((group, index) => renderExecutionPlanGroup(state, group, index === 0)).join("")}
       </div>
     </section>
+  `;
+}
+
+function renderExecutionPlanGroup(
+  state: MobileAppState,
+  group: ExecutionPlanGroup,
+  isOpen: boolean,
+) {
+  const blockCount = group.blockItems.length;
+  const exerciseCount = group.blockItems.reduce(
+    (total, item) => total + (item.block.exercises?.length ?? 0),
+    0,
+  );
+  const completedBlockCount = group.blockItems.filter((item) =>
+    Boolean(getExecutionResultForBlock(state, item.plan.id, item.block.id)),
+  ).length;
+
+  return `
+    <details class="execution-plan-group" ${isOpen ? "open" : ""}>
+      <summary>
+        <div>
+          <strong>${formatDate(group.plan.day.dayDate)} · ${escapeHtml(group.plan.day.label)}</strong>
+          <span>${escapeHtml(group.plan.templateName)}</span>
+        </div>
+        <em>${completedBlockCount}/${blockCount}</em>
+        <small>${blockCount} блоков · ${exerciseCount} упр.</small>
+      </summary>
+      <div class="execution-block-stack">
+        ${group.blockItems.map((item) => renderExecutionBlockForm(item, getExecutionResultForBlock(state, item.plan.id, item.block.id))).join("")}
+      </div>
+    </details>
   `;
 }
 
@@ -827,7 +872,7 @@ function renderExecutionBlockForm(item: ExecutionBlockItem, result: ExecutionRes
       <div class="execution-block-head wide-field">
         <div>
           <strong>${escapeHtml(item.block.name)}</strong>
-          <span>${escapeHtml(item.plan.templateName)} · ${escapeHtml(item.sessionName)}</span>
+          <span>${escapeHtml(item.sessionName)} · ${escapeHtml(item.plan.plannedPhase ?? "фаза не задана")}</span>
         </div>
         <em>${escapeHtml(statusText)}</em>
       </div>
@@ -1070,6 +1115,40 @@ function getActiveAthleteId(state: MobileAppState) {
 
 function getPlansForAthlete(state: MobileAppState, athleteId: string | null) {
   return state.data.assignedPlans.filter((plan) => !athleteId || plan.athleteId === athleteId);
+}
+
+function getExecutionPlanGroups(plans: AssignedPlanSummary[]): ExecutionPlanGroup[] {
+  return sortPlansForExecution(plans)
+    .map((plan) => ({
+      blockItems: getExecutionBlockItems([plan]),
+      plan,
+    }))
+    .filter((group) => group.blockItems.length > 0);
+}
+
+function sortPlansForExecution(plans: AssignedPlanSummary[]) {
+  const today = todayValue();
+
+  return plans.slice().sort((left, right) => {
+    const leftRank = getExecutionDateRank(left.day.dayDate, today);
+    const rightRank = getExecutionDateRank(right.day.dayDate, today);
+
+    if (leftRank !== rightRank) {
+      return leftRank - rightRank;
+    }
+
+    return leftRank === 2
+      ? right.day.dayDate.localeCompare(left.day.dayDate)
+      : left.day.dayDate.localeCompare(right.day.dayDate);
+  });
+}
+
+function getExecutionDateRank(dayDate: string, today: string) {
+  if (dayDate === today) {
+    return 0;
+  }
+
+  return dayDate > today ? 1 : 2;
 }
 
 function getExecutionBlockItems(plans: AssignedPlanSummary[]): ExecutionBlockItem[] {
