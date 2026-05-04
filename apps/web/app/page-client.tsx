@@ -499,6 +499,14 @@ function syncCompetitionSelection(
   return selectedIds.filter((id) => availableIds.has(id));
 }
 
+function syncPlanTemplateSelection(
+  selectedIds: string[],
+  templates: PlanTemplateSummary[],
+) {
+  const availableIds = new Set(templates.map((template) => template.id));
+  return selectedIds.filter((id) => availableIds.has(id));
+}
+
 function syncAssignedPlanSelection(
   selectedIds: string[],
   assignedPlans: AssignedPlanSummary[],
@@ -2888,6 +2896,7 @@ export function PageClient({
   const [planTemplates, setPlanTemplates] = useState<PlanTemplateSummary[]>(
     previewState?.planTemplates ?? [],
   );
+  const [selectedPlanTemplateIds, setSelectedPlanTemplateIds] = useState<string[]>([]);
   const [planForm, setPlanForm] =
     useState<PlanTemplatePayload>(() => createLocalizedDefaultPlanTemplate(language));
   const [importedPlanDraft, setImportedPlanDraft] = useState<ImportedPlanDraft | null>(null);
@@ -3673,6 +3682,7 @@ export function PageClient({
         setCoachAthletes([]);
         setAvailableCoachAthletes([]);
         setPlanTemplates([]);
+        setSelectedPlanTemplateIds([]);
         setAssignedPlans([]);
         setSelectedAssignedPlanIds([]);
         setAdaptedPlan(null);
@@ -3840,6 +3850,9 @@ export function PageClient({
       "/plans/templates",
     );
     setPlanTemplates(response.templates);
+    setSelectedPlanTemplateIds((current) =>
+      syncPlanTemplateSelection(current, response.templates),
+    );
   }
 
   async function loadCompetitions() {
@@ -4274,6 +4287,7 @@ export function PageClient({
       setCoachAthletes([]);
       setAvailableCoachAthletes([]);
       setPlanTemplates([]);
+      setSelectedPlanTemplateIds([]);
       setAssignedPlans([]);
       setSelectedAssignedPlanIds([]);
       setAdaptedPlan(null);
@@ -4544,6 +4558,7 @@ export function PageClient({
             }),
       );
       setPlanTemplates((current) => current.filter((item) => item.id !== template.id));
+      setSelectedPlanTemplateIds((current) => current.filter((id) => id !== template.id));
       const removedAssignedPlanIds = new Set(
         assignedPlans
           .filter((plan) => plan.templateId === template.id)
@@ -4616,6 +4631,116 @@ export function PageClient({
       });
 
       setErrorMessage(message || fallback);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleDeleteSelectedPlanTemplates() {
+    const selectedTemplates = planTemplates.filter((template) =>
+      selectedPlanTemplateIds.includes(template.id),
+    );
+
+    if (!selectedTemplates.length) {
+      return;
+    }
+
+    const confirmed = globalThis.confirm(
+      copyFor(language, {
+        en: `Delete ${selectedTemplates.length} selected saved template(s)?`,
+        ru: `Удалить выбранные сохранённые шаблоны: ${selectedTemplates.length}?`,
+        bg: `Да се изтрият ли избраните запазени шаблони: ${selectedTemplates.length}?`,
+      }),
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    const deletedTemplateIds = new Set<string>();
+    const templatesInUse: PlanTemplateSummary[] = [];
+
+    setBusy(true);
+    setErrorMessage("");
+
+    try {
+      for (const template of selectedTemplates) {
+        try {
+          await apiRequest(`/plans/templates/${template.id}`, {
+            method: "DELETE",
+          });
+          deletedTemplateIds.add(template.id);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "";
+          const isTemplateInUse =
+            message.includes("already assigned") || message.includes("cannot be deleted");
+
+          if (!isTemplateInUse) {
+            throw error;
+          }
+
+          templatesInUse.push(template);
+        }
+      }
+
+      if (templatesInUse.length) {
+        const forceConfirmed = globalThis.confirm(
+          copyFor(language, {
+            en: `${templatesInUse.length} selected template(s) are already assigned. Delete them together with their assigned training days?`,
+            ru: `${templatesInUse.length} выбранных шаблонов уже назначены спортсменам. Удалить их вместе с назначенными тренировочными днями?`,
+            bg: `${templatesInUse.length} от избраните шаблони вече са назначени на спортисти. Да се изтрият ли заедно с назначените тренировъчни дни?`,
+          }),
+        );
+
+        if (forceConfirmed) {
+          for (const template of templatesInUse) {
+            await apiRequest(`/plans/templates/${template.id}?force=true`, {
+              method: "DELETE",
+            });
+            deletedTemplateIds.add(template.id);
+          }
+        }
+      }
+
+      setSelectedPlanTemplateIds((current) =>
+        current.filter((id) => !deletedTemplateIds.has(id)),
+      );
+      setSelectedAssignedPlanIds((current) =>
+        current.filter(
+          (id) =>
+            !assignedPlans.some(
+              (plan) => plan.id === id && deletedTemplateIds.has(plan.templateId),
+            ),
+        ),
+      );
+      setAssignedPlanForm((current) =>
+        deletedTemplateIds.has(current.templateId) ? { ...current, templateId: "" } : current,
+      );
+      await Promise.all([loadPlanTemplates(), loadAssignedPlans()]);
+      setStatusMessage(
+        deletedTemplateIds.size > 0
+          ? copyFor(language, {
+              en: `Deleted templates: ${deletedTemplateIds.size}.`,
+              ru: `Удалено шаблонов: ${deletedTemplateIds.size}.`,
+              bg: `Изтрити шаблони: ${deletedTemplateIds.size}.`,
+            })
+          : copyFor(language, {
+              en: "No templates were deleted.",
+              ru: "Шаблоны не удалены.",
+              bg: "Няма изтрити шаблони.",
+            }),
+      );
+    } catch (error) {
+      await Promise.all([loadPlanTemplates(), loadAssignedPlans()]);
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : copyFor(language, {
+              en: "Failed to delete selected templates.",
+              ru: "Не удалось удалить выбранные шаблоны.",
+              bg: "Избраните шаблони не можаха да бъдат изтрити.",
+            }),
+      );
     } finally {
       setBusy(false);
     }
@@ -7173,6 +7298,12 @@ export function PageClient({
   const selectedCalendarCompetitionCount = selectedCalendarCompetitions.length;
   const allCalendarCompetitionsSelected =
     competitions.length > 0 && selectedCalendarCompetitionCount === competitions.length;
+  const selectedPlanTemplates = planTemplates.filter((template) =>
+    selectedPlanTemplateIds.includes(template.id),
+  );
+  const selectedPlanTemplateCount = selectedPlanTemplates.length;
+  const allPlanTemplatesSelected =
+    planTemplates.length > 0 && selectedPlanTemplateCount === planTemplates.length;
   const selectedAssignedPlans = assignedPlans.filter((plan) =>
     selectedAssignedPlanIds.includes(plan.id),
   );
@@ -14240,6 +14371,59 @@ export function PageClient({
                 </p>
               ) : (
                 <div className="planning-template-library-list">
+                  <div className="planning-template-delete-bar">
+                    <label className="planning-template-select planning-template-select-all">
+                      <input
+                        checked={allPlanTemplatesSelected}
+                        onChange={(event) =>
+                          setSelectedPlanTemplateIds(
+                            event.target.checked ? planTemplates.map((template) => template.id) : [],
+                          )
+                        }
+                        type="checkbox"
+                      />
+                      <span>
+                        {copyFor(language, {
+                          en: "Select all",
+                          ru: "Выбрать все",
+                          bg: "Избери всички",
+                        })}
+                      </span>
+                    </label>
+                    <span className="planning-template-selected-count">
+                      {copyFor(language, {
+                        en: `${selectedPlanTemplateCount} selected`,
+                        ru: `Выбрано: ${selectedPlanTemplateCount}`,
+                        bg: `Избрани: ${selectedPlanTemplateCount}`,
+                      })}
+                    </span>
+                    <div className="planning-template-delete-actions">
+                      <button
+                        className="planning-template-delete-button"
+                        disabled={busy || selectedPlanTemplateCount === 0}
+                        onClick={() => void handleDeleteSelectedPlanTemplates()}
+                        type="button"
+                      >
+                        {copyFor(language, {
+                          en: "Delete selected",
+                          ru: "Удалить выбранные",
+                          bg: "Изтрий избраните",
+                        })}
+                      </button>
+                      <button
+                        className="planning-template-clear-button"
+                        disabled={busy || selectedPlanTemplateCount === 0}
+                        onClick={() => setSelectedPlanTemplateIds([])}
+                        type="button"
+                      >
+                        {copyFor(language, {
+                          en: "Clear",
+                          ru: "Снять выбор",
+                          bg: "Изчисти",
+                        })}
+                      </button>
+                    </div>
+                  </div>
                   {planTemplates.map((template) => (
                     <article
                       className={`planning-template-library-card ${
@@ -14247,6 +14431,28 @@ export function PageClient({
                       }`}
                       key={template.id}
                     >
+                      <label className="planning-template-select">
+                        <input
+                          checked={selectedPlanTemplateIds.includes(template.id)}
+                          onChange={(event) =>
+                            setSelectedPlanTemplateIds((current) =>
+                              event.target.checked
+                                ? current.includes(template.id)
+                                  ? current
+                                  : [...current, template.id]
+                                : current.filter((id) => id !== template.id),
+                            )
+                          }
+                          type="checkbox"
+                        />
+                        <span>
+                          {copyFor(language, {
+                            en: "Select",
+                            ru: "Выбрать",
+                            bg: "Избери",
+                          })}
+                        </span>
+                      </label>
                       <button
                         className="planning-template-library-select"
                         onClick={() => {

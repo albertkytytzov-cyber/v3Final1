@@ -3783,6 +3783,71 @@ select {
   gap: 10px;
 }
 
+.planning-template-delete-bar {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(248, 250, 252, 0.82);
+}
+
+.planning-template-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  color: var(--muted-strong);
+  font-size: 0.82rem;
+  font-weight: 800;
+  cursor: pointer;
+  user-select: none;
+}
+
+.planning-template-select input {
+  width: 16px;
+  height: 16px;
+  accent-color: #15803d;
+  flex: 0 0 auto;
+}
+
+.planning-template-select span {
+  overflow-wrap: anywhere;
+}
+
+.planning-template-selected-count {
+  color: var(--muted-strong);
+  font-size: 0.84rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.planning-template-delete-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.planning-template-clear-button {
+  padding: 7px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(15, 118, 110, 0.18);
+  background: rgba(240, 253, 250, 0.82);
+  color: var(--muted-strong);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.planning-template-clear-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
 .planning-assigned-plan-list {
   display: grid;
   gap: 10px;
@@ -3886,15 +3951,18 @@ select {
 }
 
 @media (max-width: 720px) {
+  .planning-template-delete-bar,
   .planning-assigned-delete-bar {
     grid-template-columns: 1fr;
     align-items: stretch;
   }
 
+  .planning-template-delete-actions,
   .planning-assigned-delete-actions {
     justify-content: stretch;
   }
 
+  .planning-template-delete-actions button,
   .planning-assigned-delete-actions button {
     flex: 1 1 140px;
   }
