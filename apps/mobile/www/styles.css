@@ -162,6 +162,91 @@ button {
   resize: vertical;
 }
 
+.password-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.password-control input {
+  min-width: 0;
+}
+
+.inline-action {
+  min-height: 46px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface-muted);
+  color: var(--accent-dark);
+  cursor: pointer;
+  font-weight: 850;
+}
+
+.choice-field {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.choice-field legend {
+  padding: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.choice-group {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.choice-option {
+  position: relative;
+  display: block !important;
+  min-width: 0;
+}
+
+.choice-option input {
+  position: absolute;
+  width: 1px;
+  min-height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.choice-option span {
+  display: grid;
+  min-height: 42px;
+  place-items: center;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+  color: var(--text);
+  font-size: 0.86rem;
+  font-weight: 850;
+  letter-spacing: 0;
+  text-align: center;
+  text-transform: none;
+}
+
+.choice-option input:checked + span {
+  border-color: rgba(15, 118, 110, 0.52);
+  background: #dff2ef;
+  color: var(--accent-dark);
+}
+
+.choice-option input:focus-visible + span,
+.inline-action:focus-visible {
+  outline: 3px solid rgba(15, 118, 110, 0.24);
+  outline-offset: 2px;
+}
+
 .check-row {
   display: flex !important;
   grid-template-columns: none;
@@ -470,6 +555,10 @@ button.list-card {
 
   .compact-form,
   .metric-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .choice-group {
     grid-template-columns: 1fr;
   }
 

@@ -322,6 +322,20 @@ export function bootstrapMobileApp(root: HTMLElement) {
       void handleLogin(event.currentTarget as HTMLFormElement);
     });
 
+    root.querySelector<HTMLButtonElement>("[data-toggle-password]")?.addEventListener("click", (event) => {
+      const button = event.currentTarget as HTMLButtonElement;
+      const input = root.querySelector<HTMLInputElement>("[data-password-input]");
+
+      if (!input) {
+        return;
+      }
+
+      const isHidden = input.type === "password";
+      input.type = isHidden ? "text" : "password";
+      button.textContent = isHidden ? "Скрыть" : "Показать";
+      button.setAttribute("aria-pressed", String(isHidden));
+    });
+
     root.querySelectorAll<HTMLButtonElement>("[data-screen]").forEach((button) => {
       button.addEventListener("click", () => {
         update({ selectedScreen: button.dataset.screen as MobileScreen });
@@ -409,9 +423,12 @@ function renderLogin(state: MobileAppState) {
             <span>Email</span>
             <input name="email" type="email" autocomplete="email" required />
           </label>
-          <label>
+          <label class="password-field">
             <span>Пароль</span>
-            <input name="password" type="password" autocomplete="current-password" required />
+            <div class="password-control">
+              <input data-password-input name="password" type="password" autocomplete="current-password" required />
+              <button aria-pressed="false" class="inline-action" data-toggle-password type="button">Показать</button>
+            </div>
           </label>
           <button class="primary-action" ${state.isBusy ? "disabled" : ""} type="submit">
             ${state.isBusy ? "Подключение..." : "Войти"}
@@ -652,19 +669,90 @@ function renderReadinessScreen(state: MobileAppState) {
     </div>
     <form class="mobile-form compact-form" data-readiness-form>
       <label><span>Дата</span><input name="entryDate" type="date" value="${todayValue()}" /></label>
-      <label><span>Сон, часов</span><input name="sleepHours" type="number" min="0" max="14" step="0.5" value="8" /></label>
-      <label><span>Качество сна</span><input name="sleepQuality" type="number" min="1" max="10" value="7" /></label>
-      <label><span>Самочувствие</span><input name="generalFeeling" type="number" min="1" max="10" value="7" /></label>
-      <label><span>Усталость</span><input name="fatigueLevel" type="number" min="1" max="10" value="4" /></label>
-      <label><span>Мышцы</span><input name="muscleSoreness" type="number" min="1" max="10" value="4" /></label>
-      <label><span>Мотивация</span><input name="motivationLevel" type="number" min="1" max="10" value="7" /></label>
       <label><span>Пульс покоя</span><input name="restingHr" type="number" min="30" max="140" value="${state.session.user.baselineRestingHr ?? 60}" /></label>
       <label><span>Вес</span><input name="bodyWeight" type="number" min="20" max="200" step="0.1" value="${state.session.user.baselineWeightKg ?? 70}" /></label>
-      <label><span>Боль</span><input name="painLevel" type="number" min="0" max="10" value="0" /></label>
+      ${renderChoiceGroup("sleepHours", "Сон", [
+        { label: "меньше 6 ч", value: "5.5" },
+        { label: "6-7 ч", value: "6.5" },
+        { label: "7-8 ч", value: "7.5" },
+        { label: "8+ ч", value: "8.5" },
+      ], "8.5")}
+      ${renderChoiceGroup("sleepQuality", "Качество сна", readinessBetterOptions, "4")}
+      ${renderChoiceGroup("generalFeeling", "Самочувствие", readinessFeelingOptions, "4")}
+      ${renderChoiceGroup("fatigueLevel", "Усталость", readinessLoadOptions, "2")}
+      ${renderChoiceGroup("muscleSoreness", "Мышцы", readinessLoadOptions, "2")}
+      ${renderChoiceGroup("motivationLevel", "Мотивация", readinessMotivationOptions, "4")}
+      ${renderChoiceGroup("painLevel", "Боль", readinessPainOptions, "0")}
       <label class="check-row"><input name="illnessFlag" type="checkbox" /> Есть болезнь</label>
       <label class="check-row"><input name="feverFlag" type="checkbox" /> Температура</label>
       <button class="primary-action" type="submit">Сохранить готовность</button>
     </form>
+  `;
+}
+
+interface ChoiceOption {
+  label: string;
+  value: string;
+}
+
+const readinessBetterOptions: ChoiceOption[] = [
+  { label: "плохо", value: "1" },
+  { label: "слабо", value: "2" },
+  { label: "нормально", value: "3" },
+  { label: "хорошо", value: "4" },
+  { label: "отлично", value: "5" },
+];
+
+const readinessFeelingOptions: ChoiceOption[] = [
+  { label: "плохо", value: "1" },
+  { label: "тяжело", value: "2" },
+  { label: "нормально", value: "3" },
+  { label: "хорошо", value: "4" },
+  { label: "отлично", value: "5" },
+];
+
+const readinessLoadOptions: ChoiceOption[] = [
+  { label: "нет", value: "1" },
+  { label: "лёгкая", value: "2" },
+  { label: "средняя", value: "3" },
+  { label: "сильная", value: "4" },
+  { label: "очень сильная", value: "5" },
+];
+
+const readinessMotivationOptions: ChoiceOption[] = [
+  { label: "нет", value: "1" },
+  { label: "низкая", value: "2" },
+  { label: "нормальная", value: "3" },
+  { label: "высокая", value: "4" },
+  { label: "максимум", value: "5" },
+];
+
+const readinessPainOptions: ChoiceOption[] = [
+  { label: "нет", value: "0" },
+  { label: "лёгкая", value: "2" },
+  { label: "средняя", value: "5" },
+  { label: "сильная", value: "8" },
+  { label: "очень сильная", value: "10" },
+];
+
+function renderChoiceGroup(
+  name: string,
+  label: string,
+  options: ChoiceOption[],
+  defaultValue: string,
+) {
+  return `
+    <fieldset class="choice-field">
+      <legend>${escapeHtml(label)}</legend>
+      <div class="choice-group">
+        ${options.map((option) => `
+          <label class="choice-option">
+            <input name="${escapeHtml(name)}" type="radio" value="${escapeHtml(option.value)}" ${option.value === defaultValue ? "checked" : ""} />
+            <span>${escapeHtml(option.label)}</span>
+          </label>
+        `).join("")}
+      </div>
+    </fieldset>
   `;
 }
 
