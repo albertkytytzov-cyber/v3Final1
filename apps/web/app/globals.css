@@ -3785,9 +3785,9 @@ select {
 
 .planning-template-delete-bar {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: 10px;
-  align-items: center;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  align-items: stretch;
   padding: 10px 12px;
   border-radius: 14px;
   border: 1px solid rgba(148, 163, 184, 0.18);
@@ -3825,10 +3825,18 @@ select {
 }
 
 .planning-template-delete-actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(132px, 100%), 1fr));
   gap: 8px;
+  min-width: 0;
+}
+
+.planning-template-delete-actions .planning-template-delete-button,
+.planning-template-delete-actions .planning-template-clear-button,
+.planning-assigned-delete-actions .planning-template-delete-button,
+.planning-assigned-delete-actions .planning-assigned-clear-button {
+  width: 100%;
+  justify-self: stretch;
 }
 
 .planning-template-clear-button {
@@ -3848,6 +3856,50 @@ select {
   opacity: 0.58;
 }
 
+.planning-template-exercise-details {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 9px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(248, 250, 252, 0.72);
+}
+
+.planning-template-exercise-details summary {
+  color: var(--muted-strong);
+  font-size: 0.82rem;
+  font-weight: 800;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+.planning-template-exercise-preview {
+  display: grid;
+  gap: 10px;
+  padding-top: 8px;
+}
+
+.planning-template-exercise-session,
+.planning-template-exercise-block {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.planning-template-exercise-session > strong,
+.planning-template-exercise-block > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.planning-template-exercise-block {
+  padding: 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  background: rgba(255, 255, 255, 0.74);
+}
+
 .planning-assigned-plan-list {
   display: grid;
   gap: 10px;
@@ -3855,9 +3907,9 @@ select {
 
 .planning-assigned-delete-bar {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: 10px;
-  align-items: center;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  align-items: stretch;
   padding: 10px 12px;
   border-radius: 14px;
   border: 1px solid rgba(148, 163, 184, 0.18);
@@ -3895,10 +3947,10 @@ select {
 }
 
 .planning-assigned-delete-actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(132px, 100%), 1fr));
   gap: 8px;
+  min-width: 0;
 }
 
 .planning-assigned-clear-button {

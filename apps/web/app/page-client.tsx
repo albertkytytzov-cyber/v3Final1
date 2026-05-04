@@ -659,6 +659,46 @@ type ImportedPlanDraft = {
   days: ImportedPlanDayDraft[];
 };
 
+type TemplateExercisePreviewSession = {
+  name: string;
+  blocks: PlanTemplatePayload["blocks"];
+};
+
+function getTemplateExercisePreviewSessions(
+  template: Pick<PlanTemplateSummary, "blocks" | "days">,
+): TemplateExercisePreviewSession[] {
+  const daySessions =
+    template.days?.flatMap((day) =>
+      day.sessions.map((session) => ({
+        name: `${day.label} / ${session.name}`,
+        blocks: session.blocks,
+      })),
+    ) ?? [];
+
+  if (daySessions.length) {
+    return daySessions;
+  }
+
+  return [
+    {
+      name: "",
+      blocks: template.blocks,
+    },
+  ];
+}
+
+function countTemplateExercises(template: Pick<PlanTemplateSummary, "blocks" | "days">) {
+  return getTemplateExercisePreviewSessions(template).reduce(
+    (total, session) =>
+      total +
+      session.blocks.reduce(
+        (sessionTotal, block) => sessionTotal + (block.exercises?.length ?? 0),
+        0,
+      ),
+    0,
+  );
+}
+
 function normalizeImportedPlanText(value: string) {
   return value.replace(/\s+/g, " ").trim();
 }
@@ -733,6 +773,32 @@ function extractImportedRpe(value: string) {
   return Number(match[1].replace(",", "."));
 }
 
+function isGenericImportedExerciseGroup(name: string) {
+  return /^(?:состав|внутри\b|повторы|комплекс)/iu.test(name.trim());
+}
+
+function splitImportedExerciseItems(value: string) {
+  return value
+    .split(/\s*(?:\/|\+|;)\s*/u)
+    .map(normalizeImportedPlanText)
+    .filter((item) => /[a-zа-яё]/iu.test(item));
+}
+
+function buildImportedExerciseItems(name: string, volume: string, control: string) {
+  const details = [volume, control].filter(Boolean);
+
+  if (!isGenericImportedExerciseGroup(name) || details.length === 0) {
+    return [];
+  }
+
+  const candidates = details.flatMap(splitImportedExerciseItems);
+  const uniqueItems = candidates.filter(
+    (item, index) => candidates.findIndex((candidate) => candidate === item) === index,
+  );
+
+  return uniqueItems.length > 1 ? uniqueItems : [];
+}
+
 function inferImportedBlockType(value: string): PlanBlockType {
   const normalized = value.toLowerCase();
 
@@ -780,6 +846,36 @@ function createImportedPlanBlock(
   const rpe = extractImportedRpe(details);
   const { sets, reps } = extractImportedSetsReps(details);
   const isMandatory = blockType !== "recovery" && blockType !== "mobility";
+  const exerciseItems = buildImportedExerciseItems(name, volume, control);
+  const exercises = exerciseItems.length
+    ? exerciseItems.map((item, exerciseIndex) => {
+        const itemDuration = extractImportedDurationMinutes(item) ?? duration;
+        const itemRpe = extractImportedRpe(item) ?? rpe;
+        const itemSetsReps = extractImportedSetsReps(item);
+
+        return {
+          name: item,
+          targetSets: itemSetsReps.sets ?? sets,
+          targetReps: itemSetsReps.reps ?? reps,
+          targetWeightKg: null,
+          targetDurationMinutes: itemDuration,
+          targetRpe: itemRpe,
+          notes,
+          displayOrder: displayOrder + exerciseIndex,
+        };
+      })
+    : [
+        {
+          name: name || "Импортированное упражнение",
+          targetSets: sets,
+          targetReps: reps,
+          targetWeightKg: null,
+          targetDurationMinutes: duration,
+          targetRpe: rpe,
+          notes,
+          displayOrder,
+        },
+      ];
 
   return {
     name: name || "Импортированный блок",
@@ -795,18 +891,7 @@ function createImportedPlanBlock(
     targetSets: sets,
     targetReps: reps,
     notes,
-    exercises: [
-      {
-        name: name || "Импортированное упражнение",
-        targetSets: sets,
-        targetReps: reps,
-        targetWeightKg: null,
-        targetDurationMinutes: duration,
-        targetRpe: rpe,
-        notes,
-        displayOrder,
-      },
-    ],
+    exercises,
   };
 }
 
@@ -13652,7 +13737,7 @@ export function PageClient({
                       </span>
                     </div>
                     <div className="planning-template-import-days">
-                      {importedPlanDraft.days.slice(0, 8).map((day) => (
+                      {importedPlanDraft.days.map((day) => (
                         <button
                           className={`planning-template-import-day ${
                             planForm.name === day.template.name ? "is-active" : ""
@@ -13670,15 +13755,16 @@ export function PageClient({
                           <strong>{day.label}</strong>
                           <span>
                             {day.dayDate ?? `+${day.dayOffset}`} /{" "}
-                            {blocksCountLabel(day.blockCount, language)}
+                            {blocksCountLabel(day.blockCount, language)} /{" "}
+                            {copyFor(language, {
+                              en: "ex.",
+                              ru: "упр.",
+                              bg: "упр.",
+                            })}{" "}
+                            {countTemplateExercises(day.template)}
                           </span>
                         </button>
                       ))}
-                      {importedPlanDraft.days.length > 8 ? (
-                        <span className="planning-template-import-more">
-                          +{importedPlanDraft.days.length - 8}
-                        </span>
-                      ) : null}
                     </div>
                     <div className="planning-template-import-actions">
                       <label className="field">
@@ -14424,7 +14510,11 @@ export function PageClient({
                       </button>
                     </div>
                   </div>
-                  {planTemplates.map((template) => (
+                  {planTemplates.map((template) => {
+                    const previewSessions = getTemplateExercisePreviewSessions(template);
+                    const exerciseCount = countTemplateExercises(template);
+
+                    return (
                     <article
                       className={`planning-template-library-card ${
                         assignedPlanForm.templateId === template.id ? "is-active" : ""
@@ -14473,6 +14563,12 @@ export function PageClient({
                         <em>
                           {blocksCountLabel(template.blockCount, language)} /{" "}
                           {copyFor(language, {
+                            en: "exercises",
+                            ru: "упражнений",
+                            bg: "упражнения",
+                          })}{" "}
+                          {exerciseCount} /{" "}
+                          {copyFor(language, {
                             en: "load",
                             ru: "нагрузка",
                             bg: "натоварване",
@@ -14480,6 +14576,56 @@ export function PageClient({
                           {template.estimatedLoad}
                         </em>
                       </button>
+                      <details className="planning-template-exercise-details">
+                        <summary>
+                          {copyFor(language, {
+                            en: "Show exercises",
+                            ru: "Показать упражнения",
+                            bg: "Покажи упражненията",
+                          })}{" "}
+                          ({exerciseCount})
+                        </summary>
+                        <div className="planning-template-exercise-preview">
+                          {previewSessions.map((session, sessionIndex) => (
+                            <section
+                              className="planning-template-exercise-session"
+                              key={`${template.id}-${session.name}-${sessionIndex}`}
+                            >
+                              <strong>
+                                {session.name ||
+                                  copyFor(language, {
+                                    en: "Template",
+                                    ru: "Шаблон",
+                                    bg: "Шаблон",
+                                  })}
+                              </strong>
+                              {session.blocks.map((block, blockIndex) => (
+                                <div
+                                  className="planning-template-exercise-block"
+                                  key={`${block.name}-${blockIndex}`}
+                                >
+                                  <span>{translateKnownTemplateText(block.name, language)}</span>
+                                  {(block.exercises ?? []).length ? (
+                                    <div className="assigned-exercise-list">
+                                      {(block.exercises ?? []).map((exercise, exerciseIndex) => (
+                                        <div
+                                          className="assigned-exercise-row"
+                                          key={`${exercise.name}-${exerciseIndex}`}
+                                        >
+                                          <strong>{exercise.name}</strong>
+                                          <span>{formatExerciseTarget(exercise, language)}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <small>{block.notes}</small>
+                                  )}
+                                </div>
+                              ))}
+                            </section>
+                          ))}
+                        </div>
+                      </details>
                       <button
                         className="planning-template-delete-button"
                         disabled={busy}
@@ -14493,7 +14639,8 @@ export function PageClient({
                         })}
                       </button>
                     </article>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
