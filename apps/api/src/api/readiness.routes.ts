@@ -58,6 +58,18 @@ export function registerReadinessRoutes(
     };
   });
 
+  app.get("/api/v1/readiness/recent", async (request) => {
+    const user = await dependencies.guards.requireUser(request);
+
+    if (!user.athlete_id) {
+      throw dependencies.httpError(403, "Only athlete accounts have readiness entries");
+    }
+
+    return {
+      entries: await listRecentReadinessEntries(user.athlete_id),
+    };
+  });
+
   app.get("/api/v1/readiness/day", async (request) => {
     const user = await dependencies.guards.requireUser(request);
 

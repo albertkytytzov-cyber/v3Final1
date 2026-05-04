@@ -52,6 +52,7 @@ export interface MobileDataSnapshot {
   competitions: CompetitionSummary[];
   competitionPlans: CompetitionPlanSummary[];
   readinessEntry: ReadinessEntry | null;
+  readinessHistory: ReadinessEntry[];
   executionResults: ExecutionResult[];
 }
 
@@ -98,6 +99,7 @@ export function createEmptySnapshot(): MobileDataSnapshot {
     competitions: [],
     competitionPlans: [],
     readinessEntry: null,
+    readinessHistory: [],
     executionResults: [],
   };
 }

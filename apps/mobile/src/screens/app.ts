@@ -23,6 +23,7 @@ import type {
   MobileAppState,
   MobileDataSnapshot,
   MobileScreen,
+  ReadinessEntry,
   ReadinessSubmissionPayload,
 } from "../types/models.js";
 
@@ -210,6 +211,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
       const snapshot = {
         ...state.data,
         readinessEntry: result.entry,
+        readinessHistory: upsertReadinessHistory(state.data.readinessHistory, result.entry),
         savedAt: new Date().toISOString(),
       };
       saveSnapshot(snapshot);
@@ -702,6 +704,7 @@ function renderReadinessScreen(state: MobileAppState) {
   }
 
   const readiness = state.data.readinessEntry;
+  const readinessHistory = getReadinessHistory(state);
 
   return `
     <div class="screen-head readiness-head">
@@ -770,6 +773,7 @@ function renderReadinessScreen(state: MobileAppState) {
       </section>
       <button class="primary-action" type="submit">Сохранить готовность</button>
     </form>
+    ${renderReadinessHistory(readinessHistory)}
   `;
 }
 
@@ -910,6 +914,30 @@ function applyReadinessPreset(form: HTMLFormElement, preset: string) {
 
 function cssEscape(value: string) {
   return value.replace(/["\\]/g, "\\$&");
+}
+
+function renderReadinessHistory(entries: ReadinessEntry[]) {
+  if (entries.length === 0) {
+    return "";
+  }
+
+  return `
+    <section class="readiness-history">
+      <div class="section-title">
+        <h3>Предыдущие дни</h3>
+      </div>
+      <div class="readiness-history-list">
+        ${entries.map((entry) => `
+          <article class="readiness-history-card readiness-${escapeHtml(entry.status)}">
+            <time>${formatDate(entry.entryDate)}</time>
+            <strong>${entry.score}</strong>
+            <span>${formatReadinessStatus(entry.status)}</span>
+            <small>${formatReadinessHistoryDetails(entry)}</small>
+          </article>
+        `).join("")}
+      </div>
+    </section>
+  `;
 }
 
 interface ExecutionBlockItem {
@@ -1356,6 +1384,20 @@ function formatReadinessStatus(status: string) {
   return status;
 }
 
+function formatReadinessHistoryDetails(entry: ReadinessEntry) {
+  const flags = [
+    entry.fatigueLevel >= 4 ? "усталость" : "",
+    entry.muscleSoreness >= 4 ? "мышцы" : "",
+    entry.painLevel >= 5 ? "боль" : "",
+    entry.illnessFlag ? "болезнь" : "",
+    entry.feverFlag ? "температура" : "",
+  ].filter(Boolean);
+
+  return flags.length
+    ? flags.join(" · ")
+    : `сон ${entry.sleepHours} ч · пульс ${entry.restingHr}`;
+}
+
 function formatInputValue(value: number | null | undefined) {
   return value === null || value === undefined ? "" : String(value);
 }
@@ -1371,6 +1413,19 @@ function formatExecutionHistoryDetails(result: ExecutionResult) {
 
 function getCompetitionPlansForAthlete(state: MobileAppState, athleteId: string | null) {
   return state.data.competitionPlans.filter((plan) => !athleteId || plan.athleteId === athleteId);
+}
+
+function getReadinessHistory(state: MobileAppState) {
+  const entries = state.data.readinessHistory.length
+    ? state.data.readinessHistory
+    : state.data.readinessEntry
+      ? [state.data.readinessEntry]
+      : [];
+
+  return entries
+    .slice()
+    .sort((left, right) => right.entryDate.localeCompare(left.entryDate))
+    .slice(0, 10);
 }
 
 function getNextCompetitionPlan(plans: CompetitionPlanSummary[]) {
@@ -1395,6 +1450,14 @@ function upsertById<T extends { id: string }>(items: T[], item: T) {
   const nextItems = items.filter((value) => value.id !== item.id);
   nextItems.unshift(item);
   return nextItems;
+}
+
+function upsertReadinessHistory(items: ReadinessEntry[], entry: ReadinessEntry) {
+  const nextItems = items.filter((item) => item.entryDate !== entry.entryDate);
+  nextItems.unshift(entry);
+  return nextItems
+    .sort((left, right) => right.entryDate.localeCompare(left.entryDate))
+    .slice(0, 14);
 }
 
 function readString(form: HTMLFormElement, name: string) {

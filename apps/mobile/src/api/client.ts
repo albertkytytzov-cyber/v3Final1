@@ -104,6 +104,7 @@ export class MobileApiClient {
       competitionPlans,
       athletes,
       readiness,
+      readinessHistory,
       execution,
     ] = await Promise.all([
       this.request<{ assignedPlans: AssignedPlanSummary[] }>("/plans/assigned"),
@@ -120,6 +121,10 @@ export class MobileApiClient {
             .catch(() => ({ entry: null }))
         : Promise.resolve({ entry: null }),
       userRole === "athlete"
+        ? this.request<{ entries: ReadinessEntry[] }>("/readiness/recent")
+            .catch(() => ({ entries: [] }))
+        : Promise.resolve({ entries: [] }),
+      userRole === "athlete"
         ? this.request<{ results: ExecutionResult[] }>("/execution")
             .catch(() => ({ results: [] }))
         : Promise.resolve({ results: [] }),
@@ -132,6 +137,7 @@ export class MobileApiClient {
       competitions: competitions.competitions,
       executionResults: execution.results,
       readinessEntry: readiness.entry,
+      readinessHistory: readinessHistory.entries,
     };
   }
 
