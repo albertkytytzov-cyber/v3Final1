@@ -995,37 +995,39 @@ function renderExecutionPlanGroup(
   ).length;
 
   return `
-    <details class="execution-plan-group" ${isOpen ? "open" : ""}>
-      <summary>
+    <details class="execution-plan-group mobile-plan-day-card mobile-execution-day-card" ${isOpen ? "open" : ""}>
+      <summary class="mobile-plan-day-card-head">
         <div>
           <strong>${formatDate(group.plan.day.dayDate)} · ${escapeHtml(group.plan.day.label)}</strong>
-          <span>${escapeHtml(group.plan.templateName)}</span>
+          <span>${escapeHtml(group.plan.templateName)} · ${blockCount} блоков · ${exerciseCount} упр.</span>
         </div>
         <em>${completedBlockCount}/${blockCount}</em>
-        <small>${blockCount} блоков · ${exerciseCount} упр.</small>
       </summary>
-      <div class="execution-block-stack">
-        <article class="mobile-plan-day-card mobile-execution-day-card">
-          <div class="mobile-plan-day-card-body">
-            ${group.plan.day.sessions.map((session) => `
-              <section class="mobile-plan-session">
-                <h4>${escapeHtml(session.name)}</h4>
-                ${session.blocks
-                  .map((block) =>
-                    renderExecutionBlockForm(
-                      {
-                        block,
-                        plan: group.plan,
-                        sessionName: session.name,
-                      },
-                      getExecutionResultForBlock(state, group.plan.id, block.id),
-                    ),
-                  )
-                  .join("")}
-              </section>
-            `).join("")}
-          </div>
-        </article>
+      <div class="mobile-plan-day-card-body">
+        ${group.plan.day.sessions.map((session) => `
+          <section class="mobile-plan-session">
+            <h4>${escapeHtml(session.name)}</h4>
+            <div class="mobile-plan-table">
+              <div class="mobile-plan-table-head">
+                <span>Упр.</span>
+                <span>Подходы</span>
+                <span>Контр.</span>
+              </div>
+              ${session.blocks
+                .map((block) =>
+                  renderExecutionBlockForm(
+                    {
+                      block,
+                      plan: group.plan,
+                      sessionName: session.name,
+                    },
+                    getExecutionResultForBlock(state, group.plan.id, block.id),
+                  ),
+                )
+                .join("")}
+            </div>
+          </section>
+        `).join("")}
       </div>
     </details>
   `;
@@ -1033,43 +1035,17 @@ function renderExecutionPlanGroup(
 
 function renderExecutionBlockForm(item: ExecutionBlockItem, result: ExecutionResult | null) {
   const exercises = item.block.exercises ?? [];
-  const completedCount = result?.exerciseResults?.filter((exercise) => exercise.completed).length ?? 0;
-  const statusText = result
-    ? exercises.length > 0
-      ? `${completedCount} из ${exercises.length} выполнено`
-      : result.completed ? "Выполнено" : "Не выполнено"
-    : "Не заполнено";
-
   return `
-    <form class="mobile-form compact-form execution-block-form mobile-plan-block-form" data-execution-form>
+    <form class="mobile-execution-row-form" data-execution-form>
       <input name="assignedPlanId" type="hidden" value="${escapeHtml(item.plan.id)}" />
       <input name="assignedBlockId" type="hidden" value="${escapeHtml(item.block.id)}" />
-      <div class="execution-block-head wide-field">
-        <div>
-          <strong>${escapeHtml(item.block.name)}</strong>
-          <span>${escapeHtml(item.sessionName)} · ${escapeHtml(item.plan.plannedPhase ?? "фаза не задана")}</span>
-        </div>
-        <em>${escapeHtml(statusText)}</em>
-      </div>
-      ${exercises.length > 0 ? `
-        <div class="mobile-plan-table execution-exercise-list wide-field">
-          <div class="mobile-plan-table-head">
-            <span>Упр.</span>
-            <span>Подходы</span>
-            <span>Контроль</span>
-          </div>
-          ${exercises
+      ${exercises.length > 0
+        ? exercises
             .slice()
             .sort((a, b) => a.orderIndex - b.orderIndex)
-            .map((exercise) => renderExecutionExerciseRow(exercise, getExerciseResult(result, exercise.id)))
-            .join("")}
-        </div>
-      ` : renderBlockFallbackFields(result)}
-      <label class="wide-field">
-        <span>Комментарий по блоку</span>
-        <textarea name="notes" rows="2">${escapeHtml(result?.notes ?? "")}</textarea>
-      </label>
-      <button class="primary-action" type="submit">Сохранить этот блок</button>
+            .map((exercise) => renderExecutionExerciseRow(exercise, getExerciseResult(result, exercise.id), result))
+            .join("")
+        : renderExecutionBlockFallbackRow(item.block, result)}
     </form>
   `;
 }
@@ -1077,9 +1053,10 @@ function renderExecutionBlockForm(item: ExecutionBlockItem, result: ExecutionRes
 function renderExecutionExerciseRow(
   exercise: AssignedBlockExercise,
   result: ExecutionExerciseResult | null,
+  blockResult: ExecutionResult | null,
 ) {
   return `
-    <article class="mobile-plan-row execution-exercise-card" data-execution-exercise data-exercise-id="${escapeHtml(exercise.id)}">
+    <div class="mobile-plan-row mobile-execution-row" data-execution-exercise data-exercise-id="${escapeHtml(exercise.id)}">
       <label class="execution-exercise-check mobile-plan-exercise-name">
         <input name="exerciseCompleted:${escapeHtml(exercise.id)}" type="checkbox" ${result?.completed ? "checked" : ""} />
         <span>
@@ -1087,20 +1064,53 @@ function renderExecutionExerciseRow(
           <small>${result?.completed ? "выполнено" : "не отмечено"}</small>
         </span>
       </label>
-      <span class="mobile-plan-cell">${escapeHtml(formatExerciseWorkCell(exercise))}</span>
-      <span class="mobile-plan-cell">${escapeHtml(formatExerciseControlCell(exercise))}</span>
-      <div class="execution-exercise-fields">
-        <label><span>Подх.</span><input inputmode="numeric" name="exerciseSets:${escapeHtml(exercise.id)}" placeholder="${escapeHtml(exercise.targetSets)}" type="number" min="0" value="${formatInputValue(result?.setsCompleted)}" /></label>
-        <label><span>Повт.</span><input inputmode="numeric" name="exerciseReps:${escapeHtml(exercise.id)}" placeholder="${escapeHtml(exercise.targetReps)}" type="number" min="0" value="${formatInputValue(result?.repsCompleted)}" /></label>
-        <label><span>Кг</span><input inputmode="decimal" name="exerciseWeight:${escapeHtml(exercise.id)}" placeholder="${escapeHtml(exercise.targetWeightKg)}" type="number" min="0" step="0.5" value="${formatInputValue(result?.weightKg)}" /></label>
-        <label><span>Мин.</span><input inputmode="numeric" name="exerciseDuration:${escapeHtml(exercise.id)}" placeholder="${escapeHtml(exercise.targetDurationMinutes)}" type="number" min="0" value="${formatInputValue(result?.durationMinutes)}" /></label>
-        <label><span>RPE</span><input inputmode="numeric" name="exerciseRpe:${escapeHtml(exercise.id)}" placeholder="${escapeHtml(exercise.targetRpe)}" type="number" min="1" max="10" value="${formatInputValue(result?.rpe)}" /></label>
-      </div>
-      <label class="exercise-note">
-        <span>Заметка</span>
-        <input name="exerciseNotes:${escapeHtml(exercise.id)}" placeholder="${escapeHtml(exercise.notes || "по упражнению")}" value="${escapeHtml(result?.notes ?? "")}" />
+      <span class="mobile-plan-cell mobile-plan-work">${escapeHtml(formatExerciseWorkCell(exercise))}</span>
+      <span class="mobile-plan-cell mobile-plan-control">${escapeHtml(formatExerciseControlCell(exercise))}</span>
+      <details class="mobile-execution-row-details">
+        <summary>Факт</summary>
+        <div class="execution-exercise-fields">
+          <label><span>Подх.</span><input inputmode="numeric" name="exerciseSets:${escapeHtml(exercise.id)}" placeholder="${escapeHtml(exercise.targetSets)}" type="number" min="0" value="${formatInputValue(result?.setsCompleted)}" /></label>
+          <label><span>Повт.</span><input inputmode="numeric" name="exerciseReps:${escapeHtml(exercise.id)}" placeholder="${escapeHtml(exercise.targetReps)}" type="number" min="0" value="${formatInputValue(result?.repsCompleted)}" /></label>
+          <label><span>Кг</span><input inputmode="decimal" name="exerciseWeight:${escapeHtml(exercise.id)}" placeholder="${escapeHtml(exercise.targetWeightKg)}" type="number" min="0" step="0.5" value="${formatInputValue(result?.weightKg)}" /></label>
+          <label><span>Мин.</span><input inputmode="numeric" name="exerciseDuration:${escapeHtml(exercise.id)}" placeholder="${escapeHtml(exercise.targetDurationMinutes)}" type="number" min="0" value="${formatInputValue(result?.durationMinutes)}" /></label>
+          <label><span>RPE</span><input inputmode="numeric" name="exerciseRpe:${escapeHtml(exercise.id)}" placeholder="${escapeHtml(exercise.targetRpe)}" type="number" min="1" max="10" value="${formatInputValue(result?.rpe)}" /></label>
+        </div>
+        <label class="exercise-note">
+          <span>Заметка</span>
+          <input name="exerciseNotes:${escapeHtml(exercise.id)}" placeholder="${escapeHtml(exercise.notes || "по упражнению")}" value="${escapeHtml(result?.notes ?? "")}" />
+        </label>
+        <label class="exercise-note">
+          <span>Комментарий</span>
+          <input name="notes" value="${escapeHtml(blockResult?.notes ?? "")}" />
+        </label>
+        <button class="primary-action" type="submit">Сохранить</button>
+      </details>
+    </div>
+  `;
+}
+
+function renderExecutionBlockFallbackRow(block: AssignedPlanBlock, result: ExecutionResult | null) {
+  return `
+    <div class="mobile-plan-row mobile-execution-row">
+      <label class="execution-exercise-check mobile-plan-exercise-name">
+        <input name="completed" type="checkbox" ${result?.completed !== false ? "checked" : ""} />
+        <span>
+          <strong>${escapeHtml(block.name)}</strong>
+          <small>${result?.completed ? "выполнено" : "не отмечено"}</small>
+        </span>
       </label>
-    </article>
+      <span class="mobile-plan-cell mobile-plan-work">${escapeHtml(formatBlockTarget(block))}</span>
+      <span class="mobile-plan-cell mobile-plan-control">${escapeHtml(block.notes || "-")}</span>
+      <details class="mobile-execution-row-details">
+        <summary>Факт</summary>
+        ${renderBlockFallbackFields(result)}
+        <label class="exercise-note">
+          <span>Комментарий</span>
+          <input name="notes" value="${escapeHtml(result?.notes ?? "")}" />
+        </label>
+        <button class="primary-action" type="submit">Сохранить</button>
+      </details>
+    </div>
   `;
 }
 
@@ -1180,7 +1190,7 @@ function renderPlanCard(plan: AssignedPlanSummary) {
               <div class="mobile-plan-table-head">
                 <span>Упр.</span>
                 <span>Подходы</span>
-                <span>Контроль</span>
+                <span>Контр.</span>
               </div>
               ${session.blocks.map((block) => renderPlanBlock(block)).join("")}
             </div>
@@ -1197,15 +1207,15 @@ function renderPlanBlock(block: AssignedPlanBlock) {
   return `
     ${exercises.length > 0 ? exercises.map((exercise) => `
       <div class="mobile-plan-row">
-        <span>${escapeHtml(exercise.name)}</span>
-        <span>${escapeHtml(formatExerciseWorkCell(exercise))}</span>
-        <span>${escapeHtml(formatExerciseControlCell(exercise))}</span>
+        <span class="mobile-plan-exercise-name-static">${escapeHtml(exercise.name)}</span>
+        <span class="mobile-plan-cell mobile-plan-work">${escapeHtml(formatExerciseWorkCell(exercise))}</span>
+        <span class="mobile-plan-cell mobile-plan-control">${escapeHtml(formatExerciseControlCell(exercise))}</span>
       </div>
     `).join("") : `
       <div class="mobile-plan-row">
-        <span>${escapeHtml(block.name)}</span>
-        <span>${escapeHtml(formatBlockTarget(block))}</span>
-        <span>-</span>
+        <span class="mobile-plan-exercise-name-static">${escapeHtml(block.name)}</span>
+        <span class="mobile-plan-cell mobile-plan-work">${escapeHtml(formatBlockTarget(block))}</span>
+        <span class="mobile-plan-cell mobile-plan-control">-</span>
       </div>
     `}
   `;
