@@ -5432,11 +5432,7 @@ export function PageClient({
         templateId: "",
         startDate: draft.startDate,
         dayLabel: firstDay.label,
-        notes: copyFor(language, {
-          en: `Imported from ${draft.sourceFileName}`,
-          ru: `Импорт из файла ${draft.sourceFileName}`,
-          bg: `Импорт от файла ${draft.sourceFileName}`,
-        }),
+        notes: "",
       }));
       setStatusMessage(
         copyFor(language, {
@@ -5501,13 +5497,7 @@ export function PageClient({
         athleteId,
         startDate,
         daysCount: maxOffset + 1,
-        notes:
-          assignedPlanForm.notes ||
-          copyFor(language, {
-            en: `Imported from ${importedPlanDraft.sourceFileName}`,
-            ru: `Импорт из файла ${importedPlanDraft.sourceFileName}`,
-            bg: `Импорт от файла ${importedPlanDraft.sourceFileName}`,
-          }),
+        notes: assignedPlanForm.notes,
         plannedPhase: assignedPlanForm.plannedPhase,
         items: createdItems,
       };

@@ -1172,6 +1172,7 @@ function renderExecutionHistory(state: MobileAppState) {
 function renderPlanCard(plan: AssignedPlanSummary) {
   const blocks = plan.day.sessions.flatMap((session) => session.blocks);
   const exerciseCount = countPlanExercises(plan);
+  const dayFocus = formatAssignedPlanDayFocus(plan);
 
   return `
     <article class="mobile-plan-day-card plan-card">
@@ -1180,7 +1181,7 @@ function renderPlanCard(plan: AssignedPlanSummary) {
           <strong>${formatDate(plan.day.dayDate)} · ${escapeHtml(plan.day.label)}</strong>
           <span>${escapeHtml(plan.templateName)} · ${blocks.length} блоков · ${exerciseCount} упражнений</span>
         </div>
-        <em>${escapeHtml(plan.day.notes || plan.plannedPhase || "план")}</em>
+        <em>${escapeHtml(dayFocus)}</em>
       </header>
       <div class="mobile-plan-day-card-body">
         ${plan.day.sessions.map((session) => `
@@ -1388,6 +1389,18 @@ function countPlanExercises(plan: AssignedPlanSummary) {
       blockTotal + (block.exercises?.length ?? 0),
     0),
   0);
+}
+
+function formatAssignedPlanDayFocus(plan: AssignedPlanSummary) {
+  return cleanAssignedPlanNotes(plan.day.notes) || plan.plannedPhase || "план";
+}
+
+function cleanAssignedPlanNotes(notes?: string | null) {
+  const parts = splitExerciseNoteParts(notes).filter((part) =>
+    !/^(?:imported from|импорт(?:ировано)?\s+(?:из|от)\s+файла)/iu.test(part),
+  );
+
+  return parts.join(" / ");
 }
 
 function splitExerciseNoteParts(notes?: string | null) {
