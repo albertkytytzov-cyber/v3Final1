@@ -1,10 +1,13 @@
 import type {
+  AssignedBlockExercise,
+  AssignedPlanBlock,
   AssignedPlanSummary,
   AuthUser,
   CoachAthleteSummary,
   CompetitionPlanSummary,
   CompetitionResultPayload,
   CompetitionSummary,
+  ExecutionExerciseResult,
   ExecutionResult,
   ExecutionResultInput,
   ReadinessEntry,
@@ -12,6 +15,8 @@ import type {
 } from "@training-platform/shared";
 
 export type {
+  AssignedBlockExercise,
+  AssignedPlanBlock,
   AssignedPlanSummary,
   AuthResponse,
   AuthUser,
@@ -19,6 +24,7 @@ export type {
   CompetitionPlanSummary,
   CompetitionResultPayload,
   CompetitionSummary,
+  ExecutionExerciseResult,
   ExecutionResult,
   ExecutionResultInput,
   ReadinessEntry,

@@ -12,9 +12,13 @@ import {
 } from "../storage/local-store.js";
 import { createPendingAction, enqueueAction, flushSyncQueue } from "../sync/sync-queue.js";
 import type {
+  AssignedBlockExercise,
+  AssignedPlanBlock,
   AssignedPlanSummary,
   CompetitionPlanSummary,
   CompetitionResultPayload,
+  ExecutionExerciseResult,
+  ExecutionResult,
   ExecutionResultInput,
   MobileAppState,
   MobileDataSnapshot,
@@ -215,23 +219,46 @@ export function bootstrapMobileApp(root: HTMLElement) {
 
   const submitExecution = async (form: HTMLFormElement) => {
     const blockKey = readString(form, "assignedBlock");
-    const [assignedPlanId, assignedBlockId] = blockKey.split("|");
+    const [legacyAssignedPlanId, legacyAssignedBlockId] = blockKey.split("|");
+    const assignedPlanId = readString(form, "assignedPlanId") || legacyAssignedPlanId;
+    const assignedBlockId = readString(form, "assignedBlockId") || legacyAssignedBlockId;
 
     if (!assignedPlanId || !assignedBlockId) {
       update({ error: "Выберите блок плана" });
       return;
     }
 
+    const exercises = Array
+      .from(form.querySelectorAll<HTMLElement>("[data-execution-exercise]"))
+      .map((element) => {
+        const assignedExerciseId = element.dataset.exerciseId ?? "";
+
+        return {
+          assignedExerciseId,
+          completed: readCheckbox(form, `exerciseCompleted:${assignedExerciseId}`),
+          durationMinutes: readOptionalNumber(form, `exerciseDuration:${assignedExerciseId}`),
+          notes: readString(form, `exerciseNotes:${assignedExerciseId}`),
+          repsCompleted: readOptionalNumber(form, `exerciseReps:${assignedExerciseId}`),
+          rpe: readOptionalNumber(form, `exerciseRpe:${assignedExerciseId}`),
+          setsCompleted: readOptionalNumber(form, `exerciseSets:${assignedExerciseId}`),
+          weightKg: readOptionalNumber(form, `exerciseWeight:${assignedExerciseId}`),
+        };
+      })
+      .filter((exercise) => Boolean(exercise.assignedExerciseId));
+
     const payload: ExecutionResultInput = {
       assignedBlockId,
       assignedPlanId,
-      completed: readCheckbox(form, "completed"),
+      completed: exercises.length > 0
+        ? exercises.every((exercise) => exercise.completed)
+        : readCheckbox(form, "completed"),
       durationMinutes: readOptionalNumber(form, "durationMinutes"),
       notes: readString(form, "notes"),
       repsCompleted: readOptionalNumber(form, "repsCompleted"),
       rpe: readOptionalNumber(form, "rpe"),
       setsCompleted: readOptionalNumber(form, "setsCompleted"),
       weightKg: readOptionalNumber(form, "weightKg"),
+      exercises: exercises.length > 0 ? exercises : undefined,
     };
 
     await submitOrQueue("execution", payload, async (idempotencyKey) => {
@@ -376,9 +403,11 @@ export function bootstrapMobileApp(root: HTMLElement) {
       void submitReadiness(event.currentTarget as HTMLFormElement);
     });
 
-    root.querySelector<HTMLFormElement>("[data-execution-form]")?.addEventListener("submit", (event) => {
-      event.preventDefault();
-      void submitExecution(event.currentTarget as HTMLFormElement);
+    root.querySelectorAll<HTMLFormElement>("[data-execution-form]").forEach((form) => {
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        void submitExecution(event.currentTarget as HTMLFormElement);
+      });
     });
 
     root.querySelector<HTMLFormElement>("[data-competition-result-form]")?.addEventListener("submit", (event) => {
@@ -651,7 +680,7 @@ function renderResultsScreen(state: MobileAppState, athleteId: string | null) {
       <h2>Результаты</h2>
       <p>Тренировка и соревнование сохраняются локально, если нет интернета.</p>
     </div>
-    ${renderExecutionForm(plans)}
+    ${renderExecutionForm(state, plans)}
     ${state.session.user?.role === "coach" || state.session.user?.role === "admin" ? renderCompetitionResultForm(competitionPlans) : ""}
     ${renderExecutionHistory(state)}
   `;
@@ -756,38 +785,106 @@ function renderChoiceGroup(
   `;
 }
 
-function renderExecutionForm(plans: AssignedPlanSummary[]) {
-  const blockOptions = plans.flatMap((plan) =>
-    plan.day.sessions.flatMap((session) =>
-      session.blocks.map((block) => ({
-        label: `${plan.templateName} · ${session.name} · ${block.name}`,
-        value: `${plan.id}|${block.id}`,
-      })),
-    ),
-  );
+interface ExecutionBlockItem {
+  plan: AssignedPlanSummary;
+  sessionName: string;
+  block: AssignedPlanBlock;
+}
 
-  if (blockOptions.length === 0) {
+function renderExecutionForm(state: MobileAppState, plans: AssignedPlanSummary[]) {
+  const blockItems = getExecutionBlockItems(plans);
+
+  if (blockItems.length === 0) {
     return renderEmpty("Нет блоков для результата", "Назначенный план появится после обновления данных.");
   }
 
   return `
-    <form class="mobile-form compact-form" data-execution-form>
-      <h3>Результат тренировки</h3>
-      <label>
-        <span>Блок плана</span>
-        <select name="assignedBlock">
-          ${blockOptions.map((option) => `<option value="${escapeHtml(option.value)}">${escapeHtml(option.label)}</option>`).join("")}
-        </select>
+    <section class="execution-panel">
+      <div class="section-title">
+        <h3>Результат тренировки</h3>
+        <p>Откройте нужный блок, отметьте выполненные упражнения и сохраните факт.</p>
+      </div>
+      <div class="execution-block-stack">
+        ${blockItems.map((item) => renderExecutionBlockForm(item, getExecutionResultForBlock(state, item.plan.id, item.block.id))).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderExecutionBlockForm(item: ExecutionBlockItem, result: ExecutionResult | null) {
+  const exercises = item.block.exercises ?? [];
+  const completedCount = result?.exerciseResults?.filter((exercise) => exercise.completed).length ?? 0;
+  const statusText = result
+    ? exercises.length > 0
+      ? `${completedCount} из ${exercises.length} выполнено`
+      : result.completed ? "Выполнено" : "Не выполнено"
+    : "Не заполнено";
+
+  return `
+    <form class="mobile-form compact-form execution-block-form" data-execution-form>
+      <input name="assignedPlanId" type="hidden" value="${escapeHtml(item.plan.id)}" />
+      <input name="assignedBlockId" type="hidden" value="${escapeHtml(item.block.id)}" />
+      <div class="execution-block-head wide-field">
+        <div>
+          <strong>${escapeHtml(item.block.name)}</strong>
+          <span>${escapeHtml(item.plan.templateName)} · ${escapeHtml(item.sessionName)}</span>
+        </div>
+        <em>${escapeHtml(statusText)}</em>
+      </div>
+      ${exercises.length > 0 ? `
+        <div class="execution-exercise-list wide-field">
+          ${exercises
+            .slice()
+            .sort((a, b) => a.orderIndex - b.orderIndex)
+            .map((exercise) => renderExecutionExerciseRow(exercise, getExerciseResult(result, exercise.id)))
+            .join("")}
+        </div>
+      ` : renderBlockFallbackFields(result)}
+      <label class="wide-field">
+        <span>Комментарий по блоку</span>
+        <textarea name="notes" rows="2">${escapeHtml(result?.notes ?? "")}</textarea>
       </label>
-      <label class="check-row"><input name="completed" type="checkbox" checked /> Выполнено</label>
-      <label><span>Подходы</span><input name="setsCompleted" type="number" min="0" /></label>
-      <label><span>Повторы</span><input name="repsCompleted" type="number" min="0" /></label>
-      <label><span>Вес, кг</span><input name="weightKg" type="number" min="0" step="0.5" /></label>
-      <label><span>Минуты</span><input name="durationMinutes" type="number" min="0" /></label>
-      <label><span>RPE</span><input name="rpe" type="number" min="1" max="10" /></label>
-      <label class="wide-field"><span>Заметка</span><textarea name="notes" rows="3"></textarea></label>
-      <button class="primary-action" type="submit">Сохранить результат</button>
+      <button class="primary-action" type="submit">Сохранить этот блок</button>
     </form>
+  `;
+}
+
+function renderExecutionExerciseRow(
+  exercise: AssignedBlockExercise,
+  result: ExecutionExerciseResult | null,
+) {
+  return `
+    <article class="execution-exercise-card" data-execution-exercise data-exercise-id="${escapeHtml(exercise.id)}">
+      <label class="check-row execution-exercise-check">
+        <input name="exerciseCompleted:${escapeHtml(exercise.id)}" type="checkbox" ${result?.completed ? "checked" : ""} />
+        <span>
+          <strong>${escapeHtml(exercise.name)}</strong>
+          <small>${escapeHtml(formatExerciseTarget(exercise))}</small>
+        </span>
+      </label>
+      <div class="execution-exercise-fields">
+        <label><span>Подх.</span><input inputmode="numeric" name="exerciseSets:${escapeHtml(exercise.id)}" placeholder="${escapeHtml(exercise.targetSets)}" type="number" min="0" value="${formatInputValue(result?.setsCompleted)}" /></label>
+        <label><span>Повт.</span><input inputmode="numeric" name="exerciseReps:${escapeHtml(exercise.id)}" placeholder="${escapeHtml(exercise.targetReps)}" type="number" min="0" value="${formatInputValue(result?.repsCompleted)}" /></label>
+        <label><span>Кг</span><input inputmode="decimal" name="exerciseWeight:${escapeHtml(exercise.id)}" placeholder="${escapeHtml(exercise.targetWeightKg)}" type="number" min="0" step="0.5" value="${formatInputValue(result?.weightKg)}" /></label>
+        <label><span>Мин.</span><input inputmode="numeric" name="exerciseDuration:${escapeHtml(exercise.id)}" placeholder="${escapeHtml(exercise.targetDurationMinutes)}" type="number" min="0" value="${formatInputValue(result?.durationMinutes)}" /></label>
+        <label><span>RPE</span><input inputmode="numeric" name="exerciseRpe:${escapeHtml(exercise.id)}" placeholder="${escapeHtml(exercise.targetRpe)}" type="number" min="1" max="10" value="${formatInputValue(result?.rpe)}" /></label>
+      </div>
+      <label class="exercise-note">
+        <span>Заметка</span>
+        <input name="exerciseNotes:${escapeHtml(exercise.id)}" placeholder="${escapeHtml(exercise.notes || "по упражнению")}" value="${escapeHtml(result?.notes ?? "")}" />
+      </label>
+    </article>
+  `;
+}
+
+function renderBlockFallbackFields(result: ExecutionResult | null) {
+  return `
+    <label class="check-row"><input name="completed" type="checkbox" ${result?.completed !== false ? "checked" : ""} /> Выполнено</label>
+    <label><span>Подходы</span><input name="setsCompleted" type="number" min="0" value="${formatInputValue(result?.setsCompleted)}" /></label>
+    <label><span>Повторы</span><input name="repsCompleted" type="number" min="0" value="${formatInputValue(result?.repsCompleted)}" /></label>
+    <label><span>Вес, кг</span><input name="weightKg" type="number" min="0" step="0.5" value="${formatInputValue(result?.weightKg)}" /></label>
+    <label><span>Минуты</span><input name="durationMinutes" type="number" min="0" value="${formatInputValue(result?.durationMinutes)}" /></label>
+    <label><span>RPE</span><input name="rpe" type="number" min="1" max="10" value="${formatInputValue(result?.rpe)}" /></label>
   `;
 }
 
@@ -827,7 +924,8 @@ function renderExecutionHistory(state: MobileAppState) {
         <article class="list-card">
           <strong>${result.completed ? "Выполнено" : "Не выполнено"}</strong>
           <span>${formatDateTime(result.updatedAt)}</span>
-          <small>${escapeHtml(result.notes || "Без заметки")}</small>
+          <small>${escapeHtml(formatExecutionHistoryDetails(result))}</small>
+          ${result.exerciseResults?.length && result.notes ? `<small>${escapeHtml(result.notes)}</small>` : ""}
         </article>
       `).join("")}
     </div>
@@ -836,16 +934,45 @@ function renderExecutionHistory(state: MobileAppState) {
 
 function renderPlanCard(plan: AssignedPlanSummary) {
   const blocks = plan.day.sessions.flatMap((session) => session.blocks);
+  const exerciseCount = countPlanExercises(plan);
 
   return `
     <article class="list-card plan-card">
       <strong>${escapeHtml(plan.templateName)}</strong>
       <span>${formatDate(plan.startDate)} · ${escapeHtml(plan.day.label)}</span>
-      <small>${escapeHtml(plan.plannedPhase ?? "фаза не задана")} · ${blocks.length} блоков</small>
-      <div class="chip-row">
-        ${blocks.slice(0, 4).map((block) => `<em>${escapeHtml(block.name)}</em>`).join("")}
+      <small>${escapeHtml(plan.plannedPhase ?? "фаза не задана")} · ${blocks.length} блоков · ${exerciseCount} упражнений</small>
+      <div class="plan-session-list">
+        ${plan.day.sessions.map((session) => `
+          <section class="plan-session-card">
+            <strong>${escapeHtml(session.name)}</strong>
+            ${session.blocks.map((block) => renderPlanBlock(block)).join("")}
+          </section>
+        `).join("")}
       </div>
     </article>
+  `;
+}
+
+function renderPlanBlock(block: AssignedPlanBlock) {
+  const exercises = (block.exercises ?? []).slice().sort((a, b) => a.orderIndex - b.orderIndex);
+
+  return `
+    <div class="plan-block-card">
+      <div>
+        <strong>${escapeHtml(block.name)}</strong>
+        <small>${escapeHtml(formatBlockTarget(block))}</small>
+      </div>
+      ${exercises.length > 0 ? `
+        <div class="plan-exercise-list">
+          ${exercises.map((exercise) => `
+            <div class="plan-exercise-row">
+              <span>${escapeHtml(exercise.name)}</span>
+              <small>${escapeHtml(formatExerciseTarget(exercise))}</small>
+            </div>
+          `).join("")}
+        </div>
+      ` : `<small>Упражнения не заданы</small>`}
+    </div>
   `;
 }
 
@@ -943,6 +1070,81 @@ function getActiveAthleteId(state: MobileAppState) {
 
 function getPlansForAthlete(state: MobileAppState, athleteId: string | null) {
   return state.data.assignedPlans.filter((plan) => !athleteId || plan.athleteId === athleteId);
+}
+
+function getExecutionBlockItems(plans: AssignedPlanSummary[]): ExecutionBlockItem[] {
+  return plans.flatMap((plan) =>
+    plan.day.sessions.flatMap((session) =>
+      session.blocks.map((block) => ({
+        block,
+        plan,
+        sessionName: session.name,
+      })),
+    ),
+  );
+}
+
+function getExecutionResultForBlock(
+  state: MobileAppState,
+  assignedPlanId: string,
+  assignedBlockId: string,
+) {
+  return state.data.executionResults.find((result) =>
+    result.assignedPlanId === assignedPlanId && result.assignedBlockId === assignedBlockId
+  ) ?? null;
+}
+
+function getExerciseResult(
+  result: ExecutionResult | null,
+  assignedExerciseId: string,
+) {
+  return result?.exerciseResults?.find((exercise) =>
+    exercise.assignedExerciseId === assignedExerciseId
+  ) ?? null;
+}
+
+function countPlanExercises(plan: AssignedPlanSummary) {
+  return plan.day.sessions.reduce((sessionTotal, session) =>
+    sessionTotal + session.blocks.reduce((blockTotal, block) =>
+      blockTotal + (block.exercises?.length ?? 0),
+    0),
+  0);
+}
+
+function formatBlockTarget(block: AssignedPlanBlock) {
+  const parts = [
+    block.targetSets ? `${block.targetSets} подх.` : "",
+    block.targetReps ? `${block.targetReps} повт.` : "",
+    block.targetDurationMinutes ? `${block.targetDurationMinutes} мин.` : "",
+    block.targetRpe ? `RPE ${block.targetRpe}` : "",
+  ].filter(Boolean);
+
+  return parts.join(" · ") || "без целевых значений";
+}
+
+function formatExerciseTarget(exercise: AssignedBlockExercise) {
+  const parts = [
+    exercise.targetSets ? `${exercise.targetSets} подх.` : "",
+    exercise.targetReps ? `${exercise.targetReps} повт.` : "",
+    exercise.targetWeightKg ? `${exercise.targetWeightKg} кг` : "",
+    exercise.targetDurationMinutes ? `${exercise.targetDurationMinutes} мин.` : "",
+    exercise.targetRpe ? `RPE ${exercise.targetRpe}` : "",
+  ].filter(Boolean);
+
+  return parts.join(" · ") || "плановые значения не заданы";
+}
+
+function formatInputValue(value: number | null | undefined) {
+  return value === null || value === undefined ? "" : String(value);
+}
+
+function formatExecutionHistoryDetails(result: ExecutionResult) {
+  if (!result.exerciseResults?.length) {
+    return result.notes || "Без заметки";
+  }
+
+  const completed = result.exerciseResults.filter((exercise) => exercise.completed).length;
+  return `Упражнения: ${completed} из ${result.exerciseResults.length}`;
 }
 
 function getCompetitionPlansForAthlete(state: MobileAppState, athleteId: string | null) {
