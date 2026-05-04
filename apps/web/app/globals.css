@@ -3217,7 +3217,7 @@ select {
 
 .preparation-plan-builder {
   display: grid;
-  grid-template-columns: minmax(300px, 360px) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
   align-items: start;
   width: 100%;
@@ -3225,6 +3225,12 @@ select {
   border: 0;
   background: transparent;
   box-shadow: none;
+}
+
+.planning-workgrid-preparation .preparation-exercise-library,
+.planning-workgrid-preparation .preparation-plan-target-panel,
+.planning-workgrid-preparation .preparation-session-canvas {
+  display: none;
 }
 
 .preparation-plan-editor,

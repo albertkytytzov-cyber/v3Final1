@@ -7574,6 +7574,15 @@ export function PageClient({
             : "Preparation plan",
     },
     {
+      id: "mesocycle",
+      label:
+        language === "ru"
+          ? "Мезоциклы"
+          : language === "bg"
+            ? "Мезоцикли"
+            : "Mesocycles",
+    },
+    {
       id: "weekly",
       label:
         language === "ru"
@@ -7590,15 +7599,6 @@ export function PageClient({
           : language === "bg"
             ? "Библиотека с шаблони"
             : "Template library",
-    },
-    {
-      id: "mesocycle",
-      label:
-        language === "ru"
-          ? "Мезоциклы"
-          : language === "bg"
-            ? "Мезоцикли"
-            : "Mesocycles",
     },
     {
       id: "season",
@@ -11799,16 +11799,16 @@ export function PageClient({
                     <div>
                       <strong>
                         {copyFor(language, {
-                          en: "Plan setup",
-                          ru: "Настройка плана",
-                          bg: "Настройка на плана",
+                          en: "Preparation strategy",
+                          ru: "Стратегия подготовки",
+                          bg: "Стратегия за подготовка",
                         })}
                       </strong>
                       <p className="placeholder-copy">
                         {copyFor(language, {
-                          en: "Build the plan from editable modules, timeline checkpoints, and the session structure below.",
-                          ru: "Соберите план из редактируемых модулей, этапов и структуры сессий ниже.",
-                          bg: "Сглобете плана от редактируеми модули, етапи и структурата на сесиите по-долу.",
+                          en: "Set the period, goals, phases, monitoring rules, and load logic. Daily exercises are assembled in Weekly plan or Template library.",
+                          ru: "Задайте период, цели, фазы, правила контроля и логику нагрузки. Упражнения по дням собираются в недельном плане или библиотеке шаблонов.",
+                          bg: "Задайте периода, целите, фазите, правилата за контрол и логиката на натоварването. Дневните упражнения се сглобяват в седмичния план или библиотеката с шаблони.",
                         })}
                       </p>
                     </div>
@@ -11853,9 +11853,9 @@ export function PageClient({
                     <div className="summary-topline">
                       <strong>
                         {copyFor(language, {
-                          en: "Plan modules",
-                          ru: "Модули плана",
-                          bg: "Модули на плана",
+                          en: "Key parameters",
+                          ru: "Ключевые параметры",
+                          bg: "Ключови параметри",
                         })}
                       </strong>
                       <button className="tertiary-button" onClick={addPreparationMetric} type="button">
@@ -11866,8 +11866,8 @@ export function PageClient({
                       <p className="placeholder-copy">
                         {copyFor(language, {
                           en: "Add the modules that matter for this plan: goal, load, monitoring, nutrition, recovery, taper, or any custom block.",
-                          ru: "Добавьте нужные модули: цель, нагрузка, мониторинг, питание, восстановление, подводка или любой свой блок.",
-        bg: "Добавете нужните модули: цел, натоварване, мониторинг, хранене, възстановяване, тейпър или собствен блок.",
+                          ru: "Добавьте нужные параметры: цель, нагрузка, мониторинг, питание, восстановление, подводка или любой свой блок.",
+        bg: "Добавете нужните параметри: цел, натоварване, мониторинг, хранене, възстановяване, тейпър или собствен блок.",
                         })}
                       </p>
                     ) : (
@@ -11915,9 +11915,9 @@ export function PageClient({
                     <div className="summary-topline">
                       <strong>
                         {copyFor(language, {
-                          en: "Block phases",
-                          ru: "Этапы блока",
-                          bg: "Етапи на блока",
+                          en: "Preparation phases",
+                          ru: "Фазы подготовки",
+                          bg: "Фази на подготовка",
                         })}
                       </strong>
                       <button className="tertiary-button" onClick={addPreparationPhase} type="button">
@@ -12176,13 +12176,13 @@ export function PageClient({
                   ) : null}
                 </section>
 
-                <details className="preparation-plan-preview-panel">
+                <details className="preparation-plan-preview-panel" open>
                   <summary>
                     <span>
                       {copyFor(language, {
-                        en: "Full preparation document",
-                        ru: "Весь документ плана",
-                        bg: "Целият документ на плана",
+                        en: "Preparation document",
+                        ru: "Документ подготовки",
+                        bg: "Документ за подготовка",
                       })}
                     </span>
                     <strong>{preparationPlanDraft.weeks.length}</strong>
