@@ -243,6 +243,107 @@ button {
   color: var(--accent-dark);
 }
 
+.readiness-head {
+  margin-bottom: 10px;
+}
+
+.readiness-summary-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px 12px;
+  align-items: center;
+  margin-bottom: 10px;
+  padding: 14px;
+  border: 1px solid rgba(15, 118, 110, 0.2);
+  border-radius: 18px;
+  background: #e8f6f3;
+}
+
+.readiness-summary-card strong {
+  grid-row: span 2;
+  color: var(--accent-dark);
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.readiness-summary-card span {
+  color: var(--text);
+  font-weight: 900;
+}
+
+.readiness-summary-card small {
+  color: var(--muted);
+  font-weight: 750;
+}
+
+.readiness-form {
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+
+.readiness-section {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--surface);
+}
+
+.readiness-metrics {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.readiness-preset-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.readiness-preset-grid button {
+  display: grid;
+  gap: 3px;
+  min-height: 64px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #fff;
+  color: var(--text);
+  text-align: left;
+}
+
+.readiness-preset-grid button:active {
+  border-color: rgba(15, 118, 110, 0.42);
+  background: #dff2ef;
+}
+
+.readiness-preset-grid strong {
+  font-size: 0.95rem;
+}
+
+.readiness-preset-grid span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 750;
+  line-height: 1.25;
+}
+
+.readiness-section .choice-group {
+  grid-template-columns: repeat(auto-fit, minmax(84px, 1fr));
+}
+
+.readiness-section .choice-option span {
+  min-height: 40px;
+  padding: 7px 8px;
+  font-size: 0.78rem;
+  text-align: center;
+}
+
+.readiness-flags {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .execution-panel,
 .execution-plan-stack,
 .execution-block-stack,
@@ -786,6 +887,8 @@ button.list-card {
     grid-template-columns: 1fr;
   }
 
+  .readiness-metrics,
+  .readiness-flags,
   .choice-group {
     grid-template-columns: 1fr;
   }

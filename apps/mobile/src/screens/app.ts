@@ -403,6 +403,16 @@ export function bootstrapMobileApp(root: HTMLElement) {
       void submitReadiness(event.currentTarget as HTMLFormElement);
     });
 
+    root.querySelectorAll<HTMLButtonElement>("[data-readiness-preset]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const form = button.closest("form");
+
+        if (form instanceof HTMLFormElement) {
+          applyReadinessPreset(form, button.dataset.readinessPreset ?? "normal");
+        }
+      });
+    });
+
     root.querySelectorAll<HTMLFormElement>("[data-execution-form]").forEach((form) => {
       form.addEventListener("submit", (event) => {
         event.preventDefault();
@@ -691,29 +701,73 @@ function renderReadinessScreen(state: MobileAppState) {
     return renderEmpty("Готовность заполняет спортсмен", "Тренер видит готовность в карточке спортсмена и после обновления данных.");
   }
 
+  const readiness = state.data.readinessEntry;
+
   return `
-    <div class="screen-head">
+    <div class="screen-head readiness-head">
       <h2>Готовность</h2>
-      <p>${state.data.readinessEntry ? `Сегодня: ${state.data.readinessEntry.score} / ${state.data.readinessEntry.status}` : "Заполните форму перед тренировкой."}</p>
+      <p>${readiness ? `Сегодня: ${readiness.score} · ${formatReadinessStatus(readiness.status)}` : "Перед тренировкой"}</p>
     </div>
-    <form class="mobile-form compact-form" data-readiness-form>
-      <label><span>Дата</span><input name="entryDate" type="date" value="${todayValue()}" /></label>
-      <label><span>Пульс покоя</span><input name="restingHr" type="number" min="30" max="140" value="${state.session.user.baselineRestingHr ?? 60}" /></label>
-      <label><span>Вес</span><input name="bodyWeight" type="number" min="20" max="200" step="0.1" value="${state.session.user.baselineWeightKg ?? 70}" /></label>
-      ${renderChoiceGroup("sleepHours", "Сон", [
-        { label: "меньше 6 ч", value: "5.5" },
-        { label: "6-7 ч", value: "6.5" },
-        { label: "7-8 ч", value: "7.5" },
-        { label: "8+ ч", value: "8.5" },
-      ], "8.5")}
-      ${renderChoiceGroup("sleepQuality", "Качество сна", readinessBetterOptions, "4")}
-      ${renderChoiceGroup("generalFeeling", "Самочувствие", readinessFeelingOptions, "4")}
-      ${renderChoiceGroup("fatigueLevel", "Усталость", readinessLoadOptions, "2")}
-      ${renderChoiceGroup("muscleSoreness", "Мышцы", readinessLoadOptions, "2")}
-      ${renderChoiceGroup("motivationLevel", "Мотивация", readinessMotivationOptions, "4")}
-      ${renderChoiceGroup("painLevel", "Боль", readinessPainOptions, "0")}
-      <label class="check-row"><input name="illnessFlag" type="checkbox" /> Есть болезнь</label>
-      <label class="check-row"><input name="feverFlag" type="checkbox" /> Температура</label>
+    ${readiness ? `
+      <section class="readiness-summary-card">
+        <strong>${readiness.score}</strong>
+        <span>${formatReadinessStatus(readiness.status)}</span>
+        <small>${formatDate(readiness.entryDate)}</small>
+      </section>
+    ` : ""}
+    <form class="mobile-form compact-form readiness-form" data-readiness-form>
+      <section class="readiness-section wide-field">
+        <div class="section-title">
+          <h3>Быстрый выбор</h3>
+        </div>
+        <div class="readiness-preset-grid">
+          <button data-readiness-preset="good" type="button">
+            <strong>Хорошо</strong>
+            <span>готов к нагрузке</span>
+          </button>
+          <button data-readiness-preset="normal" type="button">
+            <strong>Норма</strong>
+            <span>обычный день</span>
+          </button>
+          <button data-readiness-preset="tired" type="button">
+            <strong>Усталость</strong>
+            <span>снизить объём</span>
+          </button>
+          <button data-readiness-preset="risk" type="button">
+            <strong>Риск</strong>
+            <span>нужна осторожность</span>
+          </button>
+        </div>
+      </section>
+
+      <section class="readiness-section readiness-metrics wide-field">
+        <label><span>Дата</span><input name="entryDate" type="date" value="${todayValue()}" /></label>
+        <label><span>Пульс покоя</span><input name="restingHr" type="number" min="30" max="140" value="${state.session.user.baselineRestingHr ?? 60}" /></label>
+        <label><span>Вес</span><input name="bodyWeight" type="number" min="20" max="200" step="0.1" value="${state.session.user.baselineWeightKg ?? 70}" /></label>
+      </section>
+
+      <section class="readiness-section wide-field">
+        ${renderChoiceGroup("sleepHours", "Сон", [
+          { label: "< 6 ч", value: "5.5" },
+          { label: "6-7 ч", value: "6.5" },
+          { label: "7-8 ч", value: "7.5" },
+          { label: "8+ ч", value: "8.5" },
+        ], "8.5")}
+        ${renderChoiceGroup("sleepQuality", "Качество сна", readinessBetterOptions, "4")}
+      </section>
+
+      <section class="readiness-section wide-field">
+        ${renderChoiceGroup("generalFeeling", "Самочувствие", readinessFeelingOptions, "4")}
+        ${renderChoiceGroup("fatigueLevel", "Усталость", readinessLoadOptions, "2")}
+        ${renderChoiceGroup("muscleSoreness", "Мышцы", readinessLoadOptions, "2")}
+        ${renderChoiceGroup("motivationLevel", "Мотивация", readinessMotivationOptions, "4")}
+        ${renderChoiceGroup("painLevel", "Боль", readinessPainOptions, "0")}
+      </section>
+
+      <section class="readiness-section readiness-flags wide-field">
+        <label class="check-row"><input name="illnessFlag" type="checkbox" /> Есть болезнь</label>
+        <label class="check-row"><input name="feverFlag" type="checkbox" /> Температура</label>
+      </section>
       <button class="primary-action" type="submit">Сохранить готовность</button>
     </form>
   `;
@@ -783,6 +837,79 @@ function renderChoiceGroup(
       </div>
     </fieldset>
   `;
+}
+
+function applyReadinessPreset(form: HTMLFormElement, preset: string) {
+  const presets: Record<string, Record<string, string | boolean>> = {
+    good: {
+      fatigueLevel: "1",
+      feverFlag: false,
+      generalFeeling: "5",
+      illnessFlag: false,
+      motivationLevel: "5",
+      muscleSoreness: "1",
+      painLevel: "0",
+      sleepHours: "8.5",
+      sleepQuality: "5",
+    },
+    normal: {
+      fatigueLevel: "2",
+      feverFlag: false,
+      generalFeeling: "4",
+      illnessFlag: false,
+      motivationLevel: "4",
+      muscleSoreness: "2",
+      painLevel: "0",
+      sleepHours: "7.5",
+      sleepQuality: "4",
+    },
+    risk: {
+      fatigueLevel: "5",
+      feverFlag: false,
+      generalFeeling: "2",
+      illnessFlag: false,
+      motivationLevel: "2",
+      muscleSoreness: "5",
+      painLevel: "5",
+      sleepHours: "5.5",
+      sleepQuality: "2",
+    },
+    tired: {
+      fatigueLevel: "4",
+      feverFlag: false,
+      generalFeeling: "3",
+      illnessFlag: false,
+      motivationLevel: "3",
+      muscleSoreness: "4",
+      painLevel: "2",
+      sleepHours: "6.5",
+      sleepQuality: "3",
+    },
+  };
+  const values = presets[preset] ?? presets.normal;
+
+  for (const [name, value] of Object.entries(values)) {
+    if (typeof value === "boolean") {
+      const checkbox = form.elements.namedItem(name);
+
+      if (checkbox instanceof HTMLInputElement) {
+        checkbox.checked = value;
+      }
+      continue;
+    }
+
+    const radio = form.querySelector<HTMLInputElement>(
+      `input[name="${cssEscape(name)}"][value="${cssEscape(value)}"]`,
+    );
+
+    if (radio) {
+      radio.checked = true;
+    }
+  }
+}
+
+function cssEscape(value: string) {
+  return value.replace(/["\\]/g, "\\$&");
 }
 
 interface ExecutionBlockItem {
@@ -1211,6 +1338,22 @@ function formatExerciseTarget(exercise: AssignedBlockExercise) {
   ].filter(Boolean);
 
   return parts.join(" · ") || "плановые значения не заданы";
+}
+
+function formatReadinessStatus(status: string) {
+  if (status === "green") {
+    return "готов";
+  }
+
+  if (status === "yellow") {
+    return "снизить нагрузку";
+  }
+
+  if (status === "red") {
+    return "восстановление";
+  }
+
+  return status;
 }
 
 function formatInputValue(value: number | null | undefined) {
