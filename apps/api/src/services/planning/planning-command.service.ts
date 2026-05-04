@@ -24,7 +24,8 @@ export class PlanningCommandServiceError extends Error {
     public readonly code:
       | "template_blocks_not_found"
       | "template_not_found"
-      | "template_in_use",
+      | "template_in_use"
+      | "assigned_plan_not_found",
     message: string,
   ) {
     super(message);
@@ -530,6 +531,36 @@ export async function deletePlanTemplate(input: {
   return {
     deleted: true,
     templateId: input.templateId,
+  };
+}
+
+export async function deleteAssignedPlan(input: {
+  coachUserId: string;
+  role: string;
+  assignedPlanId: string;
+}) {
+  const assignedPlan = await pool.query<{ id: string }>(
+    `
+      SELECT id
+      FROM assigned_plans
+      WHERE id = $1 AND (coach_user_id = $2 OR $3 = 'admin')
+      LIMIT 1
+    `,
+    [input.assignedPlanId, input.coachUserId, input.role],
+  );
+
+  if (!assignedPlan.rowCount) {
+    throw new PlanningCommandServiceError(
+      "assigned_plan_not_found",
+      "Assigned plan was not found",
+    );
+  }
+
+  await pool.query("DELETE FROM assigned_plans WHERE id = $1", [input.assignedPlanId]);
+
+  return {
+    deleted: true,
+    assignedPlanId: input.assignedPlanId,
   };
 }
 

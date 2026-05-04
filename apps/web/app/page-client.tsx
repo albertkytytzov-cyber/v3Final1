@@ -499,6 +499,14 @@ function syncCompetitionSelection(
   return selectedIds.filter((id) => availableIds.has(id));
 }
 
+function syncAssignedPlanSelection(
+  selectedIds: string[],
+  assignedPlans: AssignedPlanSummary[],
+) {
+  const availableIds = new Set(assignedPlans.map((plan) => plan.id));
+  return selectedIds.filter((id) => availableIds.has(id));
+}
+
 function buildAthleteProfileForm(athlete: CoachAthleteSummary | null): CoachAthleteProfilePayload {
   if (!athlete) {
     return emptyAthleteProfileForm;
@@ -2886,6 +2894,7 @@ export function PageClient({
   const [assignedPlans, setAssignedPlans] = useState<AssignedPlanSummary[]>(
     previewState?.assignedPlans ?? [],
   );
+  const [selectedAssignedPlanIds, setSelectedAssignedPlanIds] = useState<string[]>([]);
   const [competitions, setCompetitions] = useState<CompetitionSummary[]>(
     previewState?.competitions ?? [],
   );
@@ -3665,6 +3674,7 @@ export function PageClient({
         setAvailableCoachAthletes([]);
         setPlanTemplates([]);
         setAssignedPlans([]);
+        setSelectedAssignedPlanIds([]);
         setAdaptedPlan(null);
         setExecutionResults([]);
         setExecutionDrafts({});
@@ -3993,6 +4003,9 @@ export function PageClient({
         "/plans/assigned",
       );
       setAssignedPlans(response.assignedPlans);
+      setSelectedAssignedPlanIds((current) =>
+        syncAssignedPlanSelection(current, response.assignedPlans),
+      );
       importedWriteCachedData(OFFLINE_STORAGE_KEYS.assignedPlans, response);
     } catch {
       const cached = importedReadCachedData<{ assignedPlans: AssignedPlanSummary[] }>(
@@ -4000,6 +4013,9 @@ export function PageClient({
       )?.data;
       if (cached) {
         setAssignedPlans(cached.assignedPlans);
+        setSelectedAssignedPlanIds((current) =>
+          syncAssignedPlanSelection(current, cached.assignedPlans),
+        );
       }
     }
   }
@@ -4259,6 +4275,7 @@ export function PageClient({
       setAvailableCoachAthletes([]);
       setPlanTemplates([]);
       setAssignedPlans([]);
+      setSelectedAssignedPlanIds([]);
       setAdaptedPlan(null);
       setExecutionResults([]);
       setExecutionDrafts({});
@@ -4527,7 +4544,15 @@ export function PageClient({
             }),
       );
       setPlanTemplates((current) => current.filter((item) => item.id !== template.id));
+      const removedAssignedPlanIds = new Set(
+        assignedPlans
+          .filter((plan) => plan.templateId === template.id)
+          .map((plan) => plan.id),
+      );
       setAssignedPlans((current) => current.filter((plan) => plan.templateId !== template.id));
+      setSelectedAssignedPlanIds((current) =>
+        current.filter((id) => !removedAssignedPlanIds.has(id)),
+      );
       setAssignedPlanForm((current) =>
         current.templateId === template.id ? { ...current, templateId: "" } : current,
       );
@@ -4591,6 +4616,77 @@ export function PageClient({
       });
 
       setErrorMessage(message || fallback);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleDeleteSelectedAssignedPlans() {
+    const selectedPlans = assignedPlans.filter((plan) =>
+      selectedAssignedPlanIds.includes(plan.id),
+    );
+
+    if (!selectedPlans.length) {
+      return;
+    }
+
+    const confirmed = globalThis.confirm(
+      copyFor(language, {
+        en: `Delete ${selectedPlans.length} selected assigned training day(s)? Linked results for these assignments will also be deleted.`,
+        ru: `Удалить выбранные назначенные дни: ${selectedPlans.length}? Связанные результаты по этим назначениям тоже будут удалены.`,
+        bg: `Да се изтрият ли избраните назначени тренировъчни дни: ${selectedPlans.length}? Свързаните резултати за тези назначения също ще бъдат изтрити.`,
+      }),
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    const selectedIds = new Set(selectedPlans.map((plan) => plan.id));
+    const previousAssignedPlans = assignedPlans;
+    const previousSelectedIds = selectedAssignedPlanIds;
+
+    setBusy(true);
+    setErrorMessage("");
+    setAssignedPlans((current) => current.filter((plan) => !selectedIds.has(plan.id)));
+    setSelectedAssignedPlanIds([]);
+
+    try {
+      await Promise.all(
+        selectedPlans.map((plan) =>
+          apiRequest(`/plans/assigned/${plan.id}`, {
+            method: "DELETE",
+          }),
+        ),
+      );
+      setStatusMessage(
+        copyFor(language, {
+          en: "Selected assigned training days deleted.",
+          ru: "Выбранные назначенные дни удалены.",
+          bg: "Избраните назначени тренировъчни дни са изтрити.",
+        }),
+      );
+      await Promise.all([loadAssignedPlans(), loadCoachAthletes()]);
+
+      if (canLoadCoachScopedAthleteData(selectedAthleteId)) {
+        await Promise.all([
+          loadCoachAdaptedPlan(selectedAthleteId),
+          loadCoachExecutionReview(selectedAthleteId),
+          loadCoachAnalyticsOverview(selectedAthleteId),
+        ]);
+      }
+    } catch (error) {
+      setAssignedPlans(previousAssignedPlans);
+      setSelectedAssignedPlanIds(previousSelectedIds);
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : copyFor(language, {
+              en: "Failed to delete selected assigned plans.",
+              ru: "Не удалось удалить выбранные назначения.",
+              bg: "Избраните назначения не можаха да бъдат изтрити.",
+            }),
+      );
     } finally {
       setBusy(false);
     }
@@ -7077,6 +7173,12 @@ export function PageClient({
   const selectedCalendarCompetitionCount = selectedCalendarCompetitions.length;
   const allCalendarCompetitionsSelected =
     competitions.length > 0 && selectedCalendarCompetitionCount === competitions.length;
+  const selectedAssignedPlans = assignedPlans.filter((plan) =>
+    selectedAssignedPlanIds.includes(plan.id),
+  );
+  const selectedAssignedPlanCount = selectedAssignedPlans.length;
+  const allAssignedPlansSelected =
+    assignedPlans.length > 0 && selectedAssignedPlanCount === assignedPlans.length;
   const selectedPreparationWeek =
     preparationPlanDraft.weeks[selectedPreparationWeekIndex] ?? preparationPlanDraft.weeks[0] ?? null;
   const selectedPreparationDay =
@@ -14949,26 +15051,106 @@ export function PageClient({
                 </p>
               ) : (
                 <div className="planning-assigned-plan-list">
+                  <div className="planning-assigned-delete-bar">
+                    <label className="planning-assigned-select planning-assigned-select-all">
+                      <input
+                        checked={allAssignedPlansSelected}
+                        onChange={(event) =>
+                          setSelectedAssignedPlanIds(
+                            event.target.checked ? assignedPlans.map((plan) => plan.id) : [],
+                          )
+                        }
+                        type="checkbox"
+                      />
+                      <span>
+                        {copyFor(language, {
+                          en: "Select all",
+                          ru: "Выбрать все",
+                          bg: "Избери всички",
+                        })}
+                      </span>
+                    </label>
+                    <span className="planning-assigned-selected-count">
+                      {copyFor(language, {
+                        en: `${selectedAssignedPlanCount} selected`,
+                        ru: `Выбрано: ${selectedAssignedPlanCount}`,
+                        bg: `Избрани: ${selectedAssignedPlanCount}`,
+                      })}
+                    </span>
+                    <div className="planning-assigned-delete-actions">
+                      <button
+                        className="planning-template-delete-button"
+                        disabled={busy || selectedAssignedPlanCount === 0}
+                        onClick={() => void handleDeleteSelectedAssignedPlans()}
+                        type="button"
+                      >
+                        {copyFor(language, {
+                          en: "Delete selected",
+                          ru: "Удалить выбранные",
+                          bg: "Изтрий избраните",
+                        })}
+                      </button>
+                      <button
+                        className="planning-assigned-clear-button"
+                        disabled={busy || selectedAssignedPlanCount === 0}
+                        onClick={() => setSelectedAssignedPlanIds([])}
+                        type="button"
+                      >
+                        {copyFor(language, {
+                          en: "Clear",
+                          ru: "Снять выбор",
+                          bg: "Изчисти",
+                        })}
+                      </button>
+                    </div>
+                  </div>
                   {assignedPlans.map((plan) => (
                     <details className="planning-assigned-plan-card" key={plan.id}>
                       <summary>
-                        <strong>
-                          {plan.athleteName}: {translateKnownTemplateText(plan.templateName, language)}
-                        </strong>
-                        <span>
-                          {plan.day.dayDate} / {plan.day.label} / {t("phase")}{" "}
-                          {plan.plannedPhase
-                            ? localizedOptionLabel(
-                                plan.plannedPhase,
-                                language,
-                                PREPARATION_PHASE_LABELS,
+                        <label
+                          className="planning-assigned-select"
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          <input
+                            checked={selectedAssignedPlanIds.includes(plan.id)}
+                            onChange={(event) =>
+                              setSelectedAssignedPlanIds((current) =>
+                                event.target.checked
+                                  ? current.includes(plan.id)
+                                    ? current
+                                    : [...current, plan.id]
+                                  : current.filter((id) => id !== plan.id),
                               )
-                            : copyFor(language, {
-                                en: "Auto",
-                                ru: "Авто",
-                                bg: "Авто",
-                              })}
-                        </span>
+                            }
+                            type="checkbox"
+                          />
+                          <span>
+                            {copyFor(language, {
+                              en: "Delete",
+                              ru: "Удалить",
+                              bg: "Изтрий",
+                            })}
+                          </span>
+                        </label>
+                        <div className="planning-assigned-plan-summary-copy">
+                          <strong>
+                            {plan.athleteName}: {translateKnownTemplateText(plan.templateName, language)}
+                          </strong>
+                          <span>
+                            {plan.day.dayDate} / {plan.day.label} / {t("phase")}{" "}
+                            {plan.plannedPhase
+                              ? localizedOptionLabel(
+                                  plan.plannedPhase,
+                                  language,
+                                  PREPARATION_PHASE_LABELS,
+                                )
+                              : copyFor(language, {
+                                  en: "Auto",
+                                  ru: "Авто",
+                                  bg: "Авто",
+                                })}
+                          </span>
+                        </div>
                       </summary>
                       <div className="planning-assigned-session-list">
                         {plan.day.sessions.map((session) => (

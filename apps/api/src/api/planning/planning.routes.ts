@@ -3,6 +3,7 @@ import {
   autoAssignMicrocycle,
   assignPlan,
   createPlanTemplate,
+  deleteAssignedPlan,
   deletePlanTemplate,
   PlanningCommandServiceError,
 } from "../../services/planning/planning-command.service";
@@ -183,6 +184,38 @@ export function registerPlanningRoutes(
     }
 
     throw dependencies.httpError(403, "Unsupported role");
+  });
+
+  app.delete("/api/v1/plans/assigned/:assignedPlanId", async (request) => {
+    const user = await dependencies.guards.requireUser(request);
+
+    if (user.role !== "coach" && user.role !== "admin") {
+      throw dependencies.httpError(403, "Only coach or admin accounts can delete assigned plans");
+    }
+
+    const params = request.params as { assignedPlanId?: string };
+    const assignedPlanId = params.assignedPlanId ?? "";
+
+    if (!assignedPlanId) {
+      throw dependencies.httpError(400, "assignedPlanId is required");
+    }
+
+    try {
+      return await deleteAssignedPlan({
+        coachUserId: user.id,
+        role: user.role,
+        assignedPlanId,
+      });
+    } catch (error) {
+      if (
+        error instanceof PlanningCommandServiceError &&
+        error.code === "assigned_plan_not_found"
+      ) {
+        throw dependencies.httpError(404, error.message);
+      }
+
+      throw error;
+    }
   });
 
   app.post("/api/v1/plans/assign", async (request) => {
