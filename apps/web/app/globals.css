@@ -3201,7 +3201,7 @@ select {
 }
 
 .planning-workgrid.planning-workgrid-templates {
-  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr) minmax(300px, 340px);
+  grid-template-columns: minmax(240px, 0.68fr) minmax(500px, 1.42fr) minmax(280px, 0.72fr);
   grid-auto-rows: min-content;
   gap: 14px;
   align-items: start;
@@ -3695,6 +3695,12 @@ select {
   gap: 14px;
 }
 
+.planning-template-assign-head {
+  display: grid;
+  justify-content: stretch;
+  gap: 6px;
+}
+
 .planning-template-editor-head h3,
 .planning-template-assign-head h3 {
   margin: 0 0 6px;
@@ -3951,6 +3957,11 @@ select {
   overflow-wrap: anywhere;
 }
 
+.planning-template-block-row > div:first-child {
+  display: grid;
+  gap: 3px;
+}
+
 .planning-template-block-row small {
   color: var(--muted-strong);
   font-size: 0.78rem;
@@ -4055,7 +4066,13 @@ select {
   overflow-wrap: anywhere;
 }
 
+.planning-template-select-all span {
+  overflow-wrap: normal;
+  white-space: nowrap;
+}
+
 .planning-template-selected-count {
+  justify-self: start;
   color: var(--muted-strong);
   font-size: 0.84rem;
   min-width: 0;
@@ -7159,6 +7176,31 @@ select {
 
   .workspace-layout.workspace-layout-athlete .athlete-checkin-panel .athlete-scene-column-tertiary {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (min-width: 1025px) and (max-width: 1280px) {
+  .planning-workgrid.planning-workgrid-templates {
+    grid-template-columns: minmax(240px, 0.72fr) minmax(0, 1.28fr);
+  }
+
+  .planning-workgrid.planning-workgrid-templates > .planning-template-list {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .planning-workgrid.planning-workgrid-templates > .planning-template-builder {
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  .planning-workgrid.planning-workgrid-templates > .planning-template-assign {
+    grid-column: 1 / -1;
+    grid-row: 3;
+  }
+
+  .planning-template-mode-buttons {
+    grid-template-columns: repeat(3, minmax(150px, 1fr));
   }
 }
 
