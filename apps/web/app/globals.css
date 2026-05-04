@@ -7267,6 +7267,18 @@ select {
     position: static;
   }
 
+  .planning-workgrid.planning-workgrid-templates > .planning-template-list {
+    order: 1;
+  }
+
+  .planning-workgrid.planning-workgrid-templates > .planning-template-builder {
+    order: 2;
+  }
+
+  .planning-workgrid.planning-workgrid-templates > .planning-template-assign {
+    order: 3;
+  }
+
   .planning-workgrid.planning-workgrid-season {
     grid-template-columns: 1fr;
   }
