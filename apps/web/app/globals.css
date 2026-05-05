@@ -2759,15 +2759,35 @@ select {
 }
 
 .coach-analytics-stage {
-  gap: 16px;
+  gap: 12px;
   min-width: 0;
   max-width: 100%;
+}
+
+.coach-analytics-stage .summary-topline {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6px 12px;
+  min-height: 0;
+}
+
+.coach-analytics-stage .summary-topline strong,
+.coach-analytics-stage .summary-topline span {
+  min-height: 0;
+  max-width: 100%;
+  line-height: 1.28;
+  overflow: visible;
+  display: block;
+  -webkit-line-clamp: unset;
+  overflow-wrap: anywhere;
 }
 
 .coach-focus-panel.coach-analytics-stage > p {
   display: block;
   min-height: 0;
   max-width: 100%;
+  margin: 0;
   overflow: visible;
   overflow-wrap: anywhere;
   white-space: normal;
@@ -2776,10 +2796,30 @@ select {
 
 .coach-analytics-grid-v2 {
   align-items: start;
+  gap: 10px;
+}
+
+.coach-analytics-stage .scene-metric {
+  min-height: 92px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  gap: 5px;
+}
+
+.coach-analytics-stage .scene-metric span,
+.coach-analytics-stage .scene-metric strong,
+.coach-analytics-stage .scene-metric small {
+  min-height: 0;
 }
 
 .coach-analytics-card-wide {
   grid-column: span 2;
+}
+
+.coach-analytics-card.entry-summary {
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: 16px;
 }
 
 .coach-analytics-card ul {
@@ -2797,30 +2837,30 @@ select {
 
 .analytics-insight-stack {
   display: grid;
-  gap: 12px;
+  gap: 10px;
   min-width: 0;
 }
 
 .analytics-pattern-stack,
 .analytics-action-stack {
   display: grid;
-  gap: 12px;
+  gap: 10px;
   min-width: 0;
 }
 
 .analytics-insight-stack-compact {
-  margin-top: 12px;
+  margin-top: 8px;
 }
 
 .analytics-insight-card,
 .analytics-pattern-card,
 .analytics-action-card {
   display: grid;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
   max-width: 100%;
-  padding: 14px;
-  border-radius: 20px;
+  padding: 12px 14px;
+  border-radius: 16px;
   border: 1px solid rgba(148, 163, 184, 0.2);
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(244, 247, 249, 0.94) 100%);
@@ -2842,7 +2882,7 @@ select {
 .analytics-insight-card p {
   margin: 0;
   color: var(--muted);
-  line-height: 1.6;
+  line-height: 1.52;
   min-width: 0;
   overflow-wrap: anywhere;
 }
@@ -2851,7 +2891,7 @@ select {
 .analytics-action-card p {
   margin: 0;
   color: var(--muted);
-  line-height: 1.6;
+  line-height: 1.52;
   min-width: 0;
   overflow-wrap: anywhere;
 }
@@ -2918,7 +2958,7 @@ select {
   justify-content: center;
   width: fit-content;
   max-width: 100%;
-  padding: 5px 10px;
+  padding: 4px 9px;
   border-radius: 999px;
   font-size: 0.72rem;
   letter-spacing: 0.12em;
@@ -2927,6 +2967,10 @@ select {
   line-height: 1.2;
   text-align: center;
   white-space: normal;
+}
+
+.coach-analytics-stage .analytics-severity-chip {
+  display: inline-flex;
 }
 
 .analytics-severity-chip.info {
@@ -2946,7 +2990,7 @@ select {
 
 .analytics-evidence-list {
   display: grid;
-  gap: 8px;
+  gap: 6px;
   min-width: 0;
 }
 
@@ -2962,7 +3006,7 @@ select {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(72px, auto);
   align-items: start;
-  gap: 8px 12px;
+  gap: 4px 12px;
   min-width: 0;
 }
 
@@ -3002,22 +3046,22 @@ select {
 
 .analytics-week-card {
   display: grid;
-  gap: 14px;
+  gap: 10px;
   min-width: 0;
 }
 
 .analytics-week-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 110px), 1fr));
-  gap: 12px;
+  gap: 8px;
   min-width: 0;
 }
 
 .analytics-week-grid > div {
   display: grid;
-  gap: 6px;
-  padding: 12px;
-  border-radius: 16px;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 14px;
   background: rgba(255, 255, 255, 0.7);
   border: 1px solid rgba(148, 163, 184, 0.14);
 }
@@ -3040,7 +3084,7 @@ select {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px 12px;
   flex-wrap: wrap;
   min-width: 0;
 }
@@ -3054,15 +3098,15 @@ select {
 .analytics-action-buttons {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
 }
 
 .analytics-decision-panel {
   display: grid;
-  gap: 10px;
-  padding: 12px 14px;
-  border-radius: 18px;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 14px;
   border: 1px solid rgba(148, 163, 184, 0.22);
   background: rgba(255, 255, 255, 0.72);
 }
@@ -3154,7 +3198,7 @@ select {
 }
 
 .analytics-action-button {
-  min-height: 40px;
+  min-height: 36px;
   padding: 0 14px;
   min-width: 0;
   max-width: 100%;
@@ -8272,6 +8316,17 @@ select {
   .analytics-action-card {
     padding: 12px;
     border-radius: 14px;
+  }
+
+  .coach-analytics-stage {
+    gap: 10px;
+  }
+
+  .coach-analytics-stage .summary-topline {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: start;
+    gap: 5px 8px;
   }
 
   .coach-stat-strip,
