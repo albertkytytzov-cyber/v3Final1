@@ -24,7 +24,7 @@ packages/
 infra/
   caddy/               Caddy reverse-proxy config
   postgres/init/       Initial PostgreSQL schema
-docs/                  Architecture and self-host deployment notes
+docs/                  Architecture, user guide, and self-host deployment notes
 scripts/               Setup, run, lint, test, deploy, backup, restore helpers
 docker-compose.yml     Production/self-host compose stack
 ```
@@ -165,6 +165,10 @@ iOS requires Xcode on macOS or a cloud build flow:
 ```bash
 npm run mobile:open:ios
 ```
+
+## User Documentation
+
+- [Russian user guide](docs/user-guide-ru.md) - coach, athlete, planning, mobile, and offline workflows.
 
 ## Development Rules
 

@@ -130,17 +130,17 @@ export const UI_TEXT: Record<Language, Record<string, string>> = {
       "Этому спортсмену нужен активный план, чтобы сравнивать план и факт.",
     loadPoints: "точек нагрузки",
     coachAnalyticsIntro:
-      "Аналитика v2 по выбранному спортсмену. Тренды связаны с сезонным контекстом, неделей мезоцикла, фактической нагрузкой и сигналами риска для тренера.",
+      "Краткая аналитика по спортсмену",
     coachAnalyticsNeedData:
-      "Для аналитики нужны история готовности, план и данные фактического выполнения.",
-    analyticsCoachInsights: "Выводы для тренера",
+      "Для аналитики нужны записи готовности, назначенный план и отметки выполнения.",
+    analyticsCoachInsights: "Сигналы",
     analyticsPatterns: "Автоматически найденные закономерности",
-    analyticsCoachActions: "Действия тренера",
+    analyticsCoachActions: "Рекомендации тренеру",
     analyticsPlanningChain: "Планировочная цепочка",
     analyticsWeekSnapshot: "Снимок недели",
-    analyticsRecommendation: "Рекомендация",
+    analyticsRecommendation: "Что сделать",
     analyticsMissingLinks: "Отсутствующие звенья",
-    analyticsOpenInPlanner: "Открыть в планировании",
+    analyticsOpenInPlanner: "Открыть неделю",
     analyticsOpenAndApply: "Открыть и применить",
     analyticsDecisionHistory: "История решений",
     analyticsDecisionState: "Решение",
@@ -219,17 +219,17 @@ export const UI_TEXT: Record<Language, Record<string, string>> = {
       "На този спортист му е нужен активен план, за да се сравняват планът и реалното изпълнение.",
     loadPoints: "точки натоварване",
     coachAnalyticsIntro:
-      "Анализ v2 за избрания спортист. Тенденциите са свързани със сезонния контекст, седмицата от мезоцикъла, реалното натоварване и сигналите за риск към треньора.",
+      "Кратък анализ за спортиста",
     coachAnalyticsNeedData:
-      "За анализа са нужни история на готовността, план и данни за изпълнението.",
-    analyticsCoachInsights: "Изводи за треньора",
+      "За анализа са нужни записи за готовност, назначен план и отбелязано изпълнение.",
+    analyticsCoachInsights: "Сигнали",
     analyticsPatterns: "Автоматично открити закономерности",
-    analyticsCoachActions: "Действия на треньора",
+    analyticsCoachActions: "Препоръки за треньора",
     analyticsPlanningChain: "Планираща верига",
     analyticsWeekSnapshot: "Снимка на седмицата",
-    analyticsRecommendation: "Препоръка",
+    analyticsRecommendation: "Какво да се направи",
     analyticsMissingLinks: "Липсващи връзки",
-    analyticsOpenInPlanner: "Отвори в планирането",
+    analyticsOpenInPlanner: "Отвори седмицата",
     analyticsOpenAndApply: "Отвори и приложи",
     analyticsDecisionHistory: "История на решенията",
     analyticsDecisionState: "Решение",
@@ -970,7 +970,7 @@ export function translateAnalyticsInsightTitle(
     taper_violation: {
       en: "Taper freshness is being violated",
       ru: "Свежесть в подводке нарушается",
-      bg: "Свежестта в тейпъра се нарушава",
+      bg: "Свежестта преди старта се нарушава",
     },
     planning_chain_gap: {
       en: "Planning chain is incomplete",
@@ -1015,7 +1015,7 @@ export function translateAnalyticsInsightSummary(
     taper_violation: {
       en: "Close-to-competition load is still too dense for a taper or competition window, which can erode freshness without adding useful stimulus.",
       ru: "Нагрузка перед стартом всё ещё слишком плотная для подводки или соревновательного окна и может снижать свежесть без полезного стимула.",
-      bg: "Натоварването преди старта все още е твърде плътно за тейпър или състезателен прозорец и може да намали свежестта без полезен стимул.",
+      bg: "Натоварването преди старта все още е твърде плътно за предстартово намаляване или състезателен прозорец и може да намали свежестта без полезен стимул.",
     },
     planning_chain_gap: {
       en: "Analytics can still run, but the season-to-week context is partially missing for this athlete.",
@@ -1039,8 +1039,8 @@ export function translateAnalyticsInsightRecommendation(
   const map: Record<AnalyticsInsight["code"], Record<Language, string>> = {
     fatigue_risk: {
       en: "Reduce the next high-load slot, keep only essential specific work, and re-check readiness before adding volume back.",
-      ru: "Снизьте ближайший высоконагрузочный слот, оставьте только ключевую специальную работу и перепроверьте готовность перед возвратом объёма.",
-      bg: "Намалете следващия високо натоварващ слот, оставете само ключовата специфична работа и проверете готовността отново преди връщане на обема.",
+      ru: "Снизьте ближайшую тяжёлую работу, оставьте только ключевую специальную часть и проверьте готовность перед возвратом объёма.",
+      bg: "Намалете следващата тежка работа, оставете само ключовата специфична част и проверете готовността отново преди връщане на обема.",
     },
     adherence_risk: {
       en: "Review the blocker with the athlete, simplify the next 48 hours if needed, and protect the most important session instead of chasing missed volume.",
@@ -1049,8 +1049,8 @@ export function translateAnalyticsInsightRecommendation(
     },
     load_spike: {
       en: "Trim the heaviest remaining day, reduce metabolic volume first, and keep only the block types that match the week intent.",
-      ru: "Сократите самый тяжёлый оставшийся день, сначала снизьте метаболический объём и оставьте только блоки, соответствующие замыслу недели.",
-      bg: "Съкратете най-тежкия оставащ ден, първо намалете метаболитния обем и оставете само блоковете, които отговарят на замисъла на седмицата.",
+      ru: "Сократите самый тяжёлый оставшийся день, сначала снизьте объём утомляющей работы и оставьте только то, что соответствует цели недели.",
+      bg: "Съкратете най-тежкия оставащ ден, първо намалете обема на уморяващата работа и оставете само това, което отговаря на целта на седмицата.",
     },
     underload_risk: {
       en: "Check whether sessions were missed, then either recover the key work or lower the planned target so the block stays honest.",
@@ -1064,8 +1064,8 @@ export function translateAnalyticsInsightRecommendation(
     },
     planning_chain_gap: {
       en: "Link the active season, mesocycle, and competition plan so readiness and execution can be interpreted against the intended block.",
-      ru: "Свяжите активный сезон, мезоцикл и план старта, чтобы готовность и выполнение интерпретировались относительно нужного блока.",
-      bg: "Свържете активния сезон, мезоцикъла и плана за старт, за да могат готовността и изпълнението да се интерпретират спрямо правилния блок.",
+      ru: "Свяжите активный сезон, мезоцикл и план старта, чтобы готовность и выполнение оценивались в правильном контексте.",
+      bg: "Свържете активния сезон, мезоцикъла и плана за старт, за да се оценяват готовността и изпълнението в правилния контекст.",
     },
     on_track: {
       en: "Hold the current week intent, monitor readiness daily, and adjust only if execution or freshness changes materially.",
@@ -1154,18 +1154,18 @@ export function translateAnalyticsCoachSuggestionTitle(
   const map: Record<AnalyticsCoachSuggestion["id"], Record<Language, string>> = {
     "protect-taper-freshness": {
       en: "Protect taper freshness in planner",
-      ru: "Защитить свежесть подводки в планировании",
-      bg: "Защитете свежестта на тейпъра в планирането",
+      ru: "Сохранить свежесть перед стартом",
+      bg: "Запазете свежестта преди старта",
     },
     "rebalance-recovery-density": {
       en: "Rebalance the week toward recovery",
-      ru: "Сместить неделю в сторону восстановления",
-      bg: "Пребалансирайте седмицата към възстановяване",
+      ru: "Усилить восстановление на неделе",
+      bg: "Усилете възстановяването през седмицата",
     },
     "rescue-specific-work": {
       en: "Rescue the specific work slot",
-      ru: "Сохранить слот специальной работы",
-      bg: "Запазете слота за специфична работа",
+      ru: "Сохранить специальную работу",
+      bg: "Запазете специфичната работа",
     },
     "smooth-load-curve": {
       en: "Smooth the weekly load curve",
@@ -1174,8 +1174,8 @@ export function translateAnalyticsCoachSuggestionTitle(
     },
     "restore-block-stimulus": {
       en: "Restore the intended block stimulus",
-      ru: "Вернуть нужный стимул блока",
-      bg: "Върнете целевия стимул на блока",
+      ru: "Вернуть нужную нагрузку блока",
+      bg: "Върнете нужното натоварване в блока",
     },
   };
 
@@ -1189,18 +1189,18 @@ export function translateAnalyticsCoachSuggestionSummary(
   const map: Record<AnalyticsCoachSuggestion["id"], Record<Language, string>> = {
     "protect-taper-freshness": {
       en: "Open the active week in planning studio and convert the flagged fatiguing slot into activation or recovery work.",
-      ru: "Откройте активную неделю в планировании и переведите отмеченный утомляющий слот в активацию или восстановление.",
-      bg: "Отворете активната седмица в планирането и превърнете маркирания уморяващ слот в активация или възстановяване.",
+      ru: "Откройте активную неделю и замените утомляющую работу на активацию или восстановление.",
+      bg: "Отворете активната седмица и заменете уморяващата работа с активация или възстановяване.",
     },
     "rebalance-recovery-density": {
       en: "Use the weekly planner to insert more recovery-support work before fatigue accumulates further.",
-      ru: "Используйте недельное планирование, чтобы добавить больше восстановительной работы до дальнейшего накопления усталости.",
-      bg: "Използвайте седмичното планиране, за да добавите повече възстановителна работа, преди умората да се натрупа още.",
+      ru: "Добавьте восстановительную работу сейчас, пока усталость не накопилась сильнее.",
+      bg: "Добавете възстановителна работа сега, преди умората да се натрупа повече.",
     },
     "rescue-specific-work": {
       en: "Specific execution is drifting, so open the planner and move or protect the targeted day before it is lost.",
-      ru: "Специальная работа уходит от плана, поэтому откройте планирование и сместите либо защитите целевой день, пока он не потерян.",
-      bg: "Специфичното изпълнение се отдалечава, затова отворете планирането и преместете или защитете целевия ден, преди да бъде загубен.",
+      ru: "Специальная работа уходит от плана: перенесите или защитите нужный день, пока он не потерян.",
+      bg: "Специфичната работа се отдалечава от плана: преместете или защитете нужния ден, преди да бъде загубен.",
     },
     "smooth-load-curve": {
       en: "The active week is climbing too fast, so use the planner to reduce the heaviest slot instead of carrying the spike forward.",
@@ -1209,8 +1209,8 @@ export function translateAnalyticsCoachSuggestionSummary(
     },
     "restore-block-stimulus": {
       en: "The block is under-delivering against intent, so the next planner pass should add load back in the right slot instead of drifting quietly.",
-      ru: "Блок недодаёт относительно замысла, поэтому следующий проход планирования должен вернуть нагрузку в нужный слот, а не оставлять тихий дрейф.",
-      bg: "Блокът недодава спрямо замисъла, така че следващото планиране трябва да върне натоварването в правилния слот, вместо да остави тихо отклонение.",
+      ru: "Блок недобирает нагрузку. Верните работу в подходящий день, чтобы не терять замысел подготовки.",
+      bg: "Блокът не достига планираното натоварване. Върнете работата в подходящия ден, за да не се губи замисълът на подготовката.",
     },
   };
 
@@ -1224,18 +1224,18 @@ export function translateAnalyticsCoachSuggestionRecommendation(
   const map: Record<AnalyticsCoachSuggestion["id"], Record<Language, string>> = {
     "protect-taper-freshness": {
       en: "Load the weekly planner for this week and apply the taper-safe swap on the targeted day.",
-      ru: "Откройте недельное планирование и примените безопасную для подводки замену в целевой день.",
-      bg: "Отворете седмичното планиране и приложете безопасна за тейпъра смяна в целевия ден.",
+      ru: "Откройте недельный план и замените тяжёлую работу на более лёгкую в нужный день.",
+      bg: "Отворете седмичния план и заменете тежката работа с по-лека в нужния ден.",
     },
     "rebalance-recovery-density": {
       en: "Open the current week and convert the heaviest slot into a recovery day or lighter template.",
-      ru: "Откройте текущую неделю и превратите самый тяжёлый слот в восстановительный день или более лёгкий шаблон.",
-      bg: "Отворете текущата седмица и превърнете най-тежкия слот във възстановителен ден или по-лек шаблон.",
+      ru: "Откройте текущую неделю и замените самый тяжёлый день на восстановление или лёгкий шаблон.",
+      bg: "Отворете текущата седмица и заменете най-тежкия ден с възстановяване или по-лек шаблон.",
     },
     "rescue-specific-work": {
       en: "Open the active week, move the specific slot if needed, and preserve it from overlap or fatigue spillover.",
-      ru: "Откройте активную неделю, при необходимости сдвиньте специальный слот и защитите его от пересечения или переноса усталости.",
-      bg: "Отворете активната седмица, при нужда преместете специфичния слот и го защитете от припокриване или пренасяне на умора.",
+      ru: "Откройте активную неделю, перенесите специальную работу при необходимости и уберите пересечения.",
+      bg: "Отворете активната седмица, преместете специфичната работа при нужда и премахнете припокриванията.",
     },
     "smooth-load-curve": {
       en: "Open the weekly planner and apply a load-reduction suggestion on the overloaded day.",
@@ -1244,8 +1244,8 @@ export function translateAnalyticsCoachSuggestionRecommendation(
     },
     "restore-block-stimulus": {
       en: "Open the current week and increase one of the lighter slots to better match the block target.",
-      ru: "Откройте текущую неделю и увеличьте один из более лёгких слотов, чтобы лучше попасть в цель блока.",
-      bg: "Отворете текущата седмица и увеличете един от по-леките слотове, за да се доближите по-добре до целта на блока.",
+      ru: "Откройте текущую неделю и усилите один из лёгких дней, чтобы попасть в цель блока.",
+      bg: "Отворете текущата седмица и усилете един от леките дни, за да достигнете целта на блока.",
     },
   };
 

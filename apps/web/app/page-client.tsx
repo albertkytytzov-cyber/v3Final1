@@ -74,17 +74,13 @@ import {
   translateAnalyticsCoachSuggestionRecommendation as importedTranslateAnalyticsCoachSuggestionRecommendation,
   translateAnalyticsCoachSuggestionSummary as importedTranslateAnalyticsCoachSuggestionSummary,
   translateAnalyticsCoachSuggestionTitle as importedTranslateAnalyticsCoachSuggestionTitle,
-  translateAnalyticsDecisionExplanation as importedTranslateAnalyticsDecisionExplanation,
   translateAnalyticsDecisionOutcome as importedTranslateAnalyticsDecisionOutcome,
-  translateAnalyticsDecisionOutcomeSource as importedTranslateAnalyticsDecisionOutcomeSource,
   translateAnalyticsDecisionStatus as importedTranslateAnalyticsDecisionStatus,
   translateAnalyticsInsightLevel as importedTranslateAnalyticsInsightLevel,
   translateAnalyticsInsightRecommendation as importedTranslateAnalyticsInsightRecommendation,
   translateAnalyticsInsightSummary as importedTranslateAnalyticsInsightSummary,
   translateAnalyticsInsightTitle as importedTranslateAnalyticsInsightTitle,
   translateAnalyticsMissingLink as importedTranslateAnalyticsMissingLink,
-  translateAnalyticsPatternSummary as importedTranslateAnalyticsPatternSummary,
-  translateAnalyticsPatternTitle as importedTranslateAnalyticsPatternTitle,
   translateAnalyticsWeekStatus as importedTranslateAnalyticsWeekStatus,
   translateBlockAction as importedTranslateBlockAction,
   translateExecutionStatus as importedTranslateExecutionStatus,
@@ -3452,10 +3448,6 @@ export function PageClient({
     }));
   }
 
-  const analyticsPatternTitle = (pattern: NonNullable<AnalyticsOverview["patterns"]>[number]) =>
-    importedTranslateAnalyticsPatternTitle(pattern, language);
-  const analyticsPatternSummary = (pattern: NonNullable<AnalyticsOverview["patterns"]>[number]) =>
-    importedTranslateAnalyticsPatternSummary(pattern, language);
   const analyticsCoachSuggestionTitle = (
     suggestion: NonNullable<AnalyticsOverview["coachSuggestions"]>[number],
   ) => importedTranslateAnalyticsCoachSuggestionTitle(suggestion, language);
@@ -3469,11 +3461,6 @@ export function PageClient({
     importedTranslateAnalyticsDecisionStatus(status, language);
   const analyticsDecisionOutcome = (outcome: AnalyticsCoachActionDecision["outcome"]) =>
     importedTranslateAnalyticsDecisionOutcome(outcome, language);
-  const analyticsDecisionOutcomeSource = (
-    source: AnalyticsCoachActionDecision["outcomeSource"],
-  ) => importedTranslateAnalyticsDecisionOutcomeSource(source, language);
-  const analyticsDecisionExplanation = (decision: AnalyticsCoachActionDecision) =>
-    importedTranslateAnalyticsDecisionExplanation(decision, language);
   const analyticsWeekStatus = (status: NonNullable<AnalyticsOverview["chain"]["weekSummary"]>["status"]) =>
     importedTranslateAnalyticsWeekStatus(status, language);
   const analyticsMissingLink = (link: string) =>
@@ -7806,10 +7793,10 @@ export function PageClient({
             : "Athlete roster, coach linking, and selected athlete profile."
       : activeWorkspace === "coach-analytics"
         ? language === "ru"
-        ? "Тренды, риски, закономерности и тренерские предложения по выбранному спортсмену."
+        ? "Ключевые сигналы, риски и практические рекомендации по выбранному спортсмену."
         : language === "bg"
-          ? "Тенденции, рискове, закономерности и треньорски предложения за избрания спортист."
-            : "Trends, risks, patterns, and coach suggestions for the selected athlete."
+          ? "Ключови сигнали, рискове и практически препоръки за избрания спортист."
+            : "Key signals, risks, and practical coach recommendations for the selected athlete."
       : activeWorkspace === "coach-review"
         ? language === "ru"
         ? "Разбор выполнения, план и факт, отклонения по выбранному спортсмену."
@@ -11013,7 +11000,15 @@ export function PageClient({
                     <strong>{t("analytics")}</strong>
                     <span>
                       {coachAnalyticsOverview
-                        ? `${coachAnalyticsOverview.insights.length} ${ui("analyticsCoachInsights").toLowerCase()}`
+                        ? `${coachAnalyticsOverview.insights.length} ${copyFor(language, {
+                            en: "signals",
+                            ru: "сигналов",
+                            bg: "сигнала",
+                          })} / ${coachAnalyticsOverview.coachSuggestions.length} ${copyFor(language, {
+                            en: "recommendations",
+                            ru: "рекомендаций",
+                            bg: "препоръки",
+                          })}`
                         : ui("noAnalyticsYet")}
                     </span>
                   </div>
@@ -11106,50 +11101,7 @@ export function PageClient({
                           </div>
                         </article>
 
-                        <article className="entry-summary coach-analytics-card">
-                          <div className="summary-topline">
-                            <strong>{ui("analyticsPatterns")}</strong>
-                            <span>{coachAnalyticsOverview.patterns.length}</span>
-                          </div>
-                          {coachAnalyticsOverview.patterns.length ? (
-                            <div className="analytics-pattern-stack">
-                              {coachAnalyticsOverview.patterns.map((pattern) => (
-                                <article className="analytics-pattern-card" key={pattern.code}>
-                                  <div className="summary-topline">
-                                    <strong>{analyticsPatternTitle(pattern)}</strong>
-                                    <span className={`analytics-severity-chip ${pattern.level}`}>
-                                      {analyticsSeverityLabel(pattern.level)}
-                                    </span>
-                                  </div>
-                                  <p>{analyticsPatternSummary(pattern)}</p>
-                                  <div className="analytics-evidence-list">
-                                    {pattern.evidence.map((item) => (
-                                      <div className="analytics-evidence-row" key={`${pattern.code}-${item.label}`}>
-                                        <span>{analyticsEvidenceLabel(item.label)}</span>
-                                        <strong>{item.value}</strong>
-                                      </div>
-                                    ))}
-                                  </div>
-                                  <small className="analytics-pattern-meta">
-                                    {pattern.weekLabel ?? "-"}
-                                    {pattern.blockType ? ` / ${pattern.blockType}` : ""}
-                                    {pattern.dayOffset !== null
-                                      ? ` / ${copyFor(language, {
-                                          en: "Day",
-                                          ru: "День",
-                                          bg: "Ден",
-                                        })} ${pattern.dayOffset + 1}`
-                                      : ""}
-                                  </small>
-                                </article>
-                              ))}
-                            </div>
-                          ) : (
-                            <p className="placeholder-copy">{ui("noAnalyticsYet")}</p>
-                          )}
-                        </article>
-
-                        <article className="entry-summary coach-analytics-card">
+                        <article className="entry-summary coach-analytics-card coach-analytics-card-wide">
                           <div className="summary-topline">
                             <strong>{ui("analyticsCoachActions")}</strong>
                             <span>{coachAnalyticsOverview.coachSuggestions.length}</span>
@@ -11177,179 +11129,6 @@ export function PageClient({
                                       {analyticsCoachSuggestionRecommendation(suggestion)}
                                     </p>
 
-                                    {suggestion.plannerBridge ? (
-                                      <div className="analytics-selection-flow">
-                                        <article className="analytics-selection-stage">
-                                          <span className="analytics-selection-kicker">
-                                            {copyFor(language, {
-                                              en: "Pack choice",
-                                              ru: "Выбор пакета",
-        bg: "Избор на пакет",
-                                            })}
-                                          </span>
-                                          {plannerLink.hasMatchingPack ? (
-                                            plannerLink.packItem ? (
-                                              <>
-                                                <strong>
-                                                  {plannerLink.packItem.dayLabel} ·{" "}
-                                                  {plannerLink.packItem.templateName}
-                                                </strong>
-                                                <small className="analytics-selection-meta">
-                                                  {copyFor(language, {
-                                                    en: `Load ${plannerLink.packItem.estimatedLoad} · score ${plannerLink.packItem.score}`,
-                                                    ru: `Нагрузка ${plannerLink.packItem.estimatedLoad} · оценка ${plannerLink.packItem.score}`,
-                                                    bg: `Натоварване ${plannerLink.packItem.estimatedLoad} · оценка ${plannerLink.packItem.score}`,
-                                                  })}
-                                                </small>
-                                                {plannerLink.packItem.historyBiases.length ? (
-                                                  <div className="analytics-selection-signal-list">
-                                                    {plannerLink.packItem.historyBiases.map(
-                                                      (bias, index) => (
-                                                        <small
-                                                          className={`planner-feedback-badge ${bias.label}`}
-                                                          key={`${suggestion.id}-${bias.code}-${bias.action}-${index}`}
-                                                        >
-                                                          {plannerHistoryBiasSummary(bias)}
-                                                        </small>
-                                                      ),
-                                                    )}
-                                                  </div>
-                                                ) : (
-                                                  <p className="analytics-selection-placeholder">
-                                                    {copyFor(language, {
-                                                      en: "This slot stayed mostly phase/load-driven without a strong history override.",
-          ru: "Этот слот остался в основном выбранным по фазе и нагрузке без сильной исторической поправки.",
-          bg: "Този слот остана избран основно според фазата и натоварването без силна историческа корекция.",
-                                                    })}
-                                                  </p>
-                                                )}
-                                                <p className="analytics-selection-note">
-                                                  {plannerLink.packItem.reason}
-                                                </p>
-                                              </>
-                                            ) : (
-                                              <p className="analytics-selection-placeholder">
-                                                {copyFor(language, {
-                                                  en: "The linked planner day is no longer present in the loaded pack.",
-          ru: "Связанный день планировщика больше не присутствует в загруженном пакете.",
-          bg: "Свързаният ден от планирането вече не присъства в заредения пакет.",
-                                                })}
-                                              </p>
-                                            )
-                                          ) : (
-                                            <p className="analytics-selection-placeholder">
-                                              {copyFor(language, {
-                                                en: "Open the matching planner week to inspect the current pack choice and its selection signals.",
-          ru: "Откройте соответствующую неделю планирования, чтобы увидеть текущий выбор пакета и его сигналы отбора.",
-          bg: "Отворете съответната седмица в планирането, за да видите текущия избор на пакет и сигналите за подбор.",
-                                              })}
-                                            </p>
-                                          )}
-                                        </article>
-
-                                        <article className="analytics-selection-stage">
-                                          <span className="analytics-selection-kicker">
-                                            {copyFor(language, {
-                                              en: "Suggestion refinement",
-                                              ru: "Уточнение совета",
-                                              bg: "Уточняване на предложението",
-                                            })}
-                                          </span>
-                                          {plannerLink.hasMatchingPack ? (
-                                            plannerLink.plannerSuggestion ? (
-                                              <>
-                                                <strong>
-                                                  {plannerLink.plannerSuggestion.recommendedTemplateName ??
-                                                    copyFor(language, {
-                                                      en: "Planner action ready",
-        ru: "Действие планирования готово",
-        bg: "Действието за планиране е готово",
-                                                    })}
-                                                </strong>
-                                                <small className="analytics-selection-meta">
-                                                  {plannerLink.plannerSuggestion.message}
-                                                </small>
-                                                {plannerLink.plannerSuggestion.feedback ? (
-                                                  <small
-                                                    className={`planner-feedback-badge ${plannerLink.plannerSuggestion.feedback.label}`}
-                                                  >
-                                                    {plannerSuggestionFeedbackSummary(
-                                                      plannerLink.plannerSuggestion.feedback,
-                                                    )}
-                                                  </small>
-                                                ) : (
-                                                  <p className="analytics-selection-placeholder">
-                                                    {copyFor(language, {
-                                                      en: "This refinement has no extra coach feedback signal yet.",
-                                                      ru: "У этого уточнения пока нет дополнительного coach-feedback сигнала.",
-                                                      bg: "Това уточнение все още няма допълнителен coach-feedback сигнал.",
-                                                    })}
-                                                  </p>
-                                                )}
-                                              </>
-                                            ) : (
-                                              <p className="analytics-selection-placeholder">
-                                                {copyFor(language, {
-                                                  en: "The loaded pack does not currently surface this refinement in its suggestion list.",
-          ru: "Загруженный пакет сейчас не показывает это уточнение в списке предложений.",
-          bg: "Зареденият пакет в момента не показва това уточнение в списъка с предложения.",
-                                                })}
-                                              </p>
-                                            )
-                                          ) : (
-                                            <p className="analytics-selection-placeholder">
-                                              {copyFor(language, {
-                                                en: "Load the same planner week to see how analytics refines the pack choice into a planner action.",
-        ru: "Загрузите ту же неделю планирования, чтобы увидеть, как аналитика превращает выбор пакета в действие планирования.",
-        bg: "Заредете същата седмица в планирането, за да видите как анализът превръща избора на пакет в действие за планиране.",
-                                              })}
-                                            </p>
-                                          )}
-                                        </article>
-
-                                        <article className="analytics-selection-stage outcome">
-                                          <span className="analytics-selection-kicker">
-                                            {copyFor(language, {
-                                              en: "Applied outcome",
-                                              ru: "Итог применения",
-                                              bg: "Резултат от прилагането",
-                                            })}
-                                          </span>
-                                          {suggestion.latestDecision ? (
-                                            <>
-                                              <strong>
-                                                {analyticsDecisionStatus(
-                                                  suggestion.latestDecision.decisionStatus,
-                                                )}{" "}
-                                                ·{" "}
-                                                {analyticsDecisionOutcome(
-                                                  suggestion.latestDecision.outcome,
-                                                )}
-                                              </strong>
-                                              <small className="analytics-selection-meta">
-                                                {analyticsDecisionOutcomeSource(
-                                                  suggestion.latestDecision.outcomeSource,
-                                                )}
-                                              </small>
-                                              <p className="analytics-selection-note">
-                                                {analyticsDecisionExplanation(
-                                                  suggestion.latestDecision,
-                                                )}
-                                              </p>
-                                            </>
-                                          ) : (
-                                            <p className="analytics-selection-placeholder">
-                                              {copyFor(language, {
-                                                en: "Awaiting coach action and outcome feedback for this chain.",
-                                                ru: "Для этой цепочки ещё ожидаются действие тренера и outcome-feedback.",
-                                                bg: "За тази верига все още се чака треньорско действие и outcome-feedback.",
-                                              })}
-                                            </p>
-                                          )}
-                                        </article>
-                                      </div>
-                                    ) : null}
-
                                     {suggestion.latestDecision ? (
                                       <div className="analytics-decision-panel">
                                         <div className="analytics-decision-row">
@@ -11366,14 +11145,6 @@ export function PageClient({
                                             {analyticsDecisionOutcome(suggestion.latestDecision.outcome)}
                                           </strong>
                                         </div>
-                                        <small className="analytics-decision-caption">
-                                          {analyticsDecisionOutcomeSource(
-                                            suggestion.latestDecision.outcomeSource,
-                                          )}
-                                        </small>
-                                        <p className="analytics-decision-caption">
-                                          {analyticsDecisionExplanation(suggestion.latestDecision)}
-                                        </p>
                                         <div className="analytics-outcome-actions">
                                           {(["positive", "neutral", "negative"] as const).map(
                                             (outcome) => (
@@ -11399,19 +11170,17 @@ export function PageClient({
                                           )}
                                         </div>
                                       </div>
-                                    ) : (
-                                      <p className="analytics-decision-caption">
-                                        {copyFor(language, {
-                                          en: "No coach decision has been logged for this action yet.",
-                                          ru: "Для этого действия тренерское решение пока не зафиксировано.",
-                                          bg: "За това действие все още няма записано треньорско решение.",
-                                        })}
-                                      </p>
-                                    )}
+                                    ) : null}
                                     <div className="analytics-action-footer">
                                       <small>
                                         {suggestion.plannerBridge
-                                          ? `${suggestion.plannerBridge.startDate} / ${suggestion.plannerBridge.plannedPhase ?? "-"}`
+                                          ? plannerLink.hasMatchingPack
+                                            ? `${suggestion.plannerBridge.startDate} / ${suggestion.plannerBridge.plannedPhase ?? "-"}`
+                                            : copyFor(language, {
+                                                en: "Open the matching week in planning",
+                                                ru: "Откройте эту неделю в планировании",
+                                                bg: "Отворете тази седмица в планирането",
+                                              })
                                           : copyFor(language, {
                                               en: "Planner bridge unavailable",
         ru: "Связь с планированием недоступна",
@@ -11452,125 +11221,6 @@ export function PageClient({
                           )}
                         </article>
 
-                        <article className="entry-summary coach-analytics-card">
-                          <div className="summary-topline">
-                            <strong>{ui("analyticsDecisionHistory")}</strong>
-                            <span>{coachAnalyticsOverview.decisionHistory.length}</span>
-                          </div>
-                          {coachAnalyticsOverview.decisionHistory.length ? (
-                            <div className="analytics-decision-history">
-                              {coachAnalyticsOverview.decisionHistory.slice(0, 4).map((decision) => (
-                                <article className="analytics-decision-history-card" key={decision.id}>
-                                  <div className="summary-topline">
-                                    <strong>{decision.suggestionTitle}</strong>
-                                    <span
-                                      className={`analytics-decision-chip ${decision.decisionStatus}`}
-                                    >
-                                      {analyticsDecisionStatus(decision.decisionStatus)}
-                                    </span>
-                                  </div>
-                                  <div className="analytics-decision-meta">
-                                    <strong>{analyticsDecisionOutcome(decision.outcome)}</strong>
-                                    <span>{decision.weekLabel ?? decision.weekStartDate}</span>
-                                  </div>
-                                  <small className="analytics-decision-caption">
-                                    {analyticsDecisionOutcomeSource(decision.outcomeSource)}
-                                  </small>
-                                  <p className="analytics-decision-caption">
-                                    {analyticsDecisionExplanation(decision)}
-                                  </p>
-                                  {decision.baselineSnapshot || decision.latestSnapshot ? (
-                                    <div className="analytics-decision-snapshot">
-                                      <span>
-                                        {copyFor(language, {
-                                          en: "Readiness",
-                                          ru: "Readiness",
-                                          bg: "Readiness",
-                                        })}{" "}
-                                        {decision.baselineSnapshot?.readinessScore ?? "-"} {"->"}{" "}
-                                        {decision.latestSnapshot?.readinessScore ?? "-"}
-                                      </span>
-                                      <span>
-                                        {copyFor(language, {
-                                          en: "Adherence",
-                                          ru: "Выполнение",
-                                          bg: "Изпълнение",
-                                        })}{" "}
-                                        {decision.baselineSnapshot?.adherenceRate ?? "-"}% {"->"}{" "}
-                                        {decision.latestSnapshot?.adherenceRate ?? "-"}%
-                                      </span>
-                                    </div>
-                                  ) : null}
-                                </article>
-                              ))}
-                            </div>
-                          ) : (
-                            <p className="placeholder-copy">{ui("analyticsNoDecisionHistory")}</p>
-                          )}
-                        </article>
-
-                        <article className="entry-summary coach-analytics-card">
-                          <div className="summary-topline">
-                            <strong>{ui("analyticsPlanningChain")}</strong>
-                            <span>
-                              {coachAnalyticsOverview.chain.mesocycleWeek?.weekLabel ??
-                                copyFor(language, {
-                                  en: "No week",
-                                  ru: "Нет недели",
-                                  bg: "Няма седмица",
-                                })}
-                            </span>
-                          </div>
-                          <div className="analytics-chain-list">
-                            <div className="analytics-chain-row">
-                              <span>{copyFor(language, { en: "Season", ru: "Сезон", bg: "Сезон" })}</span>
-                              <strong>
-                                {coachAnalyticsOverview.chain.season
-                                  ? `${coachAnalyticsOverview.chain.season.name} / ${coachAnalyticsOverview.chain.season.year}`
-                                  : "-"}
-                              </strong>
-                            </div>
-                            <div className="analytics-chain-row">
-                              <span>{copyFor(language, {
-                                en: "Competition plan",
-                                ru: "План старта",
-                                bg: "План за състезание",
-                              })}</span>
-                              <strong>
-                                {coachAnalyticsOverview.chain.competitionPlan
-                                  ? `${coachAnalyticsOverview.chain.competitionPlan.competitionTitle} / ${coachAnalyticsOverview.chain.competitionPlan.priority}`
-                                  : "-"}
-                              </strong>
-                            </div>
-                            <div className="analytics-chain-row">
-                              <span>{copyFor(language, { en: "Mesocycle", ru: "Мезоцикл", bg: "Мезоцикъл" })}</span>
-                              <strong>
-                                {coachAnalyticsOverview.chain.mesocycle
-                                  ? `${coachAnalyticsOverview.chain.mesocycle.name} / ${coachAnalyticsOverview.chain.mesocycle.phase}`
-                                  : "-"}
-                              </strong>
-                            </div>
-                            <div className="analytics-chain-row">
-                              <span>{copyFor(language, { en: "Week", ru: "Неделя", bg: "Седмица" })}</span>
-                              <strong>
-                                {coachWeekSummary
-                                  ? `${coachWeekSummary.label} / ${analyticsWeekStatus(coachWeekSummary.status)}`
-                                  : "-"}
-                              </strong>
-                            </div>
-                            {coachAnalyticsOverview.chain.missingLinks.length > 0 ? (
-                              <div className="analytics-chain-note">
-                                <span>{ui("analyticsMissingLinks")}</span>
-                                <strong>
-                                  {coachAnalyticsOverview.chain.missingLinks
-                                    .map((link) => analyticsMissingLink(link))
-                                    .join(", ")}
-                                </strong>
-                              </div>
-                            ) : null}
-                          </div>
-                        </article>
-
                         {coachWeekSummary ? (
                           <article className="entry-summary coach-analytics-card analytics-week-card">
                             <div className="summary-topline">
@@ -11606,51 +11256,6 @@ export function PageClient({
                           </article>
                         ) : null}
 
-                        <article className="entry-summary coach-analytics-card">
-                          <div className="summary-topline">
-                            <strong>{ui("readinessTrend")}</strong>
-                            <span>{coachAnalyticsOverview.readinessTrend.length}</span>
-                          </div>
-                          <ul className="analytics-trend-list">
-                            {coachAnalyticsOverview.readinessTrend.slice(-4).reverse().map((point) => (
-                              <li key={point.date}>
-                                {point.date}: {point.score} / {readinessMeta[point.status].label}
-                              </li>
-                            ))}
-                          </ul>
-                        </article>
-
-                        <article className="entry-summary coach-analytics-card">
-                          <div className="summary-topline">
-                            <strong>{ui("completionTrend")}</strong>
-                            <span>{coachAnalyticsOverview.completionTrend.length}</span>
-                          </div>
-                          <ul className="analytics-trend-list">
-                            {coachAnalyticsOverview.completionTrend.slice(-4).reverse().map((point) => (
-                              <li key={point.date}>
-                                {point.date}: {point.adherenceRate}% / {point.completedBlocks}/{point.plannedBlocks}
-                              </li>
-                            ))}
-                          </ul>
-                        </article>
-
-                        <article className="entry-summary coach-analytics-card">
-                          <div className="summary-topline">
-                            <strong>{ui("loadTrend")}</strong>
-                            <span>{coachAnalyticsOverview.loadTrend.length}</span>
-                          </div>
-                          <ul className="analytics-trend-list">
-                            {coachAnalyticsOverview.loadTrend.slice(-4).reverse().map((point) => (
-                              <li key={point.date}>
-                                {point.date}: {point.actualLoad} / {copyFor(language, {
-                                  en: "delta",
-                                  ru: "дельта",
-                                  bg: "делта",
-                                })} {point.loadDelta}
-                              </li>
-                            ))}
-                          </ul>
-                        </article>
                       </div>
                     </>
                   ) : (
