@@ -1,0 +1,82 @@
+name: iOS Build
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "apps/mobile/**"
+      - "packages/shared/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/ios-build.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "apps/mobile/**"
+      - "packages/shared/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/ios-build.yml"
+
+jobs:
+  ios:
+    name: Build unsigned iOS IPA
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Sync iOS project
+        run: npm run mobile:sync:ios
+
+      - name: Resolve Xcode packages
+        run: |
+          xcodebuild \
+            -resolvePackageDependencies \
+            -project apps/mobile/ios/App/App.xcodeproj \
+            -scheme App
+
+      - name: Build unsigned app
+        run: |
+          xcodebuild \
+            -project apps/mobile/ios/App/App.xcodeproj \
+            -scheme App \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build/ios-derived \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build
+
+      - name: Package unsigned IPA
+        run: |
+          APP_PATH=$(find build/ios-derived/Build/Products/Release-iphoneos -maxdepth 1 -name "*.app" -type d | head -n 1)
+          if [ -z "$APP_PATH" ]; then
+            echo "::error::No iOS .app bundle was produced"
+            exit 1
+          fi
+
+          rm -rf build/ios-unsigned
+          mkdir -p build/ios-unsigned/Payload
+          cp -R "$APP_PATH" build/ios-unsigned/Payload/
+          (cd build/ios-unsigned && zip -qry ../perform-ios-unsigned.ipa Payload)
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: perform-ios-unsigned-ipa
+          path: build/perform-ios-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 14
