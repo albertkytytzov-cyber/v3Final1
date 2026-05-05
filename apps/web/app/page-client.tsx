@@ -10949,7 +10949,7 @@ export function PageClient({
                 ) : null}
 
                 {isCoachReviewWorkspace || (isCoachDashboardWorkspace && coachView === "execution") ? (
-                <div className="entry-summary">
+                <div className="entry-summary coach-review-card">
                   <div className="summary-topline">
                     <strong>{t("executionReview")}</strong>
                     <span>
@@ -10960,31 +10960,83 @@ export function PageClient({
                   </div>
                   {coachExecutionReview ? (
                     <>
-                      <p>
-                        Planned blocks: {coachExecutionReview.summary.plannedBlocks}. Completed:{" "}
-                        {coachExecutionReview.summary.completedBlocks}. Partial:{" "}
-                        {coachExecutionReview.summary.partialBlocks}. Missed:{" "}
-                        {coachExecutionReview.summary.missedBlocks}. Avg RPE:{" "}
-                        {coachExecutionReview.summary.averageRpe ?? "n/a"}. Total actual
-                        duration: {coachExecutionReview.summary.totalDurationMinutes} min.
-                      </p>
-                      <ul>
+                      <div className="coach-review-summary-grid">
+                        {[
+                          {
+                            label: copyFor(language, { en: "Planned", ru: "План", bg: "План" }),
+                            value: coachExecutionReview.summary.plannedBlocks,
+                          },
+                          {
+                            label: copyFor(language, { en: "Done", ru: "Выполнено", bg: "Изпълнено" }),
+                            value: coachExecutionReview.summary.completedBlocks,
+                          },
+                          {
+                            label: copyFor(language, { en: "Partial", ru: "Частично", bg: "Частично" }),
+                            value: coachExecutionReview.summary.partialBlocks,
+                          },
+                          {
+                            label: copyFor(language, { en: "Missed", ru: "Пропущено", bg: "Пропуснато" }),
+                            value: coachExecutionReview.summary.missedBlocks,
+                          },
+                          {
+                            label: "RPE",
+                            value: coachExecutionReview.summary.averageRpe ?? "-",
+                          },
+                          {
+                            label: copyFor(language, { en: "Duration", ru: "Длительность", bg: "Продължителност" }),
+                            value: `${coachExecutionReview.summary.totalDurationMinutes} ${copyFor(language, {
+                              en: "min",
+                              ru: "мин",
+                              bg: "мин",
+                            })}`,
+                          },
+                        ].map((item) => (
+                          <div className="coach-review-summary-item" key={item.label}>
+                            <span>{item.label}</span>
+                            <strong>{item.value}</strong>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="coach-review-block-list">
                         {coachExecutionReview.sessions.flatMap((session) =>
                           session.blocks.map((block) => (
-                          <li key={block.id}>
-                              {session.name}: {block.name} / {translateExecutionStatus(block.executionStatus, language)} /{" "}
-                              {t("targetSets")} {block.targetSets ?? "-"} {"->"}{" "}
-                              {block.actualResult?.setsCompleted ?? "-"} / {t("targetReps")}{" "}
-                              {block.targetReps ?? "-"} {"->"}{" "}
-                              {block.actualResult?.repsCompleted ?? "-"} /{" "}
-                              {t("targetDuration")} {block.targetDurationMinutes ?? "-"} {"->"}{" "}
-                              {block.actualResult?.durationMinutes ?? "-"} /{" "}
-                              {t("targetRpe")} {block.targetRpe ?? "-"} {"->"}{" "}
-                              {block.actualResult?.rpe ?? "-"}
-                            </li>
+                            <article className="coach-review-block-item" key={block.id}>
+                              <div className="coach-review-block-main">
+                                <strong>{block.name}</strong>
+                                <span>
+                                  {session.name} / {translateExecutionStatus(block.executionStatus, language)}
+                                </span>
+                              </div>
+                              <div className="coach-review-block-values">
+                                <span>
+                                  <small>{copyFor(language, { en: "Sets", ru: "Подходы", bg: "Серии" })}</small>
+                                  <strong>
+                                    {block.targetSets ?? "-"} / {block.actualResult?.setsCompleted ?? "-"}
+                                  </strong>
+                                </span>
+                                <span>
+                                  <small>{copyFor(language, { en: "Reps", ru: "Повторы", bg: "Повт." })}</small>
+                                  <strong>
+                                    {block.targetReps ?? "-"} / {block.actualResult?.repsCompleted ?? "-"}
+                                  </strong>
+                                </span>
+                                <span>
+                                  <small>{copyFor(language, { en: "Duration", ru: "Длит.", bg: "Време" })}</small>
+                                  <strong>
+                                    {block.targetDurationMinutes ?? "-"} / {block.actualResult?.durationMinutes ?? "-"}
+                                  </strong>
+                                </span>
+                                <span>
+                                  <small>RPE</small>
+                                  <strong>
+                                    {block.targetRpe ?? "-"} / {block.actualResult?.rpe ?? "-"}
+                                  </strong>
+                                </span>
+                              </div>
+                            </article>
                           )),
                         )}
-                      </ul>
+                      </div>
                     </>
                   ) : (
                     <p className="placeholder-copy">
