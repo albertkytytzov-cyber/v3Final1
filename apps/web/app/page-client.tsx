@@ -43,6 +43,7 @@ import {
   type CoachDiaryEntryPayload,
   type PlanTemplateRecommendation,
   type PlannerSuggestion,
+  type PlannerWarning,
   type PlanExerciseInput,
   type TemplatePackRecommendation,
   type TemplatePackRecommendationResponse,
@@ -2321,6 +2322,569 @@ function localizedWeekLabel(label: string, language: Language) {
     ru: `Неделя ${match[1]}`,
     bg: `Седмица ${match[1]}`,
   });
+}
+
+function localizedPlannerDayLabel(label: string | null | undefined, language: Language) {
+  if (!label) {
+    return "";
+  }
+
+  const trimmed = label.trim();
+  const dayMatch = /^Day\s+(\d+)$/i.exec(trimmed);
+  if (dayMatch) {
+    return copyFor(language, {
+      en: `Day ${dayMatch[1]}`,
+      ru: `День ${dayMatch[1]}`,
+      bg: `Ден ${dayMatch[1]}`,
+    });
+  }
+
+  const weekMatch = /^Week\s+\d+$/i.exec(trimmed);
+  if (weekMatch) {
+    return localizedWeekLabel(trimmed, language);
+  }
+
+  return translateKnownTemplateText(label, language);
+}
+
+function localizedPlannerDayFromOffset(dayOffset: number | null, language: Language) {
+  return dayOffset === null
+    ? copyFor(language, { en: "the selected day", ru: "выбранный день", bg: "избрания ден" })
+    : localizedPlannerDayLabel(`Day ${dayOffset + 1}`, language);
+}
+
+function localizedPlannerWarningLevel(level: PlannerWarning["level"], language: Language) {
+  if (level === "critical") {
+    return copyFor(language, { en: "Critical", ru: "Критично", bg: "Критично" });
+  }
+
+  if (level === "warning") {
+    return copyFor(language, {
+      en: "Warning",
+      ru: "Предупреждение",
+      bg: "Предупреждение",
+    });
+  }
+
+  return copyFor(language, { en: "Info", ru: "Информация", bg: "Информация" });
+}
+
+function localizedPlannerLoadBalanceLabel(label: string | null | undefined, language: Language) {
+  if (!label) {
+    return "";
+  }
+
+  const normalized = label.trim().toLowerCase().replace(/[\s_]+/g, "-");
+
+  if (normalized === "single-day") {
+    return copyFor(language, { en: "single-day", ru: "один день", bg: "един ден" });
+  }
+
+  if (normalized === "volatile") {
+    return copyFor(language, { en: "volatile", ru: "скачкообразный", bg: "нестабилен" });
+  }
+
+  if (normalized === "balanced-taper") {
+    return copyFor(language, {
+      en: "balanced taper",
+      ru: "сбалансированная подводка",
+      bg: "балансиран тейпър",
+    });
+  }
+
+  if (normalized === "balanced") {
+    return copyFor(language, { en: "balanced", ru: "сбалансированный", bg: "балансиран" });
+  }
+
+  return label;
+}
+
+function localizedPlannerScopeLabel(
+  scope: NonNullable<PlannerSuggestion["feedback"]>["scope"],
+  language: Language,
+) {
+  if (scope === "exact_context") {
+    return copyFor(language, {
+      en: "same phase and priority",
+      ru: "та же фаза и приоритет",
+      bg: "същата фаза и приоритет",
+    });
+  }
+
+  if (scope === "phase_context") {
+    return copyFor(language, {
+      en: "same phase",
+      ru: "та же фаза",
+      bg: "същата фаза",
+    });
+  }
+
+  return copyFor(language, {
+    en: "athlete history",
+    ru: "история спортсмена",
+    bg: "история на спортиста",
+  });
+}
+
+function localizedPlannerHistoryReasonDescription(description: string, language: Language) {
+  const labels: Record<string, Record<Language, string>> = {
+    "recovery-style template replacements": {
+      en: "recovery-style template replacements",
+      ru: "замены на восстановительные шаблоны",
+      bg: "замени с възстановителни шаблони",
+    },
+    "supportive low-load templates": {
+      en: "supportive low-load templates",
+      ru: "поддерживающие низконагрузочные шаблоны",
+      bg: "поддържащи нисконатоварващи шаблони",
+    },
+    "activation-style template replacements": {
+      en: "activation-style template replacements",
+      ru: "замены на активационные шаблоны",
+      bg: "замени с активационни шаблони",
+    },
+    "lighter substitutions for heavy slots": {
+      en: "lighter substitutions for heavy slots",
+      ru: "более лёгкие замены для тяжёлых слотов",
+      bg: "по-леки замени за тежки слотове",
+    },
+    "higher-load substitutions for underloaded slots": {
+      en: "higher-load substitutions for underloaded slots",
+      ru: "более нагрузочные замены для недогруженных слотов",
+      bg: "по-натоварени замени за недостатъчно натоварени слотове",
+    },
+    "protecting this slot from overload": {
+      en: "protecting this slot from overload",
+      ru: "защита слота от перегрузки",
+      bg: "защита на слота от претоварване",
+    },
+    "filling underloaded load/specific slots": {
+      en: "filling underloaded load/specific slots",
+      ru: "добавление нагрузки в недогруженные нагрузочные/специальные слоты",
+      bg: "добавяне на натоварване в недонатоварени натоварващи/специфични слотове",
+    },
+  };
+
+  return labels[description]?.[language] ?? description;
+}
+
+function localizedPlannerReasonFragment(fragment: string, language: Language) {
+  const trimmed = fragment.trim();
+  const exact: Record<string, Record<Language, string>> = {
+    "competition-specific template": {
+      en: "competition-specific template",
+      ru: "соревновательно-специфичный шаблон",
+      bg: "състезателно-специфичен шаблон",
+    },
+    "general template fit": {
+      en: "general template fit",
+      ru: "общее соответствие шаблона",
+      bg: "общо съответствие на шаблона",
+    },
+    "back-to-back repeat penalty": {
+      en: "back-to-back repeat penalty",
+      ru: "штраф за повтор подряд",
+      bg: "санкция за последователно повторение",
+    },
+    "hard load jump penalty": {
+      en: "hard load jump penalty",
+      ru: "штраф за резкий скачок нагрузки",
+      bg: "санкция за рязък скок на натоварването",
+    },
+    "load jump penalty": {
+      en: "load jump penalty",
+      ru: "штраф за скачок нагрузки",
+      bg: "санкция за скок на натоварването",
+    },
+    "soft load jump penalty": {
+      en: "soft load jump penalty",
+      ru: "штраф за умеренный скачок нагрузки",
+      bg: "санкция за умерен скок на натоварването",
+    },
+    "balanced load transition": {
+      en: "balanced load transition",
+      ru: "ровный переход нагрузки",
+      bg: "балансиран преход на натоварването",
+    },
+    "calendar-adjacent load jump": {
+      en: "calendar-adjacent load jump",
+      ru: "скачок нагрузки рядом в календаре",
+      bg: "скок на натоварването в близки календарни дни",
+    },
+    "calendar proximity penalty": {
+      en: "calendar proximity penalty",
+      ru: "штраф за близость в календаре",
+      bg: "санкция за близост в календара",
+    },
+    "existing assignment on same date": {
+      en: "existing assignment on same date",
+      ru: "уже есть назначение на эту дату",
+      bg: "вече има назначение за тази дата",
+    },
+    "recovery/taper load protected": {
+      en: "recovery/taper load protected",
+      ru: "нагрузка восстановления/подводки защищена",
+      bg: "натоварването за възстановяване/тейпър е защитено",
+    },
+    "impact week load supported": {
+      en: "impact week load supported",
+      ru: "нагрузка ударной недели поддержана",
+      bg: "натоварването на ударната седмица е подкрепено",
+    },
+    "slot load close to mesocycle target": {
+      en: "slot load close to mesocycle target",
+      ru: "нагрузка слота близка к цели мезоцикла",
+      bg: "натоварването на слота е близо до целта на мезоцикъла",
+    },
+    "slot load within mesocycle range": {
+      en: "slot load within mesocycle range",
+      ru: "нагрузка слота в диапазоне мезоцикла",
+      bg: "натоварването на слота е в диапазона на мезоцикъла",
+    },
+    "far from mesocycle target load": {
+      en: "far from mesocycle target load",
+      ru: "далеко от целевой нагрузки мезоцикла",
+      bg: "далеч от целевото натоварване на мезоцикъла",
+    },
+    "off mesocycle target load": {
+      en: "off mesocycle target load",
+      ru: "вне целевой нагрузки мезоцикла",
+      bg: "извън целевото натоварване на мезоцикъла",
+    },
+    "manual suggestion applied": {
+      en: "manual suggestion applied",
+      ru: "совет применён вручную",
+      bg: "предложението е приложено ръчно",
+    },
+  };
+
+  if (exact[trimmed]) {
+    return exact[trimmed][language];
+  }
+
+  const phaseMatch = /^phase match: (.+)$/i.exec(trimmed);
+  if (phaseMatch) {
+    return copyFor(language, {
+      en: `phase match: ${localizedOptionLabel(
+        phaseMatch[1],
+        language,
+        PREPARATION_PHASE_LABELS,
+      )}`,
+      ru: `совпадение фазы: ${localizedOptionLabel(
+        phaseMatch[1],
+        language,
+        PREPARATION_PHASE_LABELS,
+      )}`,
+      bg: `съвпадение на фазата: ${localizedOptionLabel(
+        phaseMatch[1],
+        language,
+        PREPARATION_PHASE_LABELS,
+      )}`,
+    });
+  }
+
+  const priorityMatch = /^priority match: (.+)$/i.exec(trimmed);
+  if (priorityMatch) {
+    return copyFor(language, {
+      en: `priority match: ${priorityMatch[1]}`,
+      ru: `совпадение приоритета: ${priorityMatch[1]}`,
+      bg: `съвпадение на приоритета: ${priorityMatch[1]}`,
+    });
+  }
+
+  const microcycleMatch = /^microcycle match: (.+)$/i.exec(trimmed);
+  if (microcycleMatch) {
+    return copyFor(language, {
+      en: `microcycle match: ${localizedOptionLabel(
+        microcycleMatch[1],
+        language,
+        MICROCYCLE_TYPE_LABELS,
+      )}`,
+      ru: `совпадение микроцикла: ${localizedOptionLabel(
+        microcycleMatch[1],
+        language,
+        MICROCYCLE_TYPE_LABELS,
+      )}`,
+      bg: `съвпадение на микроцикъла: ${localizedOptionLabel(
+        microcycleMatch[1],
+        language,
+        MICROCYCLE_TYPE_LABELS,
+      )}`,
+    });
+  }
+
+  const mesocycleMatch = /^mesocycle week match: (.+)$/i.exec(trimmed);
+  if (mesocycleMatch) {
+    return copyFor(language, {
+      en: `mesocycle week match: ${localizedOptionLabel(
+        mesocycleMatch[1],
+        language,
+        MICROCYCLE_TYPE_LABELS,
+      )}`,
+      ru: `совпадение недели мезоцикла: ${localizedOptionLabel(
+        mesocycleMatch[1],
+        language,
+        MICROCYCLE_TYPE_LABELS,
+      )}`,
+      bg: `съвпадение на седмицата от мезоцикъла: ${localizedOptionLabel(
+        mesocycleMatch[1],
+        language,
+        MICROCYCLE_TYPE_LABELS,
+      )}`,
+    });
+  }
+
+  const repeatMatch = /^repeat penalty x(\d+)$/i.exec(trimmed);
+  if (repeatMatch) {
+    return copyFor(language, {
+      en: `repeat penalty x${repeatMatch[1]}`,
+      ru: `штраф за повтор x${repeatMatch[1]}`,
+      bg: `санкция за повторение x${repeatMatch[1]}`,
+    });
+  }
+
+  const historyMatch = /^history (boost|caution): (.+) \(([^,]+), n=(\d+)\)$/i.exec(trimmed);
+  if (historyMatch) {
+    const effect = historyMatch[1] === "boost"
+      ? copyFor(language, {
+          en: "history boost",
+          ru: "история усиливает",
+          bg: "историята подсилва",
+        })
+      : copyFor(language, {
+          en: "history caution",
+          ru: "история предупреждает",
+          bg: "историята предупреждава",
+        });
+    const scope = localizedPlannerScopeLabel(
+      historyMatch[3] as NonNullable<PlannerSuggestion["feedback"]>["scope"],
+      language,
+    );
+
+    return `${effect}: ${localizedPlannerHistoryReasonDescription(
+      historyMatch[2],
+      language,
+    )} (${scope}, n=${historyMatch[4]})`;
+  }
+
+  return trimmed;
+}
+
+function localizedPlannerReason(reason: string, language: Language) {
+  const exact: Record<string, Record<Language, string>> = {
+    "Restores freshness after the last build session.": {
+      en: "Restores freshness after the last build session.",
+      ru: "Восстанавливает свежесть после последней нагрузочной сессии.",
+      bg: "Възстановява свежестта след последната натоварваща сесия.",
+    },
+    "Best fit for phase taper, priority A, and competition proximity.": {
+      en: "Best fit for phase taper, priority A, and competition proximity.",
+      ru: "Лучше всего подходит под подводку, приоритет A и близость соревнования.",
+      bg: "Най-добро съответствие за тейпър, приоритет A и близост до състезание.",
+    },
+    "Balances cumulative density before travel.": {
+      en: "Balances cumulative density before travel.",
+      ru: "Выравнивает накопленную плотность нагрузки перед поездкой.",
+      bg: "Балансира натрупаната плътност преди пътуване.",
+    },
+    "Keeps specific sharpness without reopening fatigue.": {
+      en: "Keeps specific sharpness without reopening fatigue.",
+      ru: "Сохраняет специальную остроту без повторного накопления усталости.",
+      bg: "Запазва специфичната острота без повторно натрупване на умора.",
+    },
+    "Short flush and mobility before competition day.": {
+      en: "Short flush and mobility before competition day.",
+      ru: "Короткая разгрузка и мобильность перед соревновательным днём.",
+      bg: "Кратко раздвижване и мобилност преди състезателния ден.",
+    },
+  };
+
+  if (exact[reason]) {
+    return exact[reason][language];
+  }
+
+  return reason
+    .split(/, (?![^()]*\))/)
+    .map((fragment) => localizedPlannerReasonFragment(fragment, language))
+    .join(", ");
+}
+
+function localizedPlannerWarningMessage(warning: PlannerWarning, language: Language) {
+  const amountMatch = /by\s+(-?\d+(?:\.\d+)?)/i.exec(warning.message);
+  const amount = amountMatch?.[1] ?? "";
+  const weekTypeMatch = /the\s+([\w-]+)\s+(?:intent|mesocycle week intent)/i.exec(
+    warning.message,
+  );
+  const weekType = weekTypeMatch
+    ? localizedOptionLabel(weekTypeMatch[1], language, MICROCYCLE_TYPE_LABELS)
+    : "";
+  const betweenDaysMatch = /between\s+Day\s+(\d+)\s+and\s+Day\s+(\d+)/i.exec(
+    warning.message,
+  );
+
+  if (warning.code === "high_load_density") {
+    return copyFor(language, {
+      en: warning.message,
+      ru: "Слишком высокая плотность тяжёлых дней вокруг недельного плана.",
+      bg: "Твърде висока плътност на тежки дни около седмичния план.",
+    });
+  }
+
+  if (warning.code === "low_recovery") {
+    return copyFor(language, {
+      en: warning.message,
+      ru: "Недостаточно восстановления в ближайших назначенных днях и предложенных слотах.",
+      bg: "Недостатъчно възстановяване в близките назначени дни и предложените слотове.",
+    });
+  }
+
+  if (warning.code === "taper_violated") {
+    if (betweenDaysMatch) {
+      return copyFor(language, {
+        en: warning.message,
+        ru: `Слишком высокая плотность нагрузки между ${localizedPlannerDayLabel(
+          `Day ${betweenDaysMatch[1]}`,
+          language,
+        )} и ${localizedPlannerDayLabel(
+          `Day ${betweenDaysMatch[2]}`,
+          language,
+        )} на неделе подводки.`,
+        bg: `Твърде висока плътност на натоварването между ${localizedPlannerDayLabel(
+          `Day ${betweenDaysMatch[1]}`,
+          language,
+        )} и ${localizedPlannerDayLabel(
+          `Day ${betweenDaysMatch[2]}`,
+          language,
+        )} в тейпър седмицата.`,
+      });
+    }
+
+    return copyFor(language, {
+      en: warning.message,
+      ru: "Подводка нарушена: тяжёлый или нагрузочный день стоит слишком близко к соревнованию.",
+      bg: "Тейпърът е нарушен: тежък или натоварващ ден е твърде близо до състезанието.",
+    });
+  }
+
+  if (warning.code === "weekly_load_jump") {
+    return copyFor(language, {
+      en: warning.message,
+      ru: "Недельная нагрузка слишком резко меняется между соседними календарными днями.",
+      bg: "Седмичното натоварване се променя твърде рязко между съседни календарни дни.",
+    });
+  }
+
+  if (warning.code === "calendar_overlap") {
+    return copyFor(language, {
+      en: warning.message,
+      ru: "Один или несколько предложенных дней пересекаются с уже назначенными датами.",
+      bg: "Един или повече предложени дни се припокриват с вече назначени дати.",
+    });
+  }
+
+  if (warning.code === "mesocycle_target_above") {
+    return copyFor(language, {
+      en: warning.message,
+      ru: `Плановая недельная нагрузка выше цели мезоцикла${amount ? ` на ${amount}` : ""}.`,
+      bg: `Планираното седмично натоварване е над целта на мезоцикъла${
+        amount ? ` с ${amount}` : ""
+      }.`,
+    });
+  }
+
+  if (warning.code === "mesocycle_target_below") {
+    return copyFor(language, {
+      en: warning.message,
+      ru: `Плановая недельная нагрузка ниже цели мезоцикла${amount ? ` на ${amount}` : ""}.`,
+      bg: `Планираното седмично натоварване е под целта на мезоцикъла${
+        amount ? ` с ${amount}` : ""
+      }.`,
+    });
+  }
+
+  return copyFor(language, {
+    en: warning.message,
+    ru: weekType
+      ? `Пакет не соответствует намерению недели мезоцикла: ${weekType}.`
+      : "Пакет не соответствует типу текущей недели мезоцикла.",
+    bg: weekType
+      ? `Пакетът не съответства на намерението на седмицата от мезоцикъла: ${weekType}.`
+      : "Пакетът не съответства на типа на текущата седмица от мезоцикъла.",
+  });
+}
+
+function localizedPlannerSuggestionMessage(
+  suggestion: PlannerSuggestion,
+  language: Language,
+) {
+  const day = localizedPlannerDayFromOffset(suggestion.dayOffset, language);
+  const targetDay =
+    suggestion.targetDayOffset === null
+      ? ""
+      : localizedPlannerDayFromOffset(suggestion.targetDayOffset, language);
+  const templateName = translateKnownTemplateText(suggestion.recommendedTemplateName, language);
+
+  if (suggestion.code === "recover_day_swap") {
+    return copyFor(language, {
+      en: suggestion.message,
+      ru: templateName
+        ? `Заменить ${day} на восстановительный слот: ${templateName}.`
+        : `Заменить ${day} на восстановительный слот.`,
+      bg: templateName
+        ? `Заменете ${day} с възстановителен слот: ${templateName}.`
+        : `Заменете ${day} с възстановителен слот.`,
+    });
+  }
+
+  if (suggestion.code === "activation_swap") {
+    return copyFor(language, {
+      en: suggestion.message,
+      ru: templateName
+        ? `Безопасная подводка: заменить ${day} на ${templateName}.`
+        : `Безопасная подводка: снизить ${day} и оставить только активацию/восстановление.`,
+      bg: templateName
+        ? `Безопасен тейпър: заменете ${day} с ${templateName}.`
+        : `Безопасен тейпър: намалете ${day} и оставете само активация/възстановяване.`,
+    });
+  }
+
+  if (suggestion.code === "reduce_slot_load") {
+    return copyFor(language, {
+      en: suggestion.message,
+      ru: `Снизить нагрузку в ${day}, чтобы сгладить недельную кривую нагрузки.`,
+      bg: `Намалете натоварването в ${day}, за да изгладите седмичната крива на натоварване.`,
+    });
+  }
+
+  if (suggestion.code === "increase_slot_load") {
+    return copyFor(language, {
+      en: suggestion.message,
+      ru: `Увеличить нагрузку в ${day}, чтобы лучше попасть в цель мезоцикла.`,
+      bg: `Увеличете натоварването в ${day}, за да доближите целта на мезоцикъла.`,
+    });
+  }
+
+  if (suggestion.code === "move_specific_day") {
+    return copyFor(language, {
+      en: suggestion.message,
+      ru: targetDay
+        ? `Перенести специальный день: ${day} → ${targetDay}, если календарь остаётся плотным.`
+        : `Перенести специальный день с ${day}, если календарь остаётся плотным.`,
+      bg: targetDay
+        ? `Преместете специфичния ден: ${day} → ${targetDay}, ако календарът остава плътен.`
+        : `Преместете специфичния ден от ${day}, ако календарът остава плътен.`,
+    });
+  }
+
+  if (suggestion.code === "resolve_overlap") {
+    return copyFor(language, {
+      en: suggestion.message,
+      ru: `Убрать пересечение календаря в ${day}: оставить одну основную сессию на дату.`,
+      bg: `Премахнете календарното припокриване в ${day}: оставете една основна сесия за датата.`,
+    });
+  }
+
+  return suggestion.message;
 }
 
 function translateKnownMesocycleText(value: string | null | undefined, language: Language) {
@@ -16091,7 +16655,9 @@ export function PageClient({
                               bg: "Баланс",
                             })}
                           </span>
-                          <strong>{templatePack.loadBalanceLabel}</strong>
+                          <strong>
+                            {localizedPlannerLoadBalanceLabel(templatePack.loadBalanceLabel, language)}
+                          </strong>
                         </article>
                         <article className="context-chip">
                           <span>
@@ -16194,8 +16760,12 @@ export function PageClient({
                             en: "Mesocycle",
                             ru: "Мезоцикл",
                             bg: "Мезоцикъл",
-                          })}: {templatePack.mesocycleWeek.mesocycleName} /{" "}
-                          {templatePack.mesocycleWeek.weekLabel} /{" "}
+                          })}:{" "}
+                          {translateKnownMesocycleText(
+                            templatePack.mesocycleWeek.mesocycleName,
+                            language,
+                          )}{" "}
+                          / {localizedWeekLabel(templatePack.mesocycleWeek.weekLabel, language)} /{" "}
                           {localizedOptionLabel(
                             templatePack.mesocycleWeek.microcycleType,
                             language,
@@ -16243,7 +16813,8 @@ export function PageClient({
                       <ul>
                         {templatePack.warnings.map((warning) => (
                           <li key={`${warning.code}-${warning.message}`}>
-                            {warning.level.toUpperCase()}: {warning.message}
+                            {localizedPlannerWarningLevel(warning.level, language)}:{" "}
+                            {localizedPlannerWarningMessage(warning, language)}
                           </li>
                         ))}
                       </ul>
@@ -16275,13 +16846,22 @@ export function PageClient({
                             key={`${suggestion.code}-${suggestion.dayOffset}-${suggestion.targetDayOffset}-${suggestion.recommendedTemplateId}`}
                           >
                             <div className="planner-suggestion-copy">
-                              <span>{suggestion.message}</span>
+                              <span>{localizedPlannerSuggestionMessage(suggestion, language)}</span>
                               {suggestion.recommendedTemplateName ? (
                                 <small>
                                   {copyFor(language, {
-                                    en: `Recommended template: ${suggestion.recommendedTemplateName}.`,
-                                    ru: `Рекомендованный шаблон: ${suggestion.recommendedTemplateName}.`,
-                                    bg: `Препоръчан шаблон: ${suggestion.recommendedTemplateName}.`,
+                                    en: `Recommended template: ${translateKnownTemplateText(
+                                      suggestion.recommendedTemplateName,
+                                      language,
+                                    )}.`,
+                                    ru: `Рекомендованный шаблон: ${translateKnownTemplateText(
+                                      suggestion.recommendedTemplateName,
+                                      language,
+                                    )}.`,
+                                    bg: `Препоръчан шаблон: ${translateKnownTemplateText(
+                                      suggestion.recommendedTemplateName,
+                                      language,
+                                    )}.`,
                                   })}
                                 </small>
                               ) : null}
@@ -16379,7 +16959,9 @@ export function PageClient({
                           >
                             <div className="planner-pack-day-header">
                               <div className="planner-pack-day-copy">
-                                <span className="planner-pack-day-label">{item.dayLabel}</span>
+                                <span className="planner-pack-day-label">
+                                  {localizedPlannerDayLabel(item.dayLabel, language)}
+                                </span>
                                 <strong>{translateKnownTemplateText(item.templateName, language)}</strong>
                                 <small>
                                   {localizedOptionLabel(
@@ -16438,7 +17020,7 @@ export function PageClient({
                                   bg: "Защо е избран",
                                 })}
                               </span>
-                              <strong>{item.reason}</strong>
+                              <strong>{localizedPlannerReason(item.reason, language)}</strong>
                             </p>
                           </article>
                         ))}
@@ -16672,7 +17254,7 @@ export function PageClient({
                             {plan.athleteName}: {translateKnownTemplateText(plan.templateName, language)}
                           </strong>
                           <span>
-                            {plan.day.dayDate} / {plan.day.label} / {t("phase")}{" "}
+                            {plan.day.dayDate} / {localizedPlannerDayLabel(plan.day.label, language)} / {t("phase")}{" "}
                             {plan.plannedPhase
                               ? localizedOptionLabel(
                                   plan.plannedPhase,
@@ -16846,7 +17428,8 @@ export function PageClient({
                     <ul>
                       {templatePack.warnings.slice(0, 5).map((warning) => (
                         <li key={`${warning.code}-${warning.message}`}>
-                          {warning.level.toUpperCase()}: {warning.message}
+                          {localizedPlannerWarningLevel(warning.level, language)}:{" "}
+                          {localizedPlannerWarningMessage(warning, language)}
                         </li>
                       ))}
                     </ul>
