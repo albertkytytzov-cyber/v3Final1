@@ -2146,6 +2146,76 @@ const KNOWN_TEMPLATE_TEXT_LABELS: Record<string, Record<Language, string>> = {
     ru: "Короткая нейроактивация без лишней усталости.",
     bg: "Кратка невроактивация без излишна умора.",
   },
+  "Taper activation": {
+    en: "Taper activation",
+    ru: "Подводящая активация",
+    bg: "Тейпър активация",
+  },
+  "Sharpness session with low fatigue and speed retention.": {
+    en: "Sharpness session with low fatigue and speed retention.",
+    ru: "Сессия на остроту с низкой усталостью и сохранением скорости.",
+    bg: "Сесия за острота с ниска умора и запазване на скоростта.",
+  },
+  "Specific power build": {
+    en: "Specific power build",
+    ru: "Специальное развитие мощности",
+    bg: "Специфично развитие на мощността",
+  },
+  "Specific intensity with disciplined volume control.": {
+    en: "Specific intensity with disciplined volume control.",
+    ru: "Специальная интенсивность с контролем объёма.",
+    bg: "Специфична интензивност с дисциплиниран контрол на обема.",
+  },
+  "Recovery reset": {
+    en: "Recovery reset",
+    ru: "Восстановительный сброс",
+    bg: "Възстановителен ресет",
+  },
+  "Low-load reset day with mobility and aerobic flush.": {
+    en: "Low-load reset day with mobility and aerobic flush.",
+    ru: "Низконагрузочный день сброса с мобильностью и лёгкой аэробной разгрузкой.",
+    bg: "Нисконатоварващ ден за ресет с мобилност и аеробно раздвижване.",
+  },
+  "speed retention": {
+    en: "speed retention",
+    ru: "сохранение скорости",
+    bg: "запазване на скоростта",
+  },
+  "specific power": {
+    en: "specific power",
+    ru: "специальная мощность",
+    bg: "специфична мощност",
+  },
+  "recovery": {
+    en: "recovery",
+    ru: "восстановление",
+    bg: "възстановяване",
+  },
+  "Explosive entry": {
+    en: "Explosive entry",
+    ru: "Взрывной вход",
+    bg: "Експлозивно влизане",
+  },
+  "Specific patterns": {
+    en: "Specific patterns",
+    ru: "Специальные паттерны",
+    bg: "Специфични модели",
+  },
+  "Mobility flush": {
+    en: "Mobility flush",
+    ru: "Мобильность и разгрузка",
+    bg: "Мобилност и раздвижване",
+  },
+  "Primary session": {
+    en: "Primary session",
+    ru: "Основная сессия",
+    bg: "Основна сесия",
+  },
+  "Final taper activation before weigh-in.": {
+    en: "Final taper activation before weigh-in.",
+    ru: "Финальная активация подводки перед взвешиванием.",
+    bg: "Финална тейпър активация преди кантара.",
+  },
   "Taper activation day": {
     en: "Taper activation day",
     ru: "Активационный день подводки",
