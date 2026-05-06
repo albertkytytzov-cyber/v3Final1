@@ -1,5 +1,6 @@
 import type {
   AnalyticsCoachActionDecisionPayload,
+  CoachDiaryEntryPayload,
   ExecutionResultInput,
   ReadinessSubmissionPayload,
 } from "@training-platform/shared";
@@ -36,6 +37,10 @@ export type QueueItem =
       type: "analytics-decision";
       athleteId: string;
       payload: AnalyticsCoachActionDecisionPayload;
+    })
+  | (QueueItemBase & {
+      type: "coach-diary";
+      payload: CoachDiaryEntryPayload;
     });
 
 type LegacyQueueItem =
@@ -83,6 +88,15 @@ function analyticsDecisionDedupeKey(
   payload: AnalyticsCoachActionDecisionPayload,
 ) {
   return `analytics:${athleteId}:${payload.suggestionId}:${payload.weekStartDate}`;
+}
+
+function coachDiaryDedupeKey(payload: CoachDiaryEntryPayload) {
+  const targetIds =
+    payload.scope === "tasks"
+      ? [...payload.assignedBlockIds, ...payload.assignedExerciseIds].sort().join(",")
+      : "day";
+
+  return `coach-diary:${payload.athleteId}:${payload.assignedPlanId}:${payload.entryDate}:${targetIds}`;
 }
 
 function sortQueueItems(items: QueueItem[]) {
@@ -180,6 +194,30 @@ function normalizeLegacyQueueItem(item: LegacyQueueItem | QueueItem): QueueItem 
         "dedupeKey" in item && item.dedupeKey
           ? item.dedupeKey
           : analyticsDecisionDedupeKey(item.athleteId, item.payload),
+      createdAt,
+      lastAttemptAt:
+        "lastAttemptAt" in item && item.lastAttemptAt ? item.lastAttemptAt : null,
+      syncedAt: "syncedAt" in item && item.syncedAt ? item.syncedAt : null,
+      attemptCount:
+        "attemptCount" in item && typeof item.attemptCount === "number" ? item.attemptCount : 0,
+      status: "status" in item && item.status ? item.status : "pending",
+      error: "error" in item && typeof item.error === "string" ? item.error : null,
+    };
+  }
+
+  if (item.type === "coach-diary") {
+    const clientRequestId =
+      "clientRequestId" in item && item.clientRequestId ? item.clientRequestId : createStableId();
+
+    return {
+      id: "id" in item && item.id ? item.id : createStableId(),
+      type: "coach-diary",
+      payload: item.payload,
+      clientRequestId,
+      dedupeKey:
+        "dedupeKey" in item && item.dedupeKey
+          ? item.dedupeKey
+          : coachDiaryDedupeKey(item.payload),
       createdAt,
       lastAttemptAt:
         "lastAttemptAt" in item && item.lastAttemptAt ? item.lastAttemptAt : null,
@@ -310,6 +348,10 @@ export function createQueueItem(
         type: "analytics-decision";
         athleteId: string;
         payload: AnalyticsCoachActionDecisionPayload;
+      }
+    | {
+        type: "coach-diary";
+        payload: CoachDiaryEntryPayload;
       },
 ): QueueItem {
   const createdAt = new Date().toISOString();
@@ -348,13 +390,29 @@ export function createQueueItem(
     };
   }
 
+  if (input.type === "analytics-decision") {
+    return {
+      id,
+      type: "analytics-decision",
+      athleteId: input.athleteId,
+      payload: input.payload,
+      clientRequestId,
+      dedupeKey: analyticsDecisionDedupeKey(input.athleteId, input.payload),
+      createdAt,
+      lastAttemptAt: null,
+      syncedAt: null,
+      attemptCount: 0,
+      status: "pending",
+      error: null,
+    };
+  }
+
   return {
     id,
-    type: "analytics-decision",
-    athleteId: input.athleteId,
+    type: "coach-diary",
     payload: input.payload,
     clientRequestId,
-    dedupeKey: analyticsDecisionDedupeKey(input.athleteId, input.payload),
+    dedupeKey: coachDiaryDedupeKey(input.payload),
     createdAt,
     lastAttemptAt: null,
     syncedAt: null,

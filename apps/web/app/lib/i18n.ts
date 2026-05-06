@@ -383,6 +383,14 @@ export function formatQueueItemLabel(item: QueueItem, language: Language) {
         : `execution / block ${item.payload.assignedBlockId}`;
   }
 
+  if (item.type === "coach-diary") {
+    return language === "ru"
+      ? `запись тренера / ${item.payload.entryDate}`
+      : language === "bg"
+        ? `запис на треньора / ${item.payload.entryDate}`
+        : `coach note / ${item.payload.entryDate}`;
+  }
+
   return language === "ru"
     ? `решение аналитики / ${item.payload.suggestionTitle}`
     : language === "bg"
@@ -399,17 +407,27 @@ export function queueConflictLabel(item: QueueItem, language: Language) {
         : "Latest readiness draft for the day replaces the previous one.";
   }
 
-  return language === "ru"
-    ? item.type === "analytics-decision"
+  if (item.type === "analytics-decision") {
+    return language === "ru"
       ? "Последнее решение по одной рекомендации и неделе заменяет предыдущее."
-      : "Последний черновик выполнения по блоку заменяет предыдущий."
-    : language === "bg"
-      ? item.type === "analytics-decision"
+      : language === "bg"
         ? "Последното решение за същата препоръка и седмица заменя предишното."
-        : "Последната чернова за изпълнението на блока заменя предишната."
-      : item.type === "analytics-decision"
-        ? "Latest decision for the same suggestion/week context replaces the previous one."
-        : "Latest execution draft for the block replaces the previous one.";
+        : "Latest decision for the same suggestion/week context replaces the previous one.";
+  }
+
+  if (item.type === "coach-diary") {
+    return language === "ru"
+      ? "Последняя запись тренера для этого дня или набора заданий заменяет предыдущую."
+      : language === "bg"
+        ? "Последният запис на треньора за този ден или набор задачи заменя предишния."
+        : "Latest coach note for the same day or task set replaces the previous one.";
+  }
+
+  return language === "ru"
+    ? "Последний черновик выполнения по блоку заменяет предыдущий."
+    : language === "bg"
+      ? "Последната чернова за изпълнението на блока заменя предишната."
+      : "Latest execution draft for the block replaces the previous one.";
 }
 
 export function translateModule(

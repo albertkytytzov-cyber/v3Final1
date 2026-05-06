@@ -10,6 +10,7 @@ import {
 import { registerAdaptationRoutes } from "./api/adaptation.routes";
 import { registerAnalyticsRoutes } from "./api/analytics/analytics.routes";
 import { registerAuthRoutes } from "./api/auth.routes";
+import { registerCoachDiaryRoutes } from "./api/coach-diary.routes";
 import { registerCompetitionRoutes } from "./api/competition/competition.routes";
 import { createApiGuards } from "./api/guards";
 import { registerPlanningRoutes } from "./api/planning/planning.routes";
@@ -85,6 +86,11 @@ registerAdaptationRoutes(app, {
 });
 
 registerExecutionRoutes(app, {
+  guards,
+  httpError,
+});
+
+registerCoachDiaryRoutes(app, {
   guards,
   httpError,
 });

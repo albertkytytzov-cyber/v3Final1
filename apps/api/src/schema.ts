@@ -388,6 +388,21 @@ export async function ensureSchema() {
       UNIQUE (execution_result_id, assigned_exercise_id)
     );
 
+    CREATE TABLE IF NOT EXISTS coach_diary_entries (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      athlete_id UUID NOT NULL REFERENCES athletes(id) ON DELETE CASCADE,
+      coach_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      assigned_plan_id UUID NOT NULL REFERENCES assigned_plans(id) ON DELETE CASCADE,
+      entry_date DATE NOT NULL,
+      scope TEXT NOT NULL DEFAULT 'day' CHECK (scope IN ('day', 'tasks')),
+      notes TEXT NOT NULL DEFAULT '',
+      assigned_block_ids UUID[] NOT NULL DEFAULT '{}'::uuid[],
+      assigned_exercise_ids UUID[] NOT NULL DEFAULT '{}'::uuid[],
+      client_request_id TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
     CREATE TABLE IF NOT EXISTS olympic_cycles (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       name TEXT NOT NULL,
@@ -572,6 +587,7 @@ export async function ensureSchema() {
   await ensureUuidDefault("assigned_block_exercises");
   await ensureUuidDefault("exercise_results");
   await ensureUuidDefault("exercise_result_exercises");
+  await ensureUuidDefault("coach_diary_entries");
   await ensureUuidDefault("olympic_cycles");
   await ensureUuidDefault("seasons");
   await ensureUuidDefault("competitions");
@@ -662,6 +678,33 @@ export async function ensureSchema() {
   await ensureColumn("exercise_result_exercises", "created_at", "TIMESTAMPTZ NOT NULL DEFAULT NOW()");
   await ensureColumn("exercise_result_exercises", "updated_at", "TIMESTAMPTZ NOT NULL DEFAULT NOW()");
   await ensureColumn(
+    "coach_diary_entries",
+    "athlete_id",
+    "UUID REFERENCES athletes(id) ON DELETE CASCADE",
+  );
+  await ensureColumn(
+    "coach_diary_entries",
+    "coach_user_id",
+    "UUID REFERENCES users(id) ON DELETE CASCADE",
+  );
+  await ensureColumn(
+    "coach_diary_entries",
+    "assigned_plan_id",
+    "UUID REFERENCES assigned_plans(id) ON DELETE CASCADE",
+  );
+  await ensureColumn("coach_diary_entries", "entry_date", "DATE");
+  await ensureColumn(
+    "coach_diary_entries",
+    "scope",
+    "TEXT NOT NULL DEFAULT 'day' CHECK (scope IN ('day', 'tasks'))",
+  );
+  await ensureColumn("coach_diary_entries", "notes", "TEXT NOT NULL DEFAULT ''");
+  await ensureColumn("coach_diary_entries", "assigned_block_ids", "UUID[] NOT NULL DEFAULT '{}'::uuid[]");
+  await ensureColumn("coach_diary_entries", "assigned_exercise_ids", "UUID[] NOT NULL DEFAULT '{}'::uuid[]");
+  await ensureColumn("coach_diary_entries", "client_request_id", "TEXT");
+  await ensureColumn("coach_diary_entries", "created_at", "TIMESTAMPTZ NOT NULL DEFAULT NOW()");
+  await ensureColumn("coach_diary_entries", "updated_at", "TIMESTAMPTZ NOT NULL DEFAULT NOW()");
+  await ensureColumn(
     "training_load_logs",
     "athlete_id",
     "UUID REFERENCES athletes(id) ON DELETE CASCADE",
@@ -737,6 +780,9 @@ export async function ensureSchema() {
       WHERE client_request_id IS NOT NULL;
     CREATE UNIQUE INDEX IF NOT EXISTS idx_analytics_action_decisions_athlete_client_request
       ON analytics_action_decisions (athlete_id, client_request_id)
+      WHERE client_request_id IS NOT NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_coach_diary_entries_athlete_client_request
+      ON coach_diary_entries (athlete_id, client_request_id)
       WHERE client_request_id IS NOT NULL;
     CREATE UNIQUE INDEX IF NOT EXISTS idx_exercise_results_athlete_assigned_block
       ON exercise_results (athlete_id, assigned_block_id);
@@ -995,6 +1041,10 @@ export async function ensureSchema() {
       ON analytics_action_decisions (athlete_id, updated_at DESC);
     CREATE INDEX IF NOT EXISTS idx_analytics_action_decisions_athlete_week
       ON analytics_action_decisions (athlete_id, week_start_date DESC);
+    CREATE INDEX IF NOT EXISTS idx_coach_diary_entries_athlete_date
+      ON coach_diary_entries (athlete_id, entry_date DESC, updated_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_coach_diary_entries_coach_updated
+      ON coach_diary_entries (coach_user_id, updated_at DESC);
   `);
 
   await backfillPlanHierarchy();

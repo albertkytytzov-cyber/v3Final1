@@ -2938,6 +2938,112 @@ select {
   min-width: 0;
 }
 
+.coach-diary-panel {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(15, 118, 110, 0.18);
+  background: rgba(240, 253, 250, 0.72);
+  min-width: 0;
+}
+
+.coach-diary-heading {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.coach-diary-heading small,
+.coach-diary-history-item small {
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.coach-diary-scope {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.coach-diary-scope label,
+.coach-diary-task-choice {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.coach-diary-scope label {
+  min-height: 40px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(15, 118, 110, 0.16);
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--text);
+  font-weight: 800;
+}
+
+.coach-diary-task-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+
+.coach-diary-task-choice {
+  align-items: flex-start;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: rgba(255, 255, 255, 0.8);
+}
+
+.coach-diary-task-choice span,
+.coach-diary-history-item {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.coach-diary-task-choice strong,
+.coach-diary-task-choice small,
+.coach-diary-history-item strong,
+.coach-diary-history-item p {
+  overflow-wrap: anywhere;
+}
+
+.coach-diary-task-choice small {
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.coach-diary-note-field {
+  min-width: 0;
+}
+
+.coach-diary-history {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.coach-diary-history-item {
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.coach-diary-history-item p {
+  margin: 0;
+  color: var(--text);
+  line-height: 1.55;
+}
+
 .analytics-mini-grid {
   margin-bottom: 4px;
 }

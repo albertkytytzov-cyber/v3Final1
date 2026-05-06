@@ -2,6 +2,7 @@ import type {
   AnalyticsOverview,
   AssignedPlanSummary,
   AuthUser,
+  CoachDiaryEntry,
   CoachAthleteSummary,
   CompetitionContext,
   CompetitionPlanSummary,
@@ -48,6 +49,7 @@ export type WorkspacePreviewState = {
   competitionContext: CompetitionContext;
   competitionReview: CompetitionReviewOverview;
   coachExecutionReview: ExecutionReviewPlan;
+  coachDiaryEntries: CoachDiaryEntry[];
   coachAnalyticsOverview: AnalyticsOverview;
   templatePack: TemplatePackRecommendation;
   offlineQueueItems: QueueItem[];
@@ -555,6 +557,23 @@ const previewExecutionReview = {
     },
   ],
 } as ExecutionReviewPlan;
+
+const previewCoachDiaryEntries: CoachDiaryEntry[] = [
+  {
+    id: "coach-diary-preview-1",
+    athleteId: "athlete-1",
+    assignedPlanId: "assigned-plan-1",
+    entryDate: "2026-04-21",
+    scope: "tasks",
+    notes: "Specific patterns: оставить один качественный подход, не добивать объём после дороги.",
+    assignedBlockIds: ["block-2"],
+    assignedExerciseIds: [],
+    coachUserId: "preview-coach-user",
+    coachName: "Demo Coach",
+    createdAt: "2026-04-21T10:10:00.000Z",
+    updatedAt: "2026-04-21T10:10:00.000Z",
+  },
+];
 
 const previewAnalytics = {
   athleteId: "athlete-1",
@@ -1381,6 +1400,7 @@ function buildPreviewState(
     competitionContext: previewCompetitionContext,
     competitionReview: previewCompetitionReview,
     coachExecutionReview: previewExecutionReview,
+    coachDiaryEntries: previewCoachDiaryEntries,
     coachAnalyticsOverview: previewAnalytics,
     templatePack: previewTemplatePack,
     offlineQueueItems: previewOfflineQueueItems,

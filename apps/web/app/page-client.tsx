@@ -39,6 +39,8 @@ import {
   type CoachAvailableAthletesResponse,
   type CoachAthleteProfilePayload,
   type CoachAthleteSummary,
+  type CoachDiaryEntry,
+  type CoachDiaryEntryPayload,
   type PlanTemplateRecommendation,
   type PlannerSuggestion,
   type PlanExerciseInput,
@@ -271,6 +273,16 @@ const UI_TEXT = IMPORTED_UI_TEXT;
 const STORAGE_KEYS = OFFLINE_STORAGE_KEYS;
 
 type ExecutionDraft = Omit<ExecutionResultInput, "assignedPlanId" | "assignedBlockId">;
+type CoachDiaryDraft = Pick<
+  CoachDiaryEntryPayload,
+  "scope" | "notes" | "assignedBlockIds" | "assignedExerciseIds"
+>;
+type CoachDiaryTaskChoice = {
+  id: string;
+  kind: "block" | "exercise";
+  label: string;
+  meta: string;
+};
 
 type OfflineSyncErrors = Record<string, string>;
 type TemplatePackDraftItem = TemplatePackRecommendation["items"][number];
@@ -288,6 +300,13 @@ const emptyExecutionDraft: ExecutionDraft = {
   durationMinutes: null,
   rpe: null,
   notes: "",
+};
+
+const emptyCoachDiaryDraft: CoachDiaryDraft = {
+  scope: "day",
+  notes: "",
+  assignedBlockIds: [],
+  assignedExerciseIds: [],
 };
 
 const emptyAthleteProfileForm: CoachAthleteProfilePayload = {
@@ -475,6 +494,28 @@ async function apiRequest<T>(path: string, options?: RequestInit): Promise<T> {
 
 function copyFor(language: Language, values: Record<Language, string>) {
   return values[language];
+}
+
+function coachDiaryTargetKey(entry: Pick<
+  CoachDiaryEntryPayload,
+  "athleteId" | "assignedPlanId" | "entryDate" | "scope" | "assignedBlockIds" | "assignedExerciseIds"
+>) {
+  const blockIds = [...entry.assignedBlockIds].sort().join(",");
+  const exerciseIds = [...entry.assignedExerciseIds].sort().join(",");
+  return [
+    entry.athleteId,
+    entry.assignedPlanId,
+    entry.entryDate,
+    entry.scope,
+    blockIds,
+    exerciseIds,
+  ].join(":");
+}
+
+function upsertCoachDiaryEntry(entries: CoachDiaryEntry[], entry: CoachDiaryEntry) {
+  const nextEntryKey = coachDiaryTargetKey(entry);
+  return [entry, ...entries.filter((item) => item.id !== entry.id && coachDiaryTargetKey(item) !== nextEntryKey)]
+    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
 }
 
 function withFallbackOptions(options: string[], fallback: string) {
@@ -3308,6 +3349,11 @@ export function PageClient({
   );
   const [coachExecutionReview, setCoachExecutionReview] =
     useState<ExecutionReviewPlan | null>(previewState?.coachExecutionReview ?? null);
+  const [coachDiaryEntries, setCoachDiaryEntries] = useState<CoachDiaryEntry[]>(
+    previewState?.coachDiaryEntries ?? [],
+  );
+  const [coachDiaryDraft, setCoachDiaryDraft] =
+    useState<CoachDiaryDraft>(emptyCoachDiaryDraft);
   const [coachAnalyticsOverview, setCoachAnalyticsOverview] =
     useState<AnalyticsOverview | null>(
       normalizeAnalyticsOverview(previewState?.coachAnalyticsOverview ?? null),
@@ -3420,6 +3466,8 @@ export function PageClient({
     setSelectedAthleteEntries([]);
     setCoachAdaptedPlan(null);
     setCoachExecutionReview(null);
+    setCoachDiaryEntries([]);
+    setCoachDiaryDraft(emptyCoachDiaryDraft);
     setCoachAnalyticsOverview(null);
     setCompetitionContext(null);
     setCompetitionReview(null);
@@ -3821,7 +3869,7 @@ export function PageClient({
             ...current,
             [response.result.assignedBlockId]: toExecutionDraft(response.result),
           }));
-        } else {
+        } else if (item.type === "analytics-decision") {
           const response = await apiRequest<{
             analytics: AnalyticsOverview | null;
             decision: AnalyticsCoachActionDecision | null;
@@ -3834,6 +3882,13 @@ export function PageClient({
           if (item.athleteId === selectedAthleteId) {
             setCoachAnalyticsOverview(normalized);
           }
+        } else {
+          const response = await apiRequest<{ entry: CoachDiaryEntry }>("/coach/diary", {
+            method: "POST",
+            headers: { "X-Idempotency-Key": item.clientRequestId },
+            body: JSON.stringify(item.payload),
+          });
+          setCoachDiaryEntries((current) => upsertCoachDiaryEntry(current, response.entry));
         }
       } catch (error) {
         commitQueue(
@@ -4114,6 +4169,7 @@ export function PageClient({
         loadCoachAthleteReadiness(athleteId),
         loadCoachAdaptedPlan(athleteId),
         loadCoachExecutionReview(athleteId),
+        loadCoachDiaryEntries(),
         loadCoachAnalyticsOverview(athleteId),
         loadCompetitionContext(athleteId),
         loadSeasons(athleteId),
@@ -4434,11 +4490,31 @@ export function PageClient({
     setCoachExecutionReview(response.review);
   }
 
+  async function loadCoachDiaryEntries() {
+    const response = await apiRequest<{ entries: CoachDiaryEntry[] }>("/coach/diary");
+    setCoachDiaryEntries(
+      response.entries.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)),
+    );
+  }
+
   async function loadCoachAnalyticsOverview(athleteId: string) {
     const response = await apiRequest<{ analytics: AnalyticsOverview | null }>(
       `/coach/athletes/${athleteId}/analytics`,
     );
     setCoachAnalyticsOverview(normalizeAnalyticsOverview(response.analytics));
+  }
+
+  async function saveCoachDiaryEntry(
+    payload: CoachDiaryEntryPayload,
+    clientRequestId?: string,
+  ) {
+    const response = await apiRequest<{ entry: CoachDiaryEntry }>("/coach/diary", {
+      method: "POST",
+      headers: clientRequestId ? { "X-Idempotency-Key": clientRequestId } : undefined,
+      body: JSON.stringify(payload),
+    });
+    setCoachDiaryEntries((current) => upsertCoachDiaryEntry(current, response.entry));
+    return response.entry;
   }
 
   async function saveCoachAnalyticsDecision(
@@ -4482,6 +4558,135 @@ export function PageClient({
       }),
     );
     return enqueueResult;
+  }
+
+  function enqueueCoachDiaryEntry(
+    payload: CoachDiaryEntryPayload,
+    queueItem = importedCreateQueueItem({
+      type: "coach-diary",
+      payload,
+    }),
+  ) {
+    const now = new Date().toISOString();
+    const optimisticEntry: CoachDiaryEntry = {
+      id: `offline-${queueItem.clientRequestId}`,
+      ...payload,
+      coachUserId: user?.id ?? "",
+      coachName: user?.fullName ?? copyFor(language, { en: "Coach", ru: "Тренер", bg: "Треньор" }),
+      createdAt: now,
+      updatedAt: now,
+    };
+    const enqueueResult = importedEnqueueOfflineItem(queueItem);
+    const nextQueueSize = importedCountActiveQueueItems(enqueueResult.queue);
+    setCoachDiaryEntries((current) => upsertCoachDiaryEntry(current, optimisticEntry));
+    syncQueueState(enqueueResult.queue);
+    setStatusMessage(
+      copyFor(language, {
+        en: `Coach note was saved locally and will sync later. ${queueLabel(language, nextQueueSize)}`,
+        ru: `Запись тренера сохранена локально и будет отправлена позже. ${queueLabel(language, nextQueueSize)}`,
+        bg: `Записът на треньора е запазен локално и ще бъде изпратен по-късно. ${queueLabel(language, nextQueueSize)}`,
+      }),
+    );
+    return enqueueResult;
+  }
+
+  async function handleCoachDiarySubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!coachExecutionReview || !selectedAthleteId) {
+      return;
+    }
+
+    const notes = coachDiaryDraft.notes.trim();
+    const assignedBlockIds =
+      coachDiaryDraft.scope === "tasks" ? coachDiaryDraft.assignedBlockIds : [];
+    const assignedExerciseIds =
+      coachDiaryDraft.scope === "tasks" ? coachDiaryDraft.assignedExerciseIds : [];
+
+    if (!notes) {
+      setErrorMessage(
+        copyFor(language, {
+          en: "Add a note before saving.",
+          ru: "Добавьте текст заметки перед сохранением.",
+          bg: "Добавете текст на бележката преди запазване.",
+        }),
+      );
+      return;
+    }
+
+    if (coachDiaryDraft.scope === "tasks" && assignedBlockIds.length + assignedExerciseIds.length === 0) {
+      setErrorMessage(
+        copyFor(language, {
+          en: "Select at least one task for a task note.",
+          ru: "Выберите хотя бы одно задание для записи по заданиям.",
+          bg: "Изберете поне една задача за запис по задачи.",
+        }),
+      );
+      return;
+    }
+
+    const payload: CoachDiaryEntryPayload = {
+      athleteId: selectedAthleteId,
+      assignedPlanId: coachExecutionReview.assignedPlanId,
+      entryDate: coachExecutionReview.dayDate,
+      scope: coachDiaryDraft.scope,
+      notes,
+      assignedBlockIds,
+      assignedExerciseIds,
+    };
+    const queueItem = importedCreateQueueItem({
+      type: "coach-diary",
+      payload,
+    });
+
+    setBusy(true);
+    setErrorMessage("");
+
+    try {
+      await saveCoachDiaryEntry(payload, queueItem.clientRequestId);
+      setCoachDiaryDraft((current) => ({
+        ...current,
+        notes: "",
+        assignedBlockIds: [],
+        assignedExerciseIds: [],
+      }));
+      setStatusMessage(
+        copyFor(language, {
+          en: "Coach note saved.",
+          ru: "Запись тренера сохранена.",
+          bg: "Записът на треньора е запазен.",
+        }),
+      );
+    } catch (error) {
+      enqueueCoachDiaryEntry(payload, queueItem);
+      setCoachDiaryDraft((current) => ({
+        ...current,
+        notes: "",
+        assignedBlockIds: [],
+        assignedExerciseIds: [],
+      }));
+      setErrorMessage(
+        error instanceof Error && typeof navigator !== "undefined" && navigator.onLine
+          ? error.message
+          : "",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function updateCoachDiaryTarget(kind: CoachDiaryTaskChoice["kind"], id: string, checked: boolean) {
+    const key = kind === "exercise" ? "assignedExerciseIds" : "assignedBlockIds";
+    setCoachDiaryDraft((current) => {
+      const nextIds = checked
+        ? Array.from(new Set([...current[key], id]))
+        : current[key].filter((item) => item !== id);
+
+      return {
+        ...current,
+        [key]: nextIds,
+      };
+    });
   }
 
   function getExecutionDraft(blockId: string) {
@@ -4779,6 +4984,7 @@ export function PageClient({
         loadCoachAthleteReadiness(athleteId),
         loadCoachAdaptedPlan(athleteId),
         loadCoachExecutionReview(athleteId),
+        loadCoachDiaryEntries(),
         loadCoachAnalyticsOverview(athleteId),
         loadCompetitionContext(athleteId),
         loadSeasons(athleteId),
@@ -7842,6 +8048,49 @@ export function PageClient({
       .filter((item): item is Extract<QueueItem, { type: "execution" }> => item.type === "execution")
       .map((item) => item.payload.assignedBlockId),
   );
+  const pendingCoachDiaryQueued = activeOfflineQueueItems.some(
+    (item) =>
+      item.type === "coach-diary" &&
+      item.payload.athleteId === selectedAthleteId &&
+      item.payload.assignedPlanId === coachExecutionReview?.assignedPlanId,
+  );
+  const coachDiaryTaskChoices: CoachDiaryTaskChoice[] = coachExecutionReview
+    ? coachExecutionReview.sessions.flatMap((session) =>
+        session.blocks.flatMap<CoachDiaryTaskChoice>((block) => {
+          const exercises = [...(block.exercises ?? [])].sort(
+            (left, right) => left.orderIndex - right.orderIndex,
+          );
+
+          if (exercises.length === 0) {
+            return [
+              {
+                id: block.id,
+                kind: "block" as const,
+                label: block.name,
+                meta: `${session.name} / ${translateExecutionStatus(block.executionStatus, language)}`,
+              },
+            ];
+          }
+
+          return exercises.map<CoachDiaryTaskChoice>((exercise) => ({
+            id: exercise.id,
+            kind: "exercise" as const,
+            label: exercise.name,
+            meta: `${block.name} / ${formatExerciseTarget(exercise, language)}`,
+          }));
+        }),
+      )
+    : [];
+  const selectedCoachDiaryEntries = coachExecutionReview
+    ? coachDiaryEntries
+        .filter(
+          (entry) =>
+            entry.athleteId === selectedAthleteId &&
+            entry.assignedPlanId === coachExecutionReview.assignedPlanId,
+        )
+        .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+    : [];
+  const latestCoachDiaryEntry = selectedCoachDiaryEntries[0] ?? null;
   const athleteChangedToday = adaptedPlan
     ? [
         ...adaptedPlan.reducedBlocks.map((name) => ({
@@ -10997,6 +11246,170 @@ export function PageClient({
                           </div>
                         ))}
                       </div>
+                      <form className="coach-diary-panel" onSubmit={handleCoachDiarySubmit}>
+                        <div className="summary-topline">
+                          <div className="coach-diary-heading">
+                            <strong>
+                              {copyFor(language, {
+                                en: "Coach note for the day",
+                                ru: "Запись тренера за день",
+                                bg: "Запис на треньора за деня",
+                              })}
+                            </strong>
+                            <small>
+                              {latestCoachDiaryEntry
+                                ? `${copyFor(language, {
+                                    en: "Latest",
+                                    ru: "Последняя",
+                                    bg: "Последен",
+                                  })}: ${latestCoachDiaryEntry.updatedAt.slice(0, 16)}`
+                                : copyFor(language, {
+                                    en: "Day comment or task-specific note",
+                                    ru: "Комментарий ко всему дню или к заданиям",
+                                    bg: "Коментар за целия ден или по задачи",
+                                  })}
+                            </small>
+                          </div>
+                          <span className={`status-chip ${pendingCoachDiaryQueued ? "pending" : "synced"}`}>
+                            {pendingCoachDiaryQueued ? ui("pendingSync") : ui("readyToSync")}
+                          </span>
+                        </div>
+
+                        <div className="coach-diary-scope" role="radiogroup">
+                          <label>
+                            <input
+                              checked={coachDiaryDraft.scope === "day"}
+                              name="coachDiaryScope"
+                              onChange={() =>
+                                setCoachDiaryDraft((current) => ({
+                                  ...current,
+                                  scope: "day",
+                                  assignedBlockIds: [],
+                                  assignedExerciseIds: [],
+                                }))
+                              }
+                              type="radio"
+                            />
+                            <span>
+                              {copyFor(language, { en: "Whole day", ru: "Весь день", bg: "Целият ден" })}
+                            </span>
+                          </label>
+                          <label>
+                            <input
+                              checked={coachDiaryDraft.scope === "tasks"}
+                              name="coachDiaryScope"
+                              onChange={() =>
+                                setCoachDiaryDraft((current) => ({
+                                  ...current,
+                                  scope: "tasks",
+                                }))
+                              }
+                              type="radio"
+                            />
+                            <span>
+                              {copyFor(language, { en: "By tasks", ru: "По заданиям", bg: "По задачи" })}
+                            </span>
+                          </label>
+                        </div>
+
+                        {coachDiaryDraft.scope === "tasks" ? (
+                          <div className="coach-diary-task-grid">
+                            {coachDiaryTaskChoices.map((choice) => {
+                              const checked =
+                                choice.kind === "exercise"
+                                  ? coachDiaryDraft.assignedExerciseIds.includes(choice.id)
+                                  : coachDiaryDraft.assignedBlockIds.includes(choice.id);
+
+                              return (
+                                <label className="coach-diary-task-choice" key={`${choice.kind}-${choice.id}`}>
+                                  <input
+                                    checked={checked}
+                                    onChange={(event) =>
+                                      updateCoachDiaryTarget(choice.kind, choice.id, event.target.checked)
+                                    }
+                                    type="checkbox"
+                                  />
+                                  <span>
+                                    <strong>{choice.label}</strong>
+                                    <small>{choice.meta}</small>
+                                  </span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        ) : null}
+
+                        <label className="field coach-diary-note-field">
+                          <span>{t("notes")}</span>
+                          <textarea
+                            onChange={(event) =>
+                              setCoachDiaryDraft((current) => ({
+                                ...current,
+                                notes: event.target.value,
+                              }))
+                            }
+                            placeholder={copyFor(language, {
+                              en: "Observation, decision, or recommendation for this day",
+                              ru: "Наблюдение, решение или рекомендация на этот день",
+                              bg: "Наблюдение, решение или препоръка за този ден",
+                            })}
+                            rows={3}
+                            value={coachDiaryDraft.notes}
+                          />
+                        </label>
+
+                        <button
+                          className="primary-button"
+                          disabled={busy || coachDiaryDraft.notes.trim().length === 0}
+                          type="submit"
+                        >
+                          {busy
+                            ? ui("syncingNow")
+                            : copyFor(language, {
+                                en: "Save note",
+                                ru: "Сохранить запись",
+                                bg: "Запази запис",
+                              })}
+                        </button>
+                      </form>
+                      {selectedCoachDiaryEntries.length > 0 ? (
+                        <div className="coach-diary-history">
+                          {selectedCoachDiaryEntries.slice(0, 4).map((entry) => {
+                            const targetIds = new Set([
+                              ...entry.assignedBlockIds,
+                              ...entry.assignedExerciseIds,
+                            ]);
+                            const targetLabels = coachDiaryTaskChoices
+                              .filter((choice) => targetIds.has(choice.id))
+                              .map((choice) => choice.label);
+                            const targetLabel =
+                              entry.scope === "day"
+                                ? copyFor(language, {
+                                    en: "Whole day",
+                                    ru: "Весь день",
+                                    bg: "Целият ден",
+                                  })
+                                : targetLabels.length > 0
+                                  ? targetLabels.slice(0, 3).join(" / ")
+                                  : copyFor(language, {
+                                      en: "Selected tasks",
+                                      ru: "Выбранные задания",
+                                      bg: "Избрани задачи",
+                                    });
+
+                            return (
+                              <article className="coach-diary-history-item" key={entry.id}>
+                                <div className="summary-topline">
+                                  <strong>{targetLabel}</strong>
+                                  <span>{entry.updatedAt.slice(0, 16)}</span>
+                                </div>
+                                <p>{entry.notes}</p>
+                                <small>{entry.coachName}</small>
+                              </article>
+                            );
+                          })}
+                        </div>
+                      ) : null}
                       <div className="coach-review-block-list">
                         {coachExecutionReview.sessions.flatMap((session) =>
                           session.blocks.map((block) => (

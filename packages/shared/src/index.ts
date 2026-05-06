@@ -544,6 +544,30 @@ export interface ExecutionResultsResponse {
   results: ExecutionResult[];
 }
 
+export type CoachDiaryScope = "day" | "tasks";
+
+export interface CoachDiaryEntryPayload {
+  athleteId: string;
+  assignedPlanId: string;
+  entryDate: string;
+  scope: CoachDiaryScope;
+  notes: string;
+  assignedBlockIds: string[];
+  assignedExerciseIds: string[];
+}
+
+export interface CoachDiaryEntry extends CoachDiaryEntryPayload {
+  id: string;
+  coachUserId: string;
+  coachName: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CoachDiaryEntriesResponse {
+  entries: CoachDiaryEntry[];
+}
+
 export interface ExecutionExerciseResultInput {
   assignedExerciseId: string;
   completed: boolean;
