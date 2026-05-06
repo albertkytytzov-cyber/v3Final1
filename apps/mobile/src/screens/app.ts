@@ -1781,18 +1781,52 @@ function splitExerciseNoteParts(notes?: string | null) {
     .filter(Boolean);
 }
 
-function isDurationVolumeNote(value: string) {
-  return /\d/u.test(value) && /(?:сек|sec|s\b|мин|min|m\b)/iu.test(value);
+function inferExerciseWorkDisplayUnit(name: string, value: string) {
+  const normalized = `${name} ${value}`.toLowerCase();
+
+  if (!/\d+\s*[xх×*]\s*\d/u.test(normalized) || /(?:сек|sec|s\b|мин|min|m\b)/iu.test(normalized)) {
+    return null;
+  }
+
+  if (/(?:ускор|спринт|скорост|рывок|отрез|прыж|shuttle|sprint|speed)/iu.test(normalized)) {
+    return "сек";
+  }
+
+  if (/(?:схват|раунд|спарр|борьб|round|sparring)/iu.test(normalized)) {
+    return "мин";
+  }
+
+  return null;
+}
+
+function isExerciseVolumeNote(value: string) {
+  return /\d/u.test(value) && (
+    /\d+\s*[xх×*]\s*\d/iu.test(value) ||
+    /(?:сек|sec|s\b|мин|min|m\b|км|km|кг|kg|м\b|подх|повт|reps|sets)/iu.test(value)
+  );
+}
+
+function normalizeExerciseWorkDisplay(name: string, value: string) {
+  const inferredUnit = inferExerciseWorkDisplayUnit(name, value);
+
+  if (!inferredUnit) {
+    return value;
+  }
+
+  return value.replace(
+    /(\d+)\s*[xх×*]\s*(\d+(?:[.,]\d+)?)(?!\s*(?:сек|s|sec|мин|m|min)\b)/iu,
+    `$1×$2 ${inferredUnit}`,
+  );
 }
 
 function getExerciseWorkNotePart(exercise: AssignedBlockExercise, noteParts: string[]) {
   const firstNotePart = noteParts[0];
 
-  if (!firstNotePart || exercise.targetDurationMinutes === null || !isDurationVolumeNote(firstNotePart)) {
+  if (!firstNotePart || !isExerciseVolumeNote(firstNotePart)) {
     return null;
   }
 
-  return firstNotePart;
+  return normalizeExerciseWorkDisplay(exercise.name, firstNotePart);
 }
 
 function formatExerciseWorkCell(exercise: AssignedBlockExercise) {
@@ -1859,13 +1893,14 @@ function formatBlockTarget(block: AssignedPlanBlock) {
 function formatExerciseTarget(exercise: AssignedBlockExercise) {
   const noteParts = splitExerciseNoteParts(exercise.notes);
   const workNotePart = getExerciseWorkNotePart(exercise, noteParts);
+  const workNoteSource = workNotePart ? noteParts[0] : null;
   const parts = [
     workNotePart || (exercise.targetSets ? `${exercise.targetSets} подх.` : ""),
     workNotePart || !exercise.targetReps ? "" : `${exercise.targetReps} повт.`,
     exercise.targetWeightKg ? `${exercise.targetWeightKg} кг` : "",
     exercise.targetDurationMinutes && !workNotePart ? `${exercise.targetDurationMinutes} мин.` : "",
     exercise.targetRpe ? `RPE ${exercise.targetRpe}` : "",
-    ...noteParts.filter((part) => part !== workNotePart),
+    ...noteParts.filter((part) => part !== workNoteSource && part !== workNotePart),
   ].filter(Boolean);
 
   return parts.join(" · ") || "плановые значения не заданы";

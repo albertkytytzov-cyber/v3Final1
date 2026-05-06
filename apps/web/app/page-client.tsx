@@ -950,18 +950,73 @@ function roundImportedDurationMinutes(value: number) {
   return Math.round(value * 100) / 100;
 }
 
-function extractImportedSetDuration(value: string) {
+type ImportedSetDurationUnit = "minutes" | "seconds";
+
+function inferImportedSetDurationUnit(value: string, blockType?: PlanBlockType): ImportedSetDurationUnit | null {
+  const normalized = value.toLowerCase();
+
+  if (!/\d+\s*[xх×*]\s*\d/u.test(normalized)) {
+    return null;
+  }
+
+  if (/(?:сек|sec|s\b|мин|min|m\b)/iu.test(normalized)) {
+    return null;
+  }
+
+  if (/(?:ускор|спринт|скорост|рывок|отрез|прыж|shuttle|sprint|speed)/iu.test(normalized) || blockType === "speed") {
+    return "seconds";
+  }
+
+  if (/(?:схват|раунд|спарр|борьб|round|sparring)/iu.test(normalized)) {
+    return "minutes";
+  }
+
+  return null;
+}
+
+function importedSetDurationUnitLabel(unit: ImportedSetDurationUnit) {
+  return unit === "seconds" ? "сек" : "мин";
+}
+
+function normalizeImportedVolumeText(
+  name: string,
+  volume: string,
+  control: string,
+  blockType: PlanBlockType,
+) {
+  const normalizedVolume = normalizeImportedPlanText(volume);
+  const inferredUnit = inferImportedSetDurationUnit(
+    normalizeImportedPlanText(`${name} ${normalizedVolume} ${control}`),
+    blockType,
+  );
+
+  if (!inferredUnit) {
+    return normalizedVolume;
+  }
+
+  return normalizedVolume.replace(
+    /(\d+)\s*[xх×*]\s*(\d+(?:[.,]\d+)?)(?!\s*(?:сек|s|sec|мин|m|min)\b)/iu,
+    `$1×$2 ${importedSetDurationUnitLabel(inferredUnit)}`,
+  );
+}
+
+function extractImportedSetDuration(value: string, inferredUnit: ImportedSetDurationUnit | null = null) {
   const match = value
     .toLowerCase()
-    .match(/(\d+)\s*[xх×*]\s*(\d+(?:[.,]\d+)?)\s*(сек|s|sec|мин|m|min)\b/iu);
+    .match(/(\d+)\s*[xх×*]\s*(\d+(?:[.,]\d+)?)\s*(сек|s|sec|мин|m|min)?\b/iu);
 
-  if (!match) {
+  if (!match || (!match[3] && !inferredUnit)) {
     return null;
   }
 
   const sets = Number(match[1]);
   const durationValue = Number(match[2].replace(",", "."));
-  const durationMinutes = /^(?:сек|s|sec)$/iu.test(match[3])
+  const durationUnit = match[3]
+    ? /^(?:сек|s|sec)$/iu.test(match[3])
+      ? "seconds"
+      : "minutes"
+    : inferredUnit;
+  const durationMinutes = durationUnit === "seconds"
     ? durationValue / 60
     : durationValue;
 
@@ -1060,10 +1115,13 @@ function createImportedPlanBlock(
   control: string,
   displayOrder: number,
 ): PlanTemplatePayload["blocks"][number] {
-  const notes = normalizeImportedPlanText([volume, control].filter(Boolean).join(" / "));
+  const rawDetails = normalizeImportedPlanText(`${name} ${volume} ${control}`);
+  const blockType = inferImportedBlockType(rawDetails);
+  const normalizedVolume = normalizeImportedVolumeText(name, volume, control, blockType);
+  const notes = normalizeImportedPlanText([normalizedVolume, control].filter(Boolean).join(" / "));
   const details = normalizeImportedPlanText(`${name} ${notes}`);
-  const blockType = inferImportedBlockType(details);
-  const setDuration = extractImportedSetDuration(details);
+  const inferredSetDurationUnit = inferImportedSetDurationUnit(details, blockType);
+  const setDuration = extractImportedSetDuration(details, inferredSetDurationUnit);
   const duration = setDuration?.totalDurationMinutes ?? extractImportedDurationMinutes(details);
   const rpe = extractImportedRpe(details);
   const { sets, reps } = extractImportedSetsReps(details);
@@ -1073,7 +1131,11 @@ function createImportedPlanBlock(
     ? exerciseItems.map((item, exerciseIndex) => {
         const itemDuration = extractImportedDurationMinutes(item) ?? duration;
         const itemRpe = extractImportedRpe(item) ?? rpe;
-        const itemSetDuration = extractImportedSetDuration(item) ?? setDuration;
+        const itemSetDuration =
+          extractImportedSetDuration(
+            item,
+            inferImportedSetDurationUnit(`${name} ${item} ${notes}`, blockType),
+          ) ?? setDuration;
         const itemSetsReps = extractImportedSetsReps(item);
 
         return {
@@ -3579,6 +3641,7 @@ function selectCurrentAssignedPlan(
 function formatExerciseTarget(
   item: Pick<
     AssignedBlockExercise,
+    | "name"
     | "targetSets"
     | "targetReps"
     | "targetWeightKg"
@@ -3591,6 +3654,7 @@ function formatExerciseTarget(
   const parts: string[] = [];
   const noteParts = splitExerciseNoteParts(item.notes);
   const workNotePart = getExerciseWorkNotePart(item, noteParts);
+  const workNoteSource = workNotePart ? noteParts[0] : null;
 
   if (workNotePart) {
     parts.push(workNotePart);
@@ -3632,7 +3696,7 @@ function formatExerciseTarget(
     parts.push(`RPE ${item.targetRpe}`);
   }
 
-  parts.push(...noteParts.filter((part) => part !== workNotePart));
+  parts.push(...noteParts.filter((part) => part !== workNoteSource && part !== workNotePart));
 
   return parts.length ? parts.join(" / ") : "-";
 }
@@ -3644,30 +3708,64 @@ function splitExerciseNoteParts(notes?: string | null) {
     .filter(Boolean);
 }
 
-function isDurationVolumeNote(value: string) {
-  return /\d/u.test(value) && /(?:сек|sec|s\b|мин|min|m\b)/iu.test(value);
+function inferExerciseWorkDisplayUnit(name: string, value: string): "мин" | "сек" | null {
+  const normalized = `${name} ${value}`.toLowerCase();
+
+  if (!/\d+\s*[xх×*]\s*\d/u.test(normalized) || /(?:сек|sec|s\b|мин|min|m\b)/iu.test(normalized)) {
+    return null;
+  }
+
+  if (/(?:ускор|спринт|скорост|рывок|отрез|прыж|shuttle|sprint|speed)/iu.test(normalized)) {
+    return "сек";
+  }
+
+  if (/(?:схват|раунд|спарр|борьб|round|sparring)/iu.test(normalized)) {
+    return "мин";
+  }
+
+  return null;
+}
+
+function isExerciseVolumeNote(value: string) {
+  return /\d/u.test(value) && (
+    /\d+\s*[xх×*]\s*\d/iu.test(value) ||
+    /(?:сек|sec|s\b|мин|min|m\b|км|km|кг|kg|м\b|подх|повт|reps|sets)/iu.test(value)
+  );
+}
+
+function normalizeExerciseWorkDisplay(name: string, value: string) {
+  const inferredUnit = inferExerciseWorkDisplayUnit(name, value);
+
+  if (!inferredUnit) {
+    return value;
+  }
+
+  return value.replace(
+    /(\d+)\s*[xх×*]\s*(\d+(?:[.,]\d+)?)(?!\s*(?:сек|s|sec|мин|m|min)\b)/iu,
+    `$1×$2 ${inferredUnit}`,
+  );
 }
 
 function getExerciseWorkNotePart(
   item: Pick<
     AssignedBlockExercise,
-    "targetSets" | "targetReps" | "targetDurationMinutes"
+    "name" | "targetSets" | "targetReps" | "targetDurationMinutes"
   >,
   noteParts: string[],
 ) {
   const firstNotePart = noteParts[0];
 
-  if (!firstNotePart || item.targetDurationMinutes === null || !isDurationVolumeNote(firstNotePart)) {
+  if (!firstNotePart || !isExerciseVolumeNote(firstNotePart)) {
     return null;
   }
 
-  return firstNotePart;
+  return normalizeExerciseWorkDisplay(item.name, firstNotePart);
 }
 
 function formatExerciseWorkCell(
   item: Pick<
     AssignedBlockExercise,
-    "targetSets" | "targetReps" | "targetDurationMinutes" | "notes"
+    "name" | "targetSets" | "targetReps" | "targetDurationMinutes" | "notes"
   >,
   language: Language,
 ) {
