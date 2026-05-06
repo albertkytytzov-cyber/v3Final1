@@ -276,10 +276,15 @@ export async function listExecutionResultsForAthlete(
 
 export async function buildExecutionReviewForAthlete(
   athleteId: string,
+  assignedPlanId?: string,
 ): Promise<ExecutionReviewPlan | null> {
+  const whereSql = assignedPlanId
+    ? "assigned_plans.athlete_id = $1 AND assigned_plans.id = $2 AND assigned_plans.status = 'active'"
+    : "assigned_plans.athlete_id = $1 AND assigned_plans.status = 'active'";
+  const params = assignedPlanId ? [athleteId, assignedPlanId] : [athleteId];
   const [assignedPlan] = await loadAssignedPlans(
-    "assigned_plans.athlete_id = $1 AND assigned_plans.status = 'active'",
-    [athleteId],
+    whereSql,
+    params,
   );
 
   if (!assignedPlan) {

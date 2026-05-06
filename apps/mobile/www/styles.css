@@ -710,6 +710,7 @@ button {
 }
 
 .coach-diary-head span,
+.coach-diary-date span,
 .coach-diary-task small,
 .coach-diary-note span,
 .coach-diary-history-card small {
@@ -717,6 +718,21 @@ button {
   font-size: 0.76rem;
   font-weight: 750;
   line-height: 1.3;
+}
+
+.coach-diary-date {
+  display: grid;
+  gap: 6px;
+}
+
+.coach-diary-date input {
+  width: 100%;
+  min-height: 42px;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: #fff;
+  color: var(--text);
 }
 
 .coach-diary-scope {

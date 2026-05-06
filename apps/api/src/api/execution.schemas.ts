@@ -1,5 +1,7 @@
 import type { ExecutionResultInput } from "@training-platform/shared";
 
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+
 function toNullableNumber(value: unknown) {
   if (value === null || value === undefined || value === "") {
     return null;
@@ -17,6 +19,24 @@ export function parseExecutionAthleteParams(params: unknown): { athleteId: strin
   }
 
   return { athleteId };
+}
+
+export function parseExecutionReviewQuery(query: unknown): { assignedPlanId?: string } {
+  const assignedPlanId = (query as { assignedPlanId?: unknown } | null)?.assignedPlanId;
+
+  if (assignedPlanId === undefined || assignedPlanId === null || assignedPlanId === "") {
+    return {};
+  }
+
+  if (typeof assignedPlanId !== "string") {
+    throw new Error("assignedPlanId must be a string");
+  }
+
+  if (!uuidPattern.test(assignedPlanId)) {
+    throw new Error("assignedPlanId must be a valid id");
+  }
+
+  return { assignedPlanId };
 }
 
 export function parseExecutionBody(body: unknown): ExecutionResultInput {

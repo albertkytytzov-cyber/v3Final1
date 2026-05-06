@@ -4481,9 +4481,10 @@ export function PageClient({
     setCoachAdaptedPlan(response.adaptedPlan);
   }
 
-  async function loadCoachExecutionReview(athleteId: string) {
+  async function loadCoachExecutionReview(athleteId: string, assignedPlanId?: string) {
+    const query = assignedPlanId ? `?assignedPlanId=${encodeURIComponent(assignedPlanId)}` : "";
     const response = await apiRequest<{ review: ExecutionReviewPlan | null }>(
-      `/coach/athletes/${athleteId}/execution-review`,
+      `/coach/athletes/${athleteId}/execution-review${query}`,
     );
     setCoachExecutionReview(response.review);
   }
@@ -4667,6 +4668,36 @@ export function PageClient({
         error instanceof Error && typeof navigator !== "undefined" && navigator.onLine
           ? error.message
           : "",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleCoachReviewDayChange(assignedPlanId: string) {
+    if (!selectedAthleteId || !assignedPlanId) {
+      return;
+    }
+
+    setBusy(true);
+    setErrorMessage("");
+    setCoachDiaryDraft((current) => ({
+      ...current,
+      assignedBlockIds: [],
+      assignedExerciseIds: [],
+    }));
+
+    try {
+      await loadCoachExecutionReview(selectedAthleteId, assignedPlanId);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : copyFor(language, {
+              en: "Could not load the selected day.",
+              ru: "Не удалось загрузить выбранный день.",
+              bg: "Избраният ден не можа да се зареди.",
+            }),
       );
     } finally {
       setBusy(false);
@@ -8052,6 +8083,12 @@ export function PageClient({
       item.payload.athleteId === selectedAthleteId &&
       item.payload.assignedPlanId === coachExecutionReview?.assignedPlanId,
   );
+  const coachReviewDayOptions = selectedAthleteId
+    ? assignedPlans
+        .filter((plan) => plan.athleteId === selectedAthleteId)
+        .slice()
+        .sort((left, right) => left.day.dayDate.localeCompare(right.day.dayDate))
+    : [];
   const coachDiaryTaskChoices: CoachDiaryTaskChoice[] = coachExecutionReview
     ? coachExecutionReview.sessions.flatMap((session) =>
         session.blocks.flatMap<CoachDiaryTaskChoice>((block) => {
@@ -11219,6 +11256,37 @@ export function PageClient({
                         : ui("noReviewYet")}
                     </span>
                   </div>
+                  {coachReviewDayOptions.length > 0 ? (
+                    <label className="field coach-review-day-field">
+                      <span>
+                        {copyFor(language, {
+                          en: "Day for coach note",
+                          ru: "День для записи тренера",
+                          bg: "Ден за запис на треньора",
+                        })}
+                      </span>
+                      <select
+                        disabled={busy}
+                        onChange={(event) => void handleCoachReviewDayChange(event.target.value)}
+                        value={coachExecutionReview?.assignedPlanId ?? ""}
+                      >
+                        {!coachExecutionReview ? (
+                          <option value="">
+                            {copyFor(language, {
+                              en: "Select day",
+                              ru: "Выберите день",
+                              bg: "Изберете ден",
+                            })}
+                          </option>
+                        ) : null}
+                        {coachReviewDayOptions.map((plan) => (
+                          <option key={plan.id} value={plan.id}>
+                            {plan.day.dayDate} / {plan.day.label} / {plan.templateName}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : null}
                   {coachExecutionReview ? (
                     <>
                       <div className="coach-review-summary-grid">
@@ -11268,6 +11336,9 @@ export function PageClient({
                                 bg: "Запис на треньора за деня",
                               })}
                             </strong>
+                            <small>
+                              {coachExecutionReview.dayDate} / {coachExecutionReview.dayLabel}
+                            </small>
                             <small>
                               {latestCoachDiaryEntry
                                 ? `${copyFor(language, {
@@ -11413,7 +11484,7 @@ export function PageClient({
                               <article className="coach-diary-history-item" key={entry.id}>
                                 <div className="summary-topline">
                                   <strong>{targetLabel}</strong>
-                                  <span>{entry.updatedAt.slice(0, 16)}</span>
+                                  <span>{entry.entryDate} / {entry.updatedAt.slice(0, 16)}</span>
                                 </div>
                                 <p>{entry.notes}</p>
                                 <small>{entry.coachName}</small>

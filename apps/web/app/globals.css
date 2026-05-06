@@ -2886,6 +2886,10 @@ select {
   min-width: 0;
 }
 
+.coach-review-day-field {
+  max-width: 420px;
+}
+
 .coach-review-summary-item {
   display: grid;
   gap: 4px;

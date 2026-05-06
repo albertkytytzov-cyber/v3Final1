@@ -1151,13 +1151,16 @@ function renderCoachDiaryForm(group: ExecutionPlanGroup, entries: CoachDiaryEntr
     <form class="coach-diary-form" data-coach-diary-form>
       <input name="athleteId" type="hidden" value="${escapeHtml(group.plan.athleteId)}" />
       <input name="assignedPlanId" type="hidden" value="${escapeHtml(group.plan.id)}" />
-      <input name="entryDate" type="hidden" value="${escapeHtml(group.plan.day.dayDate)}" />
       <div class="coach-diary-head">
         <div>
           <strong>Запись тренера за день</strong>
           <span>${latestEntry ? `Последняя: ${formatDateTime(latestEntry.updatedAt)}` : "Комментарий к дню или заданиям"}</span>
         </div>
       </div>
+      <label class="coach-diary-date">
+        <span>Дата записи</span>
+        <input name="entryDate" type="date" value="${escapeHtml(group.plan.day.dayDate)}" readonly />
+      </label>
       <fieldset class="coach-diary-scope">
         <label>
           <input name="scope" type="radio" value="day" checked />

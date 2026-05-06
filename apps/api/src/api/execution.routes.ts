@@ -10,6 +10,7 @@ import { readIdempotencyKey } from "./idempotency";
 import {
   parseExecutionAthleteParams,
   parseExecutionBody,
+  parseExecutionReviewQuery,
 } from "./execution.schemas";
 
 interface ExecutionRouteDependencies {
@@ -35,10 +36,17 @@ export function registerExecutionRoutes(
       throw dependencies.httpError(400, (error as Error).message);
     }
 
+    let query;
+    try {
+      query = parseExecutionReviewQuery(request.query);
+    } catch (error) {
+      throw dependencies.httpError(400, (error as Error).message);
+    }
+
     await dependencies.guards.assertAthleteAccess(user, athleteId);
 
     return {
-      review: await buildExecutionReviewForAthlete(athleteId),
+      review: await buildExecutionReviewForAthlete(athleteId, query.assignedPlanId),
     };
   });
 
