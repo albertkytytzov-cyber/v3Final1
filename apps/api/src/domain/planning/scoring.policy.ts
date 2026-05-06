@@ -98,6 +98,7 @@ export function getTemplateFeedbackBias(input: {
   selectionIntent: TemplateSelectionIntent;
   feedbackIndex: Map<string, PlannerSuggestionFeedback> | null;
   targetSlotLoad?: number | null;
+  estimatedLoad?: number;
 }): TemplateFeedbackBias {
   if (!input.feedbackIndex?.size) {
     return {
@@ -109,6 +110,7 @@ export function getTemplateFeedbackBias(input: {
 
   const templateType = normalizeMicrocycleType(input.template.microcycleType);
   const desiredType = normalizeMicrocycleType(input.desiredMicrocycleType);
+  const estimatedLoad = input.estimatedLoad ?? input.template.estimatedLoad;
   let scoreDelta = 0;
   const reasons: string[] = [];
   const historyBiases: TemplateFeedbackBias["historyBiases"] = [];
@@ -201,7 +203,7 @@ export function getTemplateFeedbackBias(input: {
     input.targetSlotLoad !== null &&
     input.targetSlotLoad !== undefined
   ) {
-    if (input.template.estimatedLoad > input.targetSlotLoad + 45) {
+    if (estimatedLoad > input.targetSlotLoad + 45) {
       applyFeedback(
         "reduce_slot_load",
         "reduce_load",
@@ -210,7 +212,7 @@ export function getTemplateFeedbackBias(input: {
     }
 
     if (
-      input.template.estimatedLoad < input.targetSlotLoad - 45 &&
+      estimatedLoad < input.targetSlotLoad - 45 &&
       (
         desiredType === "load" ||
         desiredType === "specific" ||

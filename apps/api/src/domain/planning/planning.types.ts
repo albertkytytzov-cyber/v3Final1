@@ -25,12 +25,15 @@ export interface TemplateFeedbackBias {
 
 export interface TemplateScoredRecommendation extends PlanTemplateRecommendation {
   estimatedLoad: number;
+  templateDayIndex?: number;
+  selectionKey: string;
   historyBiases: TemplatePackHistoryBias[];
 }
 
 export interface TemplateLoadRecommendation {
   templateId: string;
   templateName: string;
+  templateDayIndex?: number;
   estimatedLoad: number;
   score: number;
 }

@@ -5,6 +5,7 @@ import type {
   PlannerSuggestionFeedback,
 } from "@training-platform/shared";
 import {
+  getTemplateLoadCandidates,
   getTargetSlotLoad,
   normalizeMicrocycleType,
 } from "./load-balance.policy";
@@ -102,8 +103,15 @@ export function chooseTemplateForSlot(
     slots && slots.length ? getTargetSlotLoad(slots, slot, mesocycleWeek) : null;
 
   const ranked = templates
-    .map((template) => {
+    .flatMap((template) =>
+      getTemplateLoadCandidates(template).map((candidate) => ({
+        template,
+        candidate,
+      })),
+    )
+    .map(({ template, candidate }) => {
       const base = scoreTemplateRecommendation(template, competitionContext);
+      const estimatedLoad = candidate.estimatedLoad;
       let score = base.score;
       const reason = [base.reason];
       const historyBias = getTemplateFeedbackBias({
@@ -112,6 +120,7 @@ export function chooseTemplateForSlot(
         selectionIntent: "slot",
         feedbackIndex,
         targetSlotLoad,
+        estimatedLoad,
       });
 
       if (phase && template.phaseFocus === phase) {
@@ -126,19 +135,19 @@ export function chooseTemplateForSlot(
         reason.push(`microcycle match: ${slot.microcycleType}`);
       }
 
-      const repeatCount = previousTemplateIds.filter((id) => id === template.id).length;
+      const repeatCount = previousTemplateIds.filter((id) => id === candidate.selectionKey).length;
       if (repeatCount > 0) {
         score -= repeatCount * 4;
         reason.push(`repeat penalty x${repeatCount}`);
       }
 
-      if (previousTemplateIds[previousTemplateIds.length - 1] === template.id) {
+      if (previousTemplateIds[previousTemplateIds.length - 1] === candidate.selectionKey) {
         score -= 6;
         reason.push("back-to-back repeat penalty");
       }
 
       if (previousLoad !== null) {
-        const loadDelta = Math.abs(template.estimatedLoad - previousLoad);
+        const loadDelta = Math.abs(estimatedLoad - previousLoad);
         if (loadDelta > 180) {
           score -= 8;
           reason.push("hard load jump penalty");
@@ -155,7 +164,7 @@ export function chooseTemplateForSlot(
       }
 
       for (const adjacentLoad of adjacentCalendarLoads) {
-        const loadDelta = Math.abs(template.estimatedLoad - adjacentLoad);
+        const loadDelta = Math.abs(estimatedLoad - adjacentLoad);
         if (loadDelta > 200) {
           score -= 7;
           reason.push("calendar-adjacent load jump");
@@ -178,7 +187,7 @@ export function chooseTemplateForSlot(
 
         if (
           (mesocycleWeek.microcycleType === "recovery" || mesocycleWeek.microcycleType === "taper") &&
-          template.estimatedLoad <= 220
+          estimatedLoad <= 220
         ) {
           score += 2;
           reason.push("recovery/taper load protected");
@@ -186,7 +195,7 @@ export function chooseTemplateForSlot(
 
         if (
           (mesocycleWeek.microcycleType === "shock" || mesocycleWeek.microcycleType === "impact") &&
-          template.estimatedLoad >= 220
+          estimatedLoad >= 220
         ) {
           score += 2;
           reason.push("impact week load supported");
@@ -194,7 +203,7 @@ export function chooseTemplateForSlot(
       }
 
       if (targetSlotLoad !== null) {
-        const targetDelta = Math.abs(template.estimatedLoad - targetSlotLoad);
+        const targetDelta = Math.abs(estimatedLoad - targetSlotLoad);
         if (targetDelta <= 35) {
           score += 4;
           reason.push("slot load close to mesocycle target");
@@ -219,7 +228,9 @@ export function chooseTemplateForSlot(
         ...base,
         score,
         reason: reason.join(", "),
-        estimatedLoad: template.estimatedLoad,
+        estimatedLoad,
+        templateDayIndex: candidate.templateDayIndex,
+        selectionKey: candidate.selectionKey,
         historyBiases: historyBias.historyBiases,
       };
     })
@@ -241,8 +252,15 @@ export function recommendTemplateForMicrocycle(
 ): TemplateLoadRecommendation | null {
   const ranked = templates
     .filter((template) => !excludeTemplateIds.includes(template.id))
-    .map((template) => {
+    .flatMap((template) =>
+      getTemplateLoadCandidates(template).map((candidate) => ({
+        template,
+        candidate,
+      })),
+    )
+    .map(({ template, candidate }) => {
       const base = scoreTemplateRecommendation(template, competitionContext);
+      const estimatedLoad = candidate.estimatedLoad;
       let score = base.score;
       const historyBias = getTemplateFeedbackBias({
         template,
@@ -250,6 +268,7 @@ export function recommendTemplateForMicrocycle(
         selectionIntent: "slot",
         feedbackIndex,
         targetSlotLoad: null,
+        estimatedLoad,
       });
 
       if (phase && template.phaseFocus === phase) {
@@ -268,7 +287,8 @@ export function recommendTemplateForMicrocycle(
       return {
         templateId: template.id,
         templateName: template.name,
-        estimatedLoad: template.estimatedLoad,
+        templateDayIndex: candidate.templateDayIndex,
+        estimatedLoad,
         score,
       };
     })
@@ -292,10 +312,16 @@ export function recommendLighterTemplateForItem(
   feedbackIndex: Map<string, PlannerSuggestionFeedback> | null = null,
 ): TemplateLoadRecommendation | null {
   const candidates = templates
+    .flatMap((template) =>
+      getTemplateLoadCandidates(template).map((candidate) => ({
+        template,
+        candidate,
+      })),
+    )
     .filter(
-      (template) =>
+      ({ template, candidate }) =>
         template.id !== packItem.templateId &&
-        template.estimatedLoad < packItem.estimatedLoad &&
+        candidate.estimatedLoad < packItem.estimatedLoad &&
         (
           normalizeMicrocycleType(template.microcycleType) ===
             normalizeMicrocycleType(packItem.microcycleType) ||
@@ -304,8 +330,9 @@ export function recommendLighterTemplateForItem(
           normalizeMicrocycleType(template.microcycleType) === "activation"
         ),
     )
-    .map((template) => {
+    .map(({ template, candidate }) => {
       const base = scoreTemplateRecommendation(template, competitionContext);
+      const estimatedLoad = candidate.estimatedLoad;
       let score = base.score;
       const historyBias = getTemplateFeedbackBias({
         template,
@@ -313,6 +340,7 @@ export function recommendLighterTemplateForItem(
         selectionIntent: "lighter",
         feedbackIndex,
         targetSlotLoad: null,
+        estimatedLoad,
       });
 
       if (phase && template.phaseFocus === phase) {
@@ -326,14 +354,15 @@ export function recommendLighterTemplateForItem(
         score += 3;
       }
 
-      const loadRelief = packItem.estimatedLoad - template.estimatedLoad;
+      const loadRelief = packItem.estimatedLoad - estimatedLoad;
       score += Math.min(5, Math.max(1, Math.round(loadRelief / 40)));
       score += historyBias.scoreDelta;
 
       return {
         templateId: template.id,
         templateName: template.name,
-        estimatedLoad: template.estimatedLoad,
+        templateDayIndex: candidate.templateDayIndex,
+        estimatedLoad,
         score,
       };
     })
@@ -357,10 +386,16 @@ export function recommendHeavierTemplateForItem(
   feedbackIndex: Map<string, PlannerSuggestionFeedback> | null = null,
 ): TemplateLoadRecommendation | null {
   const candidates = templates
+    .flatMap((template) =>
+      getTemplateLoadCandidates(template).map((candidate) => ({
+        template,
+        candidate,
+      })),
+    )
     .filter(
-      (template) =>
+      ({ template, candidate }) =>
         template.id !== packItem.templateId &&
-        template.estimatedLoad > packItem.estimatedLoad &&
+        candidate.estimatedLoad > packItem.estimatedLoad &&
         (
           normalizeMicrocycleType(template.microcycleType) ===
             normalizeMicrocycleType(packItem.microcycleType) ||
@@ -368,8 +403,9 @@ export function recommendHeavierTemplateForItem(
           normalizeMicrocycleType(template.microcycleType) === "specific"
         ),
     )
-    .map((template) => {
+    .map(({ template, candidate }) => {
       const base = scoreTemplateRecommendation(template, competitionContext);
+      const estimatedLoad = candidate.estimatedLoad;
       let score = base.score;
       const historyBias = getTemplateFeedbackBias({
         template,
@@ -377,6 +413,7 @@ export function recommendHeavierTemplateForItem(
         selectionIntent: "heavier",
         feedbackIndex,
         targetSlotLoad: null,
+        estimatedLoad,
       });
 
       if (phase && template.phaseFocus === phase) {
@@ -390,14 +427,15 @@ export function recommendHeavierTemplateForItem(
         score += 3;
       }
 
-      const loadIncrease = template.estimatedLoad - packItem.estimatedLoad;
+      const loadIncrease = estimatedLoad - packItem.estimatedLoad;
       score += Math.min(5, Math.max(1, Math.round(loadIncrease / 40)));
       score += historyBias.scoreDelta;
 
       return {
         templateId: template.id,
         templateName: template.name,
-        estimatedLoad: template.estimatedLoad,
+        templateDayIndex: candidate.templateDayIndex,
+        estimatedLoad,
         score,
       };
     })

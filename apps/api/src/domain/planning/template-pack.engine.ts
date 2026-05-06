@@ -17,7 +17,7 @@ export function buildTemplatePackRecommendation(
 ): TemplatePackRecommendation {
   const slots = defaultMicrocycleSlots(input.phase, input.mesocycleWeek);
   const items: TemplatePackDraftItem[] = [];
-  const selectedTemplateIds: string[] = [];
+  const selectedTemplateKeys: string[] = [];
   let previousLoad: number | null = null;
 
   for (const slot of slots) {
@@ -40,7 +40,7 @@ export function buildTemplatePackRecommendation(
       input.phase,
       input.competitionContext,
       slot,
-      selectedTemplateIds,
+      selectedTemplateKeys,
       previousLoad,
       adjacentCalendarLoads,
       sameDateAssignedCount,
@@ -59,12 +59,13 @@ export function buildTemplatePackRecommendation(
       dayOffset: slot.dayOffset,
       dayLabel: slot.dayLabel,
       microcycleType: slot.microcycleType,
+      templateDayIndex: recommendation.templateDayIndex,
       score: recommendation.score,
       reason: recommendation.reason,
       estimatedLoad: recommendation.estimatedLoad,
       historyBiases: recommendation.historyBiases,
     });
-    selectedTemplateIds.push(recommendation.templateId);
+    selectedTemplateKeys.push(recommendation.selectionKey);
     previousLoad = recommendation.estimatedLoad;
   }
 

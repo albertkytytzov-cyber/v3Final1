@@ -418,6 +418,7 @@ export interface PlannerSuggestion {
   targetDayOffset: number | null;
   recommendedTemplateId: string | null;
   recommendedTemplateName: string | null;
+  recommendedTemplateDayIndex?: number | null;
   feedback: PlannerSuggestionFeedback | null;
 }
 

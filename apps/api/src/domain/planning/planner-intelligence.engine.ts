@@ -184,6 +184,8 @@ export function buildPlannerSuggestions(
   feedbackIndex: Map<string, PlannerSuggestionFeedback> | null,
 ) {
   const suggestions: PlannerSuggestion[] = [];
+  const templateDayIndex = (template: { templateDayIndex?: number } | null | undefined) =>
+    template?.templateDayIndex ?? null;
   const pushSuggestion = (suggestion: Omit<PlannerSuggestion, "feedback">) => {
     if (
       suggestions.some(
@@ -245,6 +247,7 @@ export function buildPlannerSuggestions(
         targetDayOffset: null,
         recommendedTemplateId: lighterTemplate?.templateId ?? null,
         recommendedTemplateName: lighterTemplate?.templateName ?? null,
+        recommendedTemplateDayIndex: templateDayIndex(lighterTemplate),
       });
 
       if (recoveryTemplate) {
@@ -258,6 +261,7 @@ export function buildPlannerSuggestions(
           targetDayOffset: null,
           recommendedTemplateId: recoveryTemplate.templateId,
           recommendedTemplateName: recoveryTemplate.templateName,
+          recommendedTemplateDayIndex: templateDayIndex(recoveryTemplate),
         });
       }
     }
@@ -273,6 +277,7 @@ export function buildPlannerSuggestions(
         targetDayOffset: null,
         recommendedTemplateId: recoveryTemplate.templateId,
         recommendedTemplateName: recoveryTemplate.templateName,
+        recommendedTemplateDayIndex: templateDayIndex(recoveryTemplate),
       });
     }
 
@@ -308,6 +313,7 @@ export function buildPlannerSuggestions(
           targetDayOffset: null,
           recommendedTemplateId: recommendedTemplate?.templateId ?? null,
           recommendedTemplateName: recommendedTemplate?.templateName ?? null,
+          recommendedTemplateDayIndex: templateDayIndex(recommendedTemplate),
         });
       }
     }
@@ -335,6 +341,7 @@ export function buildPlannerSuggestions(
         targetDayOffset: null,
         recommendedTemplateId: lighterTemplate?.templateId ?? null,
         recommendedTemplateName: lighterTemplate?.templateName ?? null,
+        recommendedTemplateDayIndex: templateDayIndex(lighterTemplate),
       });
     }
 
@@ -352,6 +359,7 @@ export function buildPlannerSuggestions(
           targetDayOffset: overlappingItem.dayOffset + 1,
           recommendedTemplateId: null,
           recommendedTemplateName: null,
+          recommendedTemplateDayIndex: null,
         });
       }
 
@@ -369,6 +377,7 @@ export function buildPlannerSuggestions(
           targetDayOffset: specificItem.dayOffset + 1,
           recommendedTemplateId: specificItem.templateId,
           recommendedTemplateName: specificItem.templateName,
+          recommendedTemplateDayIndex: specificItem.templateDayIndex ?? null,
         });
       }
     }
@@ -391,6 +400,7 @@ export function buildPlannerSuggestions(
         targetDayOffset: null,
         recommendedTemplateId: lighterTemplate?.templateId ?? null,
         recommendedTemplateName: lighterTemplate?.templateName ?? null,
+        recommendedTemplateDayIndex: templateDayIndex(lighterTemplate),
       });
     }
 
@@ -411,6 +421,7 @@ export function buildPlannerSuggestions(
         targetDayOffset: null,
         recommendedTemplateId: heavierTemplate?.templateId ?? null,
         recommendedTemplateName: heavierTemplate?.templateName ?? null,
+        recommendedTemplateDayIndex: templateDayIndex(heavierTemplate),
       });
     }
 
@@ -432,6 +443,7 @@ export function buildPlannerSuggestions(
             targetDayOffset: null,
             recommendedTemplateId: recoveryTemplate.templateId,
             recommendedTemplateName: recoveryTemplate.templateName,
+            recommendedTemplateDayIndex: templateDayIndex(recoveryTemplate),
           });
         }
       } else if (
@@ -454,6 +466,7 @@ export function buildPlannerSuggestions(
           targetDayOffset: null,
           recommendedTemplateId: heavierTemplate?.templateId ?? null,
           recommendedTemplateName: heavierTemplate?.templateName ?? null,
+          recommendedTemplateDayIndex: templateDayIndex(heavierTemplate),
         });
       }
     }

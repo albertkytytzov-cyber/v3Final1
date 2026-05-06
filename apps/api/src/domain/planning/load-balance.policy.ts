@@ -1,4 +1,8 @@
-import type { AssignedPlanSummary } from "@training-platform/shared";
+import type {
+  AssignedPlanSummary,
+  PlanDayInput,
+  PlanTemplateSummary,
+} from "@training-platform/shared";
 import type { PlannerSlot } from "./planning.types";
 
 export function shiftDate(dateText: string, dayOffset: number) {
@@ -28,6 +32,47 @@ export function estimateBlocksLoad(
       }, 0)
       .toFixed(1),
   );
+}
+
+export function estimatePlanDayLoad(day: Pick<PlanDayInput, "sessions">) {
+  return estimateBlocksLoad(day.sessions.flatMap((session) => session.blocks));
+}
+
+export function estimateTemplateDayLoad(
+  template: Pick<PlanTemplateSummary, "estimatedLoad" | "days">,
+  templateDayIndex: number | null | undefined,
+) {
+  const days = template.days ?? [];
+
+  if (!days.length) {
+    return template.estimatedLoad;
+  }
+
+  const normalizedIndex = Number.isFinite(templateDayIndex ?? NaN)
+    ? Math.min(Math.max(Number(templateDayIndex), 0), days.length - 1)
+    : 0;
+
+  return estimatePlanDayLoad(days[normalizedIndex]);
+}
+
+export function getTemplateLoadCandidates(template: PlanTemplateSummary) {
+  const days = template.days ?? [];
+
+  if (!days.length) {
+    return [
+      {
+        selectionKey: template.id,
+        templateDayIndex: undefined,
+        estimatedLoad: template.estimatedLoad,
+      },
+    ];
+  }
+
+  return days.map((day, index) => ({
+    selectionKey: `${template.id}:${index}`,
+    templateDayIndex: index,
+    estimatedLoad: estimatePlanDayLoad(day),
+  }));
 }
 
 export function estimateAssignedPlanLoad(plan: AssignedPlanSummary) {

@@ -799,6 +799,39 @@ function countTemplateDayBlocks(day: PlanTemplateDayInput) {
   return day.sessions.reduce((total, session) => total + session.blocks.length, 0);
 }
 
+function estimateTemplateBlocksLoad(blocks: PlanTemplatePayload["blocks"]) {
+  return Number(
+    blocks
+      .reduce((sum, block) => {
+        const duration = block.targetDurationMinutes ?? 20;
+        const rpe = block.targetRpe ?? 5;
+        return sum + duration * rpe;
+      }, 0)
+      .toFixed(1),
+  );
+}
+
+function estimateTemplateDayLoad(day: PlanTemplateDayInput) {
+  return estimateTemplateBlocksLoad(day.sessions.flatMap((session) => session.blocks));
+}
+
+function estimateTemplateLoadForDay(
+  template: Pick<PlanTemplateSummary, "days" | "estimatedLoad">,
+  templateDayIndex: number | null | undefined,
+) {
+  const days = template.days ?? [];
+
+  if (!days.length) {
+    return template.estimatedLoad;
+  }
+
+  const normalizedIndex = Number.isFinite(templateDayIndex ?? NaN)
+    ? Math.min(Math.max(Number(templateDayIndex), 0), days.length - 1)
+    : 0;
+
+  return estimateTemplateDayLoad(days[normalizedIndex]);
+}
+
 function countTemplateDayExercises(day: PlanTemplateDayInput) {
   return day.sessions.reduce(
     (total, session) =>
@@ -3618,6 +3651,7 @@ function recalculateTemplatePack(
 function packToMicrocycleItems(pack: TemplatePackRecommendation) {
   return pack.items.map((item) => ({
     templateId: item.templateId,
+    templateDayIndex: item.templateDayIndex,
     dayOffset: item.dayOffset,
     dayLabel: item.dayLabel,
     microcycleType: item.microcycleType,
@@ -3953,10 +3987,19 @@ function applyPlannerSuggestionToPack(
       suggestion.action === "increase_load") &&
     recommendedTemplate
   ) {
+    const recommendedTemplateDayIndex =
+      suggestion.recommendedTemplateDayIndex === undefined
+        ? undefined
+        : suggestion.recommendedTemplateDayIndex;
+
     targetItem.templateId = recommendedTemplate.id;
     targetItem.templateName = recommendedTemplate.name;
+    targetItem.templateDayIndex = recommendedTemplateDayIndex ?? undefined;
     targetItem.microcycleType = recommendedTemplate.microcycleType || targetItem.microcycleType;
-    targetItem.estimatedLoad = recommendedTemplate.estimatedLoad;
+    targetItem.estimatedLoad = estimateTemplateLoadForDay(
+      recommendedTemplate,
+      recommendedTemplateDayIndex,
+    );
     targetItem.reason = `${targetItem.reason}, manual suggestion applied`;
     targetItem.score = Number((targetItem.score + 1).toFixed(1));
     targetItem.historyBiases = historyBiasesFromPlannerSuggestion(suggestion);
