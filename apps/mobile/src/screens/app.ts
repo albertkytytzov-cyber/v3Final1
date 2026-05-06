@@ -281,6 +281,20 @@ export function bootstrapMobileApp(root: HTMLElement) {
     });
   };
 
+  const submitExecutionDay = async (button: HTMLButtonElement) => {
+    const group = button.closest<HTMLElement>("[data-execution-plan-group]");
+    const forms = Array.from(group?.querySelectorAll<HTMLFormElement>("[data-execution-form]") ?? []);
+
+    if (forms.length === 0) {
+      update({ error: "Нет блоков для сохранения." });
+      return;
+    }
+
+    for (const form of forms) {
+      await submitExecution(form);
+    }
+  };
+
   const submitCompetitionResult = async (form: HTMLFormElement) => {
     const payload: CompetitionResultPayload = {
       coachNotes: readString(form, "coachNotes"),
@@ -493,6 +507,12 @@ export function bootstrapMobileApp(root: HTMLElement) {
       form.addEventListener("submit", (event) => {
         event.preventDefault();
         void submitExecution(event.currentTarget as HTMLFormElement);
+      });
+    });
+
+    root.querySelectorAll<HTMLButtonElement>("[data-execution-save-day]").forEach((button) => {
+      button.addEventListener("click", () => {
+        void submitExecutionDay(button);
       });
     });
 
@@ -1095,7 +1115,7 @@ function renderExecutionPlanGroup(
   ).length;
 
   return `
-    <details class="execution-plan-group mobile-plan-day-card mobile-execution-day-card" ${isOpen ? "open" : ""}>
+    <details class="execution-plan-group mobile-plan-day-card mobile-execution-day-card" data-execution-plan-group ${isOpen ? "open" : ""}>
       <summary class="mobile-plan-day-card-head">
         <div>
           <strong>${formatDate(group.plan.day.dayDate)} · ${escapeHtml(group.plan.day.label)}</strong>
@@ -1137,6 +1157,13 @@ function renderExecutionPlanGroup(
             </div>
           </section>
         `).join("")}
+        ${canSubmitExecution ? `
+          <div class="mobile-execution-day-actions">
+            <button class="primary-action" type="button" data-execution-save-day ${state.isBusy ? "disabled" : ""}>
+              ${state.isBusy ? "Сохранение..." : "Сохранить выполнение"}
+            </button>
+          </div>
+        ` : ""}
         ${canSubmitCoachDiary ? renderCoachDiaryForm(group, getCoachDiaryEntriesForPlan(state, group.plan.id)) : ""}
       </div>
     </details>
@@ -1278,9 +1305,6 @@ function renderExecutionBlockForm(item: ExecutionBlockItem, result: ExecutionRes
             .map((exercise) => renderExecutionExerciseRow(exercise, getExerciseResult(result, exercise.id), result))
             .join("")
         : renderExecutionBlockFallbackRow(item.block, result)}
-      <div class="mobile-execution-form-actions">
-        <button class="primary-action" type="submit">Сохранить выполнение</button>
-      </div>
     </form>
   `;
 }
