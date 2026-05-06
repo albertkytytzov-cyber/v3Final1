@@ -1781,8 +1781,27 @@ function splitExerciseNoteParts(notes?: string | null) {
     .filter(Boolean);
 }
 
+function isDurationVolumeNote(value: string) {
+  return /\d/u.test(value) && /(?:сек|sec|s\b|мин|min|m\b)/iu.test(value);
+}
+
+function getExerciseWorkNotePart(exercise: AssignedBlockExercise, noteParts: string[]) {
+  const firstNotePart = noteParts[0];
+
+  if (!firstNotePart || exercise.targetDurationMinutes === null || !isDurationVolumeNote(firstNotePart)) {
+    return null;
+  }
+
+  return firstNotePart;
+}
+
 function formatExerciseWorkCell(exercise: AssignedBlockExercise) {
   const noteParts = splitExerciseNoteParts(exercise.notes);
+  const workNotePart = getExerciseWorkNotePart(exercise, noteParts);
+
+  if (workNotePart) {
+    return workNotePart;
+  }
 
   if (exercise.targetSets !== null && exercise.targetReps !== null) {
     return `${exercise.targetSets}×${exercise.targetReps}`;
@@ -1838,12 +1857,15 @@ function formatBlockTarget(block: AssignedPlanBlock) {
 }
 
 function formatExerciseTarget(exercise: AssignedBlockExercise) {
+  const noteParts = splitExerciseNoteParts(exercise.notes);
+  const workNotePart = getExerciseWorkNotePart(exercise, noteParts);
   const parts = [
-    exercise.targetSets ? `${exercise.targetSets} подх.` : "",
-    exercise.targetReps ? `${exercise.targetReps} повт.` : "",
+    workNotePart || (exercise.targetSets ? `${exercise.targetSets} подх.` : ""),
+    workNotePart || !exercise.targetReps ? "" : `${exercise.targetReps} повт.`,
     exercise.targetWeightKg ? `${exercise.targetWeightKg} кг` : "",
-    exercise.targetDurationMinutes ? `${exercise.targetDurationMinutes} мин.` : "",
+    exercise.targetDurationMinutes && !workNotePart ? `${exercise.targetDurationMinutes} мин.` : "",
     exercise.targetRpe ? `RPE ${exercise.targetRpe}` : "",
+    ...noteParts.filter((part) => part !== workNotePart),
   ].filter(Boolean);
 
   return parts.join(" · ") || "плановые значения не заданы";

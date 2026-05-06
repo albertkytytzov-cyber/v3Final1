@@ -940,10 +940,35 @@ function extractImportedDurationMinutes(value: string) {
   const secondMatch = normalized.match(/(\d+(?:[.,]\d+)?)\s*(?:сек|s|sec)\b/u);
 
   if (secondMatch) {
-    return Math.round((Number(secondMatch[1].replace(",", ".")) / 60) * 10) / 10;
+    return roundImportedDurationMinutes(Number(secondMatch[1].replace(",", ".")) / 60);
   }
 
   return null;
+}
+
+function roundImportedDurationMinutes(value: number) {
+  return Math.round(value * 100) / 100;
+}
+
+function extractImportedSetDuration(value: string) {
+  const match = value
+    .toLowerCase()
+    .match(/(\d+)\s*[xх×*]\s*(\d+(?:[.,]\d+)?)\s*(сек|s|sec|мин|m|min)\b/iu);
+
+  if (!match) {
+    return null;
+  }
+
+  const sets = Number(match[1]);
+  const durationValue = Number(match[2].replace(",", "."));
+  const durationMinutes = /^(?:сек|s|sec)$/iu.test(match[3])
+    ? durationValue / 60
+    : durationValue;
+
+  return {
+    sets,
+    totalDurationMinutes: roundImportedDurationMinutes(sets * durationMinutes),
+  };
 }
 
 function extractImportedSetsReps(value: string) {
@@ -1038,7 +1063,8 @@ function createImportedPlanBlock(
   const notes = normalizeImportedPlanText([volume, control].filter(Boolean).join(" / "));
   const details = normalizeImportedPlanText(`${name} ${notes}`);
   const blockType = inferImportedBlockType(details);
-  const duration = extractImportedDurationMinutes(details);
+  const setDuration = extractImportedSetDuration(details);
+  const duration = setDuration?.totalDurationMinutes ?? extractImportedDurationMinutes(details);
   const rpe = extractImportedRpe(details);
   const { sets, reps } = extractImportedSetsReps(details);
   const isMandatory = blockType !== "recovery" && blockType !== "mobility";
@@ -1047,14 +1073,15 @@ function createImportedPlanBlock(
     ? exerciseItems.map((item, exerciseIndex) => {
         const itemDuration = extractImportedDurationMinutes(item) ?? duration;
         const itemRpe = extractImportedRpe(item) ?? rpe;
+        const itemSetDuration = extractImportedSetDuration(item) ?? setDuration;
         const itemSetsReps = extractImportedSetsReps(item);
 
         return {
           name: item,
-          targetSets: itemSetsReps.sets ?? sets,
-          targetReps: itemSetsReps.reps ?? reps,
+          targetSets: itemSetDuration?.sets ?? itemSetsReps.sets ?? setDuration?.sets ?? sets,
+          targetReps: itemSetDuration ? null : itemSetsReps.reps ?? reps,
           targetWeightKg: null,
-          targetDurationMinutes: itemDuration,
+          targetDurationMinutes: itemSetDuration?.totalDurationMinutes ?? itemDuration,
           targetRpe: itemRpe,
           notes,
           displayOrder: displayOrder + exerciseIndex,
@@ -1063,8 +1090,8 @@ function createImportedPlanBlock(
     : [
         {
           name: name || "Импортированное упражнение",
-          targetSets: sets,
-          targetReps: reps,
+          targetSets: setDuration?.sets ?? sets,
+          targetReps: setDuration ? null : reps,
           targetWeightKg: null,
           targetDurationMinutes: duration,
           targetRpe: rpe,
@@ -1084,8 +1111,8 @@ function createImportedPlanBlock(
     reductionPercentRed: isMandatory ? 55 : 100,
     targetDurationMinutes: duration,
     targetRpe: rpe,
-    targetSets: sets,
-    targetReps: reps,
+    targetSets: setDuration?.sets ?? sets,
+    targetReps: setDuration ? null : reps,
     notes,
     exercises,
   };
@@ -3562,8 +3589,12 @@ function formatExerciseTarget(
   language: Language,
 ) {
   const parts: string[] = [];
+  const noteParts = splitExerciseNoteParts(item.notes);
+  const workNotePart = getExerciseWorkNotePart(item, noteParts);
 
-  if (item.targetSets !== null && item.targetReps !== null) {
+  if (workNotePart) {
+    parts.push(workNotePart);
+  } else if (item.targetSets !== null && item.targetReps !== null) {
     parts.push(`${item.targetSets} x ${item.targetReps}`);
   } else if (item.targetSets !== null) {
     parts.push(
@@ -3587,7 +3618,7 @@ function formatExerciseTarget(
     parts.push(`${item.targetWeightKg} ${copyFor(language, { en: "kg", ru: "кг", bg: "кг" })}`);
   }
 
-  if (item.targetDurationMinutes !== null) {
+  if (item.targetDurationMinutes !== null && !workNotePart) {
     parts.push(
       `${item.targetDurationMinutes} ${copyFor(language, {
         en: "min",
@@ -3601,9 +3632,7 @@ function formatExerciseTarget(
     parts.push(`RPE ${item.targetRpe}`);
   }
 
-  if (item.notes) {
-    parts.push(item.notes);
-  }
+  parts.push(...noteParts.filter((part) => part !== workNotePart));
 
   return parts.length ? parts.join(" / ") : "-";
 }
@@ -3615,6 +3644,26 @@ function splitExerciseNoteParts(notes?: string | null) {
     .filter(Boolean);
 }
 
+function isDurationVolumeNote(value: string) {
+  return /\d/u.test(value) && /(?:сек|sec|s\b|мин|min|m\b)/iu.test(value);
+}
+
+function getExerciseWorkNotePart(
+  item: Pick<
+    AssignedBlockExercise,
+    "targetSets" | "targetReps" | "targetDurationMinutes"
+  >,
+  noteParts: string[],
+) {
+  const firstNotePart = noteParts[0];
+
+  if (!firstNotePart || item.targetDurationMinutes === null || !isDurationVolumeNote(firstNotePart)) {
+    return null;
+  }
+
+  return firstNotePart;
+}
+
 function formatExerciseWorkCell(
   item: Pick<
     AssignedBlockExercise,
@@ -3623,6 +3672,11 @@ function formatExerciseWorkCell(
   language: Language,
 ) {
   const noteParts = splitExerciseNoteParts(item.notes);
+  const workNotePart = getExerciseWorkNotePart(item, noteParts);
+
+  if (workNotePart) {
+    return workNotePart;
+  }
 
   if (item.targetSets !== null && item.targetReps !== null) {
     return `${item.targetSets}×${item.targetReps}`;
