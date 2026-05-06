@@ -7328,7 +7328,13 @@ select {
 
 .planning-weekly-controls {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 168px), 1fr));
+  grid-template-columns:
+    minmax(118px, 0.95fr)
+    minmax(110px, 0.72fr)
+    minmax(68px, 0.42fr)
+    minmax(145px, 1.08fr)
+    minmax(130px, 0.86fr)
+    minmax(140px, 0.84fr);
   gap: 8px;
   align-items: end;
   padding: 12px;
@@ -7407,6 +7413,7 @@ select {
 .planning-weekly-submit {
   align-self: end;
   max-width: 100%;
+  min-height: 58px;
   width: 100%;
   padding-inline: 14px;
   line-height: 1.12;
@@ -7979,10 +7986,6 @@ select {
   }
 
   .workspace-layout.workspace-layout-planning .planning-weekly-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .workspace-layout.workspace-layout-planning .planning-weekly-controls {
     grid-template-columns: 1fr;
   }
 }
