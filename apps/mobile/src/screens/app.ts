@@ -1278,6 +1278,9 @@ function renderExecutionBlockForm(item: ExecutionBlockItem, result: ExecutionRes
             .map((exercise) => renderExecutionExerciseRow(exercise, getExerciseResult(result, exercise.id), result))
             .join("")
         : renderExecutionBlockFallbackRow(item.block, result)}
+      <div class="mobile-execution-form-actions">
+        <button class="primary-action" type="submit">Сохранить выполнение</button>
+      </div>
     </form>
   `;
 }
@@ -1315,7 +1318,6 @@ function renderExecutionExerciseRow(
           <span>Комментарий</span>
           <input name="notes" value="${escapeHtml(blockResult?.notes ?? "")}" />
         </label>
-        <button class="primary-action" type="submit">Сохранить</button>
       </details>
     </div>
   `;
@@ -1340,7 +1342,6 @@ function renderExecutionBlockFallbackRow(block: AssignedPlanBlock, result: Execu
           <span>Комментарий</span>
           <input name="notes" value="${escapeHtml(result?.notes ?? "")}" />
         </label>
-        <button class="primary-action" type="submit">Сохранить</button>
       </details>
     </div>
   `;

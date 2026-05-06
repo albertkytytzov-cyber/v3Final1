@@ -638,6 +638,15 @@ button {
   border-top: 1px solid rgba(148, 163, 184, 0.2);
 }
 
+.mobile-execution-form-actions {
+  display: grid;
+  padding: 10px 0 12px;
+}
+
+.mobile-execution-form-actions .primary-action {
+  width: 100%;
+}
+
 .mobile-execution-row {
   padding: 9px 0;
 }
@@ -856,12 +865,6 @@ button {
 
 .mobile-execution-row-details summary::-webkit-details-marker {
   display: none;
-}
-
-.mobile-execution-row-details .primary-action {
-  min-height: 40px;
-  padding: 9px 12px;
-  font-size: 0.86rem;
 }
 
 .mobile-plan-exercise-name {
