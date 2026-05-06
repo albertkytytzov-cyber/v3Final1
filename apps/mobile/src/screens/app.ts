@@ -1,4 +1,9 @@
 import { MobileApiClient, MobileApiError } from "../api/client.js";
+import {
+  canSubmitSyncAction,
+  getSyncActionRestrictionMessage,
+  translateApiErrorMessage,
+} from "../permissions.js";
 import { readRuntimeConfig } from "../config.js";
 import {
   clearSession,
@@ -15,6 +20,8 @@ import type {
   AssignedBlockExercise,
   AssignedPlanBlock,
   AssignedPlanSummary,
+  CoachDiaryEntry,
+  CoachDiaryEntryPayload,
   CompetitionPlanSummary,
   CompetitionResultPayload,
   ExecutionExerciseResult,
@@ -23,8 +30,10 @@ import type {
   MobileAppState,
   MobileDataSnapshot,
   MobileScreen,
+  PendingSyncAction,
   ReadinessEntry,
   ReadinessSubmissionPayload,
+  SyncActionKind,
 } from "../types/models.js";
 
 const runtimeConfig = readRuntimeConfig();
@@ -115,14 +124,11 @@ export function bootstrapMobileApp(root: HTMLElement) {
 
     update({ error: null, isSyncing: true });
 
-    const result = await flushSyncQueue(client(), state.session.user.id);
-    const message = result.syncedCount > 0
-      ? `Синхронизировано: ${result.syncedCount}`
-      : "Очередь синхронизации проверена";
+    const result = await flushSyncQueue(client(), state.session.user.id, state.session.user.role);
 
     update({
       isSyncing: false,
-      message,
+      message: formatSyncResultMessage(result.syncedCount, result.invalidatedCount),
       queue: result.queue,
     });
 
@@ -296,12 +302,80 @@ export function bootstrapMobileApp(root: HTMLElement) {
     });
   };
 
+  const submitCoachDiary = async (form: HTMLFormElement) => {
+    const scope = readString(form, "scope") === "tasks" ? "tasks" : "day";
+    const selectedBlockIds = readStringList(form, "assignedBlockIds");
+    const selectedExerciseIds = readStringList(form, "assignedExerciseIds");
+    const notes = readString(form, "notes");
+
+    const payload: CoachDiaryEntryPayload = {
+      athleteId: readString(form, "athleteId"),
+      assignedPlanId: readString(form, "assignedPlanId"),
+      entryDate: readString(form, "entryDate") || todayValue(),
+      scope,
+      notes,
+      assignedBlockIds: scope === "tasks" ? selectedBlockIds : [],
+      assignedExerciseIds: scope === "tasks" ? selectedExerciseIds : [],
+    };
+
+    if (!payload.athleteId || !payload.assignedPlanId) {
+      update({ error: "Выберите спортсмена и день плана." });
+      return;
+    }
+
+    if (!payload.notes) {
+      update({ error: "Добавьте текст записи тренера." });
+      return;
+    }
+
+    if (
+      payload.scope === "tasks" &&
+      payload.assignedBlockIds.length === 0 &&
+      payload.assignedExerciseIds.length === 0
+    ) {
+      update({ error: "Выберите задания или переключите запись на весь день." });
+      return;
+    }
+
+    await submitOrQueue("coach-diary", payload, async (idempotencyKey) => {
+      const result = await client().submitCoachDiary(payload, idempotencyKey);
+      const snapshot = {
+        ...state.data,
+        coachDiaryEntries: upsertById(state.data.coachDiaryEntries, result.entry),
+        savedAt: new Date().toISOString(),
+      };
+      saveSnapshot(snapshot);
+      update({ data: snapshot });
+    });
+  };
+
   const submitOrQueue = async (
-    kind: "readiness" | "execution" | "competition-result",
-    payload: ReadinessSubmissionPayload | ExecutionResultInput | CompetitionResultPayload,
+    kind: SyncActionKind,
+    payload:
+      | ReadinessSubmissionPayload
+      | ExecutionResultInput
+      | CompetitionResultPayload
+      | CoachDiaryEntryPayload,
     submit: (idempotencyKey: string) => Promise<void>,
   ) => {
-    const pendingAction = createPendingAction(kind, payload, state.session.user?.id ?? null);
+    const userRole = state.session.user?.role ?? null;
+
+    if (!canSubmitSyncAction(userRole, kind)) {
+      update({
+        error: getSyncActionRestrictionMessage(userRole, kind),
+        isBusy: false,
+        message: null,
+        queue: loadQueue(),
+      });
+      return;
+    }
+
+    const pendingAction = createPendingAction(
+      kind,
+      payload,
+      state.session.user?.id ?? null,
+      userRole,
+    );
 
     update({ error: null, isBusy: true, message: null });
 
@@ -326,7 +400,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
     } catch (error) {
       if (error instanceof MobileApiError && error.statusCode !== null && error.statusCode < 500) {
         update({
-          error: error.message,
+          error: toFriendlyError(error),
           isBusy: false,
         });
         return;
@@ -426,6 +500,13 @@ export function bootstrapMobileApp(root: HTMLElement) {
       event.preventDefault();
       void submitCompetitionResult(event.currentTarget as HTMLFormElement);
     });
+
+    root.querySelectorAll<HTMLFormElement>("[data-coach-diary-form]").forEach((form) => {
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        void submitCoachDiary(event.currentTarget as HTMLFormElement);
+      });
+    });
   };
 
   window.addEventListener("online", () => {
@@ -523,13 +604,20 @@ function renderAppShell(state: MobileAppState) {
 }
 
 function renderToolbar(state: MobileAppState) {
+  const pendingQueue = getPendingQueueItems(state.queue);
+  const invalidQueue = getInvalidQueueItems(state.queue);
+  const savedLabel = state.data.savedAt
+    ? `Сохранено: ${formatDateTime(state.data.savedAt)}`
+    : "Локальных данных пока нет";
+  const invalidLabel = invalidQueue.length ? ` · не отправляется: ${invalidQueue.length}` : "";
+
   return `
     <section class="toolbar-row">
       <button data-refresh type="button" ${state.isBusy ? "disabled" : ""}>Обновить</button>
-      <button data-sync type="button" ${state.isSyncing || state.queue.length === 0 ? "disabled" : ""}>
-        Синхронизация ${state.queue.length ? `(${state.queue.length})` : ""}
+      <button data-sync type="button" ${state.isSyncing || pendingQueue.length === 0 ? "disabled" : ""}>
+        Синхронизация ${pendingQueue.length ? `(${pendingQueue.length})` : ""}
       </button>
-      <small>${state.data.savedAt ? `Сохранено: ${formatDateTime(state.data.savedAt)}` : "Локальных данных пока нет"}</small>
+      <small>${savedLabel}${invalidLabel}</small>
     </section>
   `;
 }
@@ -581,6 +669,7 @@ function renderDashboardScreen(state: MobileAppState, athleteId: string | null) 
   const plans = getPlansForAthlete(state, athleteId);
   const competitionPlans = getCompetitionPlansForAthlete(state, athleteId);
   const nextStart = getNextCompetitionPlan(competitionPlans);
+  const pendingQueue = getPendingQueueItems(state.queue);
 
   return `
     <div class="screen-head">
@@ -590,7 +679,7 @@ function renderDashboardScreen(state: MobileAppState, athleteId: string | null) 
     <div class="metric-grid">
       <article><span>Планы</span><strong>${plans.length}</strong></article>
       <article><span>Старты</span><strong>${competitionPlans.length}</strong></article>
-      <article><span>Очередь</span><strong>${state.queue.length}</strong></article>
+      <article><span>Очередь</span><strong>${pendingQueue.length}</strong></article>
       <article><span>Связь</span><strong>${state.isOnline ? "Есть" : "Нет"}</strong></article>
     </div>
     ${nextStart ? `
@@ -686,14 +775,18 @@ function renderCalendarScreen(state: MobileAppState, athleteId: string | null) {
 function renderResultsScreen(state: MobileAppState, athleteId: string | null) {
   const plans = getPlansForAthlete(state, athleteId);
   const competitionPlans = getCompetitionPlansForAthlete(state, athleteId);
+  const canSubmitExecution = state.session.user?.role === "athlete";
 
   return `
     <div class="screen-head">
       <h2>Результаты</h2>
-      <p>Тренировка и соревнование сохраняются локально, если нет интернета.</p>
+      <p>${canSubmitExecution
+        ? "Тренировка сохраняется локально, если нет интернета."
+        : getSyncActionRestrictionMessage(state.session.user?.role ?? null, "execution")}</p>
     </div>
     ${renderExecutionForm(state, plans)}
     ${state.session.user?.role === "coach" || state.session.user?.role === "admin" ? renderCompetitionResultForm(competitionPlans) : ""}
+    ${renderCoachDiaryHistory(state, athleteId)}
     ${renderExecutionHistory(state)}
   `;
 }
@@ -953,6 +1046,7 @@ interface ExecutionPlanGroup {
 
 function renderExecutionForm(state: MobileAppState, plans: AssignedPlanSummary[]) {
   const planGroups = getExecutionPlanGroups(plans);
+  const canSubmitExecution = state.session.user?.role === "athlete";
   const blockCount = planGroups.reduce((total, group) => total + group.blockItems.length, 0);
   const exerciseCount = planGroups.reduce(
     (total, group) =>
@@ -971,10 +1065,14 @@ function renderExecutionForm(state: MobileAppState, plans: AssignedPlanSummary[]
     <section class="execution-panel">
       <div class="section-title">
         <h3>Результат тренировки</h3>
-        <p>${plans.length} назначенных дней · ${blockCount} блоков · ${exerciseCount} упражнений. Ближайший день открыт сверху.</p>
+        <p>${canSubmitExecution
+          ? `${plans.length} назначенных дней · ${blockCount} блоков · ${exerciseCount} упражнений. Ближайший день открыт сверху.`
+          : `Режим просмотра · ${plans.length} назначенных дней · ${blockCount} блоков · ${exerciseCount} упражнений.`}</p>
       </div>
       <div class="execution-plan-stack">
-        ${planGroups.map((group, index) => renderExecutionPlanGroup(state, group, index === 0)).join("")}
+        ${planGroups
+          .map((group, index) => renderExecutionPlanGroup(state, group, index === 0, canSubmitExecution))
+          .join("")}
       </div>
     </section>
   `;
@@ -984,8 +1082,10 @@ function renderExecutionPlanGroup(
   state: MobileAppState,
   group: ExecutionPlanGroup,
   isOpen: boolean,
+  canSubmitExecution: boolean,
 ) {
   const blockCount = group.blockItems.length;
+  const canSubmitCoachDiary = state.session.user?.role === "coach" || state.session.user?.role === "admin";
   const exerciseCount = group.blockItems.reduce(
     (total, item) => total + (item.block.exercises?.length ?? 0),
     0,
@@ -1015,21 +1115,150 @@ function renderExecutionPlanGroup(
               </div>
               ${session.blocks
                 .map((block) =>
-                  renderExecutionBlockForm(
-                    {
-                      block,
-                      plan: group.plan,
-                      sessionName: session.name,
-                    },
-                    getExecutionResultForBlock(state, group.plan.id, block.id),
-                  ),
+                  canSubmitExecution
+                    ? renderExecutionBlockForm(
+                        {
+                          block,
+                          plan: group.plan,
+                          sessionName: session.name,
+                        },
+                        getExecutionResultForBlock(state, group.plan.id, block.id),
+                      )
+                    : renderExecutionBlockReadonly(
+                        {
+                          block,
+                          plan: group.plan,
+                          sessionName: session.name,
+                        },
+                        getExecutionResultForBlock(state, group.plan.id, block.id),
+                      ),
                 )
                 .join("")}
             </div>
           </section>
         `).join("")}
+        ${canSubmitCoachDiary ? renderCoachDiaryForm(group, getCoachDiaryEntriesForPlan(state, group.plan.id)) : ""}
       </div>
     </details>
+  `;
+}
+
+function renderCoachDiaryForm(group: ExecutionPlanGroup, entries: CoachDiaryEntry[]) {
+  const taskChoices = getCoachDiaryTaskChoices(group);
+  const latestEntry = entries[0] ?? null;
+
+  return `
+    <form class="coach-diary-form" data-coach-diary-form>
+      <input name="athleteId" type="hidden" value="${escapeHtml(group.plan.athleteId)}" />
+      <input name="assignedPlanId" type="hidden" value="${escapeHtml(group.plan.id)}" />
+      <input name="entryDate" type="hidden" value="${escapeHtml(group.plan.day.dayDate)}" />
+      <div class="coach-diary-head">
+        <div>
+          <strong>Запись тренера за день</strong>
+          <span>${latestEntry ? `Последняя: ${formatDateTime(latestEntry.updatedAt)}` : "Комментарий к дню или заданиям"}</span>
+        </div>
+      </div>
+      <fieldset class="coach-diary-scope">
+        <label>
+          <input name="scope" type="radio" value="day" checked />
+          <span>Весь день</span>
+        </label>
+        <label>
+          <input name="scope" type="radio" value="tasks" />
+          <span>По заданиям</span>
+        </label>
+      </fieldset>
+      ${taskChoices.length ? `
+        <div class="coach-diary-tasks" aria-label="Задания для записи">
+          ${taskChoices.map((choice) => `
+            <label class="coach-diary-task">
+              <input name="${choice.kind === "exercise" ? "assignedExerciseIds" : "assignedBlockIds"}" type="checkbox" value="${escapeHtml(choice.id)}" />
+              <span>
+                <strong>${escapeHtml(choice.label)}</strong>
+                <small>${escapeHtml(choice.meta)}</small>
+              </span>
+            </label>
+          `).join("")}
+        </div>
+      ` : ""}
+      <label class="coach-diary-note">
+        <span>Комментарий</span>
+        <textarea name="notes" rows="3" placeholder="Наблюдение, решение или рекомендация на этот день"></textarea>
+      </label>
+      <button class="primary-action" type="submit">Сохранить запись</button>
+    </form>
+  `;
+}
+
+interface CoachDiaryTaskChoice {
+  id: string;
+  kind: "block" | "exercise";
+  label: string;
+  meta: string;
+}
+
+function getCoachDiaryTaskChoices(group: ExecutionPlanGroup): CoachDiaryTaskChoice[] {
+  return group.blockItems.flatMap<CoachDiaryTaskChoice>((item) => {
+    const exercises = (item.block.exercises ?? [])
+      .slice()
+      .sort((a, b) => a.orderIndex - b.orderIndex);
+
+    if (exercises.length === 0) {
+      return [{
+        id: item.block.id,
+        kind: "block" as const,
+        label: item.block.name,
+        meta: formatBlockTarget(item.block),
+      }];
+    }
+
+    return exercises.map((exercise) => ({
+      id: exercise.id,
+      kind: "exercise" as const,
+      label: exercise.name,
+      meta: `${item.block.name} · ${formatExerciseTarget(exercise)}`,
+    }));
+  });
+}
+
+function renderExecutionBlockReadonly(item: ExecutionBlockItem, result: ExecutionResult | null) {
+  const exercises = item.block.exercises ?? [];
+
+  return `
+    <article class="mobile-plan-row mobile-execution-row execution-readonly-row">
+      <div class="mobile-plan-exercise-name">
+        <span>
+          <strong>${escapeHtml(item.block.name)}</strong>
+          <small>${escapeHtml(formatExecutionResultStatus(result))}</small>
+        </span>
+      </div>
+      <span class="mobile-plan-cell mobile-plan-work">${escapeHtml(formatBlockTarget(item.block))}</span>
+      <span class="mobile-plan-cell mobile-plan-control">${escapeHtml(item.block.notes || item.sessionName)}</span>
+      ${exercises.length > 0 ? `
+        <div class="execution-readonly-exercises">
+          ${exercises
+            .slice()
+            .sort((a, b) => a.orderIndex - b.orderIndex)
+            .map((exercise) => renderExecutionExerciseReadonly(exercise, getExerciseResult(result, exercise.id)))
+            .join("")}
+        </div>
+      ` : ""}
+    </article>
+  `;
+}
+
+function renderExecutionExerciseReadonly(
+  exercise: AssignedBlockExercise,
+  result: ExecutionExerciseResult | null,
+) {
+  return `
+    <div class="execution-readonly-exercise">
+      <span>
+        <strong>${escapeHtml(exercise.name)}</strong>
+        <small>${escapeHtml(formatExerciseWorkCell(exercise))} · ${escapeHtml(formatExerciseControlCell(exercise))}</small>
+      </span>
+      <em>${escapeHtml(formatExerciseResultStatus(result))}</em>
+    </div>
   `;
 }
 
@@ -1169,6 +1398,38 @@ function renderExecutionHistory(state: MobileAppState) {
   `;
 }
 
+function renderCoachDiaryHistory(state: MobileAppState, athleteId: string | null) {
+  const entries = getCoachDiaryEntriesForAthlete(state, athleteId)
+    .slice()
+    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+    .slice(0, 6);
+
+  if (entries.length === 0) {
+    return "";
+  }
+
+  return `
+    <section class="coach-diary-history">
+      <div class="section-title">
+        <h3>Дневник тренера</h3>
+        <p>${entries.length} последних записей</p>
+      </div>
+      <div class="coach-diary-history-list">
+        ${entries.map((entry) => `
+          <article class="coach-diary-history-card">
+            <header>
+              <strong>${escapeHtml(formatDate(entry.entryDate))}</strong>
+              <span>${escapeHtml(formatCoachDiaryEntryTarget(state, entry))}</span>
+            </header>
+            <p>${escapeHtml(entry.notes)}</p>
+            <small>${escapeHtml(entry.coachName)} · ${formatDateTime(entry.updatedAt)}</small>
+          </article>
+        `).join("")}
+      </div>
+    </section>
+  `;
+}
+
 function renderPlanCard(plan: AssignedPlanSummary) {
   const blocks = plan.day.sessions.flatMap((session) => session.blocks);
   const exerciseCount = countPlanExercises(plan);
@@ -1235,16 +1496,46 @@ function renderProfileCard(user: NonNullable<MobileAppState["session"]["user"]>)
 function renderQueue(state: MobileAppState) {
   return `
     <section class="queue-panel">
-      <h3>Ожидает синхронизации</h3>
+      <h3>Очередь синхронизации</h3>
       ${state.queue.map((item) => `
-        <article>
+        <article class="${item.status === "invalid" ? "is-invalid" : ""}">
           <strong>${escapeHtml(item.label)}</strong>
           <span>${formatDateTime(item.createdAt)}</span>
+          <em>${escapeHtml(formatQueueItemStatus(item))}</em>
           ${item.lastError ? `<small>${escapeHtml(item.lastError)}</small>` : ""}
         </article>
       `).join("")}
     </section>
   `;
+}
+
+function getPendingQueueItems(queue: PendingSyncAction[]) {
+  return queue.filter((item) => item.status !== "invalid");
+}
+
+function getInvalidQueueItems(queue: PendingSyncAction[]) {
+  return queue.filter((item) => item.status === "invalid");
+}
+
+function formatQueueItemStatus(item: PendingSyncAction) {
+  if (item.status === "invalid") {
+    return "Не синхронизируется";
+  }
+
+  if (item.lastError) {
+    return "Повторим при синхронизации";
+  }
+
+  return "Ожидает отправки";
+}
+
+function formatSyncResultMessage(syncedCount: number, invalidatedCount: number) {
+  const parts = [
+    syncedCount > 0 ? `Синхронизировано: ${syncedCount}` : "",
+    invalidatedCount > 0 ? `Не отправляется из-за прав: ${invalidatedCount}` : "",
+  ].filter(Boolean);
+
+  return parts.length ? parts.join(". ") : "Очередь синхронизации проверена";
 }
 
 function renderStatus(state: MobileAppState) {
@@ -1381,6 +1672,58 @@ function getExerciseResult(
   return result?.exerciseResults?.find((exercise) =>
     exercise.assignedExerciseId === assignedExerciseId
   ) ?? null;
+}
+
+function getCoachDiaryEntriesForPlan(state: MobileAppState, assignedPlanId: string) {
+  return state.data.coachDiaryEntries
+    .filter((entry) => entry.assignedPlanId === assignedPlanId)
+    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+}
+
+function getCoachDiaryEntriesForAthlete(state: MobileAppState, athleteId: string | null) {
+  return state.data.coachDiaryEntries.filter((entry) =>
+    !athleteId || entry.athleteId === athleteId
+  );
+}
+
+function formatCoachDiaryEntryTarget(state: MobileAppState, entry: CoachDiaryEntry) {
+  if (entry.scope === "day") {
+    return "весь день";
+  }
+
+  const plan = state.data.assignedPlans.find((assignedPlan) => assignedPlan.id === entry.assignedPlanId);
+  const names = plan
+    ? getCoachDiaryTargetNames(plan, entry)
+    : [];
+
+  if (names.length > 0) {
+    return names.slice(0, 3).join(" · ");
+  }
+
+  const taskCount = entry.assignedBlockIds.length + entry.assignedExerciseIds.length;
+  return taskCount > 0 ? `заданий: ${taskCount}` : "по заданиям";
+}
+
+function getCoachDiaryTargetNames(plan: AssignedPlanSummary, entry: CoachDiaryEntry) {
+  const blockIds = new Set(entry.assignedBlockIds);
+  const exerciseIds = new Set(entry.assignedExerciseIds);
+  const names: string[] = [];
+
+  for (const session of plan.day.sessions) {
+    for (const block of session.blocks) {
+      if (blockIds.has(block.id)) {
+        names.push(block.name);
+      }
+
+      for (const exercise of block.exercises ?? []) {
+        if (exerciseIds.has(exercise.id)) {
+          names.push(exercise.name);
+        }
+      }
+    }
+  }
+
+  return names;
 }
 
 function countPlanExercises(plan: AssignedPlanSummary) {
@@ -1521,6 +1864,22 @@ function formatExecutionHistoryDetails(result: ExecutionResult) {
   return `Упражнения: ${completed} из ${result.exerciseResults.length}`;
 }
 
+function formatExecutionResultStatus(result: ExecutionResult | null) {
+  if (!result) {
+    return "выполнение не отправлено";
+  }
+
+  return result.completed ? "выполнено" : "не выполнено";
+}
+
+function formatExerciseResultStatus(result: ExecutionExerciseResult | null) {
+  if (!result) {
+    return "нет отметки";
+  }
+
+  return result.completed ? "выполнено" : "не выполнено";
+}
+
 function getCompetitionPlansForAthlete(state: MobileAppState, athleteId: string | null) {
   return state.data.competitionPlans.filter((plan) => !athleteId || plan.athleteId === athleteId);
 }
@@ -1572,6 +1931,13 @@ function upsertReadinessHistory(items: ReadinessEntry[], entry: ReadinessEntry) 
 
 function readString(form: HTMLFormElement, name: string) {
   return String(new FormData(form).get(name) ?? "").trim();
+}
+
+function readStringList(form: HTMLFormElement, name: string) {
+  return new FormData(form)
+    .getAll(name)
+    .map((value) => String(value).trim())
+    .filter(Boolean);
 }
 
 function readNumber(form: HTMLFormElement, name: string, fallback: number) {
@@ -1632,10 +1998,10 @@ function toFriendlyError(error: unknown) {
       return "Нет соединения с сервером. Можно работать с сохранёнными данными.";
     }
 
-    return error.message;
+    return translateApiErrorMessage(error.message);
   }
 
-  return error instanceof Error ? error.message : "Неизвестная ошибка";
+  return error instanceof Error ? translateApiErrorMessage(error.message) : "Неизвестная ошибка";
 }
 
 function escapeHtml(value: string | number | null | undefined) {

@@ -1,6 +1,8 @@
 import type {
   AssignedPlanSummary,
   AuthResponse,
+  CoachDiaryEntry,
+  CoachDiaryEntryPayload,
   CoachAthleteSummary,
   CompetitionPlanSummary,
   CompetitionResultPayload,
@@ -10,6 +12,7 @@ import type {
   ReadinessEntry,
   ReadinessSubmissionPayload,
 } from "../types/models.js";
+import { translateApiErrorMessage } from "../permissions.js";
 
 export class MobileApiError extends Error {
   constructor(
@@ -103,6 +106,7 @@ export class MobileApiClient {
       competitions,
       competitionPlans,
       athletes,
+      coachDiary,
       readiness,
       readinessHistory,
       execution,
@@ -116,6 +120,13 @@ export class MobileApiClient {
         ? this.request<{ athletes: CoachAthleteSummary[] }>("/coach/athletes")
             .catch(() => ({ athletes: [] }))
         : Promise.resolve({ athletes: [] }),
+      userRole === "coach" || userRole === "admin"
+        ? this.request<{ entries: CoachDiaryEntry[] }>("/coach/diary")
+            .catch(() => ({ entries: [] }))
+        : userRole === "athlete"
+          ? this.request<{ entries: CoachDiaryEntry[] }>("/diary")
+              .catch(() => ({ entries: [] }))
+          : Promise.resolve({ entries: [] }),
       userRole === "athlete"
         ? this.request<{ entry: ReadinessEntry | null }>("/readiness/today")
             .catch(() => ({ entry: null }))
@@ -133,6 +144,7 @@ export class MobileApiClient {
     return {
       assignedPlans: assignedPlans.assignedPlans,
       athletes: athletes.athletes,
+      coachDiaryEntries: coachDiary.entries,
       competitionPlans: competitionPlans.competitionPlans,
       competitions: competitions.competitions,
       executionResults: execution.results,
@@ -164,6 +176,14 @@ export class MobileApiClient {
       method: "POST",
     });
   }
+
+  submitCoachDiary(payload: CoachDiaryEntryPayload, idempotencyKey: string) {
+    return this.request<{ entry: CoachDiaryEntry }>("/coach/diary", {
+      body: JSON.stringify(payload),
+      idempotencyKey,
+      method: "POST",
+    });
+  }
 }
 
 async function readErrorMessage(response: Response) {
@@ -175,10 +195,11 @@ async function readErrorMessage(response: Response) {
 
   try {
     const body = JSON.parse(rawMessage) as { message?: unknown };
-    return typeof body.message === "string" && body.message
+    const message = typeof body.message === "string" && body.message
       ? body.message
       : rawMessage;
+    return translateApiErrorMessage(message);
   } catch {
-    return rawMessage;
+    return translateApiErrorMessage(rawMessage);
   }
 }

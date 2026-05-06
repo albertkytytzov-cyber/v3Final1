@@ -3,6 +3,8 @@ import type {
   AssignedPlanBlock,
   AssignedPlanSummary,
   AuthUser,
+  CoachDiaryEntry,
+  CoachDiaryEntryPayload,
   CoachAthleteSummary,
   CompetitionPlanSummary,
   CompetitionResultPayload,
@@ -12,6 +14,7 @@ import type {
   ExecutionResultInput,
   ReadinessEntry,
   ReadinessSubmissionPayload,
+  UserRole,
 } from "@training-platform/shared";
 
 export type {
@@ -20,6 +23,8 @@ export type {
   AssignedPlanSummary,
   AuthResponse,
   AuthUser,
+  CoachDiaryEntry,
+  CoachDiaryEntryPayload,
   CoachAthleteSummary,
   CompetitionPlanSummary,
   CompetitionResultPayload,
@@ -29,6 +34,7 @@ export type {
   ExecutionResultInput,
   ReadinessEntry,
   ReadinessSubmissionPayload,
+  UserRole,
 } from "@training-platform/shared";
 
 export type MobileScreen =
@@ -51,6 +57,7 @@ export interface MobileDataSnapshot {
   assignedPlans: AssignedPlanSummary[];
   competitions: CompetitionSummary[];
   competitionPlans: CompetitionPlanSummary[];
+  coachDiaryEntries: CoachDiaryEntry[];
   readinessEntry: ReadinessEntry | null;
   readinessHistory: ReadinessEntry[];
   executionResults: ExecutionResult[];
@@ -59,7 +66,8 @@ export interface MobileDataSnapshot {
 export type SyncActionKind =
   | "readiness"
   | "execution"
-  | "competition-result";
+  | "competition-result"
+  | "coach-diary";
 
 export interface PendingSyncAction {
   id: string;
@@ -70,12 +78,15 @@ export interface PendingSyncAction {
   body:
     | ReadinessSubmissionPayload
     | ExecutionResultInput
-    | CompetitionResultPayload;
+    | CompetitionResultPayload
+    | CoachDiaryEntryPayload;
   idempotencyKey: string;
   ownerUserId: string | null;
+  ownerUserRole?: UserRole | null;
   createdAt: string;
   attempts: number;
   lastError: string | null;
+  status?: "pending" | "invalid";
 }
 
 export interface MobileAppState {
@@ -96,6 +107,7 @@ export function createEmptySnapshot(): MobileDataSnapshot {
     savedAt: null,
     athletes: [],
     assignedPlans: [],
+    coachDiaryEntries: [],
     competitions: [],
     competitionPlans: [],
     readinessEntry: null,

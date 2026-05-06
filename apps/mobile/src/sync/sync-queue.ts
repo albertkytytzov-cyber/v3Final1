@@ -1,17 +1,30 @@
-import { MobileApiClient } from "../api/client.js";
+import { MobileApiClient, MobileApiError } from "../api/client.js";
+import {
+  canSubmitSyncAction,
+  getSyncActionRestrictionMessage,
+  isPermanentPermissionError,
+  translateApiErrorMessage,
+} from "../permissions.js";
 import { loadQueue, saveQueue } from "../storage/local-store.js";
 import type {
+  CoachDiaryEntryPayload,
   CompetitionResultPayload,
   ExecutionResultInput,
   PendingSyncAction,
   ReadinessSubmissionPayload,
   SyncActionKind,
+  UserRole,
 } from "../types/models.js";
 
 export function createPendingAction(
   kind: SyncActionKind,
-  body: ReadinessSubmissionPayload | ExecutionResultInput | CompetitionResultPayload,
+  body:
+    | ReadinessSubmissionPayload
+    | ExecutionResultInput
+    | CompetitionResultPayload
+    | CoachDiaryEntryPayload,
   ownerUserId: string | null,
+  ownerUserRole: UserRole | null,
 ): PendingSyncAction {
   const id = createLocalId(kind);
   const endpoint =
@@ -19,7 +32,9 @@ export function createPendingAction(
       ? "/readiness"
       : kind === "execution"
         ? "/execution"
-        : "/competition-results";
+        : kind === "competition-result"
+          ? "/competition-results"
+          : "/coach/diary";
 
   return {
     id,
@@ -30,9 +45,11 @@ export function createPendingAction(
     body,
     idempotencyKey: id,
     ownerUserId,
+    ownerUserRole,
     createdAt: new Date().toISOString(),
     attempts: 0,
     lastError: null,
+    status: "pending",
   };
 }
 
@@ -43,30 +60,68 @@ export function enqueueAction(action: PendingSyncAction) {
   return queue;
 }
 
-export async function flushSyncQueue(client: MobileApiClient, ownerUserId: string | null) {
+export async function flushSyncQueue(
+  client: MobileApiClient,
+  ownerUserId: string | null,
+  ownerUserRole: UserRole | null,
+) {
   const queue = loadQueue();
   const remaining: PendingSyncAction[] = [];
   let syncedCount = 0;
+  let invalidatedCount = 0;
 
   for (const action of queue) {
-    if (action.ownerUserId !== ownerUserId) {
-      remaining.push(action);
+    const pendingAction = normalizePendingAction(action);
+
+    if (pendingAction.ownerUserId !== ownerUserId) {
+      remaining.push(pendingAction);
+      continue;
+    }
+
+    if (pendingAction.status === "invalid") {
+      remaining.push(pendingAction);
+      continue;
+    }
+
+    if (!canSubmitSyncAction(ownerUserRole, pendingAction.kind)) {
+      remaining.push(markActionInvalid(
+        pendingAction,
+        getSyncActionRestrictionMessage(ownerUserRole, pendingAction.kind),
+      ));
+      invalidatedCount += 1;
       continue;
     }
 
     try {
-      await client.request(action.endpoint, {
-        body: JSON.stringify(action.body),
-        idempotencyKey: action.idempotencyKey,
-        method: action.method,
+      await client.request(pendingAction.endpoint, {
+        body: JSON.stringify(pendingAction.body),
+        idempotencyKey: pendingAction.idempotencyKey,
+        method: pendingAction.method,
       });
       syncedCount += 1;
     } catch (error) {
+      const lastError = toSyncErrorMessage(error);
+
+      if (isPermanentPermissionError(pendingAction.kind, lastError)) {
+        remaining.push(markActionInvalid(
+          pendingAction,
+          getSyncActionRestrictionMessage(ownerUserRole, pendingAction.kind),
+        ));
+        invalidatedCount += 1;
+        continue;
+      }
+
+      if (error instanceof MobileApiError && error.statusCode === 403) {
+        remaining.push(markActionInvalid(pendingAction, lastError));
+        invalidatedCount += 1;
+        continue;
+      }
+
       remaining.push({
-        ...action,
-        attempts: action.attempts + 1,
-        lastError:
-          error instanceof Error ? error.message : "Не удалось синхронизировать",
+        ...pendingAction,
+        attempts: pendingAction.attempts + 1,
+        lastError,
+        status: "pending",
       });
     }
   }
@@ -74,9 +129,35 @@ export async function flushSyncQueue(client: MobileApiClient, ownerUserId: strin
   saveQueue(remaining);
 
   return {
+    invalidatedCount,
     queue: remaining,
     syncedCount,
   };
+}
+
+function normalizePendingAction(action: PendingSyncAction): PendingSyncAction {
+  return {
+    ...action,
+    lastError: action.lastError ? translateApiErrorMessage(action.lastError) : null,
+    status: action.status ?? "pending",
+  };
+}
+
+function markActionInvalid(action: PendingSyncAction, lastError: string): PendingSyncAction {
+  return {
+    ...action,
+    attempts: action.attempts + 1,
+    lastError,
+    status: "invalid",
+  };
+}
+
+function toSyncErrorMessage(error: unknown) {
+  if (error instanceof Error) {
+    return translateApiErrorMessage(error.message);
+  }
+
+  return "Не удалось синхронизировать";
 }
 
 function createLocalId(kind: SyncActionKind) {
@@ -95,6 +176,10 @@ function getActionLabel(kind: SyncActionKind) {
 
   if (kind === "execution") {
     return "Результат тренировки";
+  }
+
+  if (kind === "coach-diary") {
+    return "Запись тренера";
   }
 
   return "Результат соревнования";
