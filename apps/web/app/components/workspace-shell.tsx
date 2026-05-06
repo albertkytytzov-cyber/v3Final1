@@ -53,6 +53,12 @@ type WorkspaceTopbarAuthActions = {
   onRegister: () => void;
 };
 
+type WorkspaceDownloadLink = {
+  href: string;
+  label: string;
+  title: string;
+};
+
 type WorkspaceProfileMenu = {
   avatarLabel: string;
   name: string;
@@ -73,6 +79,7 @@ type WorkspaceTopBarProps = {
   actionLabel?: string;
   actionDisabled?: boolean;
   onAction?: () => void;
+  downloadLink?: WorkspaceDownloadLink;
 };
 
 export function WorkspaceTopBar({
@@ -84,6 +91,7 @@ export function WorkspaceTopBar({
   actionLabel,
   actionDisabled,
   onAction,
+  downloadLink,
 }: WorkspaceTopBarProps) {
   const [isLanguageMenuOpen, setIsLanguageMenuOpen] = useState(false);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
@@ -167,6 +175,19 @@ export function WorkspaceTopBar({
               {actionLabel}
             </button>
           </div>
+        ) : null}
+
+        {downloadLink ? (
+          <a
+            className="secondary-button workspace-download-link"
+            download={downloadLink.href.startsWith("/") ? true : undefined}
+            href={downloadLink.href}
+            rel={downloadLink.href.startsWith("http") ? "noreferrer" : undefined}
+            target={downloadLink.href.startsWith("http") ? "_blank" : undefined}
+            title={downloadLink.title}
+          >
+            {downloadLink.label}
+          </a>
         ) : null}
 
         <div className="workspace-language-menu" ref={languageMenuRef}>

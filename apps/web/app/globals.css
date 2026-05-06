@@ -727,7 +727,8 @@ select {
   text-wrap: balance;
 }
 
-.workspace-top-action {
+.workspace-top-action,
+.workspace-download-link {
   min-height: 56px;
   align-self: flex-end;
   width: 172px;
@@ -736,6 +737,16 @@ select {
   line-height: 1.2;
   text-align: center;
   text-wrap: balance;
+}
+
+.workspace-download-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 132px;
+  min-width: 132px;
+  flex-basis: 132px;
+  text-decoration: none;
 }
 
 .workspace-command-bar,
@@ -4907,6 +4918,231 @@ select {
   }
 }
 
+@media (min-width: 721px) and (max-width: 1024px) {
+  .workspace-rail {
+    position: static;
+    padding: 10px;
+    border-radius: 18px;
+    gap: 0;
+  }
+
+  .workspace-rail::before,
+  .workspace-rail-top,
+  .workspace-rail-note,
+  .rail-stat-grid,
+  .rail-nav-label {
+    display: none;
+  }
+
+  .rail-nav {
+    display: flex;
+    gap: 8px;
+    padding: 0;
+    border: 0;
+    overflow-x: auto;
+    background: transparent;
+    scrollbar-width: none;
+  }
+
+  .rail-nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .rail-link {
+    flex: 0 0 clamp(132px, 22vw, 172px);
+    min-height: 50px;
+    padding: 8px 28px 8px 11px;
+  }
+
+  .rail-link-title {
+    -webkit-line-clamp: 2;
+  }
+}
+
+@media (max-width: 900px) {
+  .planning-template-day-session {
+    max-width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: thin;
+  }
+
+  .planning-template-exercise-table {
+    width: 100%;
+    min-width: 440px;
+  }
+}
+
+@media (max-width: 720px) {
+  .topbar-side {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(72px, 0.42fr);
+    overflow: visible;
+    scroll-snap-type: none;
+  }
+
+  .topbar-side > .compact-field {
+    grid-column: 1 / -1;
+    width: 100%;
+    flex: none;
+  }
+
+  .topbar-actions {
+    grid-column: 1;
+    width: 100%;
+    flex: none;
+  }
+
+  .workspace-download-link {
+    grid-column: 2;
+    width: 100%;
+    min-width: 0;
+    flex: none;
+  }
+
+  .workspace-language-menu {
+    grid-column: 3;
+    width: 100%;
+    min-width: 0;
+    flex: none;
+  }
+
+  .workspace-profile-menu {
+    grid-column: 1 / -1;
+    width: 100%;
+    min-width: 0;
+    flex: none;
+  }
+
+  .workspace-profile-trigger-copy strong,
+  .workspace-profile-trigger-copy small {
+    white-space: normal;
+  }
+
+  .workspace-stage-tabs,
+  .planning-nav-row,
+  .compact-tab-row,
+  .toggle-row {
+    flex-wrap: wrap;
+    overflow-x: visible;
+  }
+
+  .planning-template-day-card-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .planning-template-card-title-input,
+  .planning-template-card-note-input,
+  .planning-template-day-card-head span {
+    max-width: 100%;
+  }
+
+  .planning-template-day-card-body {
+    padding: 12px;
+    border-left-width: 4px;
+  }
+
+  .planning-template-exercise-table th,
+  .planning-template-exercise-table td {
+    padding: 7px 6px;
+  }
+
+  .planning-template-exercise-table th + th,
+  .planning-template-exercise-table td + td {
+    padding-left: 8px;
+  }
+
+  .planning-template-exercise-table input {
+    min-height: 34px;
+    padding: 6px 7px;
+  }
+
+  .planning-template-row-action {
+    width: 28px;
+    height: 28px;
+  }
+
+  .planning-template-import-file input {
+    font-size: 0.82rem;
+  }
+
+  .planning-template-day-session {
+    overflow-x: visible;
+  }
+
+  .planning-template-exercise-table {
+    display: block;
+    min-width: 0;
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+
+  .planning-template-exercise-table thead {
+    display: none;
+  }
+
+  .planning-template-exercise-table tbody {
+    display: grid;
+    gap: 8px;
+    width: 100%;
+  }
+
+  .planning-template-exercise-table tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 34px;
+    gap: 7px;
+    width: 100%;
+    padding: 8px;
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.58);
+  }
+
+  .planning-template-exercise-table td {
+    display: grid;
+    gap: 4px;
+    width: auto !important;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+  }
+
+  .planning-template-exercise-table td::before {
+    color: var(--muted-strong);
+    font-size: 0.68rem;
+    font-weight: 850;
+    line-height: 1;
+  }
+
+  .planning-template-exercise-table td:nth-child(1) {
+    grid-column: 1 / -1;
+  }
+
+  .planning-template-exercise-table td:nth-child(1)::before {
+    content: "Упр.";
+  }
+
+  .planning-template-exercise-table td:nth-child(2)::before {
+    content: "Подходы";
+  }
+
+  .planning-template-exercise-table td:nth-child(3)::before {
+    content: "Контроль";
+  }
+
+  .planning-template-exercise-action-cell {
+    align-self: end;
+    justify-items: end;
+  }
+
+  .planning-template-exercise-action-cell::before {
+    display: none;
+  }
+}
+
 .planning-assigned-session-list {
   display: grid;
   gap: 10px;
@@ -7546,7 +7782,8 @@ select {
 }
 
 .field input,
-.field select {
+.field select,
+.field textarea {
   width: 100%;
   min-height: 48px;
   padding: 12px 14px;
@@ -7558,7 +7795,8 @@ select {
 }
 
 .field input:focus,
-.field select:focus {
+.field select:focus,
+.field textarea:focus {
   outline: 2px solid rgba(15, 118, 110, 0.16);
   border-color: rgba(15, 118, 110, 0.32);
 }
@@ -8014,7 +8252,8 @@ select {
   .workspace-auth-actions,
   .workspace-profile-menu,
   .topbar-actions,
-  .workspace-top-action {
+  .workspace-top-action,
+  .workspace-download-link {
     width: 100%;
     min-width: 0;
     flex: 1 1 auto;
@@ -8169,6 +8408,7 @@ select {
 
   .topbar-side > .compact-field,
   .topbar-actions,
+  .workspace-download-link,
   .workspace-language-menu,
   .workspace-profile-menu,
   .workspace-auth-actions {
@@ -8187,7 +8427,14 @@ select {
     align-self: stretch;
   }
 
+  .workspace-download-link {
+    grid-column: 2;
+    flex: 0 0 150px;
+    align-self: stretch;
+  }
+
   .workspace-top-action,
+  .workspace-download-link,
   .workspace-auth-action,
   .workspace-language-trigger,
   .workspace-profile-trigger {
@@ -8715,5 +8962,101 @@ select {
   .tertiary-button {
     min-height: 44px;
     border-radius: 12px;
+  }
+}
+
+@media (max-width: 720px) {
+  .topbar-side {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(72px, 0.42fr);
+    overflow: visible;
+    scroll-snap-type: none;
+  }
+
+  .topbar-side > .compact-field {
+    grid-column: 1 / -1;
+    width: 100%;
+    flex: none;
+  }
+
+  .topbar-actions {
+    grid-column: 1;
+    width: 100%;
+    flex: none;
+  }
+
+  .workspace-download-link {
+    grid-column: 2;
+    width: 100%;
+    min-width: 0;
+    flex: none;
+  }
+
+  .workspace-language-menu {
+    grid-column: 3;
+    width: 100%;
+    min-width: 0;
+    flex: none;
+  }
+
+  .workspace-profile-menu {
+    grid-column: 1 / -1;
+    width: 100%;
+    min-width: 0;
+    flex: none;
+  }
+
+  .workspace-profile-trigger-copy strong,
+  .workspace-profile-trigger-copy small {
+    white-space: normal;
+  }
+
+  .workspace-stage-tabs,
+  .planning-nav-row,
+  .compact-tab-row,
+  .toggle-row {
+    flex-wrap: wrap;
+    overflow-x: visible;
+  }
+
+  .planning-template-day-card-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .planning-template-card-title-input,
+  .planning-template-card-note-input,
+  .planning-template-day-card-head span {
+    max-width: 100%;
+  }
+
+  .planning-template-day-card-body {
+    padding: 12px;
+    border-left-width: 4px;
+  }
+
+  .planning-template-exercise-table th,
+  .planning-template-exercise-table td {
+    padding: 7px 6px;
+  }
+
+  .planning-template-exercise-table th + th,
+  .planning-template-exercise-table td + td {
+    padding-left: 8px;
+  }
+
+  .planning-template-exercise-table input {
+    min-height: 34px;
+    padding: 6px 7px;
+  }
+
+  .planning-template-row-action {
+    width: 28px;
+    height: 28px;
+  }
+
+  .planning-template-import-file input {
+    font-size: 0.82rem;
   }
 }

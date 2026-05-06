@@ -66,6 +66,8 @@ playwright-report/
 *.tar
 *.tar.gz
 *.zip
+apps/web/public/downloads/*.apk
+!apps/web/public/downloads/.gitkeep
 /*.png
 /*.jpg
 /*.jpeg

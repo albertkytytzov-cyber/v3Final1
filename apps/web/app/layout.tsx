@@ -6,15 +6,8 @@ export const metadata: Metadata = {
   description:
     "Платформа для тренеров и спортсменов: готовность, адаптация нагрузки, планирование, аналитика и контроль выполнения в одной системе.",
   applicationName: "PERFORM",
-  manifest: "/manifest.webmanifest",
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: "default",
-    title: "PERFORM",
-  },
   icons: {
     icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
-    apple: [{ url: "/icon.svg", type: "image/svg+xml" }],
   },
 };
 

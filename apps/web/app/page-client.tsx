@@ -137,6 +137,9 @@ import { PlanningStudio } from "./components/planning-studio";
 import { OfflineSyncCenter } from "./components/offline-sync-center";
 
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api/v1";
+const mobileAppDownloadUrl =
+  process.env.NEXT_PUBLIC_MOBILE_APP_DOWNLOAD_URL?.trim() ||
+  "/downloads/perform-mobile-android.apk";
 const SHOW_OFFLINE_CENTER_NAV = false;
 
 function getDateInputValue(date = new Date()) {
@@ -3943,36 +3946,31 @@ export function PageClient({
   }, [language]);
 
   useEffect(() => {
-    if ("serviceWorker" in navigator) {
-      const hostname = window.location.hostname;
-      const isLocalHost =
-        hostname === "localhost" ||
-        hostname === "127.0.0.1" ||
-        hostname === "::1";
-
-      if (isLocalHost) {
-        void navigator.serviceWorker.getRegistrations().then((registrations) =>
-          Promise.all(registrations.map((registration) => registration.unregister())),
-        );
-
-        if ("caches" in window) {
-          void window.caches.keys().then((keys) =>
-            Promise.all(
-              keys
-                .filter((key) => key.startsWith("training-platform-"))
-                .map((key) => window.caches.delete(key)),
-            ),
-          );
-        }
-
-        return;
-      }
-
-      void navigator.serviceWorker
-        .register("/sw.js", { updateViaCache: "none" })
-        .then((registration) => registration.update())
-        .catch(() => undefined);
+    function preventInstallPrompt(event: Event) {
+      event.preventDefault();
     }
+
+    window.addEventListener("beforeinstallprompt", preventInstallPrompt);
+
+    if ("serviceWorker" in navigator) {
+      void navigator.serviceWorker.getRegistrations().then((registrations) =>
+        Promise.all(registrations.map((registration) => registration.unregister())),
+      );
+    }
+
+    if ("caches" in window) {
+      void window.caches.keys().then((keys) =>
+        Promise.all(
+          keys
+            .filter((key) => key.startsWith("training-platform-"))
+            .map((key) => window.caches.delete(key)),
+        ),
+      );
+    }
+
+    return () => {
+      window.removeEventListener("beforeinstallprompt", preventInstallPrompt);
+    };
   }, []);
 
   useEffect(() => {
@@ -8584,6 +8582,19 @@ export function PageClient({
       onSelect: () => setLanguage(option.value as Language),
     })),
   };
+  const topbarDownloadLink = {
+    href: mobileAppDownloadUrl,
+    label: copyFor(language, {
+      en: "Download",
+      ru: "Скачать",
+      bg: "Изтегли",
+    }),
+    title: copyFor(language, {
+      en: "Download the mobile app",
+      ru: "Скачать мобильное приложение",
+      bg: "Изтегляне на мобилното приложение",
+    }),
+  };
   const guestAccessSection = !user ? (
     <>
       <div className="toggle-row compact-tab-row workspace-profile-auth-tabs">
@@ -8875,6 +8886,7 @@ export function PageClient({
           actionDisabled={showWorkspaceTopAction ? workspaceTopActionDisabled : undefined}
           actionLabel={showWorkspaceTopAction ? workspaceTopActionButtonLabel : undefined}
           authActions={topbarAuthActions}
+          downloadLink={topbarDownloadLink}
           languageMenu={topbarLanguageMenu}
           onAction={showWorkspaceTopAction ? handleWorkspaceTopAction : undefined}
           profileMenu={topbarProfileMenu}

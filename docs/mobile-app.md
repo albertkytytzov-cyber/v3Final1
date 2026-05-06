@@ -65,6 +65,19 @@ iOS only:
 npm run mobile:sync:ios
 ```
 
+## Web Download Button
+
+The web app shows a direct mobile download button instead of relying on browser
+PWA installation prompts. Configure the button with:
+
+```bash
+NEXT_PUBLIC_MOBILE_APP_DOWNLOAD_URL=/downloads/perform-mobile-android.apk
+```
+
+For self-hosted deployments, place the Android APK at
+`apps/web/public/downloads/perform-mobile-android.apk` before building the web
+image, or set `NEXT_PUBLIC_MOBILE_APP_DOWNLOAD_URL` to an external release URL.
+
 ## Open Native Projects
 
 Android requires Android Studio:
