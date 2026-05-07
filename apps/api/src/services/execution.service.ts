@@ -369,12 +369,14 @@ export async function submitExecutionResult(
   const blockAccess = await pool.query<{
     assigned_plan_id: string;
     assigned_block_id: string;
+    day_date: string;
     assigned_exercise_id: string | null;
   }>(
     `
       SELECT
         assigned_plans.id AS assigned_plan_id,
         assigned_day_blocks.id AS assigned_block_id,
+        assigned_plan_days.day_date::text AS day_date,
         assigned_block_exercises.id AS assigned_exercise_id
       FROM assigned_plans
       JOIN assigned_plan_days ON assigned_plan_days.assigned_plan_id = assigned_plans.id
@@ -422,6 +424,7 @@ export async function submitExecutionResult(
         athlete_id,
         assigned_plan_id,
         assigned_block_id,
+        training_date,
         completed,
         sets_completed,
         reps_completed,
@@ -433,9 +436,10 @@ export async function submitExecutionResult(
         completed_at,
         updated_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CASE WHEN $4 THEN NOW() ELSE NULL END, NOW())
+      VALUES ($1, $2, $3, $4::date, $5, $6, $7, $8, $9, $10, $11, $12, CASE WHEN $5 THEN NOW() ELSE NULL END, NOW())
       ON CONFLICT (athlete_id, assigned_block_id)
       DO UPDATE SET
+        training_date = EXCLUDED.training_date,
         completed = EXCLUDED.completed,
         sets_completed = EXCLUDED.sets_completed,
         reps_completed = EXCLUDED.reps_completed,
@@ -475,6 +479,7 @@ export async function submitExecutionResult(
       input.athleteId,
       input.result.assignedPlanId,
       input.result.assignedBlockId,
+      blockAccess.rows[0].day_date,
       summary.completed,
       summary.setsCompleted,
       summary.repsCompleted,
