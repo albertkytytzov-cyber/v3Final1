@@ -618,7 +618,7 @@ button {
 .execution-day-analytics-card {
   display: grid;
   gap: 10px;
-  margin: 10px 12px 0;
+  margin: 10px 0 0;
   padding: 10px 12px;
   border: 1px solid rgba(15, 118, 110, 0.16);
   border-radius: 14px;
@@ -626,11 +626,10 @@ button {
 }
 
 .execution-day-analytics-head {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
   gap: 6px;
   align-items: center;
-  justify-content: space-between;
+  justify-items: start;
 }
 
 .execution-day-analytics-head strong,
@@ -819,6 +818,32 @@ button {
   align-items: start;
 }
 
+.execution-block-load {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 2px;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid rgba(15, 118, 110, 0.14);
+  border-radius: 10px;
+  background: #f6fbfa;
+}
+
+.execution-block-load span,
+.execution-block-load small {
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.execution-block-load strong {
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 950;
+  line-height: 1.25;
+}
+
 .execution-readonly-exercises {
   display: grid;
   grid-column: 1 / -1;
@@ -829,13 +854,25 @@ button {
 
 .execution-readonly-exercise {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
   align-items: center;
   min-width: 0;
   padding: 8px;
   border-radius: 10px;
   background: var(--surface-muted);
+}
+
+.execution-readonly-exercise.is-completed {
+  background: #ecfdf5;
+}
+
+.execution-readonly-exercise.is-partial {
+  background: #fff7ed;
+}
+
+.execution-readonly-exercise.is-missed {
+  background: #f8fafc;
 }
 
 .execution-readonly-exercise span {
@@ -855,11 +892,23 @@ button {
 }
 
 .execution-readonly-exercise em {
+  justify-self: start;
+  max-width: 100%;
   color: var(--accent-dark);
   font-size: 0.72rem;
   font-style: normal;
   font-weight: 850;
-  white-space: nowrap;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
+.execution-readonly-exercise.is-missed em {
+  color: #64748b;
+}
+
+.execution-readonly-exercise.is-partial em {
+  color: #b45309;
 }
 
 .coach-diary-form {

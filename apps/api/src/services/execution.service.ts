@@ -24,6 +24,9 @@ interface ExecutionResultRow {
   notes: string;
   completed_at: string | null;
   updated_at: string;
+  planned_load: string | null;
+  actual_load: string | null;
+  load_updated_at: string | null;
   exercise_result_id: string | null;
   assigned_exercise_id: string | null;
   exercise_completed: boolean | null;
@@ -113,6 +116,9 @@ function mapExecutionResults(rows: ExecutionResultRow[]): ExecutionResult[] {
         durationMinutes: toNullableNumber(row.duration_minutes),
         rpe: toNullableNumber(row.rpe),
         notes: row.notes,
+        plannedLoad: toNullableNumber(row.planned_load),
+        actualLoad: toNullableNumber(row.actual_load),
+        loadUpdatedAt: row.load_updated_at,
         completedAt: row.completed_at,
         updatedAt: row.updated_at,
         exerciseResults: [],
@@ -161,6 +167,9 @@ async function loadExecutionResults(whereSql: string, params: unknown[]) {
         exercise_results.notes,
         exercise_results.completed_at::text,
         exercise_results.updated_at::text,
+        training_load_logs.planned_load::text AS planned_load,
+        training_load_logs.actual_load::text AS actual_load,
+        training_load_logs.updated_at::text AS load_updated_at,
         exercise_result_exercises.id AS exercise_result_id,
         exercise_result_exercises.assigned_exercise_id::text,
         exercise_result_exercises.completed AS exercise_completed,
@@ -173,6 +182,11 @@ async function loadExecutionResults(whereSql: string, params: unknown[]) {
         exercise_result_exercises.updated_at::text AS exercise_updated_at
       FROM exercise_results
       JOIN assigned_plans ON assigned_plans.id = exercise_results.assigned_plan_id
+      LEFT JOIN training_load_logs
+        ON training_load_logs.athlete_id = exercise_results.athlete_id
+       AND training_load_logs.assigned_plan_id = exercise_results.assigned_plan_id
+       AND training_load_logs.assigned_block_id = exercise_results.assigned_block_id
+       AND training_load_logs.log_date = exercise_results.training_date
       LEFT JOIN exercise_result_exercises
         ON exercise_result_exercises.execution_result_id = exercise_results.id
       WHERE ${whereSql}
@@ -464,6 +478,9 @@ export async function submitExecutionResult(
         notes,
         completed_at::text,
         updated_at::text,
+        NULL::text AS planned_load,
+        NULL::text AS actual_load,
+        NULL::text AS load_updated_at,
         NULL::text AS exercise_result_id,
         NULL::text AS assigned_exercise_id,
         NULL::boolean AS exercise_completed,

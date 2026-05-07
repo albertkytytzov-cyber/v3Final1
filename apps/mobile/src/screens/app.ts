@@ -1522,6 +1522,8 @@ function getCoachDiaryTaskChoices(group: ExecutionPlanGroup): CoachDiaryTaskChoi
 
 function renderExecutionBlockReadonly(item: ExecutionBlockItem, result: ExecutionResult | null) {
   const exercises = item.block.exercises ?? [];
+  const plannedLoad = getExecutionBlockPlannedLoad(item.block, result);
+  const actualLoad = getExecutionBlockActualLoad(item.block, result, plannedLoad);
 
   return `
     <article class="mobile-plan-row mobile-execution-row execution-readonly-row">
@@ -1533,6 +1535,11 @@ function renderExecutionBlockReadonly(item: ExecutionBlockItem, result: Executio
       </div>
       <span class="mobile-plan-cell mobile-plan-work">${escapeHtml(formatBlockTarget(item.block))}</span>
       <span class="mobile-plan-cell mobile-plan-control">${escapeHtml(item.block.notes || item.sessionName)}</span>
+      <div class="execution-block-load">
+        <span>Нагрузка блока</span>
+        <strong>Факт ${formatLoadValue(actualLoad)} / план ${formatLoadValue(plannedLoad)}</strong>
+        <small>${escapeHtml(formatExecutionBlockLoadDelta(actualLoad, plannedLoad))}</small>
+      </div>
       ${exercises.length > 0 ? `
         <div class="execution-readonly-exercises">
           ${exercises
@@ -1550,11 +1557,14 @@ function renderExecutionExerciseReadonly(
   exercise: AssignedBlockExercise,
   result: ExecutionExerciseResult | null,
 ) {
+  const status = getExecutionExerciseStatus(result);
+
   return `
-    <div class="execution-readonly-exercise">
+    <div class="execution-readonly-exercise is-${status}">
       <span>
         <strong>${escapeHtml(exercise.name)}</strong>
-        <small>${escapeHtml(formatExerciseWorkCell(exercise))} · ${escapeHtml(formatExerciseControlCell(exercise))}</small>
+        <small>Факт: ${escapeHtml(formatExerciseActualDetails(result))}</small>
+        <small>План: ${escapeHtml(formatExerciseWorkCell(exercise))} · ${escapeHtml(formatExerciseControlCell(exercise))}</small>
       </span>
       <em>${escapeHtml(formatExerciseResultStatus(result))}</em>
     </div>
@@ -1964,11 +1974,11 @@ function getExecutionDaySummary(
 
   for (const item of group.blockItems) {
     const result = getExecutionResultForBlock(state, item.plan.id, item.block.id);
-    const blockPlannedLoad = estimateAssignedBlockLoad(item.block);
+    const blockPlannedLoad = getExecutionBlockPlannedLoad(item.block, result);
     const blockStatus = getExecutionBlockStatus(item.block, result);
 
     plannedLoad += blockPlannedLoad;
-    actualLoad += estimateExecutionActualLoad(item.block, result, blockPlannedLoad);
+    actualLoad += getExecutionBlockActualLoad(item.block, result, blockPlannedLoad);
 
     if (blockStatus === "completed") {
       completedBlockCount += 1;
@@ -2038,6 +2048,25 @@ function estimateAssignedBlockLoad(block: AssignedPlanBlock) {
   }
 
   return roundLoad(fallbackDurationMinutes * profile.rpe);
+}
+
+function getExecutionBlockPlannedLoad(
+  block: AssignedPlanBlock,
+  result: ExecutionResult | null,
+) {
+  return result?.plannedLoad !== null && result?.plannedLoad !== undefined
+    ? roundLoad(result.plannedLoad)
+    : estimateAssignedBlockLoad(block);
+}
+
+function getExecutionBlockActualLoad(
+  block: AssignedPlanBlock,
+  result: ExecutionResult | null,
+  plannedLoad = getExecutionBlockPlannedLoad(block, result),
+) {
+  return result?.actualLoad !== null && result?.actualLoad !== undefined
+    ? roundLoad(result.actualLoad)
+    : estimateExecutionActualLoad(block, result, plannedLoad);
 }
 
 function estimateAssignedExerciseLoad(exercise: AssignedBlockExercise, fallbackRpe: number) {
@@ -2143,6 +2172,25 @@ function hasExecutionResultDetails(result: ExecutionResult) {
       exercise.notes.trim().length > 0
     ))
   );
+}
+
+function hasExerciseResultDetails(result: ExecutionExerciseResult) {
+  return (
+    result.setsCompleted !== null ||
+    result.repsCompleted !== null ||
+    result.weightKg !== null ||
+    result.durationMinutes !== null ||
+    result.rpe !== null ||
+    result.notes.trim().length > 0
+  );
+}
+
+function getExecutionExerciseStatus(result: ExecutionExerciseResult | null) {
+  if (!result) {
+    return "missed";
+  }
+
+  return result.completed ? "completed" : hasExerciseResultDetails(result) ? "partial" : "missed";
 }
 
 function getExecutionDayStatusLabel(status: ExecutionDayStatus) {
@@ -2541,6 +2589,34 @@ function formatExecutionLoadDelta(summary: ExecutionDaySummary) {
   return delta > 0 ? `+${delta} к плану` : `${delta} к плану`;
 }
 
+function formatExecutionBlockLoadDelta(actualLoad: number, plannedLoad: number) {
+  const delta = roundLoad(actualLoad - plannedLoad);
+
+  if (delta === 0) {
+    return "блок по плану";
+  }
+
+  return delta > 0 ? `+${delta} к плану блока` : `${delta} к плану блока`;
+}
+
+function formatExerciseActualDetails(result: ExecutionExerciseResult | null) {
+  if (!result) {
+    return "нет отметки";
+  }
+
+  const parts = [
+    result.completed ? "отмечено" : "",
+    result.setsCompleted !== null ? `${result.setsCompleted} подх.` : "",
+    result.repsCompleted !== null ? `${result.repsCompleted} повт.` : "",
+    result.weightKg !== null ? `${result.weightKg} кг` : "",
+    result.durationMinutes !== null ? `${result.durationMinutes} мин.` : "",
+    result.rpe !== null ? `RPE ${result.rpe}` : "",
+    result.notes.trim() ? result.notes.trim() : "",
+  ].filter(Boolean);
+
+  return parts.length ? parts.join(" · ") : "есть строка, но факт не заполнен";
+}
+
 function formatAssignedDayCountLabel(count: number) {
   const lastTwoDigits = count % 100;
   const lastDigit = count % 10;
@@ -2574,7 +2650,11 @@ function formatExecutionResultStatus(result: ExecutionResult | null) {
     return "выполнение не отправлено";
   }
 
-  return result.completed ? "выполнено" : "не выполнено";
+  return result.completed
+    ? "выполнено"
+    : hasExecutionResultDetails(result)
+      ? "частично"
+      : "не выполнено";
 }
 
 function formatExerciseResultStatus(result: ExecutionExerciseResult | null) {
@@ -2582,7 +2662,11 @@ function formatExerciseResultStatus(result: ExecutionExerciseResult | null) {
     return "нет отметки";
   }
 
-  return result.completed ? "выполнено" : "не выполнено";
+  return result.completed
+    ? "выполнено"
+    : hasExerciseResultDetails(result)
+      ? "частично"
+      : "не выполнено";
 }
 
 function getCompetitionPlansForAthlete(state: MobileAppState, athleteId: string | null) {

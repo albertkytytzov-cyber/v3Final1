@@ -655,6 +655,9 @@ export interface ExecutionResultInput {
 export interface ExecutionResult extends ExecutionResultInput {
   id: string;
   athleteId: string;
+  plannedLoad?: number | null;
+  actualLoad?: number | null;
+  loadUpdatedAt?: string | null;
   completedAt: string | null;
   updatedAt: string;
   exerciseResults?: ExecutionExerciseResult[];
