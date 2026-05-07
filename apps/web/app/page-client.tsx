@@ -986,6 +986,12 @@ function hasImportedDurationUnit(value: string) {
   return /(?:сек|sec|s|мин|min|m)(?=$|[\s/.,;:!?()-])/iu.test(value);
 }
 
+function hasImportedSetDurationUnit(value: string) {
+  return /\d+\s*[xх×*]\s*\d+(?:[.,]\d+)?(?:\s*[-–—]\s*\d+(?:[.,]\d+)?)?\s*(?:сек|s|sec|мин|m|min)(?=$|[\s/.,;:!?()-])/iu.test(
+    value,
+  );
+}
+
 function inferImportedSetDurationUnit(value: string, blockType?: PlanBlockType): ImportedSetDurationUnit | null {
   const normalized = value.toLowerCase();
 
@@ -993,7 +999,7 @@ function inferImportedSetDurationUnit(value: string, blockType?: PlanBlockType):
     return null;
   }
 
-  if (hasImportedDurationUnit(normalized)) {
+  if (hasImportedSetDurationUnit(normalized)) {
     return null;
   }
 
@@ -1097,18 +1103,23 @@ function normalizeImportedVolumeText(
 }
 
 function extractImportedSetDuration(value: string, inferredUnit: ImportedSetDurationUnit | null = null) {
-  const match = value
-    .toLowerCase()
-    .match(/(\d+)\s*[xх×*]\s*(\d+(?:[.,]\d+)?)(?:\s*(сек|s|sec|мин|m|min)(?=$|[\s/.,;:!?()-]))?/iu);
+  const normalized = value.toLowerCase();
+  const explicitMatch = normalized.match(
+    /(\d+)\s*[xх×*]\s*(\d+(?:[.,]\d+)?)(?:\s*[-–—]\s*(\d+(?:[.,]\d+)?))?\s*(сек|s|sec|мин|m|min)(?=$|[\s/.,;:!?()-])/iu,
+  );
+  const inferredMatch = explicitMatch
+    ? null
+    : normalized.match(/(\d+)\s*[xх×*]\s*(\d+(?:[.,]\d+)?)/iu);
 
-  if (!match || (!match[3] && !inferredUnit)) {
+  if (!explicitMatch && (!inferredMatch || !inferredUnit)) {
     return null;
   }
 
+  const match = explicitMatch ?? inferredMatch!;
   const sets = Number(match[1]);
-  const durationValue = Number(match[2].replace(",", "."));
-  const durationUnit = match[3]
-    ? /^(?:сек|s|sec)$/iu.test(match[3])
+  const durationValue = Number((explicitMatch?.[3] ?? match[2]).replace(",", "."));
+  const durationUnit = explicitMatch?.[4]
+    ? /^(?:сек|s|sec)$/iu.test(explicitMatch[4])
       ? "seconds"
       : "minutes"
     : inferredUnit;
