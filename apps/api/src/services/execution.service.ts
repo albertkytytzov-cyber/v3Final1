@@ -124,6 +124,17 @@ function mapExecutionResults(rows: ExecutionResultRow[]): ExecutionResult[] {
   return Array.from(grouped.values());
 }
 
+function sumNullableExerciseMetric(
+  exercises: NonNullable<ExecutionResultInput["exercises"]>,
+  key: "setsCompleted" | "repsCompleted" | "durationMinutes",
+) {
+  const values = exercises
+    .map((exercise) => exercise[key])
+    .filter((value): value is number => value !== null && value !== undefined);
+
+  return values.length ? values.reduce((sum, value) => sum + value, 0) : null;
+}
+
 async function loadExecutionResults(whereSql: string, params: unknown[]) {
   const result = await pool.query<ExecutionResultRow>(
     `
@@ -178,13 +189,13 @@ function summarizeExercisePayloads(result: ExecutionResultInput) {
 
   const setsCompleted =
     result.setsCompleted ??
-    result.exercises.reduce((sum, exercise) => sum + (exercise.setsCompleted ?? 0), 0);
+    sumNullableExerciseMetric(result.exercises, "setsCompleted");
   const repsCompleted =
     result.repsCompleted ??
-    result.exercises.reduce((sum, exercise) => sum + (exercise.repsCompleted ?? 0), 0);
+    sumNullableExerciseMetric(result.exercises, "repsCompleted");
   const durationMinutes =
     result.durationMinutes ??
-    result.exercises.reduce((sum, exercise) => sum + (exercise.durationMinutes ?? 0), 0);
+    sumNullableExerciseMetric(result.exercises, "durationMinutes");
   const rpeValues = result.exercises
     .map((exercise) => exercise.rpe)
     .filter((value): value is number => value !== null && value !== undefined);

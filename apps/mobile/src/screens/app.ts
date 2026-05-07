@@ -225,7 +225,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
     });
   };
 
-  const submitExecution = async (form: HTMLFormElement) => {
+  const readExecutionPayload = (form: HTMLFormElement): ExecutionResultInput | null => {
     const blockKey = readString(form, "assignedBlock");
     const [legacyAssignedPlanId, legacyAssignedBlockId] = blockKey.split("|");
     const assignedPlanId = readString(form, "assignedPlanId") || legacyAssignedPlanId;
@@ -233,7 +233,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
 
     if (!assignedPlanId || !assignedBlockId) {
       update({ error: "Выберите блок плана" });
-      return;
+      return null;
     }
 
     const exercises = Array
@@ -254,7 +254,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
       })
       .filter((exercise) => Boolean(exercise.assignedExerciseId));
 
-    const payload: ExecutionResultInput = {
+    return {
       assignedBlockId,
       assignedPlanId,
       completed: exercises.length > 0
@@ -268,17 +268,21 @@ export function bootstrapMobileApp(root: HTMLElement) {
       weightKg: readOptionalNumber(form, "weightKg"),
       exercises: exercises.length > 0 ? exercises : undefined,
     };
+  };
 
-    await submitOrQueue("execution", payload, async (idempotencyKey) => {
-      const result = await client().submitExecution(payload, idempotencyKey);
-      const snapshot = {
-        ...state.data,
-        executionResults: upsertById(state.data.executionResults, result.result),
-        savedAt: new Date().toISOString(),
-      };
-      saveSnapshot(snapshot);
-      update({ data: snapshot });
-    });
+  const saveExecutionResultsSnapshot = (results: ExecutionResult[]) => {
+    const snapshot = {
+      ...state.data,
+      executionResults: results.reduce(
+        (items, result) => upsertExecutionResult(items, result),
+        state.data.executionResults,
+      ),
+      savedAt: new Date().toISOString(),
+    };
+
+    saveSnapshot(snapshot);
+    update({ data: snapshot });
+    return snapshot;
   };
 
   const submitExecutionDay = async (button: HTMLButtonElement) => {
@@ -290,8 +294,108 @@ export function bootstrapMobileApp(root: HTMLElement) {
       return;
     }
 
+    const payloads: ExecutionResultInput[] = [];
+
     for (const form of forms) {
-      await submitExecution(form);
+      const payload = readExecutionPayload(form);
+
+      if (!payload) {
+        return;
+      }
+
+      payloads.push(payload);
+    }
+
+    const userRole = state.session.user?.role ?? null;
+
+    if (!canSubmitSyncAction(userRole, "execution")) {
+      update({
+        error: getSyncActionRestrictionMessage(userRole, "execution"),
+        isBusy: false,
+        message: null,
+        queue: loadQueue(),
+      });
+      return;
+    }
+
+    const pendingActions = payloads.map((payload) => ({
+      action: createPendingAction(
+        "execution",
+        payload,
+        state.session.user?.id ?? null,
+        userRole,
+      ),
+      payload,
+    }));
+
+    update({ error: null, isBusy: true, message: null });
+
+    if (!navigator.onLine) {
+      let queue = loadQueue();
+
+      for (const { action } of pendingActions) {
+        queue = enqueueAction(action);
+      }
+
+      update({
+        isBusy: false,
+        message: `Сохранено локально: ${payloads.length} блоков. Отправим при появлении интернета.`,
+        queue,
+      });
+      return;
+    }
+
+    const savedResults: ExecutionResult[] = [];
+
+    try {
+      for (const { action, payload } of pendingActions) {
+        const result = await client().submitExecution(payload, action.idempotencyKey);
+        savedResults.push(result.result);
+      }
+
+      saveExecutionResultsSnapshot(savedResults);
+      update({
+        isBusy: false,
+        message: `Сохранено выполнение: ${savedResults.length} блоков.`,
+        queue: loadQueue(),
+      });
+      await refreshData(true);
+    } catch (error) {
+      if (error instanceof MobileApiError && error.statusCode !== null && error.statusCode < 500) {
+        if (savedResults.length > 0) {
+          saveExecutionResultsSnapshot(savedResults);
+        }
+
+        update({
+          error: toFriendlyError(error),
+          isBusy: false,
+        });
+        return;
+      }
+
+      const failedActions = pendingActions.slice(savedResults.length);
+      let queue = loadQueue();
+
+      for (const { action } of failedActions) {
+        queue = enqueueAction({
+          ...action,
+          attempts: 1,
+          lastError: toFriendlyError(error),
+        });
+      }
+
+      if (savedResults.length > 0) {
+        saveExecutionResultsSnapshot(savedResults);
+      }
+
+      update({
+        isBusy: false,
+        message:
+          savedResults.length > 0
+            ? `Часть дня сохранена: ${savedResults.length}. Остальное добавлено в офлайн-очередь.`
+            : "Сервер недоступен. День сохранён локально.",
+        queue,
+      });
     }
   };
 
@@ -506,7 +610,13 @@ export function bootstrapMobileApp(root: HTMLElement) {
     root.querySelectorAll<HTMLFormElement>("[data-execution-form]").forEach((form) => {
       form.addEventListener("submit", (event) => {
         event.preventDefault();
-        void submitExecution(event.currentTarget as HTMLFormElement);
+        const saveButton = (event.currentTarget as HTMLFormElement)
+          .closest<HTMLElement>("[data-execution-plan-group]")
+          ?.querySelector<HTMLButtonElement>("[data-execution-save-day]");
+
+        if (saveButton) {
+          void submitExecutionDay(saveButton);
+        }
       });
     });
 
@@ -2003,6 +2113,16 @@ function daysUntil(dateValue: string) {
 function upsertById<T extends { id: string }>(items: T[], item: T) {
   const nextItems = items.filter((value) => value.id !== item.id);
   nextItems.unshift(item);
+  return nextItems;
+}
+
+function upsertExecutionResult(items: ExecutionResult[], result: ExecutionResult) {
+  const nextItems = items.filter((item) =>
+    item.id !== result.id &&
+    (item.assignedPlanId !== result.assignedPlanId ||
+      item.assignedBlockId !== result.assignedBlockId)
+  );
+  nextItems.unshift(result);
   return nextItems;
 }
 
