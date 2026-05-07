@@ -50,6 +50,27 @@ export function registerExecutionRoutes(
     };
   });
 
+  app.get("/api/v1/coach/athletes/:athleteId/execution", async (request) => {
+    const user = await dependencies.guards.requireUser(request);
+
+    if (user.role !== "coach" && user.role !== "admin") {
+      throw dependencies.httpError(403, "Only coach or admin accounts can view execution tracking");
+    }
+
+    let athleteId: string;
+    try {
+      athleteId = parseExecutionAthleteParams(request.params).athleteId;
+    } catch (error) {
+      throw dependencies.httpError(400, (error as Error).message);
+    }
+
+    await dependencies.guards.assertAthleteAccess(user, athleteId);
+
+    return {
+      results: await listExecutionResultsForAthlete(athleteId),
+    };
+  });
+
   app.get("/api/v1/execution", async (request) => {
     const user = await dependencies.guards.requireUser(request);
 

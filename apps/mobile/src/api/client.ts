@@ -109,7 +109,7 @@ export class MobileApiClient {
       coachDiary,
       readiness,
       readinessHistory,
-      execution,
+      athleteExecution,
     ] = await Promise.all([
       this.request<{ assignedPlans: AssignedPlanSummary[] }>("/plans/assigned"),
       this.request<{ competitions: CompetitionSummary[] }>("/competitions")
@@ -140,6 +140,10 @@ export class MobileApiClient {
             .catch(() => ({ results: [] }))
         : Promise.resolve({ results: [] }),
     ]);
+    const executionResults =
+      userRole === "coach" || userRole === "admin"
+        ? await this.loadCoachExecutionResults(assignedPlans.assignedPlans, athletes.athletes)
+        : athleteExecution.results;
 
     return {
       assignedPlans: assignedPlans.assignedPlans,
@@ -147,10 +151,29 @@ export class MobileApiClient {
       coachDiaryEntries: coachDiary.entries,
       competitionPlans: competitionPlans.competitionPlans,
       competitions: competitions.competitions,
-      executionResults: execution.results,
+      executionResults,
       readinessEntry: readiness.entry,
       readinessHistory: readinessHistory.entries,
     };
+  }
+
+  private async loadCoachExecutionResults(
+    assignedPlans: AssignedPlanSummary[],
+    athletes: CoachAthleteSummary[],
+  ) {
+    const athleteIds = Array.from(new Set([
+      ...assignedPlans.map((plan) => plan.athleteId),
+      ...athletes.map((athlete) => athlete.athleteId),
+    ].filter(Boolean)));
+    const responses = await Promise.all(
+      athleteIds.map((athleteId) =>
+        this.request<{ results: ExecutionResult[] }>(
+          `/coach/athletes/${encodeURIComponent(athleteId)}/execution`,
+        ).catch(() => ({ results: [] })),
+      ),
+    );
+
+    return responses.flatMap((response) => response.results);
   }
 
   submitReadiness(payload: ReadinessSubmissionPayload, idempotencyKey: string) {
