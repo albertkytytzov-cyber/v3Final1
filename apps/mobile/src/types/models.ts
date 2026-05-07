@@ -95,6 +95,7 @@ export interface MobileAppState {
   queue: PendingSyncAction[];
   selectedScreen: MobileScreen;
   selectedAthleteId: string | null;
+  executionDateFilter: string | null;
   isOnline: boolean;
   isBusy: boolean;
   isSyncing: boolean;

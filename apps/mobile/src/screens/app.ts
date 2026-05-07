@@ -37,6 +37,18 @@ import type {
 } from "../types/models.js";
 
 const runtimeConfig = readRuntimeConfig();
+const mobileLoadBlockProfiles: Record<AssignedPlanBlock["blockType"], { durationMinutes: number; rpe: number }> = {
+  CNS_high: { durationMinutes: 24, rpe: 8 },
+  activation: { durationMinutes: 14, rpe: 4 },
+  conditioning: { durationMinutes: 32, rpe: 6.5 },
+  metabolic: { durationMinutes: 26, rpe: 8.5 },
+  mobility: { durationMinutes: 18, rpe: 2.5 },
+  recovery: { durationMinutes: 20, rpe: 2.5 },
+  speed: { durationMinutes: 22, rpe: 7.5 },
+  strength: { durationMinutes: 30, rpe: 7 },
+  technical: { durationMinutes: 35, rpe: 5 },
+};
+const defaultMobileLoadProfile = { durationMinutes: 20, rpe: 5 };
 
 export function bootstrapMobileApp(root: HTMLElement) {
   const state: MobileAppState = {
@@ -45,6 +57,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
     queue: loadQueue(),
     selectedScreen: "dashboard",
     selectedAthleteId: loadSelectedAthleteId(),
+    executionDateFilter: null,
     isOnline: navigator.onLine,
     isBusy: false,
     isSyncing: false,
@@ -563,6 +576,11 @@ export function bootstrapMobileApp(root: HTMLElement) {
       });
     });
 
+    root.querySelector<HTMLSelectElement>("[data-execution-date-filter]")?.addEventListener("change", (event) => {
+      const executionDateFilter = (event.currentTarget as HTMLSelectElement).value || null;
+      update({ executionDateFilter });
+    });
+
     root.querySelector<HTMLButtonElement>("[data-refresh]")?.addEventListener("click", () => {
       void refreshData();
     });
@@ -578,7 +596,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
     root.querySelector<HTMLSelectElement>("[data-athlete-select]")?.addEventListener("change", (event) => {
       const selectedAthleteId = (event.currentTarget as HTMLSelectElement).value || null;
       saveSelectedAthleteId(selectedAthleteId);
-      update({ selectedAthleteId });
+      update({ executionDateFilter: null, selectedAthleteId });
     });
 
     root.querySelectorAll<HTMLButtonElement>("[data-athlete-card]").forEach((button) => {
@@ -586,6 +604,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
         const selectedAthleteId = button.dataset.athleteCard ?? null;
         saveSelectedAthleteId(selectedAthleteId);
         update({
+          executionDateFilter: null,
           selectedAthleteId,
           selectedScreen: "dashboard",
         });
@@ -1177,9 +1196,30 @@ interface ExecutionPlanGroup {
   blockItems: ExecutionBlockItem[];
 }
 
+type ExecutionDayStatus = "completed" | "partial" | "missed";
+
+interface ExecutionDaySummary {
+  status: ExecutionDayStatus;
+  statusLabel: string;
+  completedBlockCount: number;
+  partialBlockCount: number;
+  missedBlockCount: number;
+  plannedLoad: number;
+  actualLoad: number;
+  latestDiaryEntry: CoachDiaryEntry | null;
+}
+
 function renderExecutionForm(state: MobileAppState, plans: AssignedPlanSummary[]) {
-  const planGroups = getExecutionPlanGroups(plans);
+  const allPlanGroups = getExecutionPlanGroups(plans);
   const canSubmitExecution = state.session.user?.role === "athlete";
+  const dateOptions = getExecutionDateOptions(allPlanGroups);
+  const selectedDate = state.executionDateFilter && dateOptions.some((option) => option.date === state.executionDateFilter)
+    ? state.executionDateFilter
+    : "";
+  const planGroups = selectedDate
+    ? allPlanGroups.filter((group) => group.plan.day.dayDate === selectedDate)
+    : allPlanGroups;
+  const totalBlockCount = allPlanGroups.reduce((total, group) => total + group.blockItems.length, 0);
   const blockCount = planGroups.reduce((total, group) => total + group.blockItems.length, 0);
   const exerciseCount = planGroups.reduce(
     (total, group) =>
@@ -1190,7 +1230,7 @@ function renderExecutionForm(state: MobileAppState, plans: AssignedPlanSummary[]
     0,
   );
 
-  if (blockCount === 0) {
+  if (totalBlockCount === 0) {
     return renderEmpty("Нет блоков для результата", "Назначенный план появится после обновления данных.");
   }
 
@@ -1202,12 +1242,38 @@ function renderExecutionForm(state: MobileAppState, plans: AssignedPlanSummary[]
           ? `${plans.length} назначенных дней · ${blockCount} блоков · ${exerciseCount} упражнений. Ближайший день открыт сверху.`
           : `Режим просмотра · ${plans.length} назначенных дней · ${blockCount} блоков · ${exerciseCount} упражнений.`}</p>
       </div>
+      ${renderExecutionDateFilter(dateOptions, selectedDate)}
       <div class="execution-plan-stack">
-        ${planGroups
-          .map((group, index) => renderExecutionPlanGroup(state, group, index === 0, canSubmitExecution))
-          .join("")}
+        ${planGroups.length > 0
+          ? planGroups
+              .map((group, index) => renderExecutionPlanGroup(state, group, index === 0, canSubmitExecution))
+              .join("")
+          : renderEmpty("На выбранную дату нет плана", "Выберите другой день из назначенного плана.")}
       </div>
     </section>
+  `;
+}
+
+function renderExecutionDateFilter(
+  options: Array<{ date: string; label: string }>,
+  selectedDate: string,
+) {
+  if (options.length <= 1) {
+    return "";
+  }
+
+  return `
+    <label class="execution-date-filter">
+      <span>Дата разбора</span>
+      <select data-execution-date-filter>
+        <option value="" ${selectedDate ? "" : "selected"}>Все дни по плану</option>
+        ${options.map((option) => `
+          <option value="${escapeHtml(option.date)}" ${selectedDate === option.date ? "selected" : ""}>
+            ${escapeHtml(formatDate(option.date))} · ${escapeHtml(option.label)}
+          </option>
+        `).join("")}
+      </select>
+    </label>
   `;
 }
 
@@ -1219,13 +1285,12 @@ function renderExecutionPlanGroup(
 ) {
   const blockCount = group.blockItems.length;
   const canSubmitCoachDiary = state.session.user?.role === "coach" || state.session.user?.role === "admin";
+  const diaryEntries = getCoachDiaryEntriesForPlan(state, group.plan.id);
+  const daySummary = getExecutionDaySummary(state, group, diaryEntries);
   const exerciseCount = group.blockItems.reduce(
     (total, item) => total + (item.block.exercises?.length ?? 0),
     0,
   );
-  const completedBlockCount = group.blockItems.filter((item) =>
-    isExecutionResultCompleted(getExecutionResultForBlock(state, item.plan.id, item.block.id)),
-  ).length;
 
   return `
     <details class="execution-plan-group mobile-plan-day-card mobile-execution-day-card" data-execution-plan-group ${isOpen ? "open" : ""}>
@@ -1233,10 +1298,18 @@ function renderExecutionPlanGroup(
         <div>
           <strong>${formatDate(group.plan.day.dayDate)} · ${escapeHtml(group.plan.day.label)}</strong>
           <span>${escapeHtml(group.plan.templateName)} · ${blockCount} блоков · ${exerciseCount} упр.</span>
+          <div class="execution-day-meta">
+            <span class="execution-day-status is-${daySummary.status}">${escapeHtml(daySummary.statusLabel)}</span>
+            <span>Факт нагрузки: ${formatLoadValue(daySummary.actualLoad)}</span>
+            <span>План: ${formatLoadValue(daySummary.plannedLoad)}</span>
+          </div>
         </div>
-        <em>${completedBlockCount}/${blockCount}</em>
+        <em>${daySummary.completedBlockCount}/${blockCount}</em>
       </summary>
       <div class="mobile-plan-day-card-body">
+        ${daySummary.latestDiaryEntry || canSubmitCoachDiary
+          ? renderExecutionDayCoachComment(daySummary.latestDiaryEntry)
+          : ""}
         ${group.plan.day.sessions.map((session) => `
           <section class="mobile-plan-session">
             <h4>${escapeHtml(session.name)}</h4>
@@ -1277,9 +1350,23 @@ function renderExecutionPlanGroup(
             </button>
           </div>
         ` : ""}
-        ${canSubmitCoachDiary ? renderCoachDiaryForm(group, getCoachDiaryEntriesForPlan(state, group.plan.id)) : ""}
+        ${canSubmitCoachDiary ? renderCoachDiaryForm(group, diaryEntries) : ""}
       </div>
     </details>
+  `;
+}
+
+function renderExecutionDayCoachComment(entry: CoachDiaryEntry | null) {
+  return `
+    <aside class="execution-day-comment">
+      <strong>Комментарий тренера</strong>
+      ${entry
+        ? `
+          <p>${escapeHtml(entry.notes)}</p>
+          <small>${escapeHtml(entry.coachName)} · ${formatDateTime(entry.updatedAt)}</small>
+        `
+        : "<p>Комментария за этот день пока нет.</p>"}
+    </aside>
   `;
 }
 
@@ -1759,6 +1846,223 @@ function getExecutionPlanGroups(plans: AssignedPlanSummary[]): ExecutionPlanGrou
     .filter((group) => group.blockItems.length > 0);
 }
 
+function getExecutionDateOptions(groups: ExecutionPlanGroup[]) {
+  const seenDates = new Set<string>();
+
+  return groups
+    .filter((group) => {
+      if (seenDates.has(group.plan.day.dayDate)) {
+        return false;
+      }
+
+      seenDates.add(group.plan.day.dayDate);
+      return true;
+    })
+    .map((group) => ({
+      date: group.plan.day.dayDate,
+      label: group.plan.day.label,
+    }));
+}
+
+function getExecutionDaySummary(
+  state: MobileAppState,
+  group: ExecutionPlanGroup,
+  diaryEntries: CoachDiaryEntry[],
+): ExecutionDaySummary {
+  let completedBlockCount = 0;
+  let partialBlockCount = 0;
+  let missedBlockCount = 0;
+  let plannedLoad = 0;
+  let actualLoad = 0;
+
+  for (const item of group.blockItems) {
+    const result = getExecutionResultForBlock(state, item.plan.id, item.block.id);
+    const blockPlannedLoad = estimateAssignedBlockLoad(item.block);
+    const blockStatus = getExecutionBlockStatus(item.block, result);
+
+    plannedLoad += blockPlannedLoad;
+    actualLoad += estimateExecutionActualLoad(item.block, result, blockPlannedLoad);
+
+    if (blockStatus === "completed") {
+      completedBlockCount += 1;
+    } else if (blockStatus === "partial") {
+      partialBlockCount += 1;
+    } else {
+      missedBlockCount += 1;
+    }
+  }
+
+  const status: ExecutionDayStatus =
+    completedBlockCount === group.blockItems.length
+      ? "completed"
+      : completedBlockCount + partialBlockCount > 0
+        ? "partial"
+        : "missed";
+
+  return {
+    actualLoad: roundLoad(actualLoad),
+    completedBlockCount,
+    latestDiaryEntry: diaryEntries[0] ?? null,
+    missedBlockCount,
+    partialBlockCount,
+    plannedLoad: roundLoad(plannedLoad),
+    status,
+    statusLabel: getExecutionDayStatusLabel(status),
+  };
+}
+
+function estimateAssignedBlockLoad(block: AssignedPlanBlock) {
+  const profile = mobileLoadBlockProfiles[block.blockType] ?? defaultMobileLoadProfile;
+  const priorityFactor = getMobileLoadPriorityFactor(block.blockPriority);
+  const fallbackDurationMinutes = profile.durationMinutes * priorityFactor;
+  const fallbackRpe = profile.rpe * priorityFactor;
+  const durationMinutes = normalizeMobileLoadNumber(block.targetDurationMinutes, 240);
+  const rpe = normalizeMobileLoadNumber(block.targetRpe, 10);
+
+  if (durationMinutes !== null && rpe !== null) {
+    return roundLoad(durationMinutes * rpe);
+  }
+
+  const exerciseLoads = (block.exercises ?? [])
+    .map((exercise) => estimateAssignedExerciseLoad(exercise, fallbackRpe))
+    .filter((value): value is number => value !== null);
+
+  if (exerciseLoads.length) {
+    return roundLoad(exerciseLoads.reduce((sum, value) => sum + value, 0));
+  }
+
+  if (durationMinutes !== null) {
+    return roundLoad(durationMinutes * (rpe ?? fallbackRpe));
+  }
+
+  if (rpe !== null) {
+    return roundLoad(fallbackDurationMinutes * rpe);
+  }
+
+  return roundLoad(fallbackDurationMinutes * profile.rpe);
+}
+
+function estimateAssignedExerciseLoad(exercise: AssignedBlockExercise, fallbackRpe: number) {
+  const durationMinutes = normalizeMobileLoadNumber(exercise.targetDurationMinutes, 240);
+  const rpe = normalizeMobileLoadNumber(exercise.targetRpe, 10);
+
+  if (durationMinutes === null) {
+    return null;
+  }
+
+  return durationMinutes * (rpe ?? fallbackRpe);
+}
+
+function normalizeMobileLoadNumber(value: number | null | undefined, maxValue: number) {
+  if (value === null || value === undefined || !Number.isFinite(value)) {
+    return null;
+  }
+
+  return value > 0 && value <= maxValue ? value : null;
+}
+
+function getMobileLoadPriorityFactor(blockPriority: number | null | undefined) {
+  const priority = Number.isFinite(blockPriority ?? NaN)
+    ? Math.min(Math.max(Number(blockPriority), 1), 5)
+    : 1;
+
+  return 0.7 + priority * 0.1;
+}
+
+function estimateExecutionActualLoad(
+  block: AssignedPlanBlock,
+  result: ExecutionResult | null,
+  plannedLoad: number,
+) {
+  if (!result) {
+    return 0;
+  }
+
+  if (result.durationMinutes !== null && result.rpe !== null) {
+    return roundLoad(result.durationMinutes * result.rpe);
+  }
+
+  const exercises = block.exercises ?? [];
+
+  if (exercises.length > 0 && result.exerciseResults?.length) {
+    const completedExerciseCount = exercises.filter((exercise) =>
+      getExerciseResult(result, exercise.id)?.completed === true
+    ).length;
+    const completionRatio = Math.min(completedExerciseCount, exercises.length) / exercises.length;
+
+    return roundLoad(plannedLoad * completionRatio);
+  }
+
+  return result.completed ? plannedLoad : 0;
+}
+
+function getExecutionBlockStatus(
+  block: AssignedPlanBlock,
+  result: ExecutionResult | null,
+): ExecutionDayStatus {
+  if (!result) {
+    return "missed";
+  }
+
+  const exercises = block.exercises ?? [];
+
+  if (exercises.length > 0 && result.exerciseResults?.length) {
+    const completedExerciseCount = exercises.filter((exercise) =>
+      getExerciseResult(result, exercise.id)?.completed === true
+    ).length;
+
+    if (completedExerciseCount >= exercises.length) {
+      return "completed";
+    }
+
+    if (completedExerciseCount > 0 || hasExecutionResultDetails(result)) {
+      return "partial";
+    }
+  }
+
+  if (result.completed) {
+    return "completed";
+  }
+
+  return hasExecutionResultDetails(result) ? "partial" : "missed";
+}
+
+function hasExecutionResultDetails(result: ExecutionResult) {
+  return (
+    result.setsCompleted !== null ||
+    result.repsCompleted !== null ||
+    result.weightKg !== null ||
+    result.durationMinutes !== null ||
+    result.rpe !== null ||
+    result.notes.trim().length > 0 ||
+    Boolean(result.exerciseResults?.some((exercise) =>
+      exercise.completed ||
+      exercise.setsCompleted !== null ||
+      exercise.repsCompleted !== null ||
+      exercise.weightKg !== null ||
+      exercise.durationMinutes !== null ||
+      exercise.rpe !== null ||
+      exercise.notes.trim().length > 0
+    ))
+  );
+}
+
+function getExecutionDayStatusLabel(status: ExecutionDayStatus) {
+  if (status === "completed") {
+    return "Выполнено";
+  }
+
+  if (status === "partial") {
+    return "Частично";
+  }
+
+  return "Не выполнено";
+}
+
+function roundLoad(value: number) {
+  return Number(value.toFixed(1));
+}
+
 function sortPlansForExecution(plans: AssignedPlanSummary[]) {
   const today = todayValue();
 
@@ -1813,10 +2117,6 @@ function getExerciseResult(
   return result?.exerciseResults?.find((exercise) =>
     exercise.assignedExerciseId === assignedExerciseId
   ) ?? null;
-}
-
-function isExecutionResultCompleted(result: ExecutionResult | null) {
-  return result?.completed === true;
 }
 
 function getCoachDiaryEntriesForPlan(state: MobileAppState, assignedPlanId: string) {
@@ -2123,6 +2423,10 @@ function formatReadinessHistoryDetails(entry: ReadinessEntry) {
 
 function formatInputValue(value: number | null | undefined) {
   return value === null || value === undefined ? "" : String(value);
+}
+
+function formatLoadValue(value: number) {
+  return value > 0 ? String(roundLoad(value)) : "0";
 }
 
 function formatExecutionHistoryDetails(result: ExecutionResult) {
