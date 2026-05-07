@@ -93,10 +93,13 @@ export function buildWeekSummary(input: {
     .filter((point) => point.date >= input.frame.startDate && point.date <= input.frame.trackingEnd)
     .map((point) => point.score);
   const targetLoad = input.mesocycleWeek?.targetLoad ?? null;
-  const expectedLoadToDate =
-    targetLoad !== null && input.frame.elapsedDays > 0
-      ? round((targetLoad * input.frame.elapsedDays) / input.frame.totalDays)
-      : null;
+  let expectedLoadToDate: number | null = null;
+
+  if (plannedLoad > 0) {
+    expectedLoadToDate = plannedLoad;
+  } else if (targetLoad !== null && input.frame.elapsedDays > 0) {
+    expectedLoadToDate = round((targetLoad * input.frame.elapsedDays) / input.frame.totalDays);
+  }
 
   return {
     label: input.frame.label,
