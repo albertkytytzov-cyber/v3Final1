@@ -1,7 +1,8 @@
-import type {
-  AssignedPlanSummary,
-  PlanDayInput,
-  PlanTemplateSummary,
+import {
+  estimateTrainingBlocksLoad,
+  type AssignedPlanSummary,
+  type PlanDayInput,
+  type PlanTemplateSummary,
 } from "@training-platform/shared";
 import type { PlannerSlot } from "./planning.types";
 
@@ -18,20 +19,9 @@ export function diffDaysBetween(dateLeft: string, dateRight: string) {
 }
 
 export function estimateBlocksLoad(
-  blocks: Array<{
-    targetDurationMinutes: number | null;
-    targetRpe: number | null;
-  }>,
+  blocks: Parameters<typeof estimateTrainingBlocksLoad>[0],
 ) {
-  return Number(
-    blocks
-      .reduce((sum, block) => {
-        const duration = block.targetDurationMinutes ?? 20;
-        const rpe = block.targetRpe ?? 5;
-        return sum + duration * rpe;
-      }, 0)
-      .toFixed(1),
-  );
+  return estimateTrainingBlocksLoad(blocks);
 }
 
 export function estimatePlanDayLoad(day: Pick<PlanDayInput, "sessions">) {

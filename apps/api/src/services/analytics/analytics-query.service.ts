@@ -727,13 +727,14 @@ export async function listTrainingLoadLogRows(
     `
       SELECT
         log_date::text,
-        planned_load::text,
-        actual_load::text,
-        actual_rpe::text,
-        actual_duration_minutes::text
+        SUM(planned_load)::text AS planned_load,
+        SUM(actual_load)::text AS actual_load,
+        AVG(actual_rpe)::text AS actual_rpe,
+        SUM(actual_duration_minutes)::text AS actual_duration_minutes
       FROM training_load_logs
       WHERE athlete_id = $1
         AND log_date BETWEEN ($2::date - INTERVAL '35 days') AND $2::date
+      GROUP BY log_date
       ORDER BY log_date DESC
     `,
     [athleteId, referenceDateText],

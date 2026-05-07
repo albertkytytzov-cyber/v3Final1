@@ -1,10 +1,11 @@
-import type {
-  AnalyticsOverview,
-  CompletionTrendPoint,
-  LoadTrendPoint,
-  PlanBlockInput,
-  ReadinessStatus,
-  WeightTrendPoint,
+import {
+  estimateTrainingBlockLoad,
+  type AnalyticsOverview,
+  type CompletionTrendPoint,
+  type LoadTrendPoint,
+  type PlanBlockInput,
+  type ReadinessStatus,
+  type WeightTrendPoint,
 } from "@training-platform/shared";
 import type {
   DailyExecutionStats,
@@ -78,31 +79,12 @@ export function estimatePlannedBlockLoad(
   targetDurationMinutes: number | null,
   targetRpe: number | null,
 ) {
-  if (targetDurationMinutes !== null && targetRpe !== null) {
-    return Number((targetDurationMinutes * targetRpe).toFixed(1));
-  }
-
-  const profile: Record<
-    PlanBlockInput["blockType"],
-    {
-      durationMinutes: number;
-      rpe: number;
-    }
-  > = {
-    technical: { durationMinutes: 35, rpe: 5 },
-    speed: { durationMinutes: 22, rpe: 7.5 },
-    strength: { durationMinutes: 30, rpe: 7 },
-    CNS_high: { durationMinutes: 24, rpe: 8 },
-    metabolic: { durationMinutes: 26, rpe: 8.5 },
-    conditioning: { durationMinutes: 32, rpe: 6.5 },
-    recovery: { durationMinutes: 20, rpe: 2.5 },
-    mobility: { durationMinutes: 18, rpe: 2.5 },
-    activation: { durationMinutes: 14, rpe: 4 },
-  };
-
-  const base = profile[blockType];
-  const priorityFactor = 0.7 + blockPriority * 0.1;
-  return Number((base.durationMinutes * base.rpe * priorityFactor).toFixed(1));
+  return estimateTrainingBlockLoad({
+    blockType,
+    blockPriority,
+    targetDurationMinutes,
+    targetRpe,
+  });
 }
 
 export function hasActualExecution(block: ExecutionBlock) {
@@ -116,6 +98,17 @@ export function hasActualExecution(block: ExecutionBlock) {
   );
 }
 
+export function estimateActualBlockLoad(
+  block: ExecutionBlock,
+  plannedLoad: number,
+) {
+  if (block.durationMinutes !== null && block.rpe !== null) {
+    return Number((block.durationMinutes * block.rpe).toFixed(1));
+  }
+
+  return block.completed ? plannedLoad : 0;
+}
+
 export function buildDailyExecutionStats(blocks: ExecutionBlock[]): DailyExecutionStats {
   let completedBlocks = 0;
   let partialBlocks = 0;
@@ -127,16 +120,14 @@ export function buildDailyExecutionStats(blocks: ExecutionBlock[]): DailyExecuti
   let rpeCount = 0;
 
   for (const block of blocks) {
-    plannedLoad += estimatePlannedBlockLoad(
+    const blockPlannedLoad = estimatePlannedBlockLoad(
       block.blockType,
       block.blockPriority,
       block.targetDurationMinutes,
       block.targetRpe,
     );
-
-    if (block.durationMinutes !== null && block.rpe !== null) {
-      actualLoad += block.durationMinutes * block.rpe;
-    }
+    plannedLoad += blockPlannedLoad;
+    actualLoad += estimateActualBlockLoad(block, blockPlannedLoad);
 
     if (block.durationMinutes !== null) {
       totalDurationMinutes += block.durationMinutes;

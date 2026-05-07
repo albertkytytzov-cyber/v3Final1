@@ -213,6 +213,125 @@ export interface PlanExerciseInput {
   displayOrder?: number;
 }
 
+export type TrainingLoadExerciseInput = Pick<
+  PlanExerciseInput,
+  "targetDurationMinutes" | "targetRpe"
+>;
+
+export type TrainingLoadBlockInput = Pick<
+  PlanBlockInput,
+  "targetDurationMinutes" | "targetRpe"
+> &
+  Partial<
+    Pick<
+      PlanBlockInput,
+      "blockType" | "blockPriority" | "targetSets" | "targetReps" | "exercises"
+    >
+  >;
+
+const TRAINING_LOAD_BLOCK_PROFILES: Record<
+  PlanBlockInput["blockType"],
+  { durationMinutes: number; rpe: number }
+> = {
+  technical: { durationMinutes: 35, rpe: 5 },
+  speed: { durationMinutes: 22, rpe: 7.5 },
+  strength: { durationMinutes: 30, rpe: 7 },
+  CNS_high: { durationMinutes: 24, rpe: 8 },
+  metabolic: { durationMinutes: 26, rpe: 8.5 },
+  conditioning: { durationMinutes: 32, rpe: 6.5 },
+  recovery: { durationMinutes: 20, rpe: 2.5 },
+  mobility: { durationMinutes: 18, rpe: 2.5 },
+  activation: { durationMinutes: 14, rpe: 4 },
+};
+
+const DEFAULT_TRAINING_LOAD_PROFILE = { durationMinutes: 20, rpe: 5 };
+
+function normalizeTrainingLoadNumber(
+  value: number | null | undefined,
+  maxValue: number,
+) {
+  if (value === null || value === undefined || !Number.isFinite(value)) {
+    return null;
+  }
+
+  return value > 0 && value <= maxValue ? value : null;
+}
+
+function getTrainingLoadProfile(blockType: PlanBlockInput["blockType"] | null | undefined) {
+  return blockType && TRAINING_LOAD_BLOCK_PROFILES[blockType]
+    ? TRAINING_LOAD_BLOCK_PROFILES[blockType]
+    : DEFAULT_TRAINING_LOAD_PROFILE;
+}
+
+function getTrainingLoadPriorityFactor(blockPriority: number | null | undefined) {
+  const priority = Number.isFinite(blockPriority ?? NaN)
+    ? Math.min(Math.max(Number(blockPriority), 1), 5)
+    : 1;
+
+  return 0.7 + priority * 0.1;
+}
+
+function estimateTrainingExerciseLoad(
+  exercise: TrainingLoadExerciseInput,
+  fallbackRpe: number,
+) {
+  const durationMinutes = normalizeTrainingLoadNumber(
+    exercise.targetDurationMinutes,
+    240,
+  );
+  const rpe = normalizeTrainingLoadNumber(exercise.targetRpe, 10);
+
+  if (durationMinutes === null) {
+    return null;
+  }
+
+  return durationMinutes * (rpe ?? fallbackRpe);
+}
+
+export function estimateTrainingBlockLoad(block: TrainingLoadBlockInput) {
+  const profile = getTrainingLoadProfile(block.blockType);
+  const priorityFactor = getTrainingLoadPriorityFactor(block.blockPriority);
+  const fallbackDurationMinutes = profile.durationMinutes * priorityFactor;
+  const fallbackRpe = profile.rpe * priorityFactor;
+  const durationMinutes = normalizeTrainingLoadNumber(
+    block.targetDurationMinutes,
+    240,
+  );
+  const rpe = normalizeTrainingLoadNumber(block.targetRpe, 10);
+
+  if (durationMinutes !== null && rpe !== null) {
+    return Number((durationMinutes * rpe).toFixed(1));
+  }
+
+  const exerciseLoads = (block.exercises ?? [])
+    .map((exercise) => estimateTrainingExerciseLoad(exercise, fallbackRpe))
+    .filter((value): value is number => value !== null);
+
+  if (exerciseLoads.length) {
+    return Number(
+      exerciseLoads.reduce((sum, value) => sum + value, 0).toFixed(1),
+    );
+  }
+
+  if (durationMinutes !== null) {
+    return Number((durationMinutes * (rpe ?? fallbackRpe)).toFixed(1));
+  }
+
+  if (rpe !== null) {
+    return Number((fallbackDurationMinutes * rpe).toFixed(1));
+  }
+
+  return Number((fallbackDurationMinutes * profile.rpe).toFixed(1));
+}
+
+export function estimateTrainingBlocksLoad(blocks: TrainingLoadBlockInput[]) {
+  return Number(
+    blocks
+      .reduce((sum, block) => sum + estimateTrainingBlockLoad(block), 0)
+      .toFixed(1),
+  );
+}
+
 export interface PlanSessionInput {
   id?: string;
   name: string;

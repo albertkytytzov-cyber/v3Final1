@@ -20,6 +20,8 @@ import {
   average,
   buildDailyExecutionStats,
   diffDays,
+  estimateActualBlockLoad,
+  estimatePlannedBlockLoad,
   hasActualExecution,
   round,
   shiftDate,
@@ -148,9 +150,15 @@ export function buildBlockTypeWeekStats(days: WeekDaySnapshot[]): BlockTypeWeekS
         stats.missedBlocks += 1;
       }
 
-      if (block.durationMinutes !== null && block.rpe !== null) {
-        stats.actualLoad += block.durationMinutes * block.rpe;
-      }
+      stats.actualLoad += estimateActualBlockLoad(
+        block,
+        estimatePlannedBlockLoad(
+          block.blockType,
+          block.blockPriority,
+          block.targetDurationMinutes,
+          block.targetRpe,
+        ),
+      );
 
       if (block.durationMinutes !== null) {
         stats.totalDurationMinutes += block.durationMinutes;

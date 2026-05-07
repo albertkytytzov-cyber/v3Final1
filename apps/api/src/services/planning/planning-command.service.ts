@@ -1,4 +1,5 @@
 import type {
+  AssignedPlanBlock,
   AssignedPlanPayload,
   AssignedPlanSummary,
   AutoAssignMicrocyclePayload,
@@ -93,6 +94,128 @@ function normalizeTemplateDays(payload: PlanTemplatePayload): PlanDayInput[] {
 
 function flattenTemplateBlocks(days: PlanDayInput[]) {
   return days.flatMap((day) => day.sessions.flatMap((session) => session.blocks));
+}
+
+function sumNullableNumbers(values: Array<number | null | undefined>) {
+  const filteredValues = values.filter(
+    (value): value is number => value !== null && value !== undefined,
+  );
+
+  return filteredValues.length
+    ? Number(filteredValues.reduce((sum, value) => sum + value, 0).toFixed(2))
+    : null;
+}
+
+function averageNullableNumbers(values: Array<number | null | undefined>) {
+  const filteredValues = values.filter(
+    (value): value is number => value !== null && value !== undefined,
+  );
+
+  return filteredValues.length
+    ? Number(
+        (
+          filteredValues.reduce((sum, value) => sum + value, 0) /
+          filteredValues.length
+        ).toFixed(1),
+      )
+    : null;
+}
+
+function summarizeAssignedPlanBlockLoad(block: AssignedPlanBlock) {
+  const exercises = block.exercises ?? [];
+
+  return {
+    plannedLoad: estimateBlocksLoad([block]),
+    plannedDurationMinutes:
+      block.targetDurationMinutes ??
+      sumNullableNumbers(exercises.map((exercise) => exercise.targetDurationMinutes)),
+    plannedRpe:
+      block.targetRpe ??
+      averageNullableNumbers(exercises.map((exercise) => exercise.targetRpe)),
+    plannedSets:
+      block.targetSets ??
+      sumNullableNumbers(exercises.map((exercise) => exercise.targetSets)),
+    plannedReps:
+      block.targetReps ??
+      sumNullableNumbers(exercises.map((exercise) => exercise.targetReps)),
+  };
+}
+
+async function upsertPlannedLoadLogsForAssignedPlan(
+  assignedPlan: AssignedPlanSummary | null,
+) {
+  if (!assignedPlan) {
+    return;
+  }
+
+  for (const session of assignedPlan.day.sessions) {
+    for (const block of session.blocks) {
+      const summary = summarizeAssignedPlanBlockLoad(block);
+
+      await pool.query(
+        `
+          INSERT INTO training_load_logs (
+            athlete_id,
+            assigned_plan_id,
+            assigned_block_id,
+            log_date,
+            planned_load,
+            planned_duration_minutes,
+            planned_rpe,
+            planned_sets,
+            planned_reps,
+            completion_status,
+            source_type,
+            updated_at
+          )
+          VALUES (
+            $1,
+            $2,
+            $3,
+            $4::date,
+            $5,
+            $6,
+            $7,
+            $8,
+            $9,
+            'not_started',
+            'plan',
+            NOW()
+          )
+          ON CONFLICT (athlete_id, assigned_block_id, log_date)
+          DO UPDATE SET
+            assigned_plan_id = EXCLUDED.assigned_plan_id,
+            planned_load = EXCLUDED.planned_load,
+            planned_duration_minutes = EXCLUDED.planned_duration_minutes,
+            planned_rpe = EXCLUDED.planned_rpe,
+            planned_sets = EXCLUDED.planned_sets,
+            planned_reps = EXCLUDED.planned_reps,
+            completion_status = CASE
+              WHEN training_load_logs.source_type = 'execution'
+                THEN training_load_logs.completion_status
+              ELSE EXCLUDED.completion_status
+            END,
+            source_type = CASE
+              WHEN training_load_logs.source_type = 'execution'
+                THEN training_load_logs.source_type
+              ELSE EXCLUDED.source_type
+            END,
+            updated_at = NOW()
+        `,
+        [
+          assignedPlan.athleteId,
+          assignedPlan.id,
+          block.id,
+          assignedPlan.day.dayDate,
+          summary.plannedLoad,
+          summary.plannedDurationMinutes,
+          summary.plannedRpe,
+          summary.plannedSets,
+          summary.plannedReps,
+        ],
+      );
+    }
+  }
 }
 
 async function insertAssignedPlanFromTemplate(input: {
@@ -598,9 +721,11 @@ export async function assignPlan(input: {
     competitionContext,
     templateDayIndex: null,
   });
+  const assignedPlan = await getAssignedPlanById(assignedPlanId);
+  await upsertPlannedLoadLogsForAssignedPlan(assignedPlan);
 
   return {
-    assignedPlan: await getAssignedPlanById(assignedPlanId),
+    assignedPlan,
   };
 }
 
@@ -635,6 +760,7 @@ export async function autoAssignMicrocycle(input: {
       const createdPlan = await getAssignedPlanById(assignedPlanId);
 
       if (createdPlan) {
+        await upsertPlannedLoadLogsForAssignedPlan(createdPlan);
         createdPlans.push(createdPlan);
       }
     } catch (error) {

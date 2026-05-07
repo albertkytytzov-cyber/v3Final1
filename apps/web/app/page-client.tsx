@@ -58,6 +58,7 @@ import {
   type ReadinessSubmissionPayload,
   type DeleteCompetitionsPayload,
   type DeleteCompetitionsResponse,
+  estimateTrainingBlocksLoad,
   type UwwEventSyncFilters,
   type UwwEventSyncOptions,
   type UwwEventSyncOptionsResponse,
@@ -800,15 +801,7 @@ function countTemplateDayBlocks(day: PlanTemplateDayInput) {
 }
 
 function estimateTemplateBlocksLoad(blocks: PlanTemplatePayload["blocks"]) {
-  return Number(
-    blocks
-      .reduce((sum, block) => {
-        const duration = block.targetDurationMinutes ?? 20;
-        const rpe = block.targetRpe ?? 5;
-        return sum + duration * rpe;
-      }, 0)
-      .toFixed(1),
-  );
+  return estimateTrainingBlocksLoad(blocks);
 }
 
 function estimateTemplateDayLoad(day: PlanTemplateDayInput) {

@@ -95,21 +95,51 @@ export async function buildAnalyticsOverviewForAthlete(
   const weightTrend = buildWeightTrend(weightLogRows, athlete.baselineWeightKg);
   const groupedByDate = buildExecutionTrendMaps(executionRows);
   const completionTrend = buildCompletionTrend(groupedByDate, referenceDateText);
+  const fallbackLoadTrend = buildLoadTrend(groupedByDate, referenceDateText);
+  const loggedLoadTrend = trainingLoadRows
+    .slice()
+    .sort((left, right) => left.date.localeCompare(right.date))
+    .map((row) => ({
+      date: row.date,
+      plannedLoad: row.plannedLoad,
+      actualLoad: row.actualLoad,
+      loadDelta: Number((row.actualLoad - row.plannedLoad).toFixed(1)),
+      averageRpe: row.actualRpe,
+      totalDurationMinutes: row.actualDurationMinutes ?? 0,
+    }));
   const loadTrend =
-    trainingLoadRows.length > 0
-      ? trainingLoadRows
-          .slice()
-          .sort((left, right) => left.date.localeCompare(right.date))
+    loggedLoadTrend.length > 0
+      ? Array.from(
+          new Set([
+            ...fallbackLoadTrend.map((point) => point.date),
+            ...loggedLoadTrend.map((point) => point.date),
+          ]),
+        )
+          .sort((left, right) => left.localeCompare(right))
           .slice(-14)
-          .map((row) => ({
-            date: row.date,
-            plannedLoad: row.plannedLoad,
-            actualLoad: row.actualLoad,
-            loadDelta: Number((row.actualLoad - row.plannedLoad).toFixed(1)),
-            averageRpe: row.actualRpe,
-            totalDurationMinutes: row.actualDurationMinutes ?? 0,
-          }))
-      : buildLoadTrend(groupedByDate, referenceDateText);
+          .map((date) => {
+            const fallbackPoint = fallbackLoadTrend.find((point) => point.date === date);
+            const loggedPoint = loggedLoadTrend.find((point) => point.date === date);
+
+            if (!loggedPoint) {
+              return fallbackPoint!;
+            }
+
+            const plannedLoad =
+              loggedPoint.plannedLoad > 0
+                ? loggedPoint.plannedLoad
+                : fallbackPoint?.plannedLoad ?? 0;
+
+            return {
+              ...loggedPoint,
+              plannedLoad,
+              loadDelta: Number((loggedPoint.actualLoad - plannedLoad).toFixed(1)),
+              averageRpe: loggedPoint.averageRpe ?? fallbackPoint?.averageRpe ?? null,
+              totalDurationMinutes:
+                loggedPoint.totalDurationMinutes || fallbackPoint?.totalDurationMinutes || 0,
+            };
+          })
+      : fallbackLoadTrend;
   const activeSeason = pickSeason(seasons, referenceDateText);
   const activeMesocycle = pickMesocycle(
     mesocycles,

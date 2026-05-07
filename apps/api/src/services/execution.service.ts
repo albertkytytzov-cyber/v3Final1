@@ -1,8 +1,10 @@
-import type {
-  ExecutionExerciseResult,
-  ExecutionResult,
-  ExecutionResultInput,
-  ExecutionReviewPlan,
+import {
+  estimateTrainingBlockLoad,
+  type ExecutionExerciseResult,
+  type ExecutionResult,
+  type ExecutionResultInput,
+  type ExecutionReviewPlan,
+  type PlanBlockInput,
 } from "@training-platform/shared";
 import { buildExecutionReviewPlan } from "../domain/execution-review.engine";
 import { pool } from "../db";
@@ -36,10 +38,17 @@ interface ExecutionResultRow {
 
 interface BlockLoadContextRow {
   day_date: string;
+  block_type: PlanBlockInput["blockType"];
+  block_priority: number;
   target_duration_minutes: string | null;
   target_rpe: string | null;
   target_sets: number | null;
   target_reps: number | null;
+  exercise_id: string | null;
+  exercise_target_duration_minutes: string | null;
+  exercise_target_rpe: string | null;
+  exercise_target_sets: number | null;
+  exercise_target_reps: number | null;
 }
 
 export interface SubmitExecutionInput {
@@ -226,17 +235,6 @@ function summarizeExercisePayloads(result: ExecutionResultInput) {
   };
 }
 
-function estimatePlannedLoad(input: {
-  targetDurationMinutes: number | null;
-  targetRpe: number | null;
-}) {
-  if (input.targetDurationMinutes !== null && input.targetRpe !== null) {
-    return Number((input.targetDurationMinutes * input.targetRpe).toFixed(2));
-  }
-
-  return 0;
-}
-
 function resolveCompletionStatus(input: {
   completed: boolean;
   setsCompleted: number | null;
@@ -267,6 +265,44 @@ function resolveCompletionStatus(input: {
   }
 
   return "missed";
+}
+
+function hasExerciseExecutionValue(exercise: NonNullable<ExecutionResultInput["exercises"]>[number]) {
+  return (
+    exercise.completed ||
+    exercise.setsCompleted !== null ||
+    exercise.repsCompleted !== null ||
+    exercise.durationMinutes !== null ||
+    exercise.rpe !== null
+  );
+}
+
+function estimateActualLoad(input: {
+  plannedLoad: number;
+  completed: boolean;
+  actualDurationMinutes: number | null;
+  actualRpe: number | null;
+  exercises?: ExecutionResultInput["exercises"];
+}) {
+  if (input.actualDurationMinutes !== null && input.actualRpe !== null) {
+    return Number((input.actualDurationMinutes * input.actualRpe).toFixed(2));
+  }
+
+  if (input.completed) {
+    return input.plannedLoad;
+  }
+
+  const exercises = input.exercises ?? [];
+
+  if (!exercises.length || input.plannedLoad <= 0) {
+    return 0;
+  }
+
+  const completedExercises = exercises.filter(hasExerciseExecutionValue).length;
+
+  return completedExercises
+    ? Number(((input.plannedLoad * completedExercises) / exercises.length).toFixed(2))
+    : 0;
 }
 
 export async function listExecutionResultsForAthlete(
@@ -501,17 +537,26 @@ export async function submitExecutionResult(
     `
       SELECT
         assigned_plan_days.day_date::text,
+        assigned_day_blocks.block_type,
+        assigned_day_blocks.block_priority,
         assigned_day_blocks.target_duration_minutes::text,
         assigned_day_blocks.target_rpe::text,
         assigned_day_blocks.target_sets,
-        assigned_day_blocks.target_reps
+        assigned_day_blocks.target_reps,
+        assigned_block_exercises.id::text AS exercise_id,
+        assigned_block_exercises.target_duration_minutes::text AS exercise_target_duration_minutes,
+        assigned_block_exercises.target_rpe::text AS exercise_target_rpe,
+        assigned_block_exercises.target_sets AS exercise_target_sets,
+        assigned_block_exercises.target_reps AS exercise_target_reps
       FROM assigned_plans
       JOIN assigned_plan_days ON assigned_plan_days.assigned_plan_id = assigned_plans.id
       JOIN assigned_day_sessions ON assigned_day_sessions.assigned_day_id = assigned_plan_days.id
       JOIN assigned_day_blocks ON assigned_day_blocks.assigned_session_id = assigned_day_sessions.id
+      LEFT JOIN assigned_block_exercises
+        ON assigned_block_exercises.assigned_block_id = assigned_day_blocks.id
       WHERE assigned_plans.id = $1
         AND assigned_day_blocks.id = $2
-      LIMIT 1
+      ORDER BY assigned_block_exercises.display_order ASC
     `,
     [input.result.assignedPlanId, input.result.assignedBlockId],
   );
@@ -522,6 +567,32 @@ export async function submitExecutionResult(
     const plannedRpe = toNullableNumber(blockRow.target_rpe);
     const actualDurationMinutes = summary.durationMinutes ?? null;
     const actualRpe = summary.rpe ?? null;
+    const plannedLoad = estimateTrainingBlockLoad({
+      blockType: blockRow.block_type,
+      blockPriority: blockRow.block_priority,
+      targetDurationMinutes: plannedDurationMinutes,
+      targetRpe: plannedRpe,
+      targetSets: blockRow.target_sets,
+      targetReps: blockRow.target_reps,
+      exercises: blockLoadContext.rows
+        .filter((row) => row.exercise_id)
+        .map((row) => ({
+          targetDurationMinutes: toNullableNumber(row.exercise_target_duration_minutes),
+          targetRpe: toNullableNumber(row.exercise_target_rpe),
+          targetSets: row.exercise_target_sets,
+          targetReps: row.exercise_target_reps,
+          targetWeightKg: null,
+          notes: "",
+          name: "",
+        })),
+    });
+    const actualLoad = estimateActualLoad({
+      plannedLoad,
+      completed: summary.completed,
+      actualDurationMinutes,
+      actualRpe,
+      exercises: input.result.exercises,
+    });
 
     await pool.query(
       `
@@ -576,6 +647,7 @@ export async function submitExecutionResult(
           planned_reps = EXCLUDED.planned_reps,
           actual_reps = EXCLUDED.actual_reps,
           completion_status = EXCLUDED.completion_status,
+          source_type = EXCLUDED.source_type,
           updated_at = NOW()
       `,
       [
@@ -583,13 +655,8 @@ export async function submitExecutionResult(
         input.result.assignedPlanId,
         input.result.assignedBlockId,
         blockRow.day_date,
-        estimatePlannedLoad({
-          targetDurationMinutes: plannedDurationMinutes,
-          targetRpe: plannedRpe,
-        }),
-        actualDurationMinutes !== null && actualRpe !== null
-          ? Number((actualDurationMinutes * actualRpe).toFixed(2))
-          : 0,
+        plannedLoad,
+        actualLoad,
         plannedDurationMinutes,
         actualDurationMinutes,
         plannedRpe,

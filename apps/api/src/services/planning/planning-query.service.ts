@@ -8,6 +8,7 @@ import type {
   PlanTemplateSummary,
 } from "@training-platform/shared";
 import { pool } from "../../db";
+import { estimateBlocksLoad } from "../../domain/planning/load-balance.policy";
 
 interface PlanTemplateRow {
   template_id: string;
@@ -344,15 +345,7 @@ function buildPlanTemplateStructureMap(rows: PlanTemplateRow[]) {
 
   for (const template of templateSummaryMap.values()) {
     template.blockCount = template.blocks.length;
-    template.estimatedLoad = Number(
-      template.blocks
-        .reduce((sum, block) => {
-          const duration = block.targetDurationMinutes ?? 20;
-          const rpe = block.targetRpe ?? 5;
-          return sum + duration * rpe;
-        }, 0)
-        .toFixed(1),
-    );
+    template.estimatedLoad = estimateBlocksLoad(template.blocks);
     template.days?.sort((left, right) => (left.orderIndex ?? 0) - (right.orderIndex ?? 0));
     for (const day of template.days ?? []) {
       day.sessions.sort((left, right) => (left.orderIndex ?? 0) - (right.orderIndex ?? 0));
