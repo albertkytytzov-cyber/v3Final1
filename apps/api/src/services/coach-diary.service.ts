@@ -145,15 +145,16 @@ async function loadAssignedPlanDiaryContext(payload: CoachDiaryEntryPayload) {
       WHERE assigned_plans.id = $1
         AND assigned_plans.athlete_id = $2
         AND assigned_plans.status = 'active'
+        AND assigned_plan_days.day_date = $3::date
       LIMIT 1
     `,
-    [payload.assignedPlanId, payload.athleteId],
+    [payload.assignedPlanId, payload.athleteId, payload.entryDate],
   );
 
   if (!result.rowCount) {
     throw new CoachDiaryServiceError(
       "assigned_plan_not_found",
-      "Assigned plan was not found for this athlete",
+      "Assigned plan day was not found for this athlete",
     );
   }
 
@@ -162,6 +163,7 @@ async function loadAssignedPlanDiaryContext(payload: CoachDiaryEntryPayload) {
 
 async function assertTaskIdsBelongToPlan(input: {
   assignedPlanId: string;
+  entryDate: string;
   assignedBlockIds: string[];
   assignedExerciseIds: string[];
 }) {
@@ -174,9 +176,10 @@ async function assertTaskIdsBelongToPlan(input: {
         JOIN assigned_day_sessions ON assigned_day_sessions.assigned_day_id = assigned_plan_days.id
         JOIN assigned_day_blocks ON assigned_day_blocks.assigned_session_id = assigned_day_sessions.id
         WHERE assigned_plans.id = $1
-          AND assigned_day_blocks.id = ANY($2::uuid[])
+          AND assigned_plan_days.day_date = $2::date
+          AND assigned_day_blocks.id = ANY($3::uuid[])
       `,
-      [input.assignedPlanId, input.assignedBlockIds],
+      [input.assignedPlanId, input.entryDate, input.assignedBlockIds],
     );
 
     if (result.rows[0].count !== input.assignedBlockIds.length) {
@@ -198,9 +201,10 @@ async function assertTaskIdsBelongToPlan(input: {
         JOIN assigned_block_exercises
           ON assigned_block_exercises.assigned_block_id = assigned_day_blocks.id
         WHERE assigned_plans.id = $1
-          AND assigned_block_exercises.id = ANY($2::uuid[])
+          AND assigned_plan_days.day_date = $2::date
+          AND assigned_block_exercises.id = ANY($3::uuid[])
       `,
-      [input.assignedPlanId, input.assignedExerciseIds],
+      [input.assignedPlanId, input.entryDate, input.assignedExerciseIds],
     );
 
     if (result.rows[0].count !== input.assignedExerciseIds.length) {
@@ -247,6 +251,7 @@ export async function submitCoachDiaryEntry(
   const planContext = await loadAssignedPlanDiaryContext(input.payload);
   await assertTaskIdsBelongToPlan({
     assignedPlanId: input.payload.assignedPlanId,
+    entryDate: planContext.day_date,
     assignedBlockIds,
     assignedExerciseIds,
   });

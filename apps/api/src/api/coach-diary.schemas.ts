@@ -31,6 +31,19 @@ function readScope(value: unknown): CoachDiaryScope {
   return value === "tasks" ? "tasks" : "day";
 }
 
+function readEntryDate(value: unknown) {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    throw new Error("entryDate must use YYYY-MM-DD format");
+  }
+
+  const parsedDate = new Date(`${value}T00:00:00.000Z`);
+  if (Number.isNaN(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== value) {
+    throw new Error("entryDate must be a valid calendar date");
+  }
+
+  return value;
+}
+
 export function parseCoachDiaryBody(body: unknown): CoachDiaryEntryPayload {
   const payload = (body ?? {}) as Partial<Record<keyof CoachDiaryEntryPayload, unknown>>;
   const scope = readScope(payload.scope);
@@ -38,7 +51,7 @@ export function parseCoachDiaryBody(body: unknown): CoachDiaryEntryPayload {
   return {
     athleteId: readRequiredId(payload.athleteId, "athleteId"),
     assignedPlanId: readRequiredId(payload.assignedPlanId, "assignedPlanId"),
-    entryDate: typeof payload.entryDate === "string" ? payload.entryDate : "",
+    entryDate: readEntryDate(payload.entryDate),
     scope,
     notes: typeof payload.notes === "string" ? payload.notes : "",
     assignedBlockIds: scope === "tasks" ? readIdList(payload.assignedBlockIds) : [],
