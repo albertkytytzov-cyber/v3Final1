@@ -7302,13 +7302,11 @@ select {
 }
 
 .planner-pack-rationale strong {
-  display: -webkit-box;
-  overflow: hidden;
+  display: block;
+  overflow-wrap: anywhere;
   font-size: 0.84rem;
   font-weight: 500;
   color: var(--text);
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 1;
 }
 
 .planner-pack-rationale-muted {
