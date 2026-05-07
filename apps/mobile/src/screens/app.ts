@@ -878,6 +878,7 @@ function renderCalendarScreen(state: MobileAppState, athleteId: string | null) {
   const competitions = state.data.competitions
     .slice()
     .sort((a, b) => a.startDate.localeCompare(b.startDate));
+  const canSubmitCompetitionResult = state.session.user?.role === "coach" || state.session.user?.role === "admin";
 
   return `
     <div class="screen-head">
@@ -899,23 +900,25 @@ function renderCalendarScreen(state: MobileAppState, athleteId: string | null) {
         `;
       }).join("") || renderEmpty("Календарь пуст", "Обновите данные с сервера.")}
     </div>
+    ${canSubmitCompetitionResult ? renderCompetitionResultForm(plans) : ""}
   `;
 }
 
 function renderResultsScreen(state: MobileAppState, athleteId: string | null) {
   const plans = getPlansForAthlete(state, athleteId);
-  const competitionPlans = getCompetitionPlansForAthlete(state, athleteId);
   const canSubmitExecution = state.session.user?.role === "athlete";
+  const isCoachReview = state.session.user?.role === "coach" || state.session.user?.role === "admin";
 
   return `
     <div class="screen-head">
-      <h2>Результаты</h2>
+      <h2>${canSubmitExecution ? "Выполнение тренировки" : "Разбор выполнения"}</h2>
       <p>${canSubmitExecution
         ? "Тренировка сохраняется локально, если нет интернета."
-        : getSyncActionRestrictionMessage(state.session.user?.role ?? null, "execution")}</p>
+        : isCoachReview
+          ? "Назначенные дни, план/факт, отметки спортсмена и дневник тренера."
+          : getSyncActionRestrictionMessage(state.session.user?.role ?? null, "execution")}</p>
     </div>
     ${renderExecutionForm(state, plans)}
-    ${state.session.user?.role === "coach" || state.session.user?.role === "admin" ? renderCompetitionResultForm(competitionPlans) : ""}
     ${renderCoachDiaryHistory(state, athleteId)}
     ${renderExecutionHistory(state)}
   `;
@@ -1194,7 +1197,7 @@ function renderExecutionForm(state: MobileAppState, plans: AssignedPlanSummary[]
   return `
     <section class="execution-panel">
       <div class="section-title">
-        <h3>Результат тренировки</h3>
+        <h3>${canSubmitExecution ? "Выполнение тренировки" : "Дни по плану"}</h3>
         <p>${canSubmitExecution
           ? `${plans.length} назначенных дней · ${blockCount} блоков · ${exerciseCount} упражнений. Ближайший день открыт сверху.`
           : `Режим просмотра · ${plans.length} назначенных дней · ${blockCount} блоков · ${exerciseCount} упражнений.`}</p>
@@ -1499,7 +1502,7 @@ function renderCompetitionResultForm(plans: CompetitionPlanSummary[]) {
 
   return `
     <form class="mobile-form compact-form" data-competition-result-form>
-      <h3>Результат соревнования</h3>
+      <h3>Результаты соревнований</h3>
       <label>
         <span>Старт</span>
         <select name="competitionPlanId">
@@ -1512,7 +1515,7 @@ function renderCompetitionResultForm(plans: CompetitionPlanSummary[]) {
       <label><span>Вес после</span><input name="weightAfter" type="number" min="0" step="0.1" /></label>
       <label class="wide-field"><span>Выступление</span><textarea name="performanceNotes" rows="3"></textarea></label>
       <label class="wide-field"><span>Заметки тренера</span><textarea name="coachNotes" rows="3"></textarea></label>
-      <button class="primary-action" type="submit">Сохранить старт</button>
+      <button class="primary-action" type="submit">Сохранить результат</button>
     </form>
   `;
 }
@@ -1699,7 +1702,7 @@ function getScreensForRole(role: string | undefined): Array<{ id: MobileScreen; 
     { id: "dashboard", label: "Главная", icon: "⌂" },
     { id: "plans", label: "Планы", icon: "▦" },
     { id: "calendar", label: "Календарь", icon: "□" },
-    { id: "results", label: "Результаты", icon: "✓" },
+    { id: "results", label: "Выполнение", icon: "✓" },
   ];
 
   if (role === "coach" || role === "admin") {
