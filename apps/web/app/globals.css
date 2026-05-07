@@ -7041,10 +7041,8 @@ select {
 
 .planner-suggestion-copy > span,
 .planner-suggestion-copy > small:not(.planner-feedback-badge) {
-  display: -webkit-box;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 1;
+  display: block;
+  overflow-wrap: anywhere;
 }
 
 .planner-suggestion-list {
@@ -7058,7 +7056,7 @@ select {
 .planner-suggestion-item {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
+  align-items: start;
   gap: 10px;
   padding: 10px 12px;
   border-radius: 12px;
@@ -7069,6 +7067,7 @@ select {
 .planner-suggestion-copy {
   display: grid;
   gap: 4px;
+  min-width: 0;
   color: var(--text);
   line-height: 1.35;
 }
