@@ -3294,6 +3294,15 @@ select {
   border: 1px solid rgba(148, 163, 184, 0.14);
 }
 
+.analytics-load-note {
+  margin: 0;
+  max-width: 100%;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.55;
+  overflow-wrap: break-word;
+}
+
 .analytics-trend-list {
   display: grid;
   gap: 8px;

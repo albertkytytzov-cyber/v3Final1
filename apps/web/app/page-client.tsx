@@ -13004,6 +13004,10 @@ export function PageClient({
                                 <strong>{coachWeekSummary.expectedLoadToDate ?? "-"}</strong>
                               </div>
                               <div>
+                                <span>{copyFor(language, { en: "Planned by tasks", ru: "План по заданиям", bg: "План по задачи" })}</span>
+                                <strong>{coachWeekSummary.plannedLoad}</strong>
+                              </div>
+                              <div>
                                 <span>{copyFor(language, { en: "Actual", ru: "Факт", bg: "Факт" })}</span>
                                 <strong>{coachWeekSummary.actualLoad}</strong>
                               </div>
@@ -13016,6 +13020,13 @@ export function PageClient({
                                 <strong>{coachWeekSummary.averageReadiness ?? "-"}</strong>
                               </div>
                             </div>
+                            <p className="analytics-load-note">
+                              {copyFor(language, {
+                                en: `Actual load is based on saved execution: completed exercises count their share of the block, full blocks count planned load, and entered minutes x RPE override the estimate. Now: ${coachWeekSummary.completedBlocks} done, ${coachWeekSummary.partialBlocks} partial, ${coachWeekSummary.missedBlocks} missed.`,
+                                ru: `Фактическая нагрузка берётся из сохранённого выполнения: отмеченные упражнения дают свою долю блока, полностью выполненный блок даёт плановую нагрузку, а введённые минуты × RPE заменяют оценку. Сейчас: выполнено ${coachWeekSummary.completedBlocks}, частично ${coachWeekSummary.partialBlocks}, пропущено ${coachWeekSummary.missedBlocks}.`,
+                                bg: `Фактическото натоварване идва от запазеното изпълнение: отбелязаните упражнения дават своя дял от блока, пълен блок дава плановото натоварване, а въведени минути × RPE заменят оценката. Сега: изпълнени ${coachWeekSummary.completedBlocks}, частични ${coachWeekSummary.partialBlocks}, пропуснати ${coachWeekSummary.missedBlocks}.`,
+                              })}
+                            </p>
                           </article>
                         ) : null}
 

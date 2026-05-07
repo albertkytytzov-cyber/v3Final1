@@ -94,6 +94,7 @@ export function hasActualExecution(block: ExecutionBlock) {
     block.weightKg !== null ||
     block.durationMinutes !== null ||
     block.rpe !== null ||
+    block.executedExerciseCount > 0 ||
     block.resultNotes.trim().length > 0
   );
 }
@@ -104,6 +105,13 @@ export function estimateActualBlockLoad(
 ) {
   if (block.durationMinutes !== null && block.rpe !== null) {
     return Number((block.durationMinutes * block.rpe).toFixed(1));
+  }
+
+  if (block.executedExerciseCount > 0 && block.assignedExerciseCount > 0 && plannedLoad > 0) {
+    const completionRatio =
+      Math.min(block.executedExerciseCount, block.assignedExerciseCount) / block.assignedExerciseCount;
+
+    return Number((plannedLoad * completionRatio).toFixed(1));
   }
 
   return block.completed ? plannedLoad : 0;

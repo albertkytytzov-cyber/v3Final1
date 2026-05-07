@@ -77,6 +77,8 @@ interface AnalyticsExecutionTrendRow {
   target_rpe: string | null;
   target_sets: number | null;
   target_reps: number | null;
+  assigned_exercise_count: number;
+  executed_exercise_count: number;
 }
 
 interface WeightLogRow {
@@ -658,7 +660,9 @@ export async function listAnalyticsExecutionRows(
         assigned_day_blocks.target_duration_minutes::text,
         assigned_day_blocks.target_rpe::text,
         assigned_day_blocks.target_sets,
-        assigned_day_blocks.target_reps
+        assigned_day_blocks.target_reps,
+        COALESCE(assigned_exercises.assigned_exercise_count, 0) AS assigned_exercise_count,
+        COALESCE(executed_exercises.executed_exercise_count, 0) AS executed_exercise_count
       FROM assigned_plans
       JOIN assigned_plan_days ON assigned_plan_days.assigned_plan_id = assigned_plans.id
       JOIN assigned_day_sessions ON assigned_day_sessions.assigned_day_id = assigned_plan_days.id
@@ -666,6 +670,23 @@ export async function listAnalyticsExecutionRows(
       LEFT JOIN exercise_results
         ON exercise_results.assigned_block_id = assigned_day_blocks.id
        AND exercise_results.athlete_id = assigned_plans.athlete_id
+      LEFT JOIN LATERAL (
+        SELECT COUNT(*)::int AS assigned_exercise_count
+        FROM assigned_block_exercises
+        WHERE assigned_block_exercises.assigned_block_id = assigned_day_blocks.id
+      ) assigned_exercises ON TRUE
+      LEFT JOIN LATERAL (
+        SELECT COUNT(DISTINCT exercise_result_exercises.assigned_exercise_id)::int AS executed_exercise_count
+        FROM exercise_result_exercises
+        WHERE exercise_result_exercises.execution_result_id = exercise_results.id
+          AND (
+            exercise_result_exercises.completed = TRUE
+            OR exercise_result_exercises.sets_completed IS NOT NULL
+            OR exercise_result_exercises.reps_completed IS NOT NULL
+            OR exercise_result_exercises.duration_minutes IS NOT NULL
+            OR exercise_result_exercises.rpe IS NOT NULL
+          )
+      ) executed_exercises ON TRUE
       WHERE assigned_plans.athlete_id = $1
         AND assigned_plan_days.day_date BETWEEN ($2::date - INTERVAL '35 days') AND ($2::date + INTERVAL '14 days')
       ORDER BY assigned_plan_days.day_date DESC, assigned_day_blocks.display_order ASC
@@ -691,6 +712,8 @@ export async function listAnalyticsExecutionRows(
       targetRpe: row.target_rpe !== null ? Number(row.target_rpe) : null,
       targetSets: row.target_sets ?? null,
       targetReps: row.target_reps ?? null,
+      assignedExerciseCount: row.assigned_exercise_count ?? 0,
+      executedExerciseCount: row.executed_exercise_count ?? 0,
     },
   }));
 }

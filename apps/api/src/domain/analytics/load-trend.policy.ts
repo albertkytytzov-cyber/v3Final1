@@ -74,11 +74,21 @@ export function buildWeekFrame(input: {
 
 export function buildWeekSummary(input: {
   readinessTrend: AnalyticsOverview["readinessTrend"];
+  loadTrend?: LoadTrendPoint[];
   mesocycleWeek: MesocycleWeekContext | null;
   frame: WeekFrame;
 }): AnalyticsWeekSummary {
   const trackedBlocks = input.frame.days.flatMap((day) => day.blocks);
   const trackedStats = buildDailyExecutionStats(trackedBlocks);
+  const trackedLoadPoints = (input.loadTrend ?? []).filter(
+    (point) => point.date >= input.frame.startDate && point.date <= input.frame.trackingEnd,
+  );
+  const plannedLoad = trackedLoadPoints.length
+    ? round(trackedLoadPoints.reduce((sum, point) => sum + point.plannedLoad, 0))
+    : trackedStats.plannedLoad;
+  const actualLoad = trackedLoadPoints.length
+    ? round(trackedLoadPoints.reduce((sum, point) => sum + point.actualLoad, 0))
+    : trackedStats.actualLoad;
   const readinessInWindow = input.readinessTrend
     .filter((point) => point.date >= input.frame.startDate && point.date <= input.frame.trackingEnd)
     .map((point) => point.score);
@@ -98,9 +108,9 @@ export function buildWeekSummary(input: {
     microcycleType: input.mesocycleWeek?.microcycleType ?? null,
     targetLoad,
     expectedLoadToDate,
-    plannedLoad: trackedStats.plannedLoad,
-    actualLoad: trackedStats.actualLoad,
-    loadDelta: round(trackedStats.actualLoad - trackedStats.plannedLoad),
+    plannedLoad,
+    actualLoad,
+    loadDelta: round(actualLoad - plannedLoad),
     averageRpe: trackedStats.averageRpe,
     averageReadiness: average(readinessInWindow),
     plannedBlocks: trackedStats.plannedBlocks,

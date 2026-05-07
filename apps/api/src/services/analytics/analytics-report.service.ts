@@ -160,6 +160,7 @@ export async function buildAnalyticsOverviewForAthlete(
   });
   const weekSummary = buildWeekSummary({
     readinessTrend,
+    loadTrend,
     mesocycleWeek,
     frame: weekFrame,
   });

@@ -42,6 +42,8 @@ export interface ExecutionBlock {
   targetRpe: number | null;
   targetSets: number | null;
   targetReps: number | null;
+  assignedExerciseCount: number;
+  executedExerciseCount: number;
 }
 
 export interface DailyExecutionStats {
