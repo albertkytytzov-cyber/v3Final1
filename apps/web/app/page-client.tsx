@@ -957,13 +957,13 @@ function parseImportedPlanDate(label: string, fallbackYear: number) {
 
 function extractImportedDurationMinutes(value: string) {
   const normalized = value.toLowerCase();
-  const minuteMatch = normalized.match(/(\d+(?:[.,]\d+)?)\s*(?:мин|m|min)\b/u);
+  const minuteMatch = normalized.match(/(\d+(?:[.,]\d+)?)\s*(?:мин|m|min)(?=$|[\s/.,;:!?()-])/u);
 
   if (minuteMatch) {
     return Number(minuteMatch[1].replace(",", "."));
   }
 
-  const secondMatch = normalized.match(/(\d+(?:[.,]\d+)?)\s*(?:сек|s|sec)\b/u);
+  const secondMatch = normalized.match(/(\d+(?:[.,]\d+)?)\s*(?:сек|s|sec)(?=$|[\s/.,;:!?()-])/u);
 
   if (secondMatch) {
     return roundImportedDurationMinutes(Number(secondMatch[1].replace(",", ".")) / 60);
@@ -978,14 +978,22 @@ function roundImportedDurationMinutes(value: number) {
 
 type ImportedSetDurationUnit = "minutes" | "seconds";
 
+function hasImportedSetPattern(value: string) {
+  return /\d+\s*[xх×*]\s*\d/u.test(value);
+}
+
+function hasImportedDurationUnit(value: string) {
+  return /(?:сек|sec|s|мин|min|m)(?=$|[\s/.,;:!?()-])/iu.test(value);
+}
+
 function inferImportedSetDurationUnit(value: string, blockType?: PlanBlockType): ImportedSetDurationUnit | null {
   const normalized = value.toLowerCase();
 
-  if (!/\d+\s*[xх×*]\s*\d/u.test(normalized)) {
+  if (!hasImportedSetPattern(normalized)) {
     return null;
   }
 
-  if (/(?:сек|sec|s\b|мин|min|m\b)/iu.test(normalized)) {
+  if (hasImportedDurationUnit(normalized)) {
     return null;
   }
 
@@ -1004,24 +1012,86 @@ function importedSetDurationUnitLabel(unit: ImportedSetDurationUnit) {
   return unit === "seconds" ? "сек" : "мин";
 }
 
+function getImportedStandaloneDurationUnit(value: string): ImportedSetDurationUnit | null {
+  const normalized = normalizeImportedPlanText(value).toLowerCase();
+
+  if (/^(?:сек|s|sec)\.?$/iu.test(normalized)) {
+    return "seconds";
+  }
+
+  if (/^(?:мин|m|min)\.?$/iu.test(normalized)) {
+    return "minutes";
+  }
+
+  return null;
+}
+
+function inferDetachedImportedSetDurationUnit(volume: string, control: string) {
+  const normalizedVolume = normalizeImportedPlanText(volume);
+
+  if (!hasImportedSetPattern(normalizedVolume) || hasImportedDurationUnit(normalizedVolume)) {
+    return null;
+  }
+
+  const controlParts = normalizeImportedPlanText(control).split(/\s*\/\s*/u);
+
+  for (const part of controlParts) {
+    const standaloneUnit = getImportedStandaloneDurationUnit(part);
+
+    if (standaloneUnit) {
+      return standaloneUnit;
+    }
+  }
+
+  const leadingUnitMatch = normalizeImportedPlanText(control)
+    .toLowerCase()
+    .match(/^(сек|s|sec|мин|m|min)\.?(?:\s+|$)/iu);
+
+  if (!leadingUnitMatch) {
+    return null;
+  }
+
+  return /^(?:сек|s|sec)$/iu.test(leadingUnitMatch[1]) ? "seconds" : "minutes";
+}
+
+function removeDetachedImportedSetDurationUnit(control: string, unit: ImportedSetDurationUnit | null) {
+  if (!unit) {
+    return normalizeImportedPlanText(control);
+  }
+
+  const unitPattern =
+    unit === "seconds"
+      ? /^(?:сек|s|sec)\.?(?:\s+|$)/iu
+      : /^(?:мин|m|min)\.?(?:\s+|$)/iu;
+
+  return normalizeImportedPlanText(control)
+    .split(/\s*\/\s*/u)
+    .map((part) => part.replace(unitPattern, "").trim())
+    .filter((part) => part && getImportedStandaloneDurationUnit(part) !== unit)
+    .join(" / ");
+}
+
 function normalizeImportedVolumeText(
   name: string,
   volume: string,
   control: string,
   blockType: PlanBlockType,
+  detachedUnit: ImportedSetDurationUnit | null = null,
 ) {
   const normalizedVolume = normalizeImportedPlanText(volume);
-  const inferredUnit = inferImportedSetDurationUnit(
-    normalizeImportedPlanText(`${name} ${normalizedVolume} ${control}`),
-    blockType,
-  );
+  const inferredUnit =
+    detachedUnit ??
+    inferImportedSetDurationUnit(
+      normalizeImportedPlanText(`${name} ${normalizedVolume} ${control}`),
+      blockType,
+    );
 
   if (!inferredUnit) {
     return normalizedVolume;
   }
 
   return normalizedVolume.replace(
-    /(\d+)\s*[xх×*]\s*(\d+(?:[.,]\d+)?)(?!\s*(?:сек|s|sec|мин|m|min)\b)/iu,
+    /(\d+)\s*[xх×*]\s*(\d+(?:[.,]\d+)?)(?!\s*(?:сек|s|sec|мин|m|min)(?=$|[\s/.,;:!?()-]))/iu,
     `$1×$2 ${importedSetDurationUnitLabel(inferredUnit)}`,
   );
 }
@@ -1029,7 +1099,7 @@ function normalizeImportedVolumeText(
 function extractImportedSetDuration(value: string, inferredUnit: ImportedSetDurationUnit | null = null) {
   const match = value
     .toLowerCase()
-    .match(/(\d+)\s*[xх×*]\s*(\d+(?:[.,]\d+)?)\s*(сек|s|sec|мин|m|min)?\b/iu);
+    .match(/(\d+)\s*[xх×*]\s*(\d+(?:[.,]\d+)?)(?:\s*(сек|s|sec|мин|m|min)(?=$|[\s/.,;:!?()-]))?/iu);
 
   if (!match || (!match[3] && !inferredUnit)) {
     return null;
@@ -1143,8 +1213,16 @@ function createImportedPlanBlock(
 ): PlanTemplatePayload["blocks"][number] {
   const rawDetails = normalizeImportedPlanText(`${name} ${volume} ${control}`);
   const blockType = inferImportedBlockType(rawDetails);
-  const normalizedVolume = normalizeImportedVolumeText(name, volume, control, blockType);
-  const notes = normalizeImportedPlanText([normalizedVolume, control].filter(Boolean).join(" / "));
+  const detachedSetDurationUnit = inferDetachedImportedSetDurationUnit(volume, control);
+  const normalizedVolume = normalizeImportedVolumeText(
+    name,
+    volume,
+    control,
+    blockType,
+    detachedSetDurationUnit,
+  );
+  const normalizedControl = removeDetachedImportedSetDurationUnit(control, detachedSetDurationUnit);
+  const notes = normalizeImportedPlanText([normalizedVolume, normalizedControl].filter(Boolean).join(" / "));
   const details = normalizeImportedPlanText(`${name} ${notes}`);
   const inferredSetDurationUnit = inferImportedSetDurationUnit(details, blockType);
   const setDuration = extractImportedSetDuration(details, inferredSetDurationUnit);
@@ -1152,7 +1230,7 @@ function createImportedPlanBlock(
   const rpe = extractImportedRpe(details);
   const { sets, reps } = extractImportedSetsReps(details);
   const isMandatory = blockType !== "recovery" && blockType !== "mobility";
-  const exerciseItems = buildImportedExerciseItems(name, volume, control);
+  const exerciseItems = buildImportedExerciseItems(name, normalizedVolume, normalizedControl);
   const exercises = exerciseItems.length
     ? exerciseItems.map((item, exerciseIndex) => {
         const itemDuration = extractImportedDurationMinutes(item) ?? duration;
@@ -3919,9 +3997,18 @@ function formatExerciseTarget(
   const noteParts = splitExerciseNoteParts(item.notes);
   const workNotePart = getExerciseWorkNotePart(item, noteParts);
   const workNoteSource = workNotePart ? noteParts[0] : null;
+  const structuredSetDuration = formatStructuredSetDurationWork(item, language);
+  const inferredWorkUnit =
+    workNotePart && workNotePart !== workNoteSource
+      ? inferExerciseWorkDisplayUnit(item.name, workNoteSource ?? "")
+      : null;
+  const detachedWorkUnit =
+    inferredWorkUnit === "сек" ? "seconds" : inferredWorkUnit === "мин" ? "minutes" : null;
 
   if (workNotePart) {
     parts.push(workNotePart);
+  } else if (structuredSetDuration) {
+    parts.push(structuredSetDuration);
   } else if (item.targetSets !== null && item.targetReps !== null) {
     parts.push(`${item.targetSets} x ${item.targetReps}`);
   } else if (item.targetSets !== null) {
@@ -3946,7 +4033,7 @@ function formatExerciseTarget(
     parts.push(`${item.targetWeightKg} ${copyFor(language, { en: "kg", ru: "кг", bg: "кг" })}`);
   }
 
-  if (item.targetDurationMinutes !== null && !workNotePart) {
+  if (item.targetDurationMinutes !== null && !workNotePart && !structuredSetDuration) {
     parts.push(
       `${item.targetDurationMinutes} ${copyFor(language, {
         en: "min",
@@ -3960,7 +4047,14 @@ function formatExerciseTarget(
     parts.push(`RPE ${item.targetRpe}`);
   }
 
-  parts.push(...noteParts.filter((part) => part !== workNoteSource && part !== workNotePart));
+  parts.push(
+    ...noteParts.filter(
+      (part) =>
+        part !== workNoteSource &&
+        part !== workNotePart &&
+        (!detachedWorkUnit || getImportedStandaloneDurationUnit(part) !== detachedWorkUnit),
+    ),
+  );
 
   return parts.length ? parts.join(" / ") : "-";
 }
@@ -4010,6 +4104,47 @@ function normalizeExerciseWorkDisplay(name: string, value: string) {
   );
 }
 
+function formatExerciseDurationValue(value: number) {
+  const rounded = Math.round(value * 10) / 10;
+
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+}
+
+function formatStructuredSetDurationWork(
+  item: Pick<
+    AssignedBlockExercise,
+    "name" | "targetSets" | "targetReps" | "targetDurationMinutes"
+  >,
+  language: Language,
+) {
+  if (
+    item.targetSets === null ||
+    item.targetReps !== null ||
+    item.targetDurationMinutes === null ||
+    item.targetSets <= 0 ||
+    item.targetDurationMinutes <= 0
+  ) {
+    return null;
+  }
+
+  const displayUnit = inferExerciseWorkDisplayUnit(item.name, `${item.targetSets}×1`);
+
+  if (!displayUnit) {
+    return null;
+  }
+
+  const perSetValue =
+    displayUnit === "сек"
+      ? (item.targetDurationMinutes * 60) / item.targetSets
+      : item.targetDurationMinutes / item.targetSets;
+  const unitLabel =
+    displayUnit === "сек"
+      ? copyFor(language, { en: "sec", ru: "сек", bg: "сек" })
+      : copyFor(language, { en: "min", ru: "мин", bg: "мин" });
+
+  return `${item.targetSets}×${formatExerciseDurationValue(perSetValue)} ${unitLabel}`;
+}
+
 function getExerciseWorkNotePart(
   item: Pick<
     AssignedBlockExercise,
@@ -4035,9 +4170,14 @@ function formatExerciseWorkCell(
 ) {
   const noteParts = splitExerciseNoteParts(item.notes);
   const workNotePart = getExerciseWorkNotePart(item, noteParts);
+  const structuredSetDuration = formatStructuredSetDurationWork(item, language);
 
   if (workNotePart) {
     return workNotePart;
+  }
+
+  if (structuredSetDuration) {
+    return structuredSetDuration;
   }
 
   if (item.targetSets !== null && item.targetReps !== null) {
@@ -4066,12 +4206,28 @@ function formatExerciseWorkCell(
 function formatExerciseControlCell(
   item: Pick<
     AssignedBlockExercise,
-    "targetWeightKg" | "targetDurationMinutes" | "targetRpe" | "notes"
+    | "name"
+    | "targetSets"
+    | "targetReps"
+    | "targetWeightKg"
+    | "targetDurationMinutes"
+    | "targetRpe"
+    | "notes"
   >,
   language: Language,
 ) {
   const noteParts = splitExerciseNoteParts(item.notes);
-  const controlParts = noteParts.length > 1 ? noteParts.slice(1) : [];
+  const workNotePart = getExerciseWorkNotePart(item, noteParts);
+  const inferredWorkUnit =
+    workNotePart && workNotePart !== noteParts[0]
+      ? inferExerciseWorkDisplayUnit(item.name, noteParts[0] ?? "")
+      : null;
+  const detachedUnit =
+    inferredWorkUnit === "сек" ? "seconds" : inferredWorkUnit === "мин" ? "minutes" : null;
+  const rawControlParts = noteParts.length > 1 ? noteParts.slice(1) : [];
+  const controlParts = detachedUnit
+    ? rawControlParts.filter((part) => getImportedStandaloneDurationUnit(part) !== detachedUnit)
+    : rawControlParts;
 
   if (item.targetWeightKg !== null) {
     controlParts.unshift(`${item.targetWeightKg} ${copyFor(language, { en: "kg", ru: "кг", bg: "кг" })}`);

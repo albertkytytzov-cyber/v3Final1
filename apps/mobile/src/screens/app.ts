@@ -1909,6 +1909,20 @@ function inferExerciseWorkDisplayUnit(name: string, value: string) {
   return null;
 }
 
+function getExerciseStandaloneDurationUnit(value: string) {
+  const normalized = value.replace(/\s+/g, " ").trim().toLowerCase();
+
+  if (/^(?:сек|s|sec)\.?$/iu.test(normalized)) {
+    return "сек";
+  }
+
+  if (/^(?:мин|m|min)\.?$/iu.test(normalized)) {
+    return "мин";
+  }
+
+  return null;
+}
+
 function isExerciseVolumeNote(value: string) {
   return /\d/u.test(value) && (
     /\d+\s*[xх×*]\s*\d/iu.test(value) ||
@@ -1929,6 +1943,37 @@ function normalizeExerciseWorkDisplay(name: string, value: string) {
   );
 }
 
+function formatExerciseDurationValue(value: number) {
+  const rounded = Math.round(value * 10) / 10;
+
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+}
+
+function formatStructuredSetDurationWork(exercise: AssignedBlockExercise) {
+  if (
+    exercise.targetSets === null ||
+    exercise.targetReps !== null ||
+    exercise.targetDurationMinutes === null ||
+    exercise.targetSets <= 0 ||
+    exercise.targetDurationMinutes <= 0
+  ) {
+    return null;
+  }
+
+  const displayUnit = inferExerciseWorkDisplayUnit(exercise.name, `${exercise.targetSets}×1`);
+
+  if (!displayUnit) {
+    return null;
+  }
+
+  const perSetValue =
+    displayUnit === "сек"
+      ? (exercise.targetDurationMinutes * 60) / exercise.targetSets
+      : exercise.targetDurationMinutes / exercise.targetSets;
+
+  return `${exercise.targetSets}×${formatExerciseDurationValue(perSetValue)} ${displayUnit}`;
+}
+
 function getExerciseWorkNotePart(exercise: AssignedBlockExercise, noteParts: string[]) {
   const firstNotePart = noteParts[0];
 
@@ -1942,9 +1987,14 @@ function getExerciseWorkNotePart(exercise: AssignedBlockExercise, noteParts: str
 function formatExerciseWorkCell(exercise: AssignedBlockExercise) {
   const noteParts = splitExerciseNoteParts(exercise.notes);
   const workNotePart = getExerciseWorkNotePart(exercise, noteParts);
+  const structuredSetDuration = formatStructuredSetDurationWork(exercise);
 
   if (workNotePart) {
     return workNotePart;
+  }
+
+  if (structuredSetDuration) {
+    return structuredSetDuration;
   }
 
   if (exercise.targetSets !== null && exercise.targetReps !== null) {
@@ -1972,7 +2022,15 @@ function formatExerciseWorkCell(exercise: AssignedBlockExercise) {
 
 function formatExerciseControlCell(exercise: AssignedBlockExercise) {
   const noteParts = splitExerciseNoteParts(exercise.notes);
-  const controlParts = noteParts.length > 1 ? noteParts.slice(1) : [];
+  const workNotePart = getExerciseWorkNotePart(exercise, noteParts);
+  const inferredWorkUnit =
+    workNotePart && workNotePart !== noteParts[0]
+      ? inferExerciseWorkDisplayUnit(exercise.name, noteParts[0] ?? "")
+      : null;
+  const rawControlParts = noteParts.length > 1 ? noteParts.slice(1) : [];
+  const controlParts = inferredWorkUnit
+    ? rawControlParts.filter((part) => getExerciseStandaloneDurationUnit(part) !== inferredWorkUnit)
+    : rawControlParts;
 
   if (exercise.targetWeightKg !== null) {
     controlParts.unshift(`${exercise.targetWeightKg} кг`);
@@ -2004,13 +2062,23 @@ function formatExerciseTarget(exercise: AssignedBlockExercise) {
   const noteParts = splitExerciseNoteParts(exercise.notes);
   const workNotePart = getExerciseWorkNotePart(exercise, noteParts);
   const workNoteSource = workNotePart ? noteParts[0] : null;
+  const structuredSetDuration = formatStructuredSetDurationWork(exercise);
+  const inferredWorkUnit =
+    workNotePart && workNotePart !== workNoteSource
+      ? inferExerciseWorkDisplayUnit(exercise.name, workNoteSource ?? "")
+      : null;
   const parts = [
-    workNotePart || (exercise.targetSets ? `${exercise.targetSets} подх.` : ""),
+    workNotePart || structuredSetDuration || (exercise.targetSets ? `${exercise.targetSets} подх.` : ""),
     workNotePart || !exercise.targetReps ? "" : `${exercise.targetReps} повт.`,
     exercise.targetWeightKg ? `${exercise.targetWeightKg} кг` : "",
-    exercise.targetDurationMinutes && !workNotePart ? `${exercise.targetDurationMinutes} мин.` : "",
+    exercise.targetDurationMinutes && !workNotePart && !structuredSetDuration ? `${exercise.targetDurationMinutes} мин.` : "",
     exercise.targetRpe ? `RPE ${exercise.targetRpe}` : "",
-    ...noteParts.filter((part) => part !== workNoteSource && part !== workNotePart),
+    ...noteParts.filter(
+      (part) =>
+        part !== workNoteSource &&
+        part !== workNotePart &&
+        (!inferredWorkUnit || getExerciseStandaloneDurationUnit(part) !== inferredWorkUnit),
+    ),
   ].filter(Boolean);
 
   return parts.join(" · ") || "плановые значения не заданы";
