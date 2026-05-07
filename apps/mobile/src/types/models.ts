@@ -96,6 +96,7 @@ export interface MobileAppState {
   selectedScreen: MobileScreen;
   selectedAthleteId: string | null;
   executionDateFilter: string | null;
+  planDateFilter: string | null;
   isOnline: boolean;
   isBusy: boolean;
   isSyncing: boolean;

@@ -420,7 +420,8 @@ button {
   font-size: 1.12rem;
 }
 
-.execution-date-filter {
+.execution-date-filter,
+.plan-date-filter {
   display: grid;
   gap: 6px;
   padding: 10px 12px;
@@ -429,14 +430,16 @@ button {
   background: rgba(240, 253, 250, 0.72);
 }
 
-.execution-date-filter span {
+.execution-date-filter span,
+.plan-date-filter span {
   color: var(--muted);
   font-size: 0.74rem;
   font-weight: 900;
   text-transform: uppercase;
 }
 
-.execution-date-filter select {
+.execution-date-filter select,
+.plan-date-filter select {
   width: 100%;
   min-height: 44px;
   padding: 9px 11px;

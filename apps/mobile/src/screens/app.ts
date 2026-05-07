@@ -58,6 +58,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
     selectedScreen: "dashboard",
     selectedAthleteId: loadSelectedAthleteId(),
     executionDateFilter: null,
+    planDateFilter: null,
     isOnline: navigator.onLine,
     isBusy: false,
     isSyncing: false,
@@ -581,6 +582,11 @@ export function bootstrapMobileApp(root: HTMLElement) {
       update({ executionDateFilter });
     });
 
+    root.querySelector<HTMLSelectElement>("[data-plan-date-filter]")?.addEventListener("change", (event) => {
+      const planDateFilter = (event.currentTarget as HTMLSelectElement).value || null;
+      update({ planDateFilter });
+    });
+
     root.querySelector<HTMLButtonElement>("[data-refresh]")?.addEventListener("click", () => {
       void refreshData();
     });
@@ -596,7 +602,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
     root.querySelector<HTMLSelectElement>("[data-athlete-select]")?.addEventListener("change", (event) => {
       const selectedAthleteId = (event.currentTarget as HTMLSelectElement).value || null;
       saveSelectedAthleteId(selectedAthleteId);
-      update({ executionDateFilter: null, selectedAthleteId });
+      update({ executionDateFilter: null, planDateFilter: null, selectedAthleteId });
     });
 
     root.querySelectorAll<HTMLButtonElement>("[data-athlete-card]").forEach((button) => {
@@ -605,6 +611,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
         saveSelectedAthleteId(selectedAthleteId);
         update({
           executionDateFilter: null,
+          planDateFilter: null,
           selectedAthleteId,
           selectedScreen: "dashboard",
         });
@@ -875,20 +882,55 @@ function renderAthletesScreen(state: MobileAppState) {
 }
 
 function renderPlansScreen(state: MobileAppState, athleteId: string | null) {
-  const plans = getPlansForAthlete(state, athleteId);
+  const allPlans = sortPlansForExecution(getPlansForAthlete(state, athleteId));
+  const dateOptions = getPlanDateOptions(allPlans);
+  const selectedDate = state.planDateFilter && dateOptions.some((option) => option.date === state.planDateFilter)
+    ? state.planDateFilter
+    : "";
+  const plans = selectedDate
+    ? allPlans.filter((plan) => plan.day.dayDate === selectedDate)
+    : allPlans;
 
-  if (plans.length === 0) {
+  if (allPlans.length === 0) {
     return renderEmpty("Планов пока нет", "После обновления здесь появятся назначенные тренировочные дни.");
   }
 
   return `
     <div class="screen-head">
       <h2>Планы</h2>
-      <p>${plans.length} назначенных дней</p>
+      <p>${selectedDate
+        ? `${plans.length} ${formatAssignedDayCountLabel(plans.length)} на выбранную дату`
+        : `${allPlans.length} ${formatAssignedDayCountLabel(allPlans.length)}`}</p>
     </div>
+    ${renderPlanDateFilter(dateOptions, selectedDate)}
     <div class="list-stack">
-      ${plans.map((plan) => renderPlanCard(plan)).join("")}
+      ${plans.length > 0
+        ? plans.map((plan) => renderPlanCard(plan)).join("")
+        : renderEmpty("На выбранную дату нет плана", "Выберите другой день из назначенного плана.")}
     </div>
+  `;
+}
+
+function renderPlanDateFilter(
+  options: Array<{ date: string; label: string }>,
+  selectedDate: string,
+) {
+  if (options.length <= 1) {
+    return "";
+  }
+
+  return `
+    <label class="plan-date-filter">
+      <span>День плана</span>
+      <select data-plan-date-filter>
+        <option value="" ${selectedDate ? "" : "selected"}>Все дни по плану</option>
+        ${options.map((option) => `
+          <option value="${escapeHtml(option.date)}" ${selectedDate === option.date ? "selected" : ""}>
+            ${escapeHtml(formatDate(option.date))} · ${escapeHtml(option.label)}
+          </option>
+        `).join("")}
+      </select>
+    </label>
   `;
 }
 
@@ -1846,6 +1888,24 @@ function getExecutionPlanGroups(plans: AssignedPlanSummary[]): ExecutionPlanGrou
     .filter((group) => group.blockItems.length > 0);
 }
 
+function getPlanDateOptions(plans: AssignedPlanSummary[]) {
+  const seenDates = new Set<string>();
+
+  return plans
+    .filter((plan) => {
+      if (seenDates.has(plan.day.dayDate)) {
+        return false;
+      }
+
+      seenDates.add(plan.day.dayDate);
+      return true;
+    })
+    .map((plan) => ({
+      date: plan.day.dayDate,
+      label: plan.day.label,
+    }));
+}
+
 function getExecutionDateOptions(groups: ExecutionPlanGroup[]) {
   const seenDates = new Set<string>();
 
@@ -2427,6 +2487,25 @@ function formatInputValue(value: number | null | undefined) {
 
 function formatLoadValue(value: number) {
   return value > 0 ? String(roundLoad(value)) : "0";
+}
+
+function formatAssignedDayCountLabel(count: number) {
+  const lastTwoDigits = count % 100;
+  const lastDigit = count % 10;
+
+  if (lastTwoDigits >= 11 && lastTwoDigits <= 14) {
+    return "назначенных дней";
+  }
+
+  if (lastDigit === 1) {
+    return "назначенный день";
+  }
+
+  if (lastDigit >= 2 && lastDigit <= 4) {
+    return "назначенных дня";
+  }
+
+  return "назначенных дней";
 }
 
 function formatExecutionHistoryDetails(result: ExecutionResult) {
