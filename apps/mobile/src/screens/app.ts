@@ -1221,7 +1221,7 @@ function renderExecutionPlanGroup(
     0,
   );
   const completedBlockCount = group.blockItems.filter((item) =>
-    Boolean(getExecutionResultForBlock(state, item.plan.id, item.block.id)),
+    isExecutionResultCompleted(getExecutionResultForBlock(state, item.plan.id, item.block.id)),
   ).length;
 
   return `
@@ -1810,6 +1810,10 @@ function getExerciseResult(
   return result?.exerciseResults?.find((exercise) =>
     exercise.assignedExerciseId === assignedExerciseId
   ) ?? null;
+}
+
+function isExecutionResultCompleted(result: ExecutionResult | null) {
+  return result?.completed === true;
 }
 
 function getCoachDiaryEntriesForPlan(state: MobileAppState, assignedPlanId: string) {
