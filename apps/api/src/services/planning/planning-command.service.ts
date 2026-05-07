@@ -218,6 +218,85 @@ async function upsertPlannedLoadLogsForAssignedPlan(
   }
 }
 
+async function syncMesocycleWeekTargetsForDates(input: {
+  athleteId: string;
+  dates: string[];
+}) {
+  const dates = Array.from(new Set(input.dates.filter(Boolean)));
+
+  if (!dates.length) {
+    return;
+  }
+
+  await pool.query(
+    `
+      WITH affected_weeks AS (
+        SELECT DISTINCT
+          mesocycles.id AS mesocycle_id,
+          (week.value ->> 'startDate')::date AS start_date,
+          (week.value ->> 'endDate')::date AS end_date
+        FROM mesocycles
+        CROSS JOIN LATERAL jsonb_array_elements(mesocycles.week_plan_json) AS week(value)
+        WHERE mesocycles.athlete_id = $1
+          AND EXISTS (
+            SELECT 1
+            FROM unnest($2::date[]) AS assigned_dates(day_date)
+            WHERE assigned_dates.day_date BETWEEN
+              (week.value ->> 'startDate')::date AND (week.value ->> 'endDate')::date
+          )
+      ),
+      week_loads AS (
+        SELECT
+          affected_weeks.mesocycle_id,
+          affected_weeks.start_date,
+          affected_weeks.end_date,
+          ROUND(COALESCE(SUM(training_load_logs.planned_load), 0)::numeric, 1) AS target_load
+        FROM affected_weeks
+        LEFT JOIN training_load_logs
+          ON training_load_logs.athlete_id = $1
+         AND training_load_logs.log_date BETWEEN affected_weeks.start_date AND affected_weeks.end_date
+        GROUP BY
+          affected_weeks.mesocycle_id,
+          affected_weeks.start_date,
+          affected_weeks.end_date
+        HAVING COALESCE(SUM(training_load_logs.planned_load), 0) > 0
+      ),
+      rebuilt_mesocycles AS (
+        SELECT
+          mesocycles.id,
+          jsonb_agg(
+            CASE
+              WHEN week_loads.mesocycle_id IS NOT NULL
+                THEN jsonb_set(
+                  week.value,
+                  '{targetLoad}',
+                  to_jsonb(week_loads.target_load),
+                  false
+                )
+              ELSE week.value
+            END
+            ORDER BY week.ordinality
+          ) AS week_plan_json
+        FROM mesocycles
+        CROSS JOIN LATERAL jsonb_array_elements(mesocycles.week_plan_json)
+          WITH ORDINALITY AS week(value, ordinality)
+        LEFT JOIN week_loads
+          ON week_loads.mesocycle_id = mesocycles.id
+         AND week_loads.start_date = (week.value ->> 'startDate')::date
+         AND week_loads.end_date = (week.value ->> 'endDate')::date
+        WHERE mesocycles.id IN (SELECT mesocycle_id FROM week_loads)
+        GROUP BY mesocycles.id
+      )
+      UPDATE mesocycles
+      SET week_plan_json = rebuilt_mesocycles.week_plan_json,
+          updated_at = NOW()
+      FROM rebuilt_mesocycles
+      WHERE mesocycles.id = rebuilt_mesocycles.id
+    `,
+    [input.athleteId, dates],
+  );
+}
+
 async function insertAssignedPlanFromTemplate(input: {
   athleteId: string;
   coachUserId: string;
@@ -723,6 +802,10 @@ export async function assignPlan(input: {
   });
   const assignedPlan = await getAssignedPlanById(assignedPlanId);
   await upsertPlannedLoadLogsForAssignedPlan(assignedPlan);
+  await syncMesocycleWeekTargetsForDates({
+    athleteId: input.payload.athleteId,
+    dates: [input.payload.startDate],
+  });
 
   return {
     assignedPlan,
@@ -774,6 +857,11 @@ export async function autoAssignMicrocycle(input: {
       throw error;
     }
   }
+
+  await syncMesocycleWeekTargetsForDates({
+    athleteId: input.payload.athleteId,
+    dates: createdPlans.map((plan) => plan.day.dayDate),
+  });
 
   return {
     assignedPlans: createdPlans,
