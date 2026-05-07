@@ -184,7 +184,16 @@ async function loadExecutionResults(whereSql: string, params: unknown[]) {
   return mapExecutionResults(result.rows);
 }
 
-function summarizeExercisePayloads(result: ExecutionResultInput) {
+function hasExerciseCompletionValue(
+  exercise: NonNullable<ExecutionResultInput["exercises"]>[number],
+) {
+  return exercise.completed || exercise.setsCompleted !== null;
+}
+
+function summarizeExercisePayloads(
+  result: ExecutionResultInput,
+  assignedExerciseCount: number,
+) {
   if (!result.exercises?.length) {
     return {
       completed: result.completed,
@@ -221,9 +230,14 @@ function summarizeExercisePayloads(result: ExecutionResultInput) {
     (weightValues.length
       ? Number((weightValues.reduce((sum, value) => sum + value, 0) / weightValues.length).toFixed(2))
       : null);
+  const completedExerciseIds = new Set(
+    result.exercises
+      .filter(hasExerciseCompletionValue)
+      .map((exercise) => exercise.assignedExerciseId),
+  );
   const completed =
     result.completed ||
-    result.exercises.every((exercise) => exercise.completed || exercise.setsCompleted !== null);
+    (assignedExerciseCount > 0 && completedExerciseIds.size >= assignedExerciseCount);
 
   return {
     completed,
@@ -282,6 +296,7 @@ function estimateActualLoad(input: {
   completed: boolean;
   actualDurationMinutes: number | null;
   actualRpe: number | null;
+  assignedExerciseCount: number;
   exercises?: ExecutionResultInput["exercises"];
 }) {
   if (input.actualDurationMinutes !== null && input.actualRpe !== null) {
@@ -298,10 +313,16 @@ function estimateActualLoad(input: {
     return 0;
   }
 
-  const completedExercises = exercises.filter(hasExerciseExecutionValue).length;
+  const assignedExerciseCount = input.assignedExerciseCount || exercises.length;
+  const completedExercises = new Set(
+    exercises
+      .filter(hasExerciseExecutionValue)
+      .map((exercise) => exercise.assignedExerciseId),
+  ).size;
+  const completionRatio = Math.min(completedExercises, assignedExerciseCount) / assignedExerciseCount;
 
   return completedExercises
-    ? Number(((input.plannedLoad * completedExercises) / exercises.length).toFixed(2))
+    ? Number((input.plannedLoad * completionRatio).toFixed(2))
     : 0;
 }
 
@@ -381,6 +402,7 @@ export async function submitExecutionResult(
       .map((row) => row.assigned_exercise_id)
       .filter((value): value is string => Boolean(value)),
   );
+  const assignedExerciseCount = allowedExerciseIds.size;
 
   if (
     input.result.exercises?.some(
@@ -393,7 +415,7 @@ export async function submitExecutionResult(
     );
   }
 
-  const summary = summarizeExercisePayloads(input.result);
+  const summary = summarizeExercisePayloads(input.result, assignedExerciseCount);
   const result = await pool.query<ExecutionResultRow>(
     `
       INSERT INTO exercise_results (
@@ -591,6 +613,7 @@ export async function submitExecutionResult(
       completed: summary.completed,
       actualDurationMinutes,
       actualRpe,
+      assignedExerciseCount,
       exercises: input.result.exercises,
     });
 
