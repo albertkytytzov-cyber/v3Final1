@@ -615,9 +615,9 @@ button {
   background: #b91c1c;
 }
 
-.execution-day-comment {
+.execution-day-analytics-card {
   display: grid;
-  gap: 5px;
+  gap: 10px;
   margin: 10px 12px 0;
   padding: 10px 12px;
   border: 1px solid rgba(15, 118, 110, 0.16);
@@ -625,25 +625,91 @@ button {
   background: rgba(255, 255, 255, 0.82);
 }
 
-.execution-day-comment strong {
+.execution-day-analytics-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.execution-day-analytics-head strong,
+.execution-day-analytics-comment strong {
   color: var(--text);
   font-size: 0.84rem;
   font-weight: 950;
 }
 
-.execution-day-comment p {
+.execution-day-analytics-head span {
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: #dff2ef;
+  color: var(--accent-dark);
+  font-size: 0.74rem;
+  font-weight: 900;
+}
+
+.execution-day-analytics-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.execution-day-analytics-metric {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 9px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 12px;
+  background: rgba(248, 252, 255, 0.88);
+}
+
+.execution-day-analytics-metric span,
+.execution-day-analytics-metric small,
+.execution-day-analytics-comment small {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.execution-day-analytics-metric strong {
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 950;
+  line-height: 1.1;
+}
+
+.execution-day-analytics-metric.readiness-green {
+  border-color: rgba(15, 118, 110, 0.28);
+  background: #ecfdf5;
+}
+
+.execution-day-analytics-metric.readiness-yellow {
+  border-color: rgba(201, 121, 43, 0.28);
+  background: #fff7ed;
+}
+
+.execution-day-analytics-metric.readiness-red {
+  border-color: rgba(185, 28, 28, 0.24);
+  background: #fef2f2;
+}
+
+.execution-day-analytics-comment {
+  display: grid;
+  gap: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.execution-day-analytics-comment p {
   margin: 0;
   color: var(--text);
   font-size: 0.86rem;
   font-weight: 750;
   line-height: 1.35;
   overflow-wrap: anywhere;
-}
-
-.execution-day-comment small {
-  color: var(--muted);
-  font-size: 0.74rem;
-  font-weight: 800;
 }
 
 .mobile-plan-day-card-body {

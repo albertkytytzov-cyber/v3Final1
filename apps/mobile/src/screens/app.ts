@@ -1249,6 +1249,7 @@ interface ExecutionDaySummary {
   plannedLoad: number;
   actualLoad: number;
   latestDiaryEntry: CoachDiaryEntry | null;
+  readinessEntry: ReadinessEntry | null;
 }
 
 function renderExecutionForm(state: MobileAppState, plans: AssignedPlanSummary[]) {
@@ -1349,9 +1350,7 @@ function renderExecutionPlanGroup(
         <em>${daySummary.completedBlockCount}/${blockCount}</em>
       </summary>
       <div class="mobile-plan-day-card-body">
-        ${daySummary.latestDiaryEntry || canSubmitCoachDiary
-          ? renderExecutionDayCoachComment(daySummary.latestDiaryEntry)
-          : ""}
+        ${renderExecutionDayAnalyticsCard(daySummary)}
         ${group.plan.day.sessions.map((session) => `
           <section class="mobile-plan-session">
             <h4>${escapeHtml(session.name)}</h4>
@@ -1398,16 +1397,44 @@ function renderExecutionPlanGroup(
   `;
 }
 
-function renderExecutionDayCoachComment(entry: CoachDiaryEntry | null) {
+function renderExecutionDayAnalyticsCard(summary: ExecutionDaySummary) {
   return `
-    <aside class="execution-day-comment">
-      <strong>Комментарий тренера</strong>
-      ${entry
-        ? `
-          <p>${escapeHtml(entry.notes)}</p>
-          <small>${escapeHtml(entry.coachName)} · ${formatDateTime(entry.updatedAt)}</small>
-        `
-        : "<p>Комментария за этот день пока нет.</p>"}
+    <aside class="execution-day-analytics-card">
+      <div class="execution-day-analytics-head">
+        <strong>Аналитика дня</strong>
+        <span>${escapeHtml(summary.statusLabel)}</span>
+      </div>
+      <div class="execution-day-analytics-grid">
+        <div class="execution-day-analytics-metric">
+          <span>Выполнение</span>
+          <strong>${summary.completedBlockCount}/${summary.completedBlockCount + summary.partialBlockCount + summary.missedBlockCount}</strong>
+          <small>${escapeHtml(formatExecutionDayBreakdown(summary))}</small>
+        </div>
+        <div class="execution-day-analytics-metric">
+          <span>Плановая нагрузка</span>
+          <strong>${formatLoadValue(summary.plannedLoad)}</strong>
+          <small>по назначенному дню</small>
+        </div>
+        <div class="execution-day-analytics-metric">
+          <span>Фактическая нагрузка</span>
+          <strong>${formatLoadValue(summary.actualLoad)}</strong>
+          <small>${escapeHtml(formatExecutionLoadDelta(summary))}</small>
+        </div>
+        <div class="execution-day-analytics-metric readiness-${escapeHtml(summary.readinessEntry?.status ?? "none")}">
+          <span>Готовность</span>
+          <strong>${summary.readinessEntry ? summary.readinessEntry.score : "-"}</strong>
+          <small>${escapeHtml(summary.readinessEntry ? formatReadinessStatus(summary.readinessEntry.status) : "нет записи")}</small>
+        </div>
+      </div>
+      <div class="execution-day-analytics-comment">
+        <strong>Комментарий тренера</strong>
+        ${summary.latestDiaryEntry
+          ? `
+            <p>${escapeHtml(summary.latestDiaryEntry.notes)}</p>
+            <small>${escapeHtml(summary.latestDiaryEntry.coachName)} · ${formatDateTime(summary.latestDiaryEntry.updatedAt)}</small>
+          `
+          : "<p>Комментария за этот день пока нет.</p>"}
+      </div>
     </aside>
   `;
 }
@@ -1966,9 +1993,20 @@ function getExecutionDaySummary(
     missedBlockCount,
     partialBlockCount,
     plannedLoad: roundLoad(plannedLoad),
+    readinessEntry: getReadinessEntryForDate(state, group.plan.day.dayDate),
     status,
     statusLabel: getExecutionDayStatusLabel(status),
   };
+}
+
+function getReadinessEntryForDate(state: MobileAppState, date: string) {
+  const entries = state.data.readinessHistory.length
+    ? state.data.readinessHistory
+    : state.data.readinessEntry
+      ? [state.data.readinessEntry]
+      : [];
+
+  return entries.find((entry) => entry.entryDate === date) ?? null;
 }
 
 function estimateAssignedBlockLoad(block: AssignedPlanBlock) {
@@ -2487,6 +2525,20 @@ function formatInputValue(value: number | null | undefined) {
 
 function formatLoadValue(value: number) {
   return value > 0 ? String(roundLoad(value)) : "0";
+}
+
+function formatExecutionDayBreakdown(summary: ExecutionDaySummary) {
+  return `${summary.completedBlockCount} вып. · ${summary.partialBlockCount} част. · ${summary.missedBlockCount} нет`;
+}
+
+function formatExecutionLoadDelta(summary: ExecutionDaySummary) {
+  const delta = roundLoad(summary.actualLoad - summary.plannedLoad);
+
+  if (delta === 0) {
+    return "по плану";
+  }
+
+  return delta > 0 ? `+${delta} к плану` : `${delta} к плану`;
 }
 
 function formatAssignedDayCountLabel(count: number) {
