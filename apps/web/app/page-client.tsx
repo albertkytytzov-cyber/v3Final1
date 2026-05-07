@@ -3079,6 +3079,243 @@ function localizedPlannerSuggestionMessage(
   return suggestion.message;
 }
 
+function formatPlannerLoad(value: number | null | undefined, language: Language) {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return copyFor(language, { en: "not calculated", ru: "не рассчитана", bg: "не е изчислено" });
+  }
+
+  return Number(value.toFixed(1)).toString();
+}
+
+function localizedPlannerSuggestionDetails(
+  suggestion: PlannerSuggestion,
+  language: Language,
+  pack: TemplatePackRecommendation | null,
+  templates: PlanTemplateSummary[],
+) {
+  const day = localizedPlannerDayFromOffset(suggestion.dayOffset, language);
+  const targetDay =
+    suggestion.targetDayOffset === null
+      ? ""
+      : localizedPlannerDayFromOffset(suggestion.targetDayOffset, language);
+  const currentItem =
+    suggestion.dayOffset === null || !pack
+      ? null
+      : pack.items.find((item) => item.dayOffset === suggestion.dayOffset) ?? null;
+  const previousItem =
+    currentItem && pack
+      ? pack.items.find((item) => item.dayOffset === currentItem.dayOffset - 1) ?? null
+      : null;
+  const nextItem =
+    currentItem && pack
+      ? pack.items.find((item) => item.dayOffset === currentItem.dayOffset + 1) ?? null
+      : null;
+  const neighboringItems = [previousItem, nextItem].filter(
+    (item): item is TemplatePackDraftItem => Boolean(item),
+  );
+  const sharpestNeighbor = currentItem
+    ? neighboringItems
+        .map((item) => ({
+          item,
+          delta: Math.abs(currentItem.estimatedLoad - item.estimatedLoad),
+        }))
+        .sort((left, right) => right.delta - left.delta)[0] ?? null
+    : null;
+  const highestLoad = pack?.items.length
+    ? Math.max(...pack.items.map((item) => item.estimatedLoad))
+    : null;
+  const recommendedTemplate = suggestion.recommendedTemplateId
+    ? templates.find((template) => template.id === suggestion.recommendedTemplateId) ?? null
+    : null;
+  const recommendedLoad = recommendedTemplate
+    ? estimateTemplateLoadForDay(recommendedTemplate, suggestion.recommendedTemplateDayIndex)
+    : null;
+  const details: string[] = [];
+
+  if (suggestion.code === "reduce_slot_load") {
+    if (currentItem) {
+      details.push(
+        copyFor(language, {
+          en: `Current ${day} load is ${formatPlannerLoad(currentItem.estimatedLoad, language)}${
+            highestLoad !== null && currentItem.estimatedLoad >= highestLoad
+              ? ", the highest slot in this week"
+              : ""
+          }.`,
+          ru: `Текущая нагрузка в ${day}: ${formatPlannerLoad(currentItem.estimatedLoad, language)}${
+            highestLoad !== null && currentItem.estimatedLoad >= highestLoad
+              ? ", это самый высокий слот недели"
+              : ""
+          }.`,
+          bg: `Текущото натоварване в ${day}: ${formatPlannerLoad(currentItem.estimatedLoad, language)}${
+            highestLoad !== null && currentItem.estimatedLoad >= highestLoad
+              ? ", това е най-високият слот за седмицата"
+              : ""
+          }.`,
+        }),
+      );
+    }
+
+    if (sharpestNeighbor) {
+      const neighborDay = localizedPlannerDayFromOffset(sharpestNeighbor.item.dayOffset, language);
+      details.push(
+        copyFor(language, {
+          en: `${neighborDay} is ${formatPlannerLoad(
+            sharpestNeighbor.item.estimatedLoad,
+            language,
+          )}; the difference is ${formatPlannerLoad(
+            sharpestNeighbor.delta,
+            language,
+          )}, so the load curve becomes too sharp.`,
+          ru: `${neighborDay} имеет нагрузку ${formatPlannerLoad(
+            sharpestNeighbor.item.estimatedLoad,
+            language,
+          )}; разница ${formatPlannerLoad(
+            sharpestNeighbor.delta,
+            language,
+          )}, поэтому кривая нагрузки получается слишком резкой.`,
+          bg: `${neighborDay} има натоварване ${formatPlannerLoad(
+            sharpestNeighbor.item.estimatedLoad,
+            language,
+          )}; разликата е ${formatPlannerLoad(
+            sharpestNeighbor.delta,
+            language,
+          )}, затова кривата на натоварването става твърде рязка.`,
+        }),
+      );
+    }
+
+    if (pack?.mesocycleWeek) {
+      details.push(
+        copyFor(language, {
+          en: `Weekly plan load is ${formatPlannerLoad(
+            pack.totalPlannedLoad,
+            language,
+          )} against mesocycle target ${formatPlannerLoad(
+            pack.mesocycleWeek.targetLoad,
+            language,
+          )}; delta ${formatPlannerLoad(pack.targetLoadDelta, language)}.`,
+          ru: `Нагрузка недели ${formatPlannerLoad(
+            pack.totalPlannedLoad,
+            language,
+          )} при цели мезоцикла ${formatPlannerLoad(
+            pack.mesocycleWeek.targetLoad,
+            language,
+          )}; отклонение ${formatPlannerLoad(pack.targetLoadDelta, language)}.`,
+          bg: `Седмичното натоварване е ${formatPlannerLoad(
+            pack.totalPlannedLoad,
+            language,
+          )} при цел на мезоцикъла ${formatPlannerLoad(
+            pack.mesocycleWeek.targetLoad,
+            language,
+          )}; отклонение ${formatPlannerLoad(pack.targetLoadDelta, language)}.`,
+        }),
+      );
+    }
+
+    if (recommendedTemplate) {
+      details.push(
+        copyFor(language, {
+          en: `Suggested replacement: ${translateKnownTemplateText(
+            recommendedTemplate.name,
+            language,
+          )}, estimated slot load ${formatPlannerLoad(recommendedLoad, language)}.`,
+          ru: `Предлагаемая замена: ${translateKnownTemplateText(
+            recommendedTemplate.name,
+            language,
+          )}, ожидаемая нагрузка слота ${formatPlannerLoad(recommendedLoad, language)}.`,
+          bg: `Предложена замяна: ${translateKnownTemplateText(
+            recommendedTemplate.name,
+            language,
+          )}, очаквано натоварване на слота ${formatPlannerLoad(recommendedLoad, language)}.`,
+        }),
+      );
+    }
+  }
+
+  if (suggestion.code === "increase_slot_load" && currentItem) {
+    details.push(
+      copyFor(language, {
+        en: `${day} is the lightest available slot at ${formatPlannerLoad(
+          currentItem.estimatedLoad,
+          language,
+        )}, while the week is below the mesocycle target.`,
+        ru: `${day} сейчас один из самых лёгких слотов: ${formatPlannerLoad(
+          currentItem.estimatedLoad,
+          language,
+        )}, при этом неделя ниже цели мезоцикла.`,
+        bg: `${day} е един от най-леките слотов: ${formatPlannerLoad(
+          currentItem.estimatedLoad,
+          language,
+        )}, а седмицата е под целта на мезоцикъла.`,
+      }),
+    );
+  }
+
+  if (suggestion.code === "recover_day_swap" && currentItem) {
+    details.push(
+      copyFor(language, {
+        en: `${day} is carrying ${formatPlannerLoad(
+          currentItem.estimatedLoad,
+          language,
+        )}; recovery protects adaptation when nearby days are dense.`,
+        ru: `${day} несёт нагрузку ${formatPlannerLoad(
+          currentItem.estimatedLoad,
+          language,
+        )}; восстановительный слот защищает адаптацию, когда рядом плотные дни.`,
+        bg: `${day} носи натоварване ${formatPlannerLoad(
+          currentItem.estimatedLoad,
+          language,
+        )}; възстановителният слот пази адаптацията при плътни съседни дни.`,
+      }),
+    );
+  }
+
+  if (suggestion.code === "activation_swap" && currentItem) {
+    details.push(
+      copyFor(language, {
+        en: `${day} is too demanding for taper/competition context: load ${formatPlannerLoad(
+          currentItem.estimatedLoad,
+          language,
+        )}.`,
+        ru: `${day} слишком тяжёлый для подводки или соревновательного контекста: нагрузка ${formatPlannerLoad(
+          currentItem.estimatedLoad,
+          language,
+        )}.`,
+        bg: `${day} е твърде тежък за тейпър или състезателен контекст: натоварване ${formatPlannerLoad(
+          currentItem.estimatedLoad,
+          language,
+        )}.`,
+      }),
+    );
+  }
+
+  if (suggestion.code === "move_specific_day" && targetDay) {
+    details.push(
+      copyFor(language, {
+        en: `Moving from ${day} to ${targetDay} keeps the specific work but separates it from calendar pressure.`,
+        ru: `Перенос с ${day} на ${targetDay} сохраняет специальную работу, но разводит её с календарной плотностью.`,
+        bg: `Преместването от ${day} към ${targetDay} запазва специфичната работа, но я отделя от календарната плътност.`,
+      }),
+    );
+  }
+
+  if (suggestion.code === "resolve_overlap") {
+    details.push(
+      copyFor(language, {
+        en: `${day} already has an assigned calendar item, so stacking another primary session can distort execution and analytics.`,
+        ru: `На ${day} уже есть назначение в календаре, поэтому ещё одна основная сессия может исказить выполнение и аналитику.`,
+        bg: `В ${day} вече има назначение в календара, затова още една основна сесия може да изкриви изпълнението и аналитиката.`,
+      }),
+    );
+  }
+
+  if (!details.length && suggestion.message) {
+    details.push(suggestion.message);
+  }
+
+  return details;
+}
+
 function translateKnownMesocycleText(value: string | null | undefined, language: Language) {
   if (!value) {
     return "";
@@ -17105,53 +17342,69 @@ export function PageClient({
                     </div>
                     {templatePack?.suggestions?.length ? (
                       <ul className="planner-suggestion-list">
-                        {templatePack.suggestions.map((suggestion) => (
-                          <li
-                            className="planner-suggestion-item"
-                            key={`${suggestion.code}-${suggestion.dayOffset}-${suggestion.targetDayOffset}-${suggestion.recommendedTemplateId}`}
-                          >
-                            <div className="planner-suggestion-copy">
-                              <span>{localizedPlannerSuggestionMessage(suggestion, language)}</span>
-                              {suggestion.recommendedTemplateName ? (
-                                <small>
-                                  {copyFor(language, {
-                                    en: `Recommended template: ${translateKnownTemplateText(
-                                      suggestion.recommendedTemplateName,
-                                      language,
-                                    )}.`,
-                                    ru: `Рекомендованный шаблон: ${translateKnownTemplateText(
-                                      suggestion.recommendedTemplateName,
-                                      language,
-                                    )}.`,
-                                    bg: `Препоръчан шаблон: ${translateKnownTemplateText(
-                                      suggestion.recommendedTemplateName,
-                                      language,
-                                    )}.`,
-                                  })}
-                                </small>
-                              ) : null}
-                              {suggestion.feedback ? (
-                                <small
-                                  className={`planner-feedback-badge ${suggestion.feedback.label}`}
-                                >
-                                  {plannerSuggestionFeedbackSummary(suggestion.feedback)}
-                                </small>
-                              ) : null}
-                            </div>
-                            <button
-                              className="secondary-button"
-                              disabled={busy}
-                              onClick={() => handleApplyPlannerSuggestion(suggestion)}
-                              type="button"
+                        {templatePack.suggestions.map((suggestion) => {
+                          const suggestionDetails = localizedPlannerSuggestionDetails(
+                            suggestion,
+                            language,
+                            templatePack,
+                            planTemplates,
+                          );
+
+                          return (
+                            <li
+                              className="planner-suggestion-item"
+                              key={`${suggestion.code}-${suggestion.dayOffset}-${suggestion.targetDayOffset}-${suggestion.recommendedTemplateId}`}
                             >
-                              {copyFor(language, {
-                                en: "Apply suggestion",
-                                ru: "Применить совет",
-                                bg: "Приложи предложението",
-                              })}
-                            </button>
-                          </li>
-                        ))}
+                              <div className="planner-suggestion-copy">
+                                <span>{localizedPlannerSuggestionMessage(suggestion, language)}</span>
+                                {suggestionDetails.length ? (
+                                  <ul className="planner-suggestion-details">
+                                    {suggestionDetails.map((detail, detailIndex) => (
+                                      <li key={`${suggestion.code}-${detailIndex}`}>{detail}</li>
+                                    ))}
+                                  </ul>
+                                ) : null}
+                                {suggestion.recommendedTemplateName ? (
+                                  <small>
+                                    {copyFor(language, {
+                                      en: `Recommended template: ${translateKnownTemplateText(
+                                        suggestion.recommendedTemplateName,
+                                        language,
+                                      )}.`,
+                                      ru: `Рекомендованный шаблон: ${translateKnownTemplateText(
+                                        suggestion.recommendedTemplateName,
+                                        language,
+                                      )}.`,
+                                      bg: `Препоръчан шаблон: ${translateKnownTemplateText(
+                                        suggestion.recommendedTemplateName,
+                                        language,
+                                      )}.`,
+                                    })}
+                                  </small>
+                                ) : null}
+                                {suggestion.feedback ? (
+                                  <small
+                                    className={`planner-feedback-badge ${suggestion.feedback.label}`}
+                                  >
+                                    {plannerSuggestionFeedbackSummary(suggestion.feedback)}
+                                  </small>
+                                ) : null}
+                              </div>
+                              <button
+                                className="secondary-button"
+                                disabled={busy}
+                                onClick={() => handleApplyPlannerSuggestion(suggestion)}
+                                type="button"
+                              >
+                                {copyFor(language, {
+                                  en: "Apply suggestion",
+                                  ru: "Применить совет",
+                                  bg: "Приложи предложението",
+                                })}
+                              </button>
+                            </li>
+                          );
+                        })}
                       </ul>
                     ) : (
                       <p className="placeholder-copy">

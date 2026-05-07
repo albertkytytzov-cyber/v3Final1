@@ -7072,6 +7072,28 @@ select {
   line-height: 1.35;
 }
 
+.planner-suggestion-details {
+  display: grid;
+  gap: 4px;
+  margin: 2px 0 0;
+  padding: 8px 10px 8px 22px;
+  border-radius: 10px;
+  border: 1px solid rgba(15, 118, 110, 0.12);
+  background: rgba(240, 249, 247, 0.72);
+  color: var(--muted-strong);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.planner-suggestion-details li {
+  display: list-item;
+  min-height: 0;
+  overflow: visible;
+  line-height: 1.4;
+  -webkit-box-orient: initial;
+  -webkit-line-clamp: initial;
+}
+
 .planning-weekly-signal-card ul,
 .planning-weekly-nearby-card ul {
   margin: 0;
