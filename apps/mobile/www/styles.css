@@ -1385,6 +1385,10 @@ button {
   border-radius: 18px;
 }
 
+.athlete-screen-picker {
+  margin-bottom: 0;
+}
+
 .screen-panel {
   min-height: calc(100dvh - 250px);
 }
@@ -1424,6 +1428,112 @@ button {
 .metric-grid strong {
   font-size: 1.6rem;
   line-height: 1;
+}
+
+.coach-athlete-card,
+.today-indicators-card {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--surface);
+}
+
+.coach-athlete-card h3,
+.today-indicators-card h3 {
+  margin: 0;
+  font-size: 1.12rem;
+  line-height: 1.15;
+}
+
+.coach-athlete-card p,
+.today-indicators-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.coach-athlete-card span,
+.today-indicators-head span,
+.today-indicators-grid span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 850;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.coach-athlete-card-grid,
+.today-indicators-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.coach-athlete-card-grid span,
+.today-indicators-grid article {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.today-indicators-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+}
+
+.today-indicators-head strong {
+  min-width: 54px;
+  padding: 9px 10px;
+  border-radius: 14px;
+  background: #dff2ef;
+  color: var(--accent-dark);
+  font-size: 1.55rem;
+  line-height: 1;
+  text-align: center;
+}
+
+.today-indicators-grid article {
+  display: grid;
+  gap: 3px;
+}
+
+.today-indicators-grid strong {
+  color: var(--text);
+  font-size: 1.05rem;
+  font-weight: 950;
+  line-height: 1.1;
+}
+
+.today-indicators-grid small {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 750;
+  line-height: 1.25;
+}
+
+.today-indicators-card.readiness-green {
+  border-color: rgba(15, 118, 110, 0.24);
+  background: #ecfdf5;
+}
+
+.today-indicators-card.readiness-yellow {
+  border-color: rgba(201, 121, 43, 0.24);
+  background: #fff7ed;
+}
+
+.today-indicators-card.readiness-red {
+  border-color: rgba(185, 28, 28, 0.22);
+  background: #fef2f2;
+}
+
+.today-indicators-card.is-empty {
+  background: rgba(248, 252, 255, 0.88);
 }
 
 .focus-card,

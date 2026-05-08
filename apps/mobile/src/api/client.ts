@@ -144,6 +144,10 @@ export class MobileApiClient {
       userRole === "coach" || userRole === "admin"
         ? await this.loadCoachExecutionResults(assignedPlans.assignedPlans, athletes.athletes)
         : athleteExecution.results;
+    const coachReadinessHistory =
+      userRole === "coach" || userRole === "admin"
+        ? await this.loadCoachReadinessEntries(assignedPlans.assignedPlans, athletes.athletes)
+        : readinessHistory.entries;
 
     return {
       assignedPlans: assignedPlans.assignedPlans,
@@ -153,7 +157,7 @@ export class MobileApiClient {
       competitions: competitions.competitions,
       executionResults,
       readinessEntry: readiness.entry,
-      readinessHistory: readinessHistory.entries,
+      readinessHistory: coachReadinessHistory,
     };
   }
 
@@ -174,6 +178,25 @@ export class MobileApiClient {
     );
 
     return responses.flatMap((response) => response.results);
+  }
+
+  private async loadCoachReadinessEntries(
+    assignedPlans: AssignedPlanSummary[],
+    athletes: CoachAthleteSummary[],
+  ) {
+    const athleteIds = Array.from(new Set([
+      ...assignedPlans.map((plan) => plan.athleteId),
+      ...athletes.map((athlete) => athlete.athleteId),
+    ].filter(Boolean)));
+    const responses = await Promise.all(
+      athleteIds.map((athleteId) =>
+        this.request<{ entries: ReadinessEntry[] }>(
+          `/coach/athletes/${encodeURIComponent(athleteId)}/readiness`,
+        ).catch(() => ({ entries: [] })),
+      ),
+    );
+
+    return responses.flatMap((response) => response.entries);
   }
 
   submitReadiness(payload: ReadinessSubmissionPayload, idempotencyKey: string) {

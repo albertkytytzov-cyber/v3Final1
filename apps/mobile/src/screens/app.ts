@@ -20,6 +20,7 @@ import type {
   AssignedBlockExercise,
   AssignedPlanBlock,
   AssignedPlanSummary,
+  CoachAthleteSummary,
   CoachDiaryEntry,
   CoachDiaryEntryPayload,
   CompetitionPlanSummary,
@@ -599,10 +600,12 @@ export function bootstrapMobileApp(root: HTMLElement) {
       void handleLogout();
     });
 
-    root.querySelector<HTMLSelectElement>("[data-athlete-select]")?.addEventListener("change", (event) => {
-      const selectedAthleteId = (event.currentTarget as HTMLSelectElement).value || null;
-      saveSelectedAthleteId(selectedAthleteId);
-      update({ executionDateFilter: null, planDateFilter: null, selectedAthleteId });
+    root.querySelectorAll<HTMLSelectElement>("[data-athlete-select]").forEach((select) => {
+      select.addEventListener("change", (event) => {
+        const selectedAthleteId = (event.currentTarget as HTMLSelectElement).value || null;
+        saveSelectedAthleteId(selectedAthleteId);
+        update({ executionDateFilter: null, planDateFilter: null, selectedAthleteId });
+      });
     });
 
     root.querySelectorAll<HTMLButtonElement>("[data-athlete-card]").forEach((button) => {
@@ -783,8 +786,12 @@ function renderAthletePicker(state: MobileAppState) {
     return "";
   }
 
+  return renderAthleteSelectControl(state, "athlete-picker");
+}
+
+function renderAthleteSelectControl(state: MobileAppState, className: string) {
   return `
-    <label class="athlete-picker">
+    <label class="${escapeHtml(className)}">
       <span>Спортсмен</span>
       <select data-athlete-select>
         ${state.data.athletes.map((athlete) => `
@@ -838,6 +845,7 @@ function renderDashboardScreen(state: MobileAppState, athleteId: string | null) 
       <article><span>Очередь</span><strong>${pendingQueue.length}</strong></article>
       <article><span>Связь</span><strong>${state.isOnline ? "Есть" : "Нет"}</strong></article>
     </div>
+    ${athleteId ? renderTodayAthleteIndicators(state, athleteId) : ""}
     ${nextStart ? `
       <article class="focus-card">
         <span>Следующий старт</span>
@@ -864,20 +872,93 @@ function renderAthletesScreen(state: MobileAppState) {
     return renderEmpty("Спортсменов пока нет", "Обновите данные или назначьте спортсменов на сайте.");
   }
 
+  const selectedAthlete = getSelectedAthlete(state) ?? state.data.athletes[0] ?? null;
+
   return `
     <div class="screen-head">
       <h2>Спортсмены</h2>
       <p>${state.data.athletes.length} в списке</p>
     </div>
-    <div class="list-stack">
-      ${state.data.athletes.map((athlete) => `
-        <button class="list-card ${state.selectedAthleteId === athlete.athleteId ? "is-selected" : ""}" data-athlete-card="${escapeHtml(athlete.athleteId)}" type="button">
-          <strong>${escapeHtml(athlete.fullName)}</strong>
-          <span>${escapeHtml(athlete.email)}</span>
-          <small>${escapeHtml([athlete.sport, athlete.weightClass].filter(Boolean).join(" · ") || "Профиль не заполнен")}</small>
-        </button>
-      `).join("")}
-    </div>
+    ${renderAthleteSelectControl(state, "athlete-picker athlete-screen-picker")}
+    ${selectedAthlete ? renderCoachAthleteCard(selectedAthlete) : ""}
+    ${selectedAthlete ? renderTodayAthleteIndicators(state, selectedAthlete.athleteId) : ""}
+  `;
+}
+
+function renderCoachAthleteCard(athlete: CoachAthleteSummary) {
+  const profileParts = [
+    athlete.sport,
+    athlete.discipline,
+    athlete.weightClass ? `вес ${athlete.weightClass}` : "",
+  ].filter(Boolean);
+  const baselineParts = [
+    athlete.baselineRestingHr !== null ? `пульс ${athlete.baselineRestingHr}` : "",
+    athlete.baselineWeightKg !== null ? `вес ${athlete.baselineWeightKg} кг` : "",
+  ].filter(Boolean);
+
+  return `
+    <article class="coach-athlete-card">
+      <div>
+        <span>Выбранный спортсмен</span>
+        <h3>${escapeHtml(athlete.fullName)}</h3>
+        <p>${escapeHtml(athlete.email)}</p>
+      </div>
+      <div class="coach-athlete-card-grid">
+        <span>${escapeHtml(profileParts.join(" · ") || "Профиль не заполнен")}</span>
+        <span>${escapeHtml(baselineParts.join(" · ") || "Базовые показатели не заданы")}</span>
+      </div>
+    </article>
+  `;
+}
+
+function renderTodayAthleteIndicators(state: MobileAppState, athleteId: string) {
+  const athlete = state.data.athletes.find((item) => item.athleteId === athleteId) ?? null;
+  const entry = getReadinessEntryForDate(state, athleteId, todayValue());
+  const title = athlete ? `Показатели сегодня · ${athlete.fullName}` : "Показатели сегодня";
+
+  if (!entry) {
+    return `
+      <article class="today-indicators-card is-empty">
+        <div class="today-indicators-head">
+          <div>
+            <span>Сегодня</span>
+            <h3>${escapeHtml(title)}</h3>
+          </div>
+        </div>
+        <p>Спортсмен ещё не отправил готовность за ${formatDate(todayValue())}. После обновления здесь появятся сон, пульс, вес, самочувствие и флаги риска.</p>
+      </article>
+    `;
+  }
+
+  return `
+    <section class="today-indicators-card readiness-${escapeHtml(entry.status)}">
+      <div class="today-indicators-head">
+        <div>
+          <span>Сегодня</span>
+          <h3>${escapeHtml(title)}</h3>
+          <p>${formatDate(entry.entryDate)} · ${escapeHtml(formatReadinessFlags(entry))}</p>
+        </div>
+        <strong>${entry.score}</strong>
+      </div>
+      <div class="today-indicators-grid">
+        ${renderTodayIndicator("Статус", formatReadinessStatus(entry.status), "итог готовности")}
+        ${renderTodayIndicator("Сон", `${formatReadinessNumber(entry.sleepHours)} ч`, `качество ${entry.sleepQuality}/5`)}
+        ${renderTodayIndicator("Самочувствие", `${entry.generalFeeling}/5`, `мотивация ${entry.motivationLevel}/5`)}
+        ${renderTodayIndicator("Усталость", `${entry.fatigueLevel}/5`, `мышцы ${entry.muscleSoreness}/5`)}
+        ${renderTodayIndicator("Пульс", `${entry.restingHr}`, "покой")}
+        ${renderTodayIndicator("Вес", `${formatReadinessNumber(entry.bodyWeight)} кг`, `боль ${entry.painLevel}/10`)}
+      </div>
+    </section>
+  `;
+}
+
+function renderTodayIndicator(label: string, value: string, detail: string) {
+  return `
+    <article>
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value)}</strong>
+      <small>${escapeHtml(detail)}</small>
+    </article>
   `;
 }
 
@@ -2003,20 +2084,27 @@ function getExecutionDaySummary(
     missedBlockCount,
     partialBlockCount,
     plannedLoad: roundLoad(plannedLoad),
-    readinessEntry: getReadinessEntryForDate(state, group.plan.day.dayDate),
+    readinessEntry: getReadinessEntryForDate(state, group.plan.athleteId, group.plan.day.dayDate),
     status,
     statusLabel: getExecutionDayStatusLabel(status),
   };
 }
 
-function getReadinessEntryForDate(state: MobileAppState, date: string) {
+function getReadinessEntryForDate(
+  state: MobileAppState,
+  athleteId: string | null,
+  date: string,
+) {
   const entries = state.data.readinessHistory.length
     ? state.data.readinessHistory
     : state.data.readinessEntry
       ? [state.data.readinessEntry]
       : [];
 
-  return entries.find((entry) => entry.entryDate === date) ?? null;
+  return entries.find((entry) =>
+    entry.entryDate === date &&
+    (!athleteId || entry.athleteId === athleteId)
+  ) ?? null;
 }
 
 function estimateAssignedBlockLoad(block: AssignedPlanBlock) {
@@ -2565,6 +2653,22 @@ function formatReadinessHistoryDetails(entry: ReadinessEntry) {
   return flags.length
     ? flags.join(" · ")
     : `сон ${entry.sleepHours} ч · пульс ${entry.restingHr}`;
+}
+
+function formatReadinessFlags(entry: ReadinessEntry) {
+  const flags = [
+    entry.illnessFlag ? "болезнь" : "",
+    entry.feverFlag ? "температура" : "",
+    entry.painLevel >= 5 ? "боль" : "",
+    entry.fatigueLevel >= 4 ? "высокая усталость" : "",
+    entry.muscleSoreness >= 4 ? "мышцы перегружены" : "",
+  ].filter(Boolean);
+
+  return flags.length ? flags.join(" · ") : "без красных флагов";
+}
+
+function formatReadinessNumber(value: number) {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
 
 function formatInputValue(value: number | null | undefined) {
