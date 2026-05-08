@@ -691,6 +691,82 @@ export interface CoachDiaryEntriesResponse {
   entries: CoachDiaryEntry[];
 }
 
+export type CoachDayAiExecutionStatus =
+  | "completed"
+  | "partial"
+  | "missed"
+  | "no-plan";
+
+export interface CoachDayAiPayload {
+  athlete: {
+    displayName: string;
+    discipline: string | null;
+    sport: string | null;
+    weightClass: string | null;
+  };
+  coachComment: string | null;
+  date: string;
+  execution: {
+    blocks: {
+      completed: number;
+      missed: number;
+      partial: number;
+      total: number;
+    };
+    exercises: {
+      completed: number;
+      missed: number;
+      partial: number;
+      total: number;
+    };
+    status: CoachDayAiExecutionStatus;
+    statusLabel: string;
+  };
+  load: {
+    actual: number;
+    delta: number;
+    planned: number;
+  };
+  plan: {
+    blocks: Array<{
+      actualLoad: number;
+      exercises: Array<{
+        actual: string;
+        name: string;
+        plannedControl: string;
+        plannedWork: string;
+        status: Exclude<CoachDayAiExecutionStatus, "no-plan">;
+      }>;
+      name: string;
+      plannedLoad: number;
+      sessionName: string;
+      status: Exclude<CoachDayAiExecutionStatus, "no-plan">;
+    }>;
+    count: number;
+    templates: string[];
+  };
+  readiness: {
+    flags: string;
+    score: number;
+    status: ReadinessStatus;
+    statusLabel: string;
+  } | null;
+}
+
+export type CoachDayAiReviewSource = "local-rules" | "model";
+
+export interface CoachDayAiReview {
+  athleteId: string;
+  entryDate: string;
+  generatedAt: string;
+  source: CoachDayAiReviewSource;
+  observation: string;
+  riskNotes: string[];
+  tomorrowActions: string[];
+  dayPayload: CoachDayAiPayload;
+  dayPayloadJson: string;
+}
+
 export interface ExecutionExerciseResultInput {
   assignedExerciseId: string;
   completed: boolean;

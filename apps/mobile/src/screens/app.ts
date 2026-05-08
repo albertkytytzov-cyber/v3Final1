@@ -21,6 +21,7 @@ import type {
   AssignedPlanBlock,
   AssignedPlanSummary,
   CoachAthleteSummary,
+  CoachDayAiPayload,
   CoachDayAiReview,
   CoachDiaryEntry,
   CoachDiaryEntryPayload,
@@ -2712,16 +2713,18 @@ function buildCoachDayAiReview(dayData: CoachDayCleanSummary): CoachDayAiReview 
 
   return {
     athleteId: dayData.athleteId,
+    dayPayload: payload,
     dayPayloadJson: JSON.stringify(payload, null, 2),
     entryDate: dayData.date,
     generatedAt: new Date().toISOString(),
     observation: buildCoachAiObservation(dayData),
     riskNotes: buildCoachAiRiskNotes(dayData),
+    source: "local-rules",
     tomorrowActions: buildCoachAiTomorrowActions(dayData),
   };
 }
 
-function buildCoachDayAiPayload(dayData: CoachDayCleanSummary) {
+function buildCoachDayAiPayload(dayData: CoachDayCleanSummary): CoachDayAiPayload {
   const summary = dayData.summary;
   const readiness = dayData.readinessEntry;
 

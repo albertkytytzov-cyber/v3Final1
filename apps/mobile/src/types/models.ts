@@ -5,6 +5,8 @@ import type {
   AuthUser,
   CoachDiaryEntry,
   CoachDiaryEntryPayload,
+  CoachDayAiPayload,
+  CoachDayAiReview,
   CoachAthleteSummary,
   CompetitionPlanSummary,
   CompetitionResultPayload,
@@ -25,6 +27,8 @@ export type {
   AuthUser,
   CoachDiaryEntry,
   CoachDiaryEntryPayload,
+  CoachDayAiPayload,
+  CoachDayAiReview,
   CoachAthleteSummary,
   CompetitionPlanSummary,
   CompetitionResultPayload,
@@ -87,16 +91,6 @@ export interface PendingSyncAction {
   attempts: number;
   lastError: string | null;
   status?: "pending" | "invalid";
-}
-
-export interface CoachDayAiReview {
-  athleteId: string;
-  entryDate: string;
-  generatedAt: string;
-  observation: string;
-  riskNotes: string[];
-  tomorrowActions: string[];
-  dayPayloadJson: string;
 }
 
 export interface MobileAppState {
