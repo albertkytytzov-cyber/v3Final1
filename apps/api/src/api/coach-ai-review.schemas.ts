@@ -5,7 +5,6 @@ import type {
   ReadinessStatus,
 } from "@training-platform/shared";
 
-const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/iu;
 const datePattern = /^\d{4}-\d{2}-\d{2}$/;
 const dayStatuses: CoachDayAiExecutionStatus[] = ["completed", "partial", "missed", "no-plan"];
 const executionStatuses: Array<Exclude<CoachDayAiExecutionStatus, "no-plan">> = [
@@ -18,7 +17,7 @@ const readinessStatuses: ReadinessStatus[] = ["green", "yellow", "red"];
 export function parseCoachDayAiAthleteParams(params: unknown): { athleteId: string } {
   const athleteId = (params as { athleteId?: unknown } | null)?.athleteId;
 
-  if (typeof athleteId !== "string" || !uuidPattern.test(athleteId)) {
+  if (typeof athleteId !== "string" || !athleteId) {
     throw new Error("athleteId is required");
   }
 
