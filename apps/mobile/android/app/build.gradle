@@ -36,6 +36,9 @@ dependencies {
     implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
     implementation project(':capacitor-android')
+    implementation "com.huawei.agconnect:agconnect-core:$huaweiAgConnectVersion"
+    implementation "com.huawei.hms:health:$huaweiHealthVersion"
+    implementation "com.huawei.hms:hwid:$huaweiHwidVersion"
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
@@ -43,6 +46,15 @@ dependencies {
 }
 
 apply from: 'capacitor.build.gradle'
+
+try {
+    def agconnectServicesJSON = file('agconnect-services.json')
+    if (agconnectServicesJSON.exists() && agconnectServicesJSON.text) {
+        apply plugin: 'com.huawei.agconnect'
+    }
+} catch(Exception e) {
+    logger.info("agconnect-services.json not found, Huawei Health authorization is disabled for this build")
+}
 
 try {
     def servicesJSON = file('google-services.json')
