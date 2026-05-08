@@ -4,6 +4,7 @@ import type {
   CoachDiaryEntry,
   CoachDiaryEntryPayload,
   CoachDayAiPayload,
+  CoachDayAiReviewHistoryResponse,
   CoachDayAiReviewResponse,
   CoachAthleteSummary,
   CompetitionPlanSummary,
@@ -108,6 +109,7 @@ export class MobileApiClient {
       competitions,
       competitionPlans,
       athletes,
+      coachAiReviews,
       coachDiary,
       readiness,
       readinessHistory,
@@ -122,6 +124,10 @@ export class MobileApiClient {
         ? this.request<{ athletes: CoachAthleteSummary[] }>("/coach/athletes")
             .catch(() => ({ athletes: [] }))
         : Promise.resolve({ athletes: [] }),
+      userRole === "coach" || userRole === "admin"
+        ? this.request<CoachDayAiReviewHistoryResponse>("/coach/ai-day-reviews")
+            .catch(() => ({ reviews: [] }))
+        : Promise.resolve({ reviews: [] }),
       userRole === "coach" || userRole === "admin"
         ? this.request<{ entries: CoachDiaryEntry[] }>("/coach/diary")
             .catch(() => ({ entries: [] }))
@@ -154,6 +160,7 @@ export class MobileApiClient {
     return {
       assignedPlans: assignedPlans.assignedPlans,
       athletes: athletes.athletes,
+      coachAiReviews: coachAiReviews.reviews,
       coachDiaryEntries: coachDiary.entries,
       competitionPlans: competitionPlans.competitionPlans,
       competitions: competitions.competitions,

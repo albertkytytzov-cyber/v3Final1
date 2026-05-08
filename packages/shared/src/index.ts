@@ -756,9 +756,12 @@ export interface CoachDayAiPayload {
 export type CoachDayAiReviewSource = "local-rules" | "server-rules" | "model";
 
 export interface CoachDayAiReview {
+  id?: string;
   athleteId: string;
+  coachUserId?: string;
   entryDate: string;
   generatedAt: string;
+  createdAt?: string;
   source: CoachDayAiReviewSource;
   observation: string;
   riskNotes: string[];
@@ -774,6 +777,10 @@ export interface CoachDayAiReviewRequest {
 
 export interface CoachDayAiReviewResponse {
   review: CoachDayAiReview;
+}
+
+export interface CoachDayAiReviewHistoryResponse {
+  reviews: CoachDayAiReview[];
 }
 
 export interface ExecutionExerciseResultInput {

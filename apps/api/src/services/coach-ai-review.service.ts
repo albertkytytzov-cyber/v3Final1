@@ -1,7 +1,23 @@
 import type {
   CoachDayAiPayload,
   CoachDayAiReview,
+  UserRole,
 } from "@training-platform/shared";
+import { pool } from "../db";
+
+interface CoachDayAiReviewRow {
+  id: string;
+  athlete_id: string;
+  coach_user_id: string;
+  entry_date: string;
+  source: CoachDayAiReview["source"];
+  observation: string;
+  risk_notes: string[] | null;
+  tomorrow_actions: string[] | null;
+  day_payload_json: CoachDayAiPayload;
+  generated_at: string;
+  created_at: string;
+}
 
 export function buildCoachDayAiReview(input: {
   athleteId: string;
@@ -19,6 +35,117 @@ export function buildCoachDayAiReview(input: {
     source: "server-rules",
     tomorrowActions: buildTomorrowActions(input.dayPayload),
   };
+}
+
+function mapCoachDayAiReview(row: CoachDayAiReviewRow): CoachDayAiReview {
+  return {
+    id: row.id,
+    athleteId: row.athlete_id,
+    coachUserId: row.coach_user_id,
+    createdAt: row.created_at,
+    dayPayload: row.day_payload_json,
+    dayPayloadJson: JSON.stringify(row.day_payload_json, null, 2),
+    entryDate: row.entry_date,
+    generatedAt: row.generated_at,
+    observation: row.observation,
+    riskNotes: row.risk_notes ?? [],
+    source: row.source,
+    tomorrowActions: row.tomorrow_actions ?? [],
+  };
+}
+
+export async function saveCoachDayAiReview(input: {
+  coachUserId: string;
+  review: CoachDayAiReview;
+}) {
+  const result = await pool.query<CoachDayAiReviewRow>(
+    `
+      INSERT INTO coach_ai_day_reviews (
+        athlete_id,
+        coach_user_id,
+        entry_date,
+        source,
+        observation,
+        risk_notes,
+        tomorrow_actions,
+        day_payload_json,
+        generated_at
+      )
+      VALUES ($1, $2, $3::date, $4, $5, $6::text[], $7::text[], $8::jsonb, $9::timestamptz)
+      RETURNING
+        id,
+        athlete_id,
+        coach_user_id,
+        entry_date::text,
+        source,
+        observation,
+        risk_notes,
+        tomorrow_actions,
+        day_payload_json,
+        generated_at::text,
+        created_at::text
+    `,
+    [
+      input.review.athleteId,
+      input.coachUserId,
+      input.review.entryDate,
+      input.review.source,
+      input.review.observation,
+      input.review.riskNotes,
+      input.review.tomorrowActions,
+      JSON.stringify(input.review.dayPayload),
+      input.review.generatedAt,
+    ],
+  );
+
+  return mapCoachDayAiReview(result.rows[0]);
+}
+
+async function loadCoachDayAiReviews(whereSql: string, params: unknown[]) {
+  const result = await pool.query<CoachDayAiReviewRow>(
+    `
+      SELECT
+        id,
+        athlete_id,
+        coach_user_id,
+        entry_date::text,
+        source,
+        observation,
+        risk_notes,
+        tomorrow_actions,
+        day_payload_json,
+        generated_at::text,
+        created_at::text
+      FROM coach_ai_day_reviews
+      WHERE ${whereSql}
+      ORDER BY generated_at DESC
+      LIMIT 300
+    `,
+    params,
+  );
+
+  return result.rows.map(mapCoachDayAiReview);
+}
+
+export function listCoachDayAiReviewsForCoachContext(input: {
+  coachUserId: string;
+  role: UserRole;
+}) {
+  if (input.role === "admin") {
+    return loadCoachDayAiReviews("TRUE", []);
+  }
+
+  return loadCoachDayAiReviews(
+    `
+      EXISTS (
+        SELECT 1
+        FROM coach_athletes
+        WHERE coach_athletes.athlete_id = coach_ai_day_reviews.athlete_id
+          AND coach_athletes.coach_user_id = $1
+      )
+    `,
+    [input.coachUserId],
+  );
 }
 
 function buildObservation(payload: CoachDayAiPayload) {

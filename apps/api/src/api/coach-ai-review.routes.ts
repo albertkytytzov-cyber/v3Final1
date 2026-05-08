@@ -1,5 +1,9 @@
 import type { FastifyInstance } from "fastify";
-import { buildCoachDayAiReview } from "../services/coach-ai-review.service";
+import {
+  buildCoachDayAiReview,
+  listCoachDayAiReviewsForCoachContext,
+  saveCoachDayAiReview,
+} from "../services/coach-ai-review.service";
 import type { ApiGuards, HttpErrorFactory } from "./guards";
 import {
   parseCoachDayAiAthleteParams,
@@ -15,6 +19,21 @@ export function registerCoachAiReviewRoutes(
   app: FastifyInstance,
   dependencies: CoachAiReviewRouteDependencies,
 ) {
+  app.get("/api/v1/coach/ai-day-reviews", async (request) => {
+    const user = await dependencies.guards.requireUser(request);
+
+    if (user.role !== "coach" && user.role !== "admin") {
+      throw dependencies.httpError(403, "Only coach or admin accounts can view AI day reviews");
+    }
+
+    return {
+      reviews: await listCoachDayAiReviewsForCoachContext({
+        coachUserId: user.id,
+        role: user.role,
+      }),
+    };
+  });
+
   app.post("/api/v1/coach/athletes/:athleteId/ai-day-review", async (request) => {
     const user = await dependencies.guards.requireUser(request);
 
@@ -37,12 +56,16 @@ export function registerCoachAiReviewRoutes(
     }
 
     await dependencies.guards.assertAthleteAccess(user, athleteId);
+    const review = buildCoachDayAiReview({
+      athleteId,
+      dayPayload: payload.dayPayload,
+      entryDate: payload.entryDate,
+    });
 
     return {
-      review: buildCoachDayAiReview({
-        athleteId,
-        dayPayload: payload.dayPayload,
-        entryDate: payload.entryDate,
+      review: await saveCoachDayAiReview({
+        coachUserId: user.id,
+        review,
       }),
     };
   });

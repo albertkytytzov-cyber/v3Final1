@@ -54,11 +54,12 @@ const mobileLoadBlockProfiles: Record<AssignedPlanBlock["blockType"], { duration
 const defaultMobileLoadProfile = { durationMinutes: 20, rpe: 5 };
 
 export function bootstrapMobileApp(root: HTMLElement) {
+  const initialData = loadSnapshot();
   const state: MobileAppState = {
     session: loadSession(runtimeConfig.apiBaseUrl),
-    data: loadSnapshot(),
+    data: initialData,
     queue: loadQueue(),
-    aiReviewByDay: {},
+    aiReviewByDay: buildCoachAiReviewByDay(initialData.coachAiReviews),
     selectedScreen: "dashboard",
     selectedAthleteId: loadSelectedAthleteId(),
     selectedDayDate: todayValue(),
@@ -116,12 +117,19 @@ export function bootstrapMobileApp(root: HTMLElement) {
         dayData.date,
         offlineReview.dayPayload,
       );
+      const snapshot = {
+        ...state.data,
+        coachAiReviews: upsertCoachAiReviewHistory(state.data.coachAiReviews, response.review),
+        savedAt: new Date().toISOString(),
+      };
+      saveSnapshot(snapshot);
 
       update({
         aiReviewByDay: {
           ...state.aiReviewByDay,
           [key]: response.review,
         },
+        data: snapshot,
         error: null,
         isBusy: false,
         message: "Разбор ИИ получен с сервера. План и дневник не изменены.",
@@ -169,6 +177,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
         ...loadedData,
         savedAt: new Date().toISOString(),
       };
+      const storedAiReviewsByDay = buildCoachAiReviewByDay(snapshot.coachAiReviews);
       const nextSession = {
         ...state.session,
         user: auth.user,
@@ -183,6 +192,10 @@ export function bootstrapMobileApp(root: HTMLElement) {
       saveSnapshot(snapshot);
       saveSelectedAthleteId(selectedAthleteId);
       update({
+        aiReviewByDay: {
+          ...state.aiReviewByDay,
+          ...storedAiReviewsByDay,
+        },
         data: snapshot,
         error: null,
         isBusy: false,
@@ -1317,7 +1330,10 @@ function renderCoachExecutionReviewSummary(
   const dayData = getCoachDayCleanSummary(state, athleteId, selectedDayDate);
   const summary = dayData.summary;
   const readinessEntry = dayData.readinessEntry;
-  const aiReview = state.aiReviewByDay[getCoachDayAiReviewKey(athleteId, selectedDayDate)] ?? null;
+  const aiReviewHistory = getCoachAiReviewsForDay(state.data.coachAiReviews, athleteId, selectedDayDate);
+  const aiReview = state.aiReviewByDay[getCoachDayAiReviewKey(athleteId, selectedDayDate)] ??
+    aiReviewHistory[0] ??
+    null;
 
   return `
     <section class="coach-execution-review-card ${summary.status === "no-plan" ? "is-empty" : ""}">
@@ -1340,7 +1356,7 @@ function renderCoachExecutionReviewSummary(
         <p>${escapeHtml(dayData.coachNote)}</p>
       </div>
     </section>
-    ${renderCoachAiReviewCard(dayData, aiReview, state.isBusy)}
+    ${renderCoachAiReviewCard(dayData, aiReview, aiReviewHistory, state.isBusy)}
   `;
 }
 
@@ -1357,6 +1373,7 @@ function renderCoachExecutionReviewMetric(label: string, value: string, detail: 
 function renderCoachAiReviewCard(
   dayData: CoachDayCleanSummary,
   review: CoachDayAiReview | null,
+  reviewHistory: CoachDayAiReview[],
   isBusy: boolean,
 ) {
   return `
@@ -1395,14 +1412,39 @@ function renderCoachAiReviewCard(
             <summary>Данные дня для ИИ</summary>
             <pre>${escapeHtml(review.dayPayloadJson)}</pre>
           </details>
+          ${renderCoachAiReviewHistory(reviewHistory)}
           <small>Сформировано: ${formatDateTime(review.generatedAt)} · Источник: ${escapeHtml(formatCoachDayAiReviewSource(review.source))}</small>
         `
         : `
           <p class="coach-ai-review-empty">
             Нажмите кнопку, чтобы отправить готовность, план/факт, выполнение упражнений и комментарий тренера в серверный разбор.
           </p>
+          ${renderCoachAiReviewHistory(reviewHistory)}
         `}
     </section>
+  `;
+}
+
+function renderCoachAiReviewHistory(reviews: CoachDayAiReview[]) {
+  const serverReviews = reviews.filter((review) => review.source !== "local-rules");
+
+  if (serverReviews.length === 0) {
+    return "";
+  }
+
+  return `
+    <details class="coach-ai-review-history">
+      <summary>История серверных разборов (${serverReviews.length})</summary>
+      <div>
+        ${serverReviews.slice(0, 5).map((review) => `
+          <article>
+            <strong>${formatDateTime(review.generatedAt)}</strong>
+            <span>${escapeHtml(formatCoachDayAiReviewSource(review.source))}</span>
+            <p>${escapeHtml(review.observation)}</p>
+          </article>
+        `).join("")}
+      </div>
+    </details>
   `;
 }
 
@@ -2747,6 +2789,40 @@ function getCoachDayAiReviewKey(athleteId: string, entryDate: string) {
   return `${athleteId}::${entryDate}`;
 }
 
+function buildCoachAiReviewByDay(reviews: CoachDayAiReview[]) {
+  return reviews
+    .filter((review) => review.source !== "local-rules")
+    .slice()
+    .sort(sortCoachAiReviewsOldestFirst)
+    .reduce<Record<string, CoachDayAiReview>>((items, review) => {
+      items[getCoachDayAiReviewKey(review.athleteId, review.entryDate)] = review;
+      return items;
+    }, {});
+}
+
+function getCoachAiReviewsForDay(
+  reviews: CoachDayAiReview[],
+  athleteId: string,
+  entryDate: string,
+) {
+  return reviews
+    .filter((review) =>
+      review.athleteId === athleteId &&
+      review.entryDate === entryDate &&
+      review.source !== "local-rules"
+    )
+    .slice()
+    .sort(sortCoachAiReviewsNewestFirst);
+}
+
+function sortCoachAiReviewsNewestFirst(left: CoachDayAiReview, right: CoachDayAiReview) {
+  return right.generatedAt.localeCompare(left.generatedAt);
+}
+
+function sortCoachAiReviewsOldestFirst(left: CoachDayAiReview, right: CoachDayAiReview) {
+  return left.generatedAt.localeCompare(right.generatedAt);
+}
+
 function formatCoachDayAiReviewSource(source: CoachDayAiReview["source"]) {
   if (source === "model") {
     return "ИИ-модель";
@@ -3690,6 +3766,22 @@ function upsertById<T extends { id: string }>(items: T[], item: T) {
   const nextItems = items.filter((value) => value.id !== item.id);
   nextItems.unshift(item);
   return nextItems;
+}
+
+function upsertCoachAiReviewHistory(items: CoachDayAiReview[], review: CoachDayAiReview) {
+  const nextItems = review.id
+    ? items.filter((item) => item.id !== review.id)
+    : items.filter((item) =>
+      item.athleteId !== review.athleteId ||
+      item.entryDate !== review.entryDate ||
+      item.generatedAt !== review.generatedAt
+    );
+
+  nextItems.unshift(review);
+  return nextItems
+    .filter((item) => item.source !== "local-rules")
+    .sort(sortCoachAiReviewsNewestFirst)
+    .slice(0, 300);
 }
 
 function upsertExecutionResult(items: ExecutionResult[], result: ExecutionResult) {

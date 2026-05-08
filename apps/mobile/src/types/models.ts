@@ -7,6 +7,7 @@ import type {
   CoachDiaryEntryPayload,
   CoachDayAiPayload,
   CoachDayAiReview,
+  CoachDayAiReviewHistoryResponse,
   CoachDayAiReviewRequest,
   CoachDayAiReviewResponse,
   CoachAthleteSummary,
@@ -31,6 +32,7 @@ export type {
   CoachDiaryEntryPayload,
   CoachDayAiPayload,
   CoachDayAiReview,
+  CoachDayAiReviewHistoryResponse,
   CoachDayAiReviewRequest,
   CoachDayAiReviewResponse,
   CoachAthleteSummary,
@@ -66,6 +68,7 @@ export interface MobileDataSnapshot {
   competitions: CompetitionSummary[];
   competitionPlans: CompetitionPlanSummary[];
   coachDiaryEntries: CoachDiaryEntry[];
+  coachAiReviews: CoachDayAiReview[];
   readinessEntry: ReadinessEntry | null;
   readinessHistory: ReadinessEntry[];
   executionResults: ExecutionResult[];
@@ -119,6 +122,7 @@ export function createEmptySnapshot(): MobileDataSnapshot {
     savedAt: null,
     athletes: [],
     assignedPlans: [],
+    coachAiReviews: [],
     coachDiaryEntries: [],
     competitions: [],
     competitionPlans: [],

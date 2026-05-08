@@ -403,6 +403,20 @@ export async function ensureSchema() {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
 
+    CREATE TABLE IF NOT EXISTS coach_ai_day_reviews (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      athlete_id UUID NOT NULL REFERENCES athletes(id) ON DELETE CASCADE,
+      coach_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      entry_date DATE NOT NULL,
+      source TEXT NOT NULL DEFAULT 'server-rules' CHECK (source IN ('server-rules', 'model')),
+      observation TEXT NOT NULL DEFAULT '',
+      risk_notes TEXT[] NOT NULL DEFAULT '{}'::text[],
+      tomorrow_actions TEXT[] NOT NULL DEFAULT '{}'::text[],
+      day_payload_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+      generated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
     CREATE TABLE IF NOT EXISTS olympic_cycles (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       name TEXT NOT NULL,
@@ -704,6 +718,28 @@ export async function ensureSchema() {
   await ensureColumn("coach_diary_entries", "client_request_id", "TEXT");
   await ensureColumn("coach_diary_entries", "created_at", "TIMESTAMPTZ NOT NULL DEFAULT NOW()");
   await ensureColumn("coach_diary_entries", "updated_at", "TIMESTAMPTZ NOT NULL DEFAULT NOW()");
+  await ensureColumn(
+    "coach_ai_day_reviews",
+    "athlete_id",
+    "UUID REFERENCES athletes(id) ON DELETE CASCADE",
+  );
+  await ensureColumn(
+    "coach_ai_day_reviews",
+    "coach_user_id",
+    "UUID REFERENCES users(id) ON DELETE CASCADE",
+  );
+  await ensureColumn("coach_ai_day_reviews", "entry_date", "DATE");
+  await ensureColumn(
+    "coach_ai_day_reviews",
+    "source",
+    "TEXT NOT NULL DEFAULT 'server-rules' CHECK (source IN ('server-rules', 'model'))",
+  );
+  await ensureColumn("coach_ai_day_reviews", "observation", "TEXT NOT NULL DEFAULT ''");
+  await ensureColumn("coach_ai_day_reviews", "risk_notes", "TEXT[] NOT NULL DEFAULT '{}'::text[]");
+  await ensureColumn("coach_ai_day_reviews", "tomorrow_actions", "TEXT[] NOT NULL DEFAULT '{}'::text[]");
+  await ensureColumn("coach_ai_day_reviews", "day_payload_json", "JSONB NOT NULL DEFAULT '{}'::jsonb");
+  await ensureColumn("coach_ai_day_reviews", "generated_at", "TIMESTAMPTZ NOT NULL DEFAULT NOW()");
+  await ensureColumn("coach_ai_day_reviews", "created_at", "TIMESTAMPTZ NOT NULL DEFAULT NOW()");
   await ensureColumn(
     "training_load_logs",
     "athlete_id",
@@ -1045,6 +1081,10 @@ export async function ensureSchema() {
       ON coach_diary_entries (athlete_id, entry_date DESC, updated_at DESC);
     CREATE INDEX IF NOT EXISTS idx_coach_diary_entries_coach_updated
       ON coach_diary_entries (coach_user_id, updated_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_coach_ai_day_reviews_athlete_date
+      ON coach_ai_day_reviews (athlete_id, entry_date DESC, generated_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_coach_ai_day_reviews_coach_generated
+      ON coach_ai_day_reviews (coach_user_id, generated_at DESC);
   `);
 
   await backfillPlanHierarchy();
