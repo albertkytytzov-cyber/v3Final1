@@ -3059,6 +3059,83 @@ select {
   line-height: 1.55;
 }
 
+.coach-ai-status-panel {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(37, 99, 235, 0.16);
+  background: rgba(239, 246, 255, 0.72);
+}
+
+.coach-ai-status-heading,
+.coach-ai-diagnostic-result {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.coach-ai-status-heading small,
+.coach-ai-diagnostic-result small,
+.coach-ai-status-actions span {
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.coach-ai-status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 130px), 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+
+.coach-ai-status-grid span {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.coach-ai-status-grid small {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.coach-ai-status-grid strong,
+.coach-ai-status-panel p,
+.coach-ai-diagnostic-result span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.coach-ai-status-panel p,
+.coach-ai-diagnostic-result p {
+  margin: 0;
+  line-height: 1.55;
+}
+
+.coach-ai-status-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.coach-ai-diagnostic-result {
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  background: rgba(255, 255, 255, 0.78);
+}
+
 .analytics-mini-grid {
   margin-bottom: 4px;
 }

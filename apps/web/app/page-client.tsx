@@ -41,6 +41,9 @@ import {
   type CoachAthleteSummary,
   type CoachDiaryEntry,
   type CoachDiaryEntryPayload,
+  type CoachAiReviewDiagnosticResponse,
+  type CoachAiReviewStatus,
+  type CoachAiReviewStatusResponse,
   type PlanTemplateRecommendation,
   type PlannerSuggestion,
   type PlannerWarning,
@@ -4583,6 +4586,11 @@ export function PageClient({
   );
   const [coachDiaryDraft, setCoachDiaryDraft] =
     useState<CoachDiaryDraft>(emptyCoachDiaryDraft);
+  const [coachAiStatus, setCoachAiStatus] = useState<CoachAiReviewStatus | null>(null);
+  const [coachAiDiagnostic, setCoachAiDiagnostic] =
+    useState<CoachAiReviewDiagnosticResponse | null>(null);
+  const [coachAiDiagnosticBusy, setCoachAiDiagnosticBusy] = useState(false);
+  const [coachAiDiagnosticMessage, setCoachAiDiagnosticMessage] = useState("");
   const [coachAnalyticsOverview, setCoachAnalyticsOverview] =
     useState<AnalyticsOverview | null>(
       normalizeAnalyticsOverview(previewState?.coachAnalyticsOverview ?? null),
@@ -5722,6 +5730,12 @@ export function PageClient({
     );
   }
 
+  async function loadCoachAiReviewStatus() {
+    const response = await apiRequest<CoachAiReviewStatusResponse>("/coach/ai-day-review/status");
+    setCoachAiStatus(response.status);
+    return response.status;
+  }
+
   async function loadCoachAnalyticsOverview(athleteId: string) {
     const response = await apiRequest<{ analytics: AnalyticsOverview | null }>(
       `/coach/athletes/${athleteId}/analytics`,
@@ -6042,6 +6056,7 @@ export function PageClient({
         await Promise.all([
           loadCoachAthletes(),
           loadAvailableCoachAthletes(),
+          loadCoachAiReviewStatus(),
           loadPlanTemplates(),
           loadAssignedPlans(),
           loadCompetitions(),
@@ -8498,6 +8513,17 @@ export function PageClient({
   const showCoachRosterColumn = false;
   const showCoachInspectorColumn = isCoachDashboardWorkspace;
   const showAthleteProfileEditor = isAthleteProfileEditorOpen;
+  const coachAiStatusSourceLabel = coachAiStatus?.source === "model"
+    ? copyFor(language, { en: "Model", ru: "Модель", bg: "Модел" })
+    : copyFor(language, { en: "Server rules", ru: "Серверные правила", bg: "Сървърни правила" });
+  const coachAiStatusModeLabel = coachAiStatus?.mode === "model"
+    ? copyFor(language, { en: "model mode", ru: "режим модели", bg: "режим модел" })
+    : copyFor(language, { en: "server rules", ru: "серверные правила", bg: "сървърни правила" });
+  const coachAiStatusChipClass = coachAiStatus?.source === "model" && coachAiStatus.modelReady
+    ? "green"
+    : coachAiStatus?.mode === "model"
+      ? "warning"
+      : "idle";
 
   useEffect(() => {
     if (
@@ -8533,11 +8559,68 @@ export function PageClient({
   useEffect(() => {
     if (!canSeeCoachWorkspace) {
       setAvailableCoachAthletes([]);
+      setCoachAiStatus(null);
+      setCoachAiDiagnostic(null);
+      setCoachAiDiagnosticMessage("");
       return;
     }
 
     void loadAvailableCoachAthletes();
-  }, [canSeeCoachWorkspace, user?.id]);
+    if (!isPreviewMode) {
+      void loadCoachAiReviewStatus().catch(() => {
+        setCoachAiStatus(null);
+      });
+    }
+  }, [canSeeCoachWorkspace, isPreviewMode, user?.id]);
+
+  async function handleCoachAiDiagnosticClick() {
+    if (!canSeeCoachWorkspace) {
+      return;
+    }
+
+    if (isPreviewMode) {
+      setCoachAiDiagnosticMessage(
+        copyFor(language, {
+          en: "The test call is available after sign-in.",
+          ru: "Тестовый вызов доступен после входа в аккаунт.",
+          bg: "Тестовото извикване е достъпно след вход.",
+        }),
+      );
+      return;
+    }
+
+    setCoachAiDiagnosticBusy(true);
+    setCoachAiDiagnosticMessage(
+      copyFor(language, {
+        en: "Checking AI review on the server...",
+        ru: "Проверяю ИИ-разбор на сервере...",
+        bg: "Проверявам AI анализа на сървъра...",
+      }),
+    );
+    setErrorMessage("");
+
+    try {
+      const response = await apiRequest<CoachAiReviewDiagnosticResponse>(
+        "/coach/ai-day-review/test",
+        { method: "POST" },
+      );
+      setCoachAiDiagnostic(response);
+      setCoachAiStatus(response.status);
+      setCoachAiDiagnosticMessage(response.message);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setCoachAiDiagnosticMessage(
+        copyFor(language, {
+          en: "AI test call failed. The main review keeps using server rules.",
+          ru: "Тестовый вызов ИИ не прошёл. Основной разбор продолжает работать по серверным правилам.",
+          bg: "Тестовото извикване на AI не мина. Основният анализ продължава със сървърни правила.",
+        }),
+      );
+      setErrorMessage(message);
+    } finally {
+      setCoachAiDiagnosticBusy(false);
+    }
+  }
 
   async function handleAthleteProfileSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -12719,6 +12802,135 @@ export function PageClient({
                           })}
                         </div>
                       ) : null}
+                      <div className="coach-ai-status-panel">
+                        <div className="summary-topline">
+                          <div className="coach-ai-status-heading">
+                            <strong>
+                              {copyFor(language, {
+                                en: "AI review check",
+                                ru: "Проверка ИИ-разбора",
+                                bg: "Проверка на AI анализа",
+                              })}
+                            </strong>
+                            <small>
+                              {copyFor(language, {
+                                en: "Service check only: plans, diary, and history are not changed.",
+                                ru: "Только служебная проверка: план, дневник и история не меняются.",
+                                bg: "Само служебна проверка: планът, дневникът и историята не се променят.",
+                              })}
+                            </small>
+                          </div>
+                          <span className={`status-chip ${coachAiStatusChipClass}`}>
+                            {coachAiStatusSourceLabel}
+                          </span>
+                        </div>
+
+                        {coachAiStatus ? (
+                          <>
+                            <div className="coach-ai-status-grid">
+                              <span>
+                                <small>
+                                  {copyFor(language, { en: "Mode", ru: "Режим", bg: "Режим" })}
+                                </small>
+                                <strong>{coachAiStatusModeLabel}</strong>
+                              </span>
+                              <span>
+                                <small>
+                                  {copyFor(language, { en: "Model", ru: "Модель", bg: "Модел" })}
+                                </small>
+                                <strong>
+                                  {coachAiStatus.modelConfigured
+                                    ? copyFor(language, { en: "configured", ru: "настроена", bg: "настроен" })
+                                    : copyFor(language, { en: "not set", ru: "не задана", bg: "не е зададен" })}
+                                </strong>
+                              </span>
+                              <span>
+                                <small>
+                                  {copyFor(language, { en: "API key", ru: "Ключ API", bg: "API ключ" })}
+                                </small>
+                                <strong>
+                                  {coachAiStatus.apiKeyConfigured
+                                    ? copyFor(language, { en: "configured", ru: "настроен", bg: "настроен" })
+                                    : copyFor(language, { en: "not set", ru: "не задан", bg: "не е зададен" })}
+                                </strong>
+                              </span>
+                              <span>
+                                <small>Fallback</small>
+                                <strong>
+                                  {coachAiStatus.fallbackEnabled
+                                    ? copyFor(language, { en: "enabled", ru: "включён", bg: "включен" })
+                                    : copyFor(language, { en: "disabled", ru: "выключен", bg: "изключен" })}
+                                </strong>
+                              </span>
+                            </div>
+                            <p>{coachAiStatus.message}</p>
+                          </>
+                        ) : (
+                          <p>
+                            {copyFor(language, {
+                              en: "AI status will load after sign-in.",
+                              ru: "Статус ИИ загрузится после входа в аккаунт.",
+                              bg: "Статусът на AI ще се зареди след вход.",
+                            })}
+                          </p>
+                        )}
+
+                        <div className="coach-ai-status-actions">
+                          <button
+                            className="secondary-button"
+                            disabled={coachAiDiagnosticBusy}
+                            onClick={() => void handleCoachAiDiagnosticClick()}
+                            type="button"
+                          >
+                            {coachAiDiagnosticBusy
+                              ? copyFor(language, {
+                                  en: "Checking...",
+                                  ru: "Проверяю...",
+                                  bg: "Проверявам...",
+                                })
+                              : copyFor(language, {
+                                  en: "Test AI",
+                                  ru: "Проверить ИИ",
+                                  bg: "Провери AI",
+                                })}
+                          </button>
+                          {coachAiDiagnosticMessage ? <span>{coachAiDiagnosticMessage}</span> : null}
+                        </div>
+
+                        {coachAiDiagnostic ? (
+                          <article className="coach-ai-diagnostic-result">
+                            <div className="summary-topline">
+                              <strong>
+                                {copyFor(language, {
+                                  en: "Last test result",
+                                  ru: "Последняя проверка",
+                                  bg: "Последна проверка",
+                                })}
+                              </strong>
+                              <span>
+                                {coachAiDiagnostic.checkedAt.slice(0, 16)} /{" "}
+                                {coachAiDiagnostic.review.source === "model"
+                                  ? copyFor(language, { en: "model", ru: "модель", bg: "модел" })
+                                  : copyFor(language, {
+                                      en: "server rules",
+                                      ru: "серверные правила",
+                                      bg: "сървърни правила",
+                                    })}
+                              </span>
+                            </div>
+                            <p>{coachAiDiagnostic.review.observation}</p>
+                            {coachAiDiagnostic.fallbackUsed ? (
+                              <small>
+                                {copyFor(language, {
+                                  en: "Fallback was used; real AI model did not return the final review.",
+                                  ru: "Использован fallback: реальная модель не вернула итоговый разбор.",
+                                  bg: "Използван е fallback: реалният модел не върна финалния анализ.",
+                                })}
+                              </small>
+                            ) : null}
+                          </article>
+                        ) : null}
+                      </div>
                       <div className="coach-review-block-list">
                         {coachExecutionReview.sessions.flatMap((session) =>
                           session.blocks.map((block) => (
