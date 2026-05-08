@@ -20,6 +20,8 @@ const API_ERROR_TRANSLATIONS: Record<string, string> = {
   "Only athlete accounts can submit readiness": ATHLETE_READINESS_REQUIRED_MESSAGE,
   "Only athlete accounts have readiness entries":
     "Только спортсмен может просматривать данные готовности.",
+  "Only athlete accounts can sync device health data": ATHLETE_READINESS_REQUIRED_MESSAGE,
+  "Only athlete accounts can view device health data": ATHLETE_READINESS_REQUIRED_MESSAGE,
   "Only coach or admin accounts can save competition results": COACH_COMPETITION_REQUIRED_MESSAGE,
   "Only coach or admin accounts can view coach diary entries": COACH_DIARY_REQUIRED_MESSAGE,
   "Only coach or admin accounts can save coach diary entries": COACH_DIARY_REQUIRED_MESSAGE,
@@ -64,7 +66,7 @@ export function translateApiErrorMessage(message: string) {
 }
 
 export function canSubmitSyncAction(role: UserRole | null | undefined, kind: SyncActionKind) {
-  if (kind === "readiness" || kind === "execution") {
+  if (kind === "readiness" || kind === "execution" || kind === "device-health") {
     return role === "athlete";
   }
 
@@ -95,7 +97,7 @@ export function getSyncActionRestrictionMessage(
     return ATHLETE_EXECUTION_REQUIRED_MESSAGE;
   }
 
-  if (kind === "readiness") {
+  if (kind === "readiness" || kind === "device-health") {
     return ATHLETE_READINESS_REQUIRED_MESSAGE;
   }
 
@@ -115,7 +117,7 @@ export function isPermanentPermissionError(kind: SyncActionKind, message: string
       translatedMessage === ADMIN_EXECUTION_READ_ONLY_MESSAGE;
   }
 
-  if (kind === "readiness") {
+  if (kind === "readiness" || kind === "device-health") {
     return translatedMessage === ATHLETE_READINESS_REQUIRED_MESSAGE;
   }
 

@@ -9,6 +9,7 @@ import { loadQueue, saveQueue } from "../storage/local-store.js";
 import type {
   CoachDiaryEntryPayload,
   CompetitionResultPayload,
+  DeviceHealthDailySummaryPayload,
   ExecutionResultInput,
   PendingSyncAction,
   ReadinessSubmissionPayload,
@@ -21,6 +22,7 @@ export function createPendingAction(
   body:
     | ReadinessSubmissionPayload
     | ExecutionResultInput
+    | DeviceHealthDailySummaryPayload
     | CompetitionResultPayload
     | CoachDiaryEntryPayload,
   ownerUserId: string | null,
@@ -32,9 +34,11 @@ export function createPendingAction(
       ? "/readiness"
       : kind === "execution"
         ? "/execution"
-        : kind === "competition-result"
-          ? "/competition-results"
-          : "/coach/diary";
+        : kind === "device-health"
+          ? "/device-health/daily-summaries"
+          : kind === "competition-result"
+            ? "/competition-results"
+            : "/coach/diary";
 
   return {
     id,
@@ -176,6 +180,10 @@ function getActionLabel(kind: SyncActionKind) {
 
   if (kind === "execution") {
     return "Результат тренировки";
+  }
+
+  if (kind === "device-health") {
+    return "Huawei Health";
   }
 
   if (kind === "coach-diary") {

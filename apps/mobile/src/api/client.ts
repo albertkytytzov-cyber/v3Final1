@@ -12,6 +12,9 @@ import type {
   CompetitionPlanSummary,
   CompetitionResultPayload,
   CompetitionSummary,
+  DeviceHealthDailySummariesResponse,
+  DeviceHealthDailySummaryPayload,
+  DeviceHealthDailySummaryResponse,
   ExecutionResult,
   ExecutionResultInput,
   ReadinessEntry,
@@ -113,6 +116,7 @@ export class MobileApiClient {
       athletes,
       coachAiReviews,
       coachDiary,
+      deviceHealth,
       readiness,
       readinessHistory,
       athleteExecution,
@@ -138,6 +142,10 @@ export class MobileApiClient {
               .catch(() => ({ entries: [] }))
           : Promise.resolve({ entries: [] }),
       userRole === "athlete"
+        ? this.request<DeviceHealthDailySummariesResponse>("/device-health/daily-summaries")
+            .catch(() => ({ summaries: [] }))
+        : Promise.resolve({ summaries: [] }),
+      userRole === "athlete"
         ? this.request<{ entry: ReadinessEntry | null }>("/readiness/today")
             .catch(() => ({ entry: null }))
         : Promise.resolve({ entry: null }),
@@ -158,6 +166,10 @@ export class MobileApiClient {
       userRole === "coach" || userRole === "admin"
         ? await this.loadCoachReadinessEntries(assignedPlans.assignedPlans, athletes.athletes)
         : readinessHistory.entries;
+    const deviceHealthSummaries =
+      userRole === "coach" || userRole === "admin"
+        ? await this.loadCoachDeviceHealthSummaries(assignedPlans.assignedPlans, athletes.athletes)
+        : deviceHealth.summaries;
 
     return {
       assignedPlans: assignedPlans.assignedPlans,
@@ -166,6 +178,7 @@ export class MobileApiClient {
       coachDiaryEntries: coachDiary.entries,
       competitionPlans: competitionPlans.competitionPlans,
       competitions: competitions.competitions,
+      deviceHealthSummaries,
       executionResults,
       readinessEntry: readiness.entry,
       readinessHistory: coachReadinessHistory,
@@ -210,6 +223,25 @@ export class MobileApiClient {
     return responses.flatMap((response) => response.entries);
   }
 
+  private async loadCoachDeviceHealthSummaries(
+    assignedPlans: AssignedPlanSummary[],
+    athletes: CoachAthleteSummary[],
+  ) {
+    const athleteIds = Array.from(new Set([
+      ...assignedPlans.map((plan) => plan.athleteId),
+      ...athletes.map((athlete) => athlete.athleteId),
+    ].filter(Boolean)));
+    const responses = await Promise.all(
+      athleteIds.map((athleteId) =>
+        this.request<DeviceHealthDailySummariesResponse>(
+          `/coach/athletes/${encodeURIComponent(athleteId)}/device-health`,
+        ).catch(() => ({ summaries: [] })),
+      ),
+    );
+
+    return responses.flatMap((response) => response.summaries);
+  }
+
   submitReadiness(payload: ReadinessSubmissionPayload, idempotencyKey: string) {
     return this.request<{ entry: ReadinessEntry }>("/readiness", {
       body: JSON.stringify(payload),
@@ -220,6 +252,14 @@ export class MobileApiClient {
 
   submitExecution(payload: ExecutionResultInput, idempotencyKey: string) {
     return this.request<{ result: ExecutionResult }>("/execution", {
+      body: JSON.stringify(payload),
+      idempotencyKey,
+      method: "POST",
+    });
+  }
+
+  submitDeviceHealthSummary(payload: DeviceHealthDailySummaryPayload, idempotencyKey: string) {
+    return this.request<DeviceHealthDailySummaryResponse>("/device-health/daily-summaries", {
       body: JSON.stringify(payload),
       idempotencyKey,
       method: "POST",

@@ -100,6 +100,63 @@ export interface ReadinessResponse {
   entry: ReadinessEntry;
 }
 
+export type DeviceHealthProvider = "huawei-health";
+
+export interface DeviceHealthSleepSummary {
+  awakeMinutes: number | null;
+  deepMinutes: number | null;
+  durationMinutes: number | null;
+  endTime: string | null;
+  lightMinutes: number | null;
+  remMinutes: number | null;
+  score: number | null;
+  startTime: string | null;
+}
+
+export interface DeviceHealthHeartRateSummary {
+  averageBpm: number | null;
+  hrvRmssdMs: number | null;
+  maxBpm: number | null;
+  minBpm: number | null;
+  restingBpm: number | null;
+}
+
+export interface DeviceHealthWorkoutSummary {
+  activeCalories: number | null;
+  averageHeartRateBpm: number | null;
+  count: number;
+  maxHeartRateBpm: number | null;
+  totalDistanceMeters: number | null;
+  totalDurationMinutes: number | null;
+}
+
+export interface DeviceHealthDailySummaryPayload {
+  entryDate: string;
+  provider: DeviceHealthProvider;
+  sourceDevice: string | null;
+  sleep: DeviceHealthSleepSummary | null;
+  heartRate: DeviceHealthHeartRateSummary | null;
+  workout: DeviceHealthWorkoutSummary | null;
+  rawPayload?: Record<string, unknown> | null;
+  syncedAt?: string | null;
+}
+
+export interface DeviceHealthDailySummary extends DeviceHealthDailySummaryPayload {
+  id: string;
+  athleteId: string;
+  createdAt: string;
+  updatedAt: string;
+  syncedAt: string;
+}
+
+export interface DeviceHealthDailySummariesResponse {
+  summaries: DeviceHealthDailySummary[];
+}
+
+export interface DeviceHealthDailySummaryResponse {
+  summary: DeviceHealthDailySummary;
+}
+
 export interface CoachAthleteSummary {
   athleteId: string;
   userId: string;

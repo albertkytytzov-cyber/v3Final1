@@ -1512,6 +1512,7 @@ button {
 .coach-athlete-card,
 .athlete-day-brief-card,
 .coach-execution-review-card,
+.device-health-card,
 .today-indicators-card {
   display: grid;
   gap: 12px;
@@ -1524,6 +1525,7 @@ button {
 .coach-athlete-card h3,
 .athlete-day-brief-card h3,
 .coach-execution-review-card h3,
+.device-health-card h3,
 .today-indicators-card h3 {
   margin: 0;
   font-size: 1.12rem;
@@ -1533,6 +1535,7 @@ button {
 .coach-athlete-card p,
 .athlete-day-brief-card p,
 .coach-execution-review-card p,
+.device-health-card p,
 .today-indicators-card p {
   margin: 0;
   color: var(--muted);
@@ -1544,6 +1547,7 @@ button {
 .athlete-day-brief-grid span,
 .coach-execution-review-head > div > span,
 .coach-execution-review-grid span,
+.device-health-head span,
 .today-indicators-head span,
 .today-indicators-grid span {
   color: var(--muted);
@@ -1961,6 +1965,35 @@ button {
   color: var(--text);
   cursor: pointer;
   font-weight: 850;
+}
+
+.device-health-card {
+  background: #f8fcff;
+}
+
+.device-health-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+}
+
+.device-health-head .secondary-action {
+  min-width: 0;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  background: #fff;
+  color: var(--accent-dark);
+  cursor: pointer;
+  font-weight: 850;
+  white-space: normal;
+}
+
+.device-health-head .secondary-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .today-indicators-head {

@@ -5,6 +5,7 @@ import {
   translateApiErrorMessage,
 } from "../permissions.js";
 import { readRuntimeConfig } from "../config.js";
+import { readHuaweiHealthDailySummary } from "../integrations/huawei-health.js";
 import {
   clearSession,
   loadQueue,
@@ -29,6 +30,8 @@ import type {
   CoachDiaryEntryPayload,
   CompetitionPlanSummary,
   CompetitionResultPayload,
+  DeviceHealthDailySummary,
+  DeviceHealthDailySummaryPayload,
   ExecutionExerciseResult,
   ExecutionResult,
   ExecutionResultInput,
@@ -366,6 +369,45 @@ export function bootstrapMobileApp(root: HTMLElement) {
     });
   };
 
+  const syncHuaweiHealth = async (entryDate: string) => {
+    if (state.session.user?.role !== "athlete") {
+      update({
+        error: "Подключение Huawei Health выполняет спортсмен в своём приложении.",
+        isBusy: false,
+        message: null,
+      });
+      return;
+    }
+
+    update({ error: null, isBusy: true, message: "Читаю данные Huawei Health..." });
+
+    let payload: DeviceHealthDailySummaryPayload;
+    try {
+      payload = await readHuaweiHealthDailySummary(entryDate);
+    } catch (error) {
+      update({
+        error: error instanceof Error ? error.message : "Huawei Health недоступен.",
+        isBusy: false,
+        message: null,
+      });
+      return;
+    }
+
+    await submitOrQueue("device-health", payload, async (idempotencyKey) => {
+      const result = await client().submitDeviceHealthSummary(payload, idempotencyKey);
+      const snapshot = {
+        ...state.data,
+        deviceHealthSummaries: upsertDeviceHealthSummary(
+          state.data.deviceHealthSummaries,
+          result.summary,
+        ),
+        savedAt: new Date().toISOString(),
+      };
+      saveSnapshot(snapshot);
+      update({ data: snapshot });
+    });
+  };
+
   const readExecutionPayload = (form: HTMLFormElement): ExecutionResultInput | null => {
     const blockKey = readString(form, "assignedBlock");
     const [legacyAssignedPlanId, legacyAssignedBlockId] = blockKey.split("|");
@@ -613,6 +655,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
     payload:
       | ReadinessSubmissionPayload
       | ExecutionResultInput
+      | DeviceHealthDailySummaryPayload
       | CompetitionResultPayload
       | CoachDiaryEntryPayload,
     submit: (idempotencyKey: string) => Promise<void>,
@@ -794,6 +837,12 @@ export function bootstrapMobileApp(root: HTMLElement) {
     root.querySelector<HTMLFormElement>("[data-readiness-form]")?.addEventListener("submit", (event) => {
       event.preventDefault();
       void submitReadiness(event.currentTarget as HTMLFormElement);
+    });
+
+    root.querySelectorAll<HTMLButtonElement>("[data-huawei-health-sync]").forEach((button) => {
+      button.addEventListener("click", () => {
+        void syncHuaweiHealth(button.dataset.huaweiHealthDate ?? todayValue());
+      });
     });
 
     root.querySelectorAll<HTMLButtonElement>("[data-readiness-preset]").forEach((button) => {
@@ -1039,6 +1088,7 @@ function renderDashboardScreen(state: MobileAppState, athleteId: string | null) 
       <article><span>Связь</span><strong>${state.isOnline ? "Есть" : "Нет"}</strong></article>
     </div>
     ${athleteId ? renderAthleteDayIndicators(state, athleteId, selectedDayDate) : ""}
+    ${athleteId ? renderDeviceHealthCard(state, athleteId, selectedDayDate) : ""}
     ${nextStart ? `
       <article class="focus-card">
         <span>Следующий старт</span>
@@ -1234,6 +1284,63 @@ function renderAthleteDayIndicators(state: MobileAppState, athleteId: string, da
           `
           : "<p>Комментария за выбранный день пока нет.</p>"}
       </div>
+    </section>
+  `;
+}
+
+function renderDeviceHealthCard(state: MobileAppState, athleteId: string, date: string) {
+  const summary = getDeviceHealthSummaryForDate(state, athleteId, date);
+  const canSync = state.session.user?.role === "athlete" &&
+    state.session.user.athleteId === athleteId;
+  const syncedLabel = summary
+    ? `Обновлено: ${formatDateTime(summary.syncedAt)}`
+    : "Данных устройства за этот день пока нет";
+
+  return `
+    <section class="device-health-card">
+      <div class="device-health-head">
+        <div>
+          <span>Huawei Health</span>
+          <h3>Данные устройства</h3>
+          <p>${escapeHtml(formatDate(date))} · ${escapeHtml(syncedLabel)}</p>
+        </div>
+        ${canSync ? `
+          <button class="secondary-action" data-huawei-health-sync data-huawei-health-date="${escapeHtml(date)}" type="button" ${state.isBusy ? "disabled" : ""}>
+            Синхронизировать
+          </button>
+        ` : ""}
+      </div>
+      <div class="today-indicators-grid">
+        ${renderTodayIndicator(
+          "Сон",
+          summary?.sleep?.durationMinutes ? formatDurationHours(summary.sleep.durationMinutes) : "-",
+          summary?.sleep?.score !== null && summary?.sleep?.score !== undefined
+            ? `оценка ${formatLoadValue(summary.sleep.score)}`
+            : "из Huawei Health",
+        )}
+        ${renderTodayIndicator(
+          "Пульс покоя",
+          summary?.heartRate?.restingBpm ? `${formatLoadValue(summary.heartRate.restingBpm)}` : "-",
+          summary?.heartRate?.averageBpm
+            ? `средний ${formatLoadValue(summary.heartRate.averageBpm)}`
+            : "нет данных",
+        )}
+        ${renderTodayIndicator(
+          "Тренировки",
+          summary?.workout ? `${summary.workout.count}` : "-",
+          summary?.workout?.totalDurationMinutes
+            ? formatDurationHours(summary.workout.totalDurationMinutes)
+            : "нет внешних тренировок",
+        )}
+        ${renderTodayIndicator(
+          "Источник",
+          summary ? "подключён" : "не подключён",
+          summary?.sourceDevice || "разрешение выдаёт спортсмен",
+        )}
+      </div>
+      <p>
+        Эти данные не заменяют отметки выполнения упражнений. Они показывают сон, пульс и внешнюю активность рядом с планом дня.
+      </p>
     </section>
   `;
 }
@@ -1567,6 +1674,7 @@ function renderReadinessScreen(state: MobileAppState) {
         <small>${formatDate(readiness.entryDate)}</small>
       </section>
     ` : ""}
+    ${state.session.user.athleteId ? renderDeviceHealthCard(state, state.session.user.athleteId, todayValue()) : ""}
     <form class="mobile-form compact-form readiness-form" data-readiness-form>
       <section class="readiness-section wide-field">
         <div class="section-title">
@@ -3089,6 +3197,17 @@ function getReadinessEntryForDate(
   ) ?? null;
 }
 
+function getDeviceHealthSummaryForDate(
+  state: MobileAppState,
+  athleteId: string | null,
+  date: string,
+) {
+  return state.data.deviceHealthSummaries.find((summary) =>
+    summary.entryDate === date &&
+    (!athleteId || summary.athleteId === athleteId)
+  ) ?? null;
+}
+
 function estimateAssignedBlockLoad(block: AssignedPlanBlock) {
   const profile = mobileLoadBlockProfiles[block.blockType] ?? defaultMobileLoadProfile;
   const priorityFactor = getMobileLoadPriorityFactor(block.blockPriority);
@@ -3725,6 +3844,11 @@ function formatLoadValue(value: number) {
   return value > 0 ? String(roundLoad(value)) : "0";
 }
 
+function formatDurationHours(minutes: number) {
+  const hours = minutes / 60;
+  return `${Number.isInteger(hours) ? hours : hours.toFixed(1)} ч`;
+}
+
 function formatExecutionDayBreakdown(summary: ExecutionDaySummary) {
   return `${summary.completedBlockCount} вып. · ${summary.partialBlockCount} част. · ${summary.missedBlockCount} нет`;
 }
@@ -3881,6 +4005,22 @@ function upsertCoachAiReviewHistory(items: CoachDayAiReview[], review: CoachDayA
     .filter((item) => item.source !== "local-rules")
     .sort(sortCoachAiReviewsNewestFirst)
     .slice(0, 300);
+}
+
+function upsertDeviceHealthSummary(
+  items: DeviceHealthDailySummary[],
+  summary: DeviceHealthDailySummary,
+) {
+  const nextItems = items.filter((item) =>
+    item.id !== summary.id &&
+    (item.athleteId !== summary.athleteId ||
+      item.provider !== summary.provider ||
+      item.entryDate !== summary.entryDate)
+  );
+  nextItems.unshift(summary);
+  return nextItems
+    .sort((left, right) => right.entryDate.localeCompare(left.entryDate))
+    .slice(0, 120);
 }
 
 function upsertExecutionResult(items: ExecutionResult[], result: ExecutionResult) {

@@ -13,6 +13,7 @@ import { registerAuthRoutes } from "./api/auth.routes";
 import { registerCoachAiReviewRoutes } from "./api/coach-ai-review.routes";
 import { registerCoachDiaryRoutes } from "./api/coach-diary.routes";
 import { registerCompetitionRoutes } from "./api/competition/competition.routes";
+import { registerDeviceHealthRoutes } from "./api/device-health.routes";
 import { createApiGuards } from "./api/guards";
 import { registerPlanningRoutes } from "./api/planning/planning.routes";
 import { registerReadinessRoutes } from "./api/readiness.routes";
@@ -92,6 +93,11 @@ registerExecutionRoutes(app, {
 });
 
 registerCoachDiaryRoutes(app, {
+  guards,
+  httpError,
+});
+
+registerDeviceHealthRoutes(app, {
   guards,
   httpError,
 });
