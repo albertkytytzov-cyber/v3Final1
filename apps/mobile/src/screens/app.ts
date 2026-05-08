@@ -741,7 +741,7 @@ function renderAppShell(state: MobileAppState) {
       ${renderToolbar(state)}
 
       ${
-        user?.role === "coach" || user?.role === "admin"
+        (user?.role === "coach" || user?.role === "admin") && state.selectedScreen !== "athletes"
           ? renderAthletePicker(state)
           : ""
       }
@@ -881,6 +881,7 @@ function renderAthletesScreen(state: MobileAppState) {
     </div>
     ${renderAthleteSelectControl(state, "athlete-picker athlete-screen-picker")}
     ${selectedAthlete ? renderCoachAthleteCard(selectedAthlete) : ""}
+    ${selectedAthlete ? renderCoachAthleteDayBrief(state, selectedAthlete.athleteId) : ""}
   `;
 }
 
@@ -906,6 +907,53 @@ function renderCoachAthleteCard(athlete: CoachAthleteSummary) {
         <span>${escapeHtml(profileParts.join(" · ") || "Профиль не заполнен")}</span>
         <span>${escapeHtml(baselineParts.join(" · ") || "Базовые показатели не заданы")}</span>
       </div>
+    </article>
+  `;
+}
+
+function renderCoachAthleteDayBrief(state: MobileAppState, athleteId: string) {
+  const today = todayValue();
+  const entry = getReadinessEntryForDate(state, athleteId, today);
+  const daySummary = getCoachTodayDaySummary(state, athleteId, today);
+  const nextStart = getNextCompetitionPlan(getCompetitionPlansForAthlete(state, athleteId));
+  const cardStateClass = entry ? `readiness-${escapeHtml(entry.status)}` : "is-missing-readiness";
+  const startLabel = nextStart
+    ? `${formatShortDate(nextStart.competitionStartDate)} · через ${daysUntil(nextStart.competitionStartDate)} дн.`
+    : "стартов нет";
+  const coachNote = daySummary.latestDiaryEntry?.notes?.trim() || "Комментария за сегодня пока нет.";
+
+  return `
+    <section class="athlete-day-brief-card ${cardStateClass}">
+      <div class="athlete-day-brief-head">
+        <div>
+          <span>Краткий статус дня</span>
+          <h3>Сегодня · ${formatShortDate(today)}</h3>
+          <p>${escapeHtml(entry ? formatReadinessFlags(entry) : "готовность не отправлена")} · ${escapeHtml(daySummary.statusLabel.toLowerCase())}</p>
+        </div>
+        <strong>${entry ? entry.score : "-"}</strong>
+      </div>
+      <div class="athlete-day-brief-grid">
+        ${renderCoachAthleteBriefMetric("План сегодня", formatCoachTodayPlanCount(daySummary), formatCoachTodayPlanNames(daySummary))}
+        ${renderCoachAthleteBriefMetric("Выполнение", `${daySummary.completedExerciseCount}/${daySummary.exerciseCount || 0}`, formatCoachTodayExerciseBreakdown(daySummary))}
+        ${renderCoachAthleteBriefMetric("Нагрузка", `${formatLoadValue(daySummary.actualLoad)} / ${formatLoadValue(daySummary.plannedLoad)}`, formatCoachTodayLoadDelta(daySummary))}
+        ${renderCoachAthleteBriefMetric("Ближайший старт", nextStart ? formatShortDate(nextStart.competitionStartDate) : "-", startLabel)}
+      </div>
+      <p class="athlete-day-brief-note">Комментарий: ${escapeHtml(coachNote)}</p>
+      <div class="athlete-day-brief-actions" aria-label="Быстрые действия по спортсмену">
+        <button class="primary-action" data-screen="dashboard" type="button">Открыть день</button>
+        <button class="secondary-action" data-screen="plans" type="button">Планы</button>
+        <button class="secondary-action" data-screen="results" type="button">Разбор</button>
+      </div>
+    </section>
+  `;
+}
+
+function renderCoachAthleteBriefMetric(label: string, value: string, detail: string) {
+  return `
+    <article>
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value)}</strong>
+      <small>${escapeHtml(detail)}</small>
     </article>
   `;
 }
@@ -3054,6 +3102,17 @@ function formatDate(value: string) {
     day: "2-digit",
     month: "short",
     year: "numeric",
+  }).format(new Date(`${value}T00:00:00.000Z`));
+}
+
+function formatShortDate(value: string) {
+  if (!value) {
+    return "-";
+  }
+
+  return new Intl.DateTimeFormat("ru", {
+    day: "2-digit",
+    month: "2-digit",
   }).format(new Date(`${value}T00:00:00.000Z`));
 }
 
