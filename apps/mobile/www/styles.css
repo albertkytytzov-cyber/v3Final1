@@ -1511,6 +1511,7 @@ button {
 
 .coach-athlete-card,
 .athlete-day-brief-card,
+.coach-execution-review-card,
 .today-indicators-card {
   display: grid;
   gap: 12px;
@@ -1522,6 +1523,7 @@ button {
 
 .coach-athlete-card h3,
 .athlete-day-brief-card h3,
+.coach-execution-review-card h3,
 .today-indicators-card h3 {
   margin: 0;
   font-size: 1.12rem;
@@ -1530,6 +1532,7 @@ button {
 
 .coach-athlete-card p,
 .athlete-day-brief-card p,
+.coach-execution-review-card p,
 .today-indicators-card p {
   margin: 0;
   color: var(--muted);
@@ -1539,6 +1542,8 @@ button {
 .coach-athlete-card span,
 .athlete-day-brief-head span,
 .athlete-day-brief-grid span,
+.coach-execution-review-head > div > span,
+.coach-execution-review-grid span,
 .today-indicators-head span,
 .today-indicators-grid span {
   color: var(--muted);
@@ -1550,6 +1555,7 @@ button {
 
 .coach-athlete-card-grid,
 .athlete-day-brief-grid,
+.coach-execution-review-grid,
 .today-indicators-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1558,12 +1564,78 @@ button {
 
 .coach-athlete-card-grid span,
 .athlete-day-brief-grid article,
+.coach-execution-review-grid article,
 .today-indicators-grid article {
   min-width: 0;
   padding: 10px;
   border: 1px solid rgba(148, 163, 184, 0.2);
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.78);
+}
+
+.coach-execution-review-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+}
+
+.coach-execution-review-head .execution-day-status {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  padding: 6px 9px;
+  border-radius: 999px;
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 900;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.coach-execution-review-grid article {
+  display: grid;
+  gap: 3px;
+}
+
+.coach-execution-review-grid strong {
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 950;
+  line-height: 1.1;
+}
+
+.coach-execution-review-grid small {
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 750;
+  line-height: 1.25;
+}
+
+.coach-execution-review-card.is-empty {
+  background: rgba(248, 252, 255, 0.88);
+}
+
+.coach-execution-review-note {
+  display: grid;
+  gap: 4px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(148, 163, 184, 0.26);
+}
+
+.coach-execution-review-note strong {
+  color: var(--text);
+  font-size: 0.88rem;
+  font-weight: 950;
+}
+
+.coach-execution-review-note p {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.88rem;
+  font-weight: 760;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 .athlete-day-brief-head {

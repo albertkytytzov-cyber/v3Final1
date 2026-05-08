@@ -1219,7 +1219,7 @@ function renderCalendarScreen(state: MobileAppState, athleteId: string | null) {
 function renderResultsScreen(state: MobileAppState, athleteId: string | null) {
   const plans = getPlansForAthlete(state, athleteId);
   const canSubmitExecution = state.session.user?.role === "athlete";
-  const isCoachReview = state.session.user?.role === "coach" || state.session.user?.role === "admin";
+  const isCoachReview = isCoachRole(state.session.user?.role);
   const selectedDayDate = isCoachReview ? state.selectedDayDate : null;
 
   return `
@@ -1231,9 +1231,58 @@ function renderResultsScreen(state: MobileAppState, athleteId: string | null) {
           ? "Назначенные дни, план/факт, отметки спортсмена и дневник тренера."
           : getSyncActionRestrictionMessage(state.session.user?.role ?? null, "execution")}</p>
     </div>
+    ${isCoachReview ? renderCoachExecutionReviewSummary(state, athleteId, state.selectedDayDate) : ""}
     ${renderExecutionForm(state, plans)}
     ${renderCoachDiaryHistory(state, athleteId, selectedDayDate)}
     ${renderExecutionHistory(state, athleteId, selectedDayDate)}
+  `;
+}
+
+function renderCoachExecutionReviewSummary(
+  state: MobileAppState,
+  athleteId: string | null,
+  selectedDayDate: string,
+) {
+  if (!athleteId) {
+    return renderEmpty("Выберите спортсмена", "После выбора спортсмена разбор покажет план, факт, выполнение и комментарий за выбранный день.");
+  }
+
+  const athlete = state.data.athletes.find((item) => item.athleteId === athleteId) ?? null;
+  const summary = getCoachDaySummary(state, athleteId, selectedDayDate);
+  const readinessEntry = getReadinessEntryForDate(state, athleteId, selectedDayDate);
+  const coachNote = summary.latestDiaryEntry?.notes?.trim() || "Комментария тренера за выбранный день пока нет.";
+
+  return `
+    <section class="coach-execution-review-card ${summary.status === "no-plan" ? "is-empty" : ""}">
+      <div class="coach-execution-review-head">
+        <div>
+          <span>Выбранный день</span>
+          <h3>${escapeHtml(athlete?.fullName ?? "Спортсмен")}</h3>
+          <p>${formatDate(selectedDayDate)} · ${escapeHtml(summary.statusLabel.toLowerCase())}</p>
+        </div>
+        <span class="execution-day-status is-${summary.status}">${escapeHtml(summary.statusLabel)}</span>
+      </div>
+      <div class="coach-execution-review-grid">
+        ${renderCoachExecutionReviewMetric("План", formatCoachTodayPlanCount(summary), formatCoachTodayPlanNames(summary))}
+        ${renderCoachExecutionReviewMetric("Упражнения", `${summary.completedExerciseCount}/${summary.exerciseCount || 0}`, formatCoachTodayExerciseBreakdown(summary))}
+        ${renderCoachExecutionReviewMetric("Нагрузка", `${formatLoadValue(summary.actualLoad)} / ${formatLoadValue(summary.plannedLoad)}`, formatCoachTodayLoadDelta(summary))}
+        ${renderCoachExecutionReviewMetric("Готовность", readinessEntry ? String(readinessEntry.score) : "-", readinessEntry ? formatReadinessStatus(readinessEntry.status) : "нет записи")}
+      </div>
+      <div class="coach-execution-review-note">
+        <strong>Комментарий тренера</strong>
+        <p>${escapeHtml(coachNote)}</p>
+      </div>
+    </section>
+  `;
+}
+
+function renderCoachExecutionReviewMetric(label: string, value: string, detail: string) {
+  return `
+    <article>
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value)}</strong>
+      <small>${escapeHtml(detail)}</small>
+    </article>
   `;
 }
 
@@ -1991,14 +2040,18 @@ function renderExecutionHistory(
 
   return `
     <div class="list-stack">
-      ${results.slice(0, 10).map((result) => `
-        <article class="list-card">
-          <strong>${result.completed ? "Выполнено" : "Не выполнено"}</strong>
-          <span>${formatDateTime(result.updatedAt)}</span>
-          <small>${escapeHtml(formatExecutionHistoryDetails(result))}</small>
-          ${result.exerciseResults?.length && result.notes ? `<small>${escapeHtml(result.notes)}</small>` : ""}
-        </article>
-      `).join("")}
+      ${results.slice(0, 10).map((result) => {
+        const status = formatExecutionResultStatus(result);
+
+        return `
+          <article class="list-card">
+            <strong>${escapeHtml(status)}</strong>
+            <span>${formatDateTime(result.updatedAt)}</span>
+            <small>${escapeHtml(formatExecutionHistoryDetails(result))}</small>
+            ${result.exerciseResults?.length && result.notes ? `<small>${escapeHtml(result.notes)}</small>` : ""}
+          </article>
+        `;
+      }).join("")}
     </div>
   `;
 }
@@ -3174,8 +3227,15 @@ function formatExecutionHistoryDetails(result: ExecutionResult) {
     return result.notes || "Без заметки";
   }
 
-  const completed = result.exerciseResults.filter((exercise) => exercise.completed).length;
-  return `Упражнения: ${completed} из ${result.exerciseResults.length}`;
+  const completed = result.exerciseResults.filter((exercise) =>
+    getExecutionExerciseStatus(exercise) === "completed"
+  ).length;
+  const partial = result.exerciseResults.filter((exercise) =>
+    getExecutionExerciseStatus(exercise) === "partial"
+  ).length;
+  const missed = Math.max(result.exerciseResults.length - completed - partial, 0);
+
+  return `Упражнения: ${completed} вып. · ${partial} част. · ${missed} нет`;
 }
 
 function formatExecutionResultStatus(result: ExecutionResult | null) {
