@@ -1384,6 +1384,80 @@ button {
   font-weight: 700;
 }
 
+.coach-day-control {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 10px;
+  padding: 12px;
+  border: 1px solid rgba(15, 118, 110, 0.2);
+  border-radius: 18px;
+  background: #e8f6f3;
+}
+
+.coach-day-control-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(118px, 0.82fr);
+  gap: 10px;
+  align-items: center;
+}
+
+.coach-day-control-head div,
+.coach-day-plan-select {
+  display: grid;
+  gap: 4px;
+}
+
+.coach-day-control-head span,
+.coach-day-plan-select span {
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.coach-day-control-head strong {
+  color: var(--text);
+  font-size: 1.18rem;
+  line-height: 1.08;
+}
+
+.coach-day-control-head small {
+  color: var(--muted);
+  font-weight: 750;
+}
+
+.coach-day-control input,
+.coach-day-plan-select select {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: #fff;
+  color: var(--text);
+  font-weight: 850;
+}
+
+.coach-day-control-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.coach-day-control-actions button {
+  min-width: 0;
+  min-height: 40px;
+  border: 1px solid rgba(15, 118, 110, 0.22);
+  border-radius: 14px;
+  background: #fff;
+  color: var(--accent-dark);
+  cursor: pointer;
+  font-size: 0.86rem;
+  font-weight: 850;
+  line-height: 1.1;
+}
+
 .athlete-picker {
   margin-bottom: 10px;
   padding: 10px;

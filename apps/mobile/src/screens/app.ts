@@ -58,6 +58,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
     queue: loadQueue(),
     selectedScreen: "dashboard",
     selectedAthleteId: loadSelectedAthleteId(),
+    selectedDayDate: todayValue(),
     executionDateFilter: null,
     planDateFilter: null,
     isOnline: navigator.onLine,
@@ -70,6 +71,15 @@ export function bootstrapMobileApp(root: HTMLElement) {
   const update = (patch: Partial<MobileAppState>) => {
     Object.assign(state, patch);
     render();
+  };
+
+  const updateSelectedDayDate = (date: string) => {
+    const selectedDayDate = normalizeDateValue(date) ?? todayValue();
+    update({
+      executionDateFilter: selectedDayDate,
+      planDateFilter: selectedDayDate,
+      selectedDayDate,
+    });
   };
 
   const client = () => new MobileApiClient(
@@ -580,12 +590,45 @@ export function bootstrapMobileApp(root: HTMLElement) {
 
     root.querySelector<HTMLSelectElement>("[data-execution-date-filter]")?.addEventListener("change", (event) => {
       const executionDateFilter = (event.currentTarget as HTMLSelectElement).value || null;
+      if (isCoachRole(state.session.user?.role)) {
+        updateSelectedDayDate(executionDateFilter ?? state.selectedDayDate);
+        return;
+      }
+
       update({ executionDateFilter });
     });
 
     root.querySelector<HTMLSelectElement>("[data-plan-date-filter]")?.addEventListener("change", (event) => {
       const planDateFilter = (event.currentTarget as HTMLSelectElement).value || null;
+      if (isCoachRole(state.session.user?.role)) {
+        updateSelectedDayDate(planDateFilter ?? state.selectedDayDate);
+        return;
+      }
+
       update({ planDateFilter });
+    });
+
+    root.querySelector<HTMLInputElement>("[data-coach-day-date]")?.addEventListener("change", (event) => {
+      updateSelectedDayDate((event.currentTarget as HTMLInputElement).value);
+    });
+
+    root.querySelector<HTMLSelectElement>("[data-coach-day-plan-date]")?.addEventListener("change", (event) => {
+      const date = (event.currentTarget as HTMLSelectElement).value;
+
+      if (date) {
+        updateSelectedDayDate(date);
+      }
+    });
+
+    root.querySelectorAll<HTMLButtonElement>("[data-coach-day-shift]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const shift = button.dataset.coachDayShift ?? "0";
+        const nextDate = shift === "today"
+          ? todayValue()
+          : addDays(state.selectedDayDate, Number(shift));
+
+        updateSelectedDayDate(nextDate);
+      });
     });
 
     root.querySelector<HTMLButtonElement>("[data-refresh]")?.addEventListener("click", () => {
@@ -604,7 +647,11 @@ export function bootstrapMobileApp(root: HTMLElement) {
       select.addEventListener("change", (event) => {
         const selectedAthleteId = (event.currentTarget as HTMLSelectElement).value || null;
         saveSelectedAthleteId(selectedAthleteId);
-        update({ executionDateFilter: null, planDateFilter: null, selectedAthleteId });
+        update({
+          executionDateFilter: isCoachRole(state.session.user?.role) ? state.selectedDayDate : null,
+          planDateFilter: isCoachRole(state.session.user?.role) ? state.selectedDayDate : null,
+          selectedAthleteId,
+        });
       });
     });
 
@@ -613,8 +660,8 @@ export function bootstrapMobileApp(root: HTMLElement) {
         const selectedAthleteId = button.dataset.athleteCard ?? null;
         saveSelectedAthleteId(selectedAthleteId);
         update({
-          executionDateFilter: null,
-          planDateFilter: null,
+          executionDateFilter: isCoachRole(state.session.user?.role) ? state.selectedDayDate : null,
+          planDateFilter: isCoachRole(state.session.user?.role) ? state.selectedDayDate : null,
           selectedAthleteId,
           selectedScreen: "dashboard",
         });
@@ -741,7 +788,7 @@ function renderAppShell(state: MobileAppState) {
       ${renderToolbar(state)}
 
       ${
-        (user?.role === "coach" || user?.role === "admin") && state.selectedScreen !== "athletes"
+        isCoachRole(user?.role) && state.selectedScreen !== "athletes"
           ? renderAthletePicker(state)
           : ""
       }
@@ -833,19 +880,27 @@ function renderDashboardScreen(state: MobileAppState, athleteId: string | null) 
   const competitionPlans = getCompetitionPlansForAthlete(state, athleteId);
   const nextStart = getNextCompetitionPlan(competitionPlans);
   const pendingQueue = getPendingQueueItems(state.queue);
+  const isCoachView = isCoachRole(state.session.user?.role);
+  const selectedDayDate = isCoachView ? state.selectedDayDate : todayValue();
+  const visiblePlans = isCoachView
+    ? plans.filter((plan) => plan.day.dayDate === selectedDayDate)
+    : plans;
 
   return `
     <div class="screen-head">
-      <h2>Сегодня</h2>
-      <p>${nextStart ? `До старта ${daysUntil(nextStart.competitionStartDate)} дн.` : "Ближайший старт не выбран"}</p>
+      <h2>${isCoachView ? "День спортсмена" : "Сегодня"}</h2>
+      <p>${isCoachView
+        ? `${formatDate(selectedDayDate)} · ${nextStart ? `до старта ${daysUntil(nextStart.competitionStartDate)} дн.` : "ближайший старт не выбран"}`
+        : nextStart ? `До старта ${daysUntil(nextStart.competitionStartDate)} дн.` : "Ближайший старт не выбран"}</p>
     </div>
+    ${isCoachView ? renderCoachDayControl(state, athleteId) : ""}
     <div class="metric-grid">
-      <article><span>Планы</span><strong>${plans.length}</strong></article>
+      <article><span>${isCoachView ? "Планы дня" : "Планы"}</span><strong>${visiblePlans.length}</strong></article>
       <article><span>Старты</span><strong>${competitionPlans.length}</strong></article>
       <article><span>Очередь</span><strong>${pendingQueue.length}</strong></article>
       <article><span>Связь</span><strong>${state.isOnline ? "Есть" : "Нет"}</strong></article>
     </div>
-    ${athleteId ? renderTodayAthleteIndicators(state, athleteId) : ""}
+    ${athleteId ? renderAthleteDayIndicators(state, athleteId, selectedDayDate) : ""}
     ${nextStart ? `
       <article class="focus-card">
         <span>Следующий старт</span>
@@ -885,6 +940,43 @@ function renderAthletesScreen(state: MobileAppState) {
   `;
 }
 
+function renderCoachDayControl(state: MobileAppState, athleteId: string | null) {
+  const selectedDayDate = state.selectedDayDate;
+  const options = getCoachSelectableDayOptions(state, athleteId);
+  const selectedOption = options.some((option) => option.date === selectedDayDate);
+
+  return `
+    <section class="coach-day-control" aria-label="Выбор дня спортсмена">
+      <div class="coach-day-control-head">
+        <div>
+          <span>Выбранный день</span>
+          <strong>${escapeHtml(formatDayRelativeLabel(selectedDayDate))}</strong>
+          <small>${formatDate(selectedDayDate)}</small>
+        </div>
+        <input data-coach-day-date type="date" value="${escapeHtml(selectedDayDate)}" />
+      </div>
+      <div class="coach-day-control-actions">
+        <button data-coach-day-shift="-1" type="button">Вчера</button>
+        <button data-coach-day-shift="today" type="button">Сегодня</button>
+        <button data-coach-day-shift="1" type="button">Завтра</button>
+      </div>
+      ${options.length ? `
+        <label class="coach-day-plan-select">
+          <span>Даты из плана, дневника и календаря</span>
+          <select data-coach-day-plan-date>
+            ${selectedOption ? "" : `<option value="${escapeHtml(selectedDayDate)}" selected>${formatDate(selectedDayDate)} · выбранный день</option>`}
+            ${options.map((option) => `
+              <option value="${escapeHtml(option.date)}" ${selectedDayDate === option.date ? "selected" : ""}>
+                ${formatDate(option.date)} · ${escapeHtml(option.label)}
+              </option>
+            `).join("")}
+          </select>
+        </label>
+      ` : ""}
+    </section>
+  `;
+}
+
 function renderCoachAthleteCard(athlete: CoachAthleteSummary) {
   const profileParts = [
     athlete.sport,
@@ -912,28 +1004,28 @@ function renderCoachAthleteCard(athlete: CoachAthleteSummary) {
 }
 
 function renderCoachAthleteDayBrief(state: MobileAppState, athleteId: string) {
-  const today = todayValue();
-  const entry = getReadinessEntryForDate(state, athleteId, today);
-  const daySummary = getCoachTodayDaySummary(state, athleteId, today);
+  const selectedDayDate = state.selectedDayDate;
+  const entry = getReadinessEntryForDate(state, athleteId, selectedDayDate);
+  const daySummary = getCoachDaySummary(state, athleteId, selectedDayDate);
   const nextStart = getNextCompetitionPlan(getCompetitionPlansForAthlete(state, athleteId));
   const cardStateClass = entry ? `readiness-${escapeHtml(entry.status)}` : "is-missing-readiness";
   const startLabel = nextStart
     ? `${formatShortDate(nextStart.competitionStartDate)} · через ${daysUntil(nextStart.competitionStartDate)} дн.`
     : "стартов нет";
-  const coachNote = daySummary.latestDiaryEntry?.notes?.trim() || "Комментария за сегодня пока нет.";
+  const coachNote = daySummary.latestDiaryEntry?.notes?.trim() || "Комментария за выбранный день пока нет.";
 
   return `
     <section class="athlete-day-brief-card ${cardStateClass}">
       <div class="athlete-day-brief-head">
         <div>
           <span>Краткий статус дня</span>
-          <h3>Сегодня · ${formatShortDate(today)}</h3>
+          <h3>${escapeHtml(formatDayRelativeLabel(selectedDayDate))} · ${formatShortDate(selectedDayDate)}</h3>
           <p>${escapeHtml(entry ? formatReadinessFlags(entry) : "готовность не отправлена")} · ${escapeHtml(daySummary.statusLabel.toLowerCase())}</p>
         </div>
         <strong>${entry ? entry.score : "-"}</strong>
       </div>
       <div class="athlete-day-brief-grid">
-        ${renderCoachAthleteBriefMetric("План сегодня", formatCoachTodayPlanCount(daySummary), formatCoachTodayPlanNames(daySummary))}
+        ${renderCoachAthleteBriefMetric("План на день", formatCoachTodayPlanCount(daySummary), formatCoachTodayPlanNames(daySummary))}
         ${renderCoachAthleteBriefMetric("Выполнение", `${daySummary.completedExerciseCount}/${daySummary.exerciseCount || 0}`, formatCoachTodayExerciseBreakdown(daySummary))}
         ${renderCoachAthleteBriefMetric("Нагрузка", `${formatLoadValue(daySummary.actualLoad)} / ${formatLoadValue(daySummary.plannedLoad)}`, formatCoachTodayLoadDelta(daySummary))}
         ${renderCoachAthleteBriefMetric("Ближайший старт", nextStart ? formatShortDate(nextStart.competitionStartDate) : "-", startLabel)}
@@ -958,21 +1050,20 @@ function renderCoachAthleteBriefMetric(label: string, value: string, detail: str
   `;
 }
 
-function renderTodayAthleteIndicators(state: MobileAppState, athleteId: string) {
-  const today = todayValue();
+function renderAthleteDayIndicators(state: MobileAppState, athleteId: string, date: string) {
   const athlete = state.data.athletes.find((item) => item.athleteId === athleteId) ?? null;
-  const entry = getReadinessEntryForDate(state, athleteId, today);
-  const daySummary = getCoachTodayDaySummary(state, athleteId, today);
-  const title = athlete ? `Показатели сегодня · ${athlete.fullName}` : "Показатели сегодня";
+  const entry = getReadinessEntryForDate(state, athleteId, date);
+  const daySummary = getCoachDaySummary(state, athleteId, date);
+  const title = athlete ? `Показатели дня · ${athlete.fullName}` : "Показатели дня";
   const cardStateClass = entry ? `readiness-${escapeHtml(entry.status)}` : "is-missing-readiness";
 
   return `
     <section class="today-indicators-card ${cardStateClass}">
       <div class="today-indicators-head">
         <div>
-          <span>Сегодня</span>
+          <span>${escapeHtml(formatDayRelativeLabel(date))}</span>
           <h3>${escapeHtml(title)}</h3>
-          <p>${formatDate(today)} · ${escapeHtml(entry ? formatReadinessFlags(entry) : "готовность не отправлена")} · ${escapeHtml(daySummary.statusLabel.toLowerCase())}</p>
+          <p>${formatDate(date)} · ${escapeHtml(entry ? formatReadinessFlags(entry) : "готовность не отправлена")} · ${escapeHtml(daySummary.statusLabel.toLowerCase())}</p>
         </div>
         <strong>${entry ? entry.score : "-"}</strong>
       </div>
@@ -1003,7 +1094,7 @@ function renderTodayAthleteIndicators(state: MobileAppState, athleteId: string) 
             <p>${escapeHtml(daySummary.latestDiaryEntry.notes)}</p>
             <small>${escapeHtml(daySummary.latestDiaryEntry.coachName)} · ${formatDateTime(daySummary.latestDiaryEntry.updatedAt)}</small>
           `
-          : "<p>Комментария за сегодня пока нет.</p>"}
+          : "<p>Комментария за выбранный день пока нет.</p>"}
       </div>
     </section>
   `;
@@ -1022,9 +1113,12 @@ function renderTodayIndicator(label: string, value: string, detail: string) {
 function renderPlansScreen(state: MobileAppState, athleteId: string | null) {
   const allPlans = sortPlansForExecution(getPlansForAthlete(state, athleteId));
   const dateOptions = getPlanDateOptions(allPlans);
-  const selectedDate = state.planDateFilter && dateOptions.some((option) => option.date === state.planDateFilter)
-    ? state.planDateFilter
-    : "";
+  const isCoachView = isCoachRole(state.session.user?.role);
+  const selectedDate = isCoachView
+    ? state.selectedDayDate
+    : state.planDateFilter && dateOptions.some((option) => option.date === state.planDateFilter)
+      ? state.planDateFilter
+      : "";
   const plans = selectedDate
     ? allPlans.filter((plan) => plan.day.dayDate === selectedDate)
     : allPlans;
@@ -1037,10 +1131,10 @@ function renderPlansScreen(state: MobileAppState, athleteId: string | null) {
     <div class="screen-head">
       <h2>Планы</h2>
       <p>${selectedDate
-        ? `${plans.length} ${formatAssignedDayCountLabel(plans.length)} на выбранную дату`
+        ? `${plans.length} ${formatAssignedDayCountLabel(plans.length)} · ${formatDate(selectedDate)}`
         : `${allPlans.length} ${formatAssignedDayCountLabel(allPlans.length)}`}</p>
     </div>
-    ${renderPlanDateFilter(dateOptions, selectedDate)}
+    ${renderPlanDateFilter(dateOptions, selectedDate, isCoachView)}
     <div class="list-stack">
       ${plans.length > 0
         ? plans.map((plan) => renderPlanCard(plan)).join("")
@@ -1052,16 +1146,21 @@ function renderPlansScreen(state: MobileAppState, athleteId: string | null) {
 function renderPlanDateFilter(
   options: Array<{ date: string; label: string }>,
   selectedDate: string,
+  isCoachView = false,
 ) {
-  if (options.length <= 1) {
+  if (options.length <= 1 && !isCoachView) {
     return "";
   }
 
+  const selectedOption = options.some((option) => option.date === selectedDate);
+
   return `
     <label class="plan-date-filter">
-      <span>День плана</span>
+      <span>${isCoachView ? "Единый день" : "День плана"}</span>
       <select data-plan-date-filter>
-        <option value="" ${selectedDate ? "" : "selected"}>Все дни по плану</option>
+        ${isCoachView
+          ? selectedOption ? "" : `<option value="${escapeHtml(selectedDate)}" selected>${formatDate(selectedDate)} · выбранный день</option>`
+          : `<option value="" ${selectedDate ? "" : "selected"}>Все дни по плану</option>`}
         ${options.map((option) => `
           <option value="${escapeHtml(option.date)}" ${selectedDate === option.date ? "selected" : ""}>
             ${escapeHtml(formatDate(option.date))} · ${escapeHtml(option.label)}
@@ -1107,6 +1206,7 @@ function renderResultsScreen(state: MobileAppState, athleteId: string | null) {
   const plans = getPlansForAthlete(state, athleteId);
   const canSubmitExecution = state.session.user?.role === "athlete";
   const isCoachReview = state.session.user?.role === "coach" || state.session.user?.role === "admin";
+  const selectedDayDate = isCoachReview ? state.selectedDayDate : null;
 
   return `
     <div class="screen-head">
@@ -1118,8 +1218,8 @@ function renderResultsScreen(state: MobileAppState, athleteId: string | null) {
           : getSyncActionRestrictionMessage(state.session.user?.role ?? null, "execution")}</p>
     </div>
     ${renderExecutionForm(state, plans)}
-    ${renderCoachDiaryHistory(state, athleteId)}
-    ${renderExecutionHistory(state)}
+    ${renderCoachDiaryHistory(state, athleteId, selectedDayDate)}
+    ${renderExecutionHistory(state, athleteId, selectedDayDate)}
   `;
 }
 
@@ -1414,10 +1514,13 @@ interface CoachTodayDaySummary {
 function renderExecutionForm(state: MobileAppState, plans: AssignedPlanSummary[]) {
   const allPlanGroups = getExecutionPlanGroups(plans);
   const canSubmitExecution = state.session.user?.role === "athlete";
+  const isCoachView = isCoachRole(state.session.user?.role);
   const dateOptions = getExecutionDateOptions(allPlanGroups);
-  const selectedDate = state.executionDateFilter && dateOptions.some((option) => option.date === state.executionDateFilter)
-    ? state.executionDateFilter
-    : "";
+  const selectedDate = isCoachView
+    ? state.selectedDayDate
+    : state.executionDateFilter && dateOptions.some((option) => option.date === state.executionDateFilter)
+      ? state.executionDateFilter
+      : "";
   const planGroups = selectedDate
     ? allPlanGroups.filter((group) => group.plan.day.dayDate === selectedDate)
     : allPlanGroups;
@@ -1442,9 +1545,9 @@ function renderExecutionForm(state: MobileAppState, plans: AssignedPlanSummary[]
         <h3>${canSubmitExecution ? "Выполнение тренировки" : "Дни по плану"}</h3>
         <p>${canSubmitExecution
           ? `${plans.length} назначенных дней · ${blockCount} блоков · ${exerciseCount} упражнений. Ближайший день открыт сверху.`
-          : `Режим просмотра · ${plans.length} назначенных дней · ${blockCount} блоков · ${exerciseCount} упражнений.`}</p>
+          : `Режим просмотра · ${formatDate(selectedDate)} · ${blockCount} блоков · ${exerciseCount} упражнений.`}</p>
       </div>
-      ${renderExecutionDateFilter(dateOptions, selectedDate)}
+      ${renderExecutionDateFilter(dateOptions, selectedDate, isCoachView)}
       <div class="execution-plan-stack">
         ${planGroups.length > 0
           ? planGroups
@@ -1459,16 +1562,21 @@ function renderExecutionForm(state: MobileAppState, plans: AssignedPlanSummary[]
 function renderExecutionDateFilter(
   options: Array<{ date: string; label: string }>,
   selectedDate: string,
+  isCoachView = false,
 ) {
-  if (options.length <= 1) {
+  if (options.length <= 1 && !isCoachView) {
     return "";
   }
 
+  const selectedOption = options.some((option) => option.date === selectedDate);
+
   return `
     <label class="execution-date-filter">
-      <span>Дата разбора</span>
+      <span>${isCoachView ? "Единый день" : "Дата разбора"}</span>
       <select data-execution-date-filter>
-        <option value="" ${selectedDate ? "" : "selected"}>Все дни по плану</option>
+        ${isCoachView
+          ? selectedOption ? "" : `<option value="${escapeHtml(selectedDate)}" selected>${formatDate(selectedDate)} · выбранный день</option>`
+          : `<option value="" ${selectedDate ? "" : "selected"}>Все дни по плану</option>`}
         ${options.map((option) => `
           <option value="${escapeHtml(option.date)}" ${selectedDate === option.date ? "selected" : ""}>
             ${escapeHtml(formatDate(option.date))} · ${escapeHtml(option.label)}
@@ -1845,14 +1953,31 @@ function renderCompetitionResultForm(plans: CompetitionPlanSummary[]) {
   `;
 }
 
-function renderExecutionHistory(state: MobileAppState) {
-  if (state.data.executionResults.length === 0) {
+function renderExecutionHistory(
+  state: MobileAppState,
+  athleteId: string | null = null,
+  dayDate: string | null = null,
+) {
+  const results = state.data.executionResults.filter((result) => {
+    if (athleteId && result.athleteId !== athleteId) {
+      return false;
+    }
+
+    if (!dayDate) {
+      return true;
+    }
+
+    const plan = state.data.assignedPlans.find((item) => item.id === result.assignedPlanId);
+    return plan?.day.dayDate === dayDate;
+  });
+
+  if (results.length === 0) {
     return "";
   }
 
   return `
     <div class="list-stack">
-      ${state.data.executionResults.slice(0, 10).map((result) => `
+      ${results.slice(0, 10).map((result) => `
         <article class="list-card">
           <strong>${result.completed ? "Выполнено" : "Не выполнено"}</strong>
           <span>${formatDateTime(result.updatedAt)}</span>
@@ -1864,8 +1989,13 @@ function renderExecutionHistory(state: MobileAppState) {
   `;
 }
 
-function renderCoachDiaryHistory(state: MobileAppState, athleteId: string | null) {
+function renderCoachDiaryHistory(
+  state: MobileAppState,
+  athleteId: string | null,
+  dayDate: string | null = null,
+) {
   const entries = getCoachDiaryEntriesForAthlete(state, athleteId)
+    .filter((entry) => !dayDate || entry.entryDate === dayDate)
     .slice()
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
     .slice(0, 6);
@@ -1878,7 +2008,7 @@ function renderCoachDiaryHistory(state: MobileAppState, athleteId: string | null
     <section class="coach-diary-history">
       <div class="section-title">
         <h3>Дневник тренера</h3>
-        <p>${entries.length} последних записей</p>
+        <p>${dayDate ? `${entries.length} записей за ${formatDate(dayDate)}` : `${entries.length} последних записей`}</p>
       </div>
       <div class="coach-diary-history-list">
         ${entries.map((entry) => `
@@ -2045,6 +2175,10 @@ function getScreensForRole(role: string | undefined): Array<{ id: MobileScreen; 
   ];
 }
 
+function isCoachRole(role: string | undefined | null) {
+  return role === "coach" || role === "admin";
+}
+
 function resolveSelectedAthleteId(
   user: MobileAppState["session"]["user"],
   data: MobileDataSnapshot,
@@ -2120,6 +2254,54 @@ function getExecutionDateOptions(groups: ExecutionPlanGroup[]) {
     }));
 }
 
+function getCoachSelectableDayOptions(state: MobileAppState, athleteId: string | null) {
+  const labelsByDate = new Map<string, Set<string>>();
+  const addDate = (date: string | null | undefined, label: string) => {
+    const normalizedDate = normalizeDateValue(date ?? "");
+
+    if (!normalizedDate) {
+      return;
+    }
+
+    if (!labelsByDate.has(normalizedDate)) {
+      labelsByDate.set(normalizedDate, new Set());
+    }
+
+    labelsByDate.get(normalizedDate)?.add(label);
+  };
+
+  addDate(todayValue(), "Сегодня");
+
+  getPlansForAthlete(state, athleteId).forEach((plan) => {
+    addDate(plan.day.dayDate, plan.day.label ? `План ${plan.day.label}` : "План");
+  });
+
+  const readinessEntries = state.data.readinessHistory.length
+    ? state.data.readinessHistory
+    : state.data.readinessEntry
+      ? [state.data.readinessEntry]
+      : [];
+
+  readinessEntries
+    .filter((entry) => !athleteId || entry.athleteId === athleteId)
+    .forEach((entry) => addDate(entry.entryDate, "Готовность"));
+
+  getCoachDiaryEntriesForAthlete(state, athleteId).forEach((entry) => {
+    addDate(entry.entryDate, "Дневник");
+  });
+
+  getCompetitionPlansForAthlete(state, athleteId).forEach((plan) => {
+    addDate(plan.competitionStartDate, "Старт");
+  });
+
+  return Array.from(labelsByDate.entries())
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([date, labels]) => ({
+      date,
+      label: Array.from(labels).slice(0, 2).join(" · "),
+    }));
+}
+
 function getExecutionDaySummary(
   state: MobileAppState,
   group: ExecutionPlanGroup,
@@ -2168,7 +2350,7 @@ function getExecutionDaySummary(
   };
 }
 
-function getCoachTodayDaySummary(
+function getCoachDaySummary(
   state: MobileAppState,
   athleteId: string,
   date: string,
@@ -3091,6 +3273,43 @@ function readCheckbox(form: HTMLFormElement, name: string) {
 
 function todayValue() {
   return new Date().toISOString().slice(0, 10);
+}
+
+function normalizeDateValue(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return null;
+  }
+
+  const date = new Date(`${value}T00:00:00.000Z`);
+  return Number.isNaN(date.getTime()) ? null : value;
+}
+
+function addDays(value: string, days: number) {
+  const normalizedDate = normalizeDateValue(value) ?? todayValue();
+  const date = new Date(`${normalizedDate}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + (Number.isFinite(days) ? days : 0));
+  return date.toISOString().slice(0, 10);
+}
+
+function formatDayRelativeLabel(value: string) {
+  const normalizedDate = normalizeDateValue(value) ?? todayValue();
+  const selectedTime = new Date(`${normalizedDate}T00:00:00.000Z`).getTime();
+  const todayTime = new Date(`${todayValue()}T00:00:00.000Z`).getTime();
+  const diffDays = Math.round((selectedTime - todayTime) / 86400000);
+
+  if (diffDays === -1) {
+    return "Вчера";
+  }
+
+  if (diffDays === 0) {
+    return "Сегодня";
+  }
+
+  if (diffDays === 1) {
+    return "Завтра";
+  }
+
+  return "Выбранный день";
 }
 
 function formatDate(value: string) {
