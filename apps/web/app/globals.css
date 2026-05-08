@@ -3136,6 +3136,79 @@ select {
   background: rgba(255, 255, 255, 0.78);
 }
 
+.coach-ai-day-review-panel {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(15, 118, 110, 0.18);
+  background: rgba(240, 253, 250, 0.72);
+}
+
+.coach-ai-day-review-panel .secondary-button {
+  white-space: normal;
+}
+
+.coach-ai-day-review-panel > p,
+.coach-ai-day-review-result p {
+  margin: 0;
+  line-height: 1.55;
+}
+
+.coach-ai-day-review-result {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.coach-ai-day-review-result article,
+.coach-ai-review-history article {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.coach-ai-day-review-result span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.coach-ai-day-review-result ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+  line-height: 1.55;
+}
+
+.coach-ai-day-review-result li,
+.coach-ai-day-review-result p,
+.coach-ai-review-history strong,
+.coach-ai-review-history span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.coach-ai-day-review-result small,
+.coach-ai-review-history span {
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.coach-ai-review-history {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
 .analytics-mini-grid {
   margin-bottom: 4px;
 }

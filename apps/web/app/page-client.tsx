@@ -44,6 +44,10 @@ import {
   type CoachAiReviewDiagnosticResponse,
   type CoachAiReviewStatus,
   type CoachAiReviewStatusResponse,
+  type CoachDayAiPayload,
+  type CoachDayAiReview,
+  type CoachDayAiReviewHistoryResponse,
+  type CoachDayAiReviewResponse,
   type PlanTemplateRecommendation,
   type PlannerSuggestion,
   type PlannerWarning,
@@ -61,6 +65,7 @@ import {
   type ReadinessSubmissionPayload,
   type DeleteCompetitionsPayload,
   type DeleteCompetitionsResponse,
+  estimateTrainingBlockLoad,
   estimateTrainingBlocksLoad,
   type UwwEventSyncFilters,
   type UwwEventSyncOptions,
@@ -253,6 +258,9 @@ type AuthMode = "login" | "register";
 type Language = I18nLanguage;
 type SeasonDisplayMode = "timeline" | "hybrid";
 type SeasonEditorMode = "starts" | "plan" | "result" | "cycles";
+type ReviewBlock = ExecutionReviewPlan["sessions"][number]["blocks"][number];
+type ReviewExercise = NonNullable<ReviewBlock["exercises"]>[number];
+type CoachDayAiTaskStatus = Exclude<CoachDayAiPayload["execution"]["status"], "no-plan">;
 
 const MONTH_LABELS: Record<Language, string[]> = {
   en: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
@@ -524,6 +532,285 @@ function upsertCoachDiaryEntry(entries: CoachDiaryEntry[], entry: CoachDiaryEntr
   const nextEntryKey = coachDiaryTargetKey(entry);
   return [entry, ...entries.filter((item) => item.id !== entry.id && coachDiaryTargetKey(item) !== nextEntryKey)]
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+}
+
+function sortCoachAiReviewsNewestFirst(left: CoachDayAiReview, right: CoachDayAiReview) {
+  return right.generatedAt.localeCompare(left.generatedAt);
+}
+
+function upsertCoachAiReviewHistory(reviews: CoachDayAiReview[], review: CoachDayAiReview) {
+  const nextReviews = review.id
+    ? reviews.filter((item) => item.id !== review.id)
+    : reviews.filter(
+        (item) =>
+          item.athleteId !== review.athleteId ||
+          item.entryDate !== review.entryDate ||
+          item.generatedAt !== review.generatedAt,
+      );
+
+  return [review, ...nextReviews]
+    .filter((item) => item.source !== "local-rules")
+    .sort(sortCoachAiReviewsNewestFirst)
+    .slice(0, 300);
+}
+
+function getCoachAiReviewsForDay(
+  reviews: CoachDayAiReview[],
+  athleteId: string,
+  entryDate: string,
+) {
+  return reviews
+    .filter(
+      (review) =>
+        review.athleteId === athleteId &&
+        review.entryDate === entryDate &&
+        review.source !== "local-rules",
+    )
+    .slice()
+    .sort(sortCoachAiReviewsNewestFirst);
+}
+
+function formatCoachAiReviewSource(source: CoachDayAiReview["source"], language: Language) {
+  if (source === "model") {
+    return copyFor(language, { en: "AI model", ru: "ИИ-модель", bg: "AI модел" });
+  }
+
+  if (source === "server-rules") {
+    return copyFor(language, {
+      en: "server review",
+      ru: "серверный разбор",
+      bg: "сървърен анализ",
+    });
+  }
+
+  return copyFor(language, {
+    en: "local draft",
+    ru: "локальный черновик",
+    bg: "локална чернова",
+  });
+}
+
+function roundCoachAiLoad(value: number) {
+  return Number.isFinite(value) ? Number(value.toFixed(1)) : 0;
+}
+
+function getCoachAiReviewStatusFromReview(status: ReviewBlock["executionStatus"]): CoachDayAiTaskStatus {
+  return status === "completed" ? "completed" : status === "partial" ? "partial" : "missed";
+}
+
+function getCoachAiExerciseStatus(exercise: ReviewExercise): CoachDayAiTaskStatus {
+  if (exercise.executionStatus === "completed") {
+    return "completed";
+  }
+
+  if (exercise.executionStatus === "partial" || hasCoachAiExerciseDetails(exercise.actualResult)) {
+    return "partial";
+  }
+
+  return "missed";
+}
+
+function hasCoachAiExerciseDetails(result: ReviewExercise["actualResult"]) {
+  return Boolean(
+    result &&
+      (result.setsCompleted !== null ||
+        result.repsCompleted !== null ||
+        result.weightKg !== null ||
+        result.durationMinutes !== null ||
+        result.rpe !== null ||
+        result.notes.trim().length > 0),
+  );
+}
+
+function formatCoachAiExerciseActual(result: ReviewExercise["actualResult"], language: Language) {
+  if (!result) {
+    return copyFor(language, { en: "not marked", ru: "нет отметки", bg: "няма отметка" });
+  }
+
+  const parts = [
+    result.completed
+      ? copyFor(language, { en: "marked", ru: "отмечено", bg: "отбелязано" })
+      : "",
+    result.setsCompleted !== null
+      ? `${result.setsCompleted} ${copyFor(language, { en: "sets", ru: "подх.", bg: "сер." })}`
+      : "",
+    result.repsCompleted !== null
+      ? `${result.repsCompleted} ${copyFor(language, { en: "reps", ru: "повт.", bg: "повт." })}`
+      : "",
+    result.weightKg !== null ? `${result.weightKg} кг` : "",
+    result.durationMinutes !== null
+      ? `${result.durationMinutes} ${copyFor(language, { en: "min", ru: "мин.", bg: "мин." })}`
+      : "",
+    result.rpe !== null ? `RPE ${result.rpe}` : "",
+    result.notes.trim(),
+  ].filter(Boolean);
+
+  return parts.length
+    ? parts.join(" · ")
+    : copyFor(language, {
+        en: "result row exists, but details are empty",
+        ru: "есть строка, но факт не заполнен",
+        bg: "има ред, но реалното изпълнение не е попълнено",
+      });
+}
+
+function formatCoachAiReadinessFlags(entry: ReadinessEntry, language: Language) {
+  if (entry.explanation.length === 0) {
+    return copyFor(language, {
+      en: "no additional readiness flags",
+      ru: "без дополнительных факторов готовности",
+      bg: "без допълнителни фактори за готовност",
+    });
+  }
+
+  return entry.explanation.join(", ");
+}
+
+function formatCoachAiReadinessStatus(status: ReadinessEntry["status"], language: Language) {
+  if (status === "green") {
+    return copyFor(language, { en: "Green", ru: "Зелёный", bg: "Зелен" });
+  }
+
+  if (status === "yellow") {
+    return copyFor(language, { en: "Yellow", ru: "Жёлтый", bg: "Жълт" });
+  }
+
+  return copyFor(language, { en: "Red", ru: "Красный", bg: "Червен" });
+}
+
+function getCoachAiBlockPlannedLoad(block: ReviewBlock) {
+  return roundCoachAiLoad(block.actualResult?.plannedLoad ?? estimateTrainingBlockLoad(block));
+}
+
+function getCoachAiBlockActualLoad(block: ReviewBlock, plannedLoad: number) {
+  if (block.actualResult?.actualLoad !== null && block.actualResult?.actualLoad !== undefined) {
+    return roundCoachAiLoad(block.actualResult.actualLoad);
+  }
+
+  if (!block.actualResult) {
+    return 0;
+  }
+
+  if (block.actualResult.durationMinutes !== null && block.actualResult.rpe !== null) {
+    return roundCoachAiLoad(block.actualResult.durationMinutes * block.actualResult.rpe);
+  }
+
+  const exercises = block.exercises ?? [];
+  if (exercises.length > 0) {
+    const completed = exercises.filter((exercise) => exercise.actualResult?.completed === true).length;
+    return roundCoachAiLoad(plannedLoad * (completed / exercises.length));
+  }
+
+  return block.actualResult.completed ? plannedLoad : 0;
+}
+
+function buildCoachDayAiPayloadFromReview(input: {
+  athlete: CoachAthleteSummary | null;
+  diaryEntry: CoachDiaryEntry | null;
+  language: Language;
+  readinessEntry: ReadinessEntry | null;
+  review: ExecutionReviewPlan;
+}): CoachDayAiPayload {
+  const blocks = input.review.sessions.flatMap((session) =>
+    session.blocks.map((block) => {
+      const plannedLoad = getCoachAiBlockPlannedLoad(block);
+      const actualLoad = getCoachAiBlockActualLoad(block, plannedLoad);
+      const exercises = [...(block.exercises ?? [])]
+        .sort((left, right) => left.orderIndex - right.orderIndex)
+        .map((exercise) => {
+          return {
+            actual: formatCoachAiExerciseActual(exercise.actualResult, input.language),
+            name: exercise.name,
+            plannedControl: formatExerciseControlCell(exercise, input.language).replace(/^-$/u, ""),
+            plannedWork: formatExerciseWorkCell(exercise, input.language).replace(/^-$/u, ""),
+            status: getCoachAiExerciseStatus(exercise),
+          };
+        });
+
+      return {
+        actualLoad,
+        exercises,
+        name: block.name,
+        plannedLoad,
+        sessionName: session.name,
+        status: getCoachAiReviewStatusFromReview(block.executionStatus),
+      };
+    }),
+  );
+  const plannedLoad = roundCoachAiLoad(blocks.reduce((sum, block) => sum + block.plannedLoad, 0));
+  const actualLoad = roundCoachAiLoad(blocks.reduce((sum, block) => sum + block.actualLoad, 0));
+  const executionStatus =
+    input.review.summary.plannedBlocks === 0
+      ? "no-plan"
+      : input.review.summary.completedBlocks >= input.review.summary.plannedBlocks
+        ? "completed"
+        : input.review.summary.completedBlocks + input.review.summary.partialBlocks > 0
+          ? "partial"
+          : "missed";
+
+  return {
+    athlete: {
+      discipline: input.athlete?.discipline || null,
+      displayName: input.review.athleteName,
+      sport: input.athlete?.sport || null,
+      weightClass: input.athlete?.weightClass || null,
+    },
+    coachComment: input.diaryEntry?.notes.trim() || null,
+    date: input.review.dayDate,
+    execution: {
+      blocks: {
+        completed: input.review.summary.completedBlocks,
+        missed: input.review.summary.missedBlocks,
+        partial: input.review.summary.partialBlocks,
+        total: input.review.summary.plannedBlocks,
+      },
+      exercises: {
+        completed: input.review.summary.completedExercises,
+        missed: input.review.summary.missedExercises,
+        partial: input.review.summary.partialExercises,
+        total: input.review.summary.plannedExercises,
+      },
+      status: executionStatus,
+      statusLabel:
+        executionStatus === "completed"
+          ? copyFor(input.language, { en: "Completed", ru: "Выполнено", bg: "Изпълнено" })
+          : executionStatus === "partial"
+            ? copyFor(input.language, {
+                en: "Partially completed",
+                ru: "Частично выполнено",
+                bg: "Частично изпълнено",
+              })
+            : executionStatus === "missed"
+              ? copyFor(input.language, {
+                  en: "Not completed",
+                  ru: "Не выполнено",
+                  bg: "Не е изпълнено",
+                })
+              : copyFor(input.language, {
+                  en: "No plan",
+                  ru: "Нет плана",
+                  bg: "Няма план",
+                }),
+    },
+    load: {
+      actual: actualLoad,
+      delta: roundCoachAiLoad(actualLoad - plannedLoad),
+      planned: plannedLoad,
+    },
+    plan: {
+      blocks,
+      count: 1,
+      templates: [input.review.templateName].filter(Boolean),
+    },
+    readiness: input.readinessEntry
+      ? {
+          flags: formatCoachAiReadinessFlags(input.readinessEntry, input.language),
+          score: input.readinessEntry.score,
+          status: input.readinessEntry.status,
+          statusLabel: formatCoachAiReadinessStatus(input.readinessEntry.status, input.language),
+        }
+      : null,
+  };
 }
 
 function withFallbackOptions(options: string[], fallback: string) {
@@ -4586,6 +4873,9 @@ export function PageClient({
   );
   const [coachDiaryDraft, setCoachDiaryDraft] =
     useState<CoachDiaryDraft>(emptyCoachDiaryDraft);
+  const [coachAiReviews, setCoachAiReviews] = useState<CoachDayAiReview[]>([]);
+  const [coachAiReviewBusy, setCoachAiReviewBusy] = useState(false);
+  const [coachAiReviewMessage, setCoachAiReviewMessage] = useState("");
   const [coachAiStatus, setCoachAiStatus] = useState<CoachAiReviewStatus | null>(null);
   const [coachAiDiagnostic, setCoachAiDiagnostic] =
     useState<CoachAiReviewDiagnosticResponse | null>(null);
@@ -4705,6 +4995,8 @@ export function PageClient({
     setCoachExecutionReview(null);
     setCoachDiaryEntries([]);
     setCoachDiaryDraft(emptyCoachDiaryDraft);
+    setCoachAiReviews([]);
+    setCoachAiReviewMessage("");
     setCoachAnalyticsOverview(null);
     setCompetitionContext(null);
     setCompetitionReview(null);
@@ -5730,6 +6022,11 @@ export function PageClient({
     );
   }
 
+  async function loadCoachAiReviews() {
+    const response = await apiRequest<CoachDayAiReviewHistoryResponse>("/coach/ai-day-reviews");
+    setCoachAiReviews(response.reviews.slice().sort(sortCoachAiReviewsNewestFirst));
+  }
+
   async function loadCoachAiReviewStatus() {
     const response = await apiRequest<CoachAiReviewStatusResponse>("/coach/ai-day-review/status");
     setCoachAiStatus(response.status);
@@ -6056,6 +6353,7 @@ export function PageClient({
         await Promise.all([
           loadCoachAthletes(),
           loadAvailableCoachAthletes(),
+          loadCoachAiReviews(),
           loadCoachAiReviewStatus(),
           loadPlanTemplates(),
           loadAssignedPlans(),
@@ -8562,11 +8860,16 @@ export function PageClient({
       setCoachAiStatus(null);
       setCoachAiDiagnostic(null);
       setCoachAiDiagnosticMessage("");
+      setCoachAiReviews([]);
+      setCoachAiReviewMessage("");
       return;
     }
 
     void loadAvailableCoachAthletes();
     if (!isPreviewMode) {
+      void loadCoachAiReviews().catch(() => {
+        setCoachAiReviews([]);
+      });
       void loadCoachAiReviewStatus().catch(() => {
         setCoachAiStatus(null);
       });
@@ -8619,6 +8922,93 @@ export function PageClient({
       setErrorMessage(message);
     } finally {
       setCoachAiDiagnosticBusy(false);
+    }
+  }
+
+  async function handleGenerateCoachAiReviewClick() {
+    if (!canSeeCoachWorkspace || !selectedAthleteId || !coachExecutionReview) {
+      setCoachAiReviewMessage(
+        copyFor(language, {
+          en: "Select an athlete and a day before generating the AI review.",
+          ru: "Выберите спортсмена и день перед формированием разбора ИИ.",
+          bg: "Изберете спортист и ден преди генериране на AI анализа.",
+        }),
+      );
+      return;
+    }
+
+    if (isPreviewMode) {
+      setCoachAiReviewMessage(
+        copyFor(language, {
+          en: "AI review generation is available after sign-in.",
+          ru: "Формирование разбора ИИ доступно после входа в аккаунт.",
+          bg: "Генерирането на AI анализ е достъпно след вход.",
+        }),
+      );
+      return;
+    }
+
+    const readinessEntry =
+      selectedAthleteEntries.find(
+        (entry) => entry.athleteId === selectedAthleteId && entry.entryDate === coachExecutionReview.dayDate,
+      ) ?? null;
+    const diaryEntry =
+      coachDiaryEntries
+        .filter(
+          (entry) =>
+            entry.athleteId === selectedAthleteId &&
+            entry.assignedPlanId === coachExecutionReview.assignedPlanId,
+        )
+        .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0] ?? null;
+    const dayPayload = buildCoachDayAiPayloadFromReview({
+      athlete: selectedCoachAthlete,
+      diaryEntry,
+      language,
+      readinessEntry,
+      review: coachExecutionReview,
+    });
+
+    setCoachAiReviewBusy(true);
+    setCoachAiReviewMessage(
+      copyFor(language, {
+        en: "Generating server review for the selected day...",
+        ru: "Формирую серверный разбор выбранного дня...",
+        bg: "Генерирам сървърен анализ за избрания ден...",
+      }),
+    );
+    setErrorMessage("");
+
+    try {
+      const response = await apiRequest<CoachDayAiReviewResponse>(
+        `/coach/athletes/${encodeURIComponent(selectedAthleteId)}/ai-day-review`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            dayPayload,
+            entryDate: coachExecutionReview.dayDate,
+          }),
+        },
+      );
+      setCoachAiReviews((current) => upsertCoachAiReviewHistory(current, response.review));
+      setCoachAiReviewMessage(
+        copyFor(language, {
+          en: "AI review saved in history. Plan and diary were not changed.",
+          ru: "Разбор ИИ сохранён в истории. План и дневник не изменены.",
+          bg: "AI анализът е запазен в историята. Планът и дневникът не са променени.",
+        }),
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setCoachAiReviewMessage(
+        copyFor(language, {
+          en: "Server review failed. Plan and diary were not changed.",
+          ru: "Серверный разбор не прошёл. План и дневник не изменены.",
+          bg: "Сървърният анализ не мина. Планът и дневникът не са променени.",
+        }),
+      );
+      setErrorMessage(message);
+    } finally {
+      setCoachAiReviewBusy(false);
     }
   }
 
@@ -9435,6 +9825,10 @@ export function PageClient({
         .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
     : [];
   const latestCoachDiaryEntry = selectedCoachDiaryEntries[0] ?? null;
+  const selectedCoachAiReviewHistory = coachExecutionReview
+    ? getCoachAiReviewsForDay(coachAiReviews, selectedAthleteId, coachExecutionReview.dayDate)
+    : [];
+  const latestCoachAiReview = selectedCoachAiReviewHistory[0] ?? null;
   const athleteChangedToday = adaptedPlan
     ? [
         ...adaptedPlan.reducedBlocks.map((name) => ({
@@ -12929,6 +13323,112 @@ export function PageClient({
                               </small>
                             ) : null}
                           </article>
+                        ) : null}
+                      </div>
+                      <div className="coach-ai-day-review-panel">
+                        <div className="summary-topline">
+                          <div className="coach-ai-status-heading">
+                            <strong>
+                              {copyFor(language, {
+                                en: "AI review for this day",
+                                ru: "Разбор ИИ по этому дню",
+                                bg: "AI анализ за този ден",
+                              })}
+                            </strong>
+                            <small>
+                              {copyFor(language, {
+                                en: "Uses the selected day: readiness, plan, actual execution, and coach note.",
+                                ru: "Используется выбранный день: готовность, план, факт выполнения и запись тренера.",
+                                bg: "Използва избрания ден: готовност, план, реално изпълнение и запис на треньора.",
+                              })}
+                            </small>
+                          </div>
+                          <button
+                            className="secondary-button"
+                            disabled={coachAiReviewBusy}
+                            onClick={() => void handleGenerateCoachAiReviewClick()}
+                            type="button"
+                          >
+                            {coachAiReviewBusy
+                              ? copyFor(language, {
+                                  en: "Generating...",
+                                  ru: "Формирую...",
+                                  bg: "Генерирам...",
+                                })
+                              : copyFor(language, {
+                                  en: "Generate recommendation",
+                                  ru: "Сформировать рекомендацию",
+                                  bg: "Генерирай препоръка",
+                                })}
+                          </button>
+                        </div>
+
+                        <p>
+                          {coachAiReviewMessage ||
+                            copyFor(language, {
+                              en: "The server saves only the recommendation history. Plan and diary stay unchanged.",
+                              ru: "Сервер сохраняет только историю рекомендации. План и дневник не меняются.",
+                              bg: "Сървърът запазва само историята на препоръката. Планът и дневникът не се променят.",
+                            })}
+                        </p>
+
+                        {latestCoachAiReview ? (
+                          <div className="coach-ai-day-review-result">
+                            <article>
+                              <span>
+                                {copyFor(language, { en: "What is visible", ru: "Что видно", bg: "Какво се вижда" })}
+                              </span>
+                              <p>{latestCoachAiReview.observation}</p>
+                            </article>
+                            <article>
+                              <span>{copyFor(language, { en: "Risks", ru: "Риски", bg: "Рискове" })}</span>
+                              <ul>
+                                {latestCoachAiReview.riskNotes.map((item) => (
+                                  <li key={item}>{item}</li>
+                                ))}
+                              </ul>
+                            </article>
+                            <article>
+                              <span>
+                                {copyFor(language, {
+                                  en: "What to do tomorrow",
+                                  ru: "Что сделать завтра",
+                                  bg: "Какво да се направи утре",
+                                })}
+                              </span>
+                              <ul>
+                                {latestCoachAiReview.tomorrowActions.map((item) => (
+                                  <li key={item}>{item}</li>
+                                ))}
+                              </ul>
+                            </article>
+                            <small>
+                              {latestCoachAiReview.generatedAt.slice(0, 16)} /{" "}
+                              {formatCoachAiReviewSource(latestCoachAiReview.source, language)}
+                            </small>
+                          </div>
+                        ) : (
+                          <p className="placeholder-copy">
+                            {copyFor(language, {
+                              en: "There is no AI review history for this day yet.",
+                              ru: "Истории разбора ИИ за этот день пока нет.",
+                              bg: "Все още няма история на AI анализ за този ден.",
+                            })}
+                          </p>
+                        )}
+
+                        {selectedCoachAiReviewHistory.length > 1 ? (
+                          <div className="coach-ai-review-history">
+                            {selectedCoachAiReviewHistory.slice(1, 4).map((review) => (
+                              <article key={`${review.generatedAt}-${review.source}`}>
+                                <strong>{review.observation}</strong>
+                                <span>
+                                  {review.generatedAt.slice(0, 16)} /{" "}
+                                  {formatCoachAiReviewSource(review.source, language)}
+                                </span>
+                              </article>
+                            ))}
+                          </div>
                         ) : null}
                       </div>
                       <div className="coach-review-block-list">
