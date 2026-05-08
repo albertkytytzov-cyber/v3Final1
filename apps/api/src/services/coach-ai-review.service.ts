@@ -4,7 +4,10 @@ import type {
   UserRole,
 } from "@training-platform/shared";
 import { pool } from "../db";
-import { tryBuildCoachDayAiModelReview } from "./coach-ai-model-review.service";
+import {
+  getCoachAiReviewStatus,
+  tryBuildCoachDayAiModelReview,
+} from "./coach-ai-model-review.service";
 
 interface CoachDayAiReviewRow {
   id: string;
@@ -29,6 +32,32 @@ export async function buildCoachDayAiReview(input: {
   return (await tryBuildCoachDayAiModelReview(input, serverRulesReview)) ?? serverRulesReview;
 }
 
+export { getCoachAiReviewStatus };
+
+export async function runCoachAiReviewDiagnostic() {
+  const status = getCoachAiReviewStatus();
+  const entryDate = new Date().toISOString().slice(0, 10);
+  const review = await buildCoachDayAiReview({
+    athleteId: "diagnostic",
+    dayPayload: buildDiagnosticCoachDayPayload(entryDate),
+    entryDate,
+  });
+  const fallbackUsed = review.source !== "model";
+  const message = review.source === "model"
+    ? "Тестовый вызов модели прошёл успешно. План и дневник не изменены."
+    : status.mode === "model" && status.modelReady
+      ? "Модель настроена, но тестовый вызов ушёл в fallback на серверные правила. План и дневник не изменены."
+      : "Модель не вызвана: работает серверный разбор по правилам. План и дневник не изменены.";
+
+  return {
+    checkedAt: new Date().toISOString(),
+    fallbackUsed,
+    message,
+    review,
+    status,
+  };
+}
+
 function buildServerRulesCoachDayAiReview(input: {
   athleteId: string;
   entryDate: string;
@@ -44,6 +73,91 @@ function buildServerRulesCoachDayAiReview(input: {
     riskNotes: buildRiskNotes(input.dayPayload),
     source: "server-rules",
     tomorrowActions: buildTomorrowActions(input.dayPayload),
+  };
+}
+
+function buildDiagnosticCoachDayPayload(entryDate: string): CoachDayAiPayload {
+  return {
+    athlete: {
+      discipline: "вольная борьба",
+      displayName: "Тестовый спортсмен",
+      sport: "борьба",
+      weightClass: null,
+    },
+    coachComment: "Тестовая проверка подключения ИИ. Не записывать в дневник.",
+    date: entryDate,
+    execution: {
+      blocks: {
+        completed: 1,
+        missed: 0,
+        partial: 1,
+        total: 2,
+      },
+      exercises: {
+        completed: 3,
+        missed: 1,
+        partial: 0,
+        total: 4,
+      },
+      status: "partial",
+      statusLabel: "Частично выполнено",
+    },
+    load: {
+      actual: 78,
+      delta: -22,
+      planned: 100,
+    },
+    plan: {
+      blocks: [
+        {
+          actualLoad: 54,
+          exercises: [
+            {
+              actual: "выполнено",
+              name: "Разминка",
+              plannedControl: "пульс до 140",
+              plannedWork: "12 мин",
+              status: "completed",
+            },
+            {
+              actual: "выполнено 3 из 4",
+              name: "Технические проходы",
+              plannedControl: "качество",
+              plannedWork: "4x6",
+              status: "partial",
+            },
+          ],
+          name: "Техника",
+          plannedLoad: 70,
+          sessionName: "Утро",
+          status: "partial",
+        },
+        {
+          actualLoad: 24,
+          exercises: [
+            {
+              actual: "выполнено",
+              name: "Заминка",
+              plannedControl: "дыхание",
+              plannedWork: "8 мин",
+              status: "completed",
+            },
+          ],
+          name: "Восстановление",
+          plannedLoad: 30,
+          sessionName: "Утро",
+          status: "completed",
+        },
+      ],
+      count: 1,
+      templates: ["Тестовый недельный план"],
+    },
+    readiness: {
+      flags: "без боли, усталость умеренная",
+      score: 72,
+      status: "yellow",
+      statusLabel: "Требует внимания",
+    },
   };
 }
 

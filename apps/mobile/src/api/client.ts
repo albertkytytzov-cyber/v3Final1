@@ -1,6 +1,8 @@
 import type {
   AssignedPlanSummary,
   AuthResponse,
+  CoachAiReviewDiagnosticResponse,
+  CoachAiReviewStatusResponse,
   CoachDiaryEntry,
   CoachDiaryEntryPayload,
   CoachDayAiPayload,
@@ -236,6 +238,16 @@ export class MobileApiClient {
     return this.request<{ entry: CoachDiaryEntry }>("/coach/diary", {
       body: JSON.stringify(payload),
       idempotencyKey,
+      method: "POST",
+    });
+  }
+
+  getCoachAiReviewStatus() {
+    return this.request<CoachAiReviewStatusResponse>("/coach/ai-day-review/status");
+  }
+
+  testCoachAiReview() {
+    return this.request<CoachAiReviewDiagnosticResponse>("/coach/ai-day-review/test", {
       method: "POST",
     });
   }

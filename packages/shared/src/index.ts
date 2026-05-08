@@ -754,6 +754,20 @@ export interface CoachDayAiPayload {
 }
 
 export type CoachDayAiReviewSource = "local-rules" | "server-rules" | "model";
+export type CoachAiReviewServerSource = "server-rules" | "model";
+
+export interface CoachAiReviewStatus {
+  mode: CoachAiReviewServerSource;
+  source: CoachAiReviewServerSource;
+  modelConfigured: boolean;
+  apiKeyConfigured: boolean;
+  endpointConfigured: boolean;
+  modelReady: boolean;
+  fallbackEnabled: boolean;
+  inputLimit: number;
+  timeoutMs: number;
+  message: string;
+}
 
 export interface CoachDayAiReview {
   id?: string;
@@ -781,6 +795,18 @@ export interface CoachDayAiReviewResponse {
 
 export interface CoachDayAiReviewHistoryResponse {
   reviews: CoachDayAiReview[];
+}
+
+export interface CoachAiReviewStatusResponse {
+  status: CoachAiReviewStatus;
+}
+
+export interface CoachAiReviewDiagnosticResponse {
+  checkedAt: string;
+  fallbackUsed: boolean;
+  message: string;
+  review: CoachDayAiReview;
+  status: CoachAiReviewStatus;
 }
 
 export interface ExecutionExerciseResultInput {

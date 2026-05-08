@@ -3,6 +3,9 @@ import type {
   AssignedPlanBlock,
   AssignedPlanSummary,
   AuthUser,
+  CoachAiReviewDiagnosticResponse,
+  CoachAiReviewStatus,
+  CoachAiReviewStatusResponse,
   CoachDiaryEntry,
   CoachDiaryEntryPayload,
   CoachDayAiPayload,
@@ -28,6 +31,9 @@ export type {
   AssignedPlanSummary,
   AuthResponse,
   AuthUser,
+  CoachAiReviewDiagnosticResponse,
+  CoachAiReviewStatus,
+  CoachAiReviewStatusResponse,
   CoachDiaryEntry,
   CoachDiaryEntryPayload,
   CoachDayAiPayload,
@@ -104,6 +110,8 @@ export interface MobileAppState {
   session: MobileSessionState;
   data: MobileDataSnapshot;
   queue: PendingSyncAction[];
+  coachAiDiagnostic: CoachAiReviewDiagnosticResponse | null;
+  coachAiStatus: CoachAiReviewStatus | null;
   aiReviewByDay: Record<string, CoachDayAiReview>;
   selectedScreen: MobileScreen;
   selectedAthleteId: string | null;

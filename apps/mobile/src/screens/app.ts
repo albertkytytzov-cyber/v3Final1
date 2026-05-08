@@ -20,6 +20,8 @@ import type {
   AssignedBlockExercise,
   AssignedPlanBlock,
   AssignedPlanSummary,
+  CoachAiReviewDiagnosticResponse,
+  CoachAiReviewStatus,
   CoachAthleteSummary,
   CoachDayAiPayload,
   CoachDayAiReview,
@@ -59,6 +61,8 @@ export function bootstrapMobileApp(root: HTMLElement) {
     session: loadSession(runtimeConfig.apiBaseUrl),
     data: initialData,
     queue: loadQueue(),
+    coachAiDiagnostic: null,
+    coachAiStatus: null,
     aiReviewByDay: buildCoachAiReviewByDay(initialData.coachAiReviews),
     selectedScreen: "dashboard",
     selectedAthleteId: loadSelectedAthleteId(),
@@ -149,6 +153,37 @@ export function bootstrapMobileApp(root: HTMLElement) {
     }
   };
 
+  const testCoachAiReview = async () => {
+    if (!isCoachRole(state.session.user?.role)) {
+      update({ error: "Проверка ИИ доступна только тренеру или администратору." });
+      return;
+    }
+
+    if (!state.isOnline) {
+      update({ error: "Нет сети: серверную проверку ИИ сейчас выполнить нельзя." });
+      return;
+    }
+
+    update({ error: null, isBusy: true, message: "Проверяю подключение ИИ на сервере..." });
+
+    try {
+      const diagnostic = await client().testCoachAiReview();
+      update({
+        coachAiDiagnostic: diagnostic,
+        coachAiStatus: diagnostic.status,
+        error: null,
+        isBusy: false,
+        message: diagnostic.message,
+      });
+    } catch (error) {
+      update({
+        error: toFriendlyError(error),
+        isBusy: false,
+        message: "Проверка ИИ не выполнена.",
+      });
+    }
+  };
+
   const client = () => new MobileApiClient(
     state.session.apiBaseUrl,
     state.session.sessionToken,
@@ -171,7 +206,15 @@ export function bootstrapMobileApp(root: HTMLElement) {
     try {
       const api = client();
       const auth = await api.me();
-      const loadedData = await api.loadAppData(auth.user.role);
+      const [
+        loadedData,
+        coachAiStatus,
+      ] = await Promise.all([
+        api.loadAppData(auth.user.role),
+        isCoachRole(auth.user.role)
+          ? api.getCoachAiReviewStatus().catch(() => ({ status: null }))
+          : Promise.resolve({ status: null }),
+      ]);
       const snapshot: MobileDataSnapshot = {
         ...state.data,
         ...loadedData,
@@ -196,6 +239,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
           ...state.aiReviewByDay,
           ...storedAiReviewsByDay,
         },
+        coachAiStatus: coachAiStatus.status,
         data: snapshot,
         error: null,
         isBusy: false,
@@ -790,6 +834,12 @@ export function bootstrapMobileApp(root: HTMLElement) {
       });
     });
 
+    root.querySelectorAll<HTMLButtonElement>("[data-test-coach-ai-review]").forEach((button) => {
+      button.addEventListener("click", () => {
+        void testCoachAiReview();
+      });
+    });
+
     root.querySelector<HTMLFormElement>("[data-competition-result-form]")?.addEventListener("submit", (event) => {
       event.preventDefault();
       void submitCompetitionResult(event.currentTarget as HTMLFormElement);
@@ -1356,7 +1406,14 @@ function renderCoachExecutionReviewSummary(
         <p>${escapeHtml(dayData.coachNote)}</p>
       </div>
     </section>
-    ${renderCoachAiReviewCard(dayData, aiReview, aiReviewHistory, state.isBusy)}
+    ${renderCoachAiReviewCard(
+      dayData,
+      aiReview,
+      aiReviewHistory,
+      state.coachAiStatus,
+      state.coachAiDiagnostic,
+      state.isBusy,
+    )}
   `;
 }
 
@@ -1374,6 +1431,8 @@ function renderCoachAiReviewCard(
   dayData: CoachDayCleanSummary,
   review: CoachDayAiReview | null,
   reviewHistory: CoachDayAiReview[],
+  status: CoachAiReviewStatus | null,
+  diagnostic: CoachAiReviewDiagnosticResponse | null,
   isBusy: boolean,
 ) {
   return `
@@ -1388,6 +1447,7 @@ function renderCoachAiReviewCard(
           ${isBusy ? "Формируется..." : "Сформировать рекомендацию"}
         </button>
       </div>
+      ${renderCoachAiReviewStatus(status, diagnostic, isBusy)}
       ${review
         ? `
           <div class="coach-ai-review-result">
@@ -1422,6 +1482,45 @@ function renderCoachAiReviewCard(
           ${renderCoachAiReviewHistory(reviewHistory)}
         `}
     </section>
+  `;
+}
+
+function renderCoachAiReviewStatus(
+  status: CoachAiReviewStatus | null,
+  diagnostic: CoachAiReviewDiagnosticResponse | null,
+  isBusy: boolean,
+) {
+  const source = diagnostic?.review.source === "model"
+    ? "model"
+    : status?.source ?? "server-rules";
+  const statusTitle = source === "model"
+    ? "Модель подключена"
+    : "Серверный разбор по правилам";
+  const statusMessage = diagnostic?.message ??
+    status?.message ??
+    "Статус ИИ появится после обновления данных.";
+
+  return `
+    <div class="coach-ai-review-status is-${source}">
+      <div>
+        <span>Статус ИИ</span>
+        <strong>${escapeHtml(statusTitle)}</strong>
+        <small>${escapeHtml(statusMessage)}</small>
+      </div>
+      <button data-test-coach-ai-review type="button" ${isBusy ? "disabled" : ""}>
+        ${isBusy ? "Проверка..." : "Проверить ИИ"}
+      </button>
+      ${status
+        ? `
+          <ul>
+            <li>Режим: ${escapeHtml(status.mode)}</li>
+            <li>Модель: ${status.modelConfigured ? "настроена" : "не настроена"}</li>
+            <li>Ключ: ${status.apiKeyConfigured ? "есть" : "нет"}</li>
+            <li>Fallback: ${status.fallbackEnabled ? "включён" : "выключен"}</li>
+          </ul>
+        `
+        : ""}
+    </div>
   `;
 }
 

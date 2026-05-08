@@ -1,4 +1,5 @@
 import type {
+  CoachAiReviewStatus,
   CoachDayAiPayload,
   CoachDayAiReview,
 } from "@training-platform/shared";
@@ -92,8 +93,56 @@ export async function tryBuildCoachDayAiModelReview(
   }
 }
 
+export function getCoachAiReviewStatus(): CoachAiReviewStatus {
+  const config = readCoachAiModelConfig();
+
+  if (config.mode !== "model") {
+    return {
+      apiKeyConfigured: Boolean(config.apiKey),
+      endpointConfigured: Boolean(config.endpoint),
+      fallbackEnabled: true,
+      inputLimit: config.inputLimit,
+      message: "Сейчас включён серверный разбор по правилам. Модель не вызывается.",
+      mode: "server-rules",
+      modelConfigured: Boolean(config.model),
+      modelReady: false,
+      source: "server-rules",
+      timeoutMs: config.timeoutMs,
+    };
+  }
+
+  if (!config.model || !config.apiKey) {
+    return {
+      apiKeyConfigured: Boolean(config.apiKey),
+      endpointConfigured: Boolean(config.endpoint),
+      fallbackEnabled: true,
+      inputLimit: config.inputLimit,
+      message: "Режим модели включён, но модель или ключ не настроены. Работает fallback на серверные правила.",
+      mode: "model",
+      modelConfigured: Boolean(config.model),
+      modelReady: false,
+      source: "server-rules",
+      timeoutMs: config.timeoutMs,
+    };
+  }
+
+  return {
+    apiKeyConfigured: true,
+    endpointConfigured: Boolean(config.endpoint),
+    fallbackEnabled: true,
+    inputLimit: config.inputLimit,
+    message: "Модель настроена. При ошибке внешнего вызова будет использован fallback на серверные правила.",
+    mode: "model",
+    modelConfigured: true,
+    modelReady: true,
+    source: "model",
+    timeoutMs: config.timeoutMs,
+  };
+}
+
 function readCoachAiModelConfig() {
-  const mode = (process.env.COACH_AI_REVIEW_MODE ?? "server-rules").trim();
+  const rawMode = (process.env.COACH_AI_REVIEW_MODE ?? "server-rules").trim();
+  const mode = rawMode === "model" ? "model" : "server-rules";
   const apiKey = (process.env.OPENAI_API_KEY ?? "").trim();
   const model = (process.env.COACH_AI_REVIEW_MODEL ?? "").trim();
   const endpoint = (process.env.COACH_AI_REVIEW_ENDPOINT ?? defaultEndpoint).trim() ||
@@ -112,6 +161,7 @@ function readCoachAiModelConfig() {
     endpoint,
     inputLimit,
     model,
+    mode,
     timeoutMs,
     enabled: mode === "model" && Boolean(apiKey) && Boolean(model),
   };

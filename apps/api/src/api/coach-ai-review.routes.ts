@@ -1,7 +1,9 @@
 import type { FastifyInstance } from "fastify";
 import {
   buildCoachDayAiReview,
+  getCoachAiReviewStatus,
   listCoachDayAiReviewsForCoachContext,
+  runCoachAiReviewDiagnostic,
   saveCoachDayAiReview,
 } from "../services/coach-ai-review.service";
 import type { ApiGuards, HttpErrorFactory } from "./guards";
@@ -19,12 +21,32 @@ export function registerCoachAiReviewRoutes(
   app: FastifyInstance,
   dependencies: CoachAiReviewRouteDependencies,
 ) {
-  app.get("/api/v1/coach/ai-day-reviews", async (request) => {
+  async function requireCoachAiReviewUser(request: Parameters<ApiGuards["requireUser"]>[0]) {
     const user = await dependencies.guards.requireUser(request);
 
     if (user.role !== "coach" && user.role !== "admin") {
-      throw dependencies.httpError(403, "Only coach or admin accounts can view AI day reviews");
+      throw dependencies.httpError(403, "Only coach or admin accounts can use AI day review");
     }
+
+    return user;
+  }
+
+  app.get("/api/v1/coach/ai-day-review/status", async (request) => {
+    await requireCoachAiReviewUser(request);
+
+    return {
+      status: getCoachAiReviewStatus(),
+    };
+  });
+
+  app.post("/api/v1/coach/ai-day-review/test", async (request) => {
+    await requireCoachAiReviewUser(request);
+
+    return runCoachAiReviewDiagnostic();
+  });
+
+  app.get("/api/v1/coach/ai-day-reviews", async (request) => {
+    const user = await requireCoachAiReviewUser(request);
 
     return {
       reviews: await listCoachDayAiReviewsForCoachContext({
@@ -35,11 +57,7 @@ export function registerCoachAiReviewRoutes(
   });
 
   app.post("/api/v1/coach/athletes/:athleteId/ai-day-review", async (request) => {
-    const user = await dependencies.guards.requireUser(request);
-
-    if (user.role !== "coach" && user.role !== "admin") {
-      throw dependencies.httpError(403, "Only coach or admin accounts can request AI day review");
-    }
+    const user = await requireCoachAiReviewUser(request);
 
     let athleteId: string;
     try {
