@@ -73,11 +73,12 @@ export function bootstrapMobileApp(root: HTMLElement) {
     render();
   };
 
-  const updateSelectedDayDate = (date: string) => {
+  const updateSelectedDayDate = (date: string, selectedScreen?: MobileScreen) => {
     const selectedDayDate = normalizeDateValue(date) ?? todayValue();
     update({
       executionDateFilter: selectedDayDate,
       planDateFilter: selectedDayDate,
+      ...(selectedScreen ? { selectedScreen } : {}),
       selectedDayDate,
     });
   };
@@ -631,6 +632,13 @@ export function bootstrapMobileApp(root: HTMLElement) {
       });
     });
 
+    root.querySelectorAll<HTMLButtonElement>("[data-coach-open-day]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const selectedScreen = (button.dataset.coachOpenScreen as MobileScreen | undefined) ?? "dashboard";
+        updateSelectedDayDate(button.dataset.coachOpenDay ?? state.selectedDayDate, selectedScreen);
+      });
+    });
+
     root.querySelector<HTMLButtonElement>("[data-refresh]")?.addEventListener("click", () => {
       void refreshData();
     });
@@ -1137,7 +1145,7 @@ function renderPlansScreen(state: MobileAppState, athleteId: string | null) {
     ${renderPlanDateFilter(dateOptions, selectedDate, isCoachView)}
     <div class="list-stack">
       ${plans.length > 0
-        ? plans.map((plan) => renderPlanCard(plan)).join("")
+        ? plans.map((plan) => renderPlanCard(plan, isCoachView)).join("")
         : renderEmpty("На выбранную дату нет плана", "Выберите другой день из назначенного плана.")}
     </div>
   `;
@@ -1176,7 +1184,7 @@ function renderCalendarScreen(state: MobileAppState, athleteId: string | null) {
   const competitions = state.data.competitions
     .slice()
     .sort((a, b) => a.startDate.localeCompare(b.startDate));
-  const canSubmitCompetitionResult = state.session.user?.role === "coach" || state.session.user?.role === "admin";
+  const canSubmitCompetitionResult = isCoachRole(state.session.user?.role);
 
   return `
     <div class="screen-head">
@@ -1186,16 +1194,22 @@ function renderCalendarScreen(state: MobileAppState, athleteId: string | null) {
     <div class="timeline-list">
       ${competitions.slice(0, 30).map((competition) => {
         const linkedPlan = plans.find((plan) => plan.competitionId === competition.id);
-        return `
-          <article class="timeline-card ${linkedPlan ? "is-linked" : ""}">
-            <time>${formatDate(competition.startDate)}</time>
-            <div>
-              <strong>${escapeHtml(competition.title)}</strong>
-              <span>${escapeHtml([competition.location, competition.ageGroup].filter(Boolean).join(" · "))}</span>
-              ${linkedPlan ? `<small>План: ${escapeHtml(linkedPlan.priority)} · ${daysUntil(linkedPlan.competitionStartDate)} дн.</small>` : ""}
-            </div>
-          </article>
+        const content = `
+          <time>${formatDate(competition.startDate)}</time>
+          <div>
+            <strong>${escapeHtml(competition.title)}</strong>
+            <span>${escapeHtml([competition.location, competition.ageGroup].filter(Boolean).join(" · "))}</span>
+            ${linkedPlan ? `<small>План: ${escapeHtml(linkedPlan.priority)} · ${daysUntil(linkedPlan.competitionStartDate)} дн.</small>` : ""}
+          </div>
         `;
+
+        return canSubmitCompetitionResult
+          ? `
+            <button class="timeline-card ${linkedPlan ? "is-linked" : ""}" data-coach-open-day="${escapeHtml(competition.startDate)}" data-coach-open-screen="dashboard" type="button">
+              ${content}
+            </button>
+          `
+          : `<article class="timeline-card ${linkedPlan ? "is-linked" : ""}">${content}</article>`;
       }).join("") || renderEmpty("Календарь пуст", "Обновите данные с сервера.")}
     </div>
     ${canSubmitCompetitionResult ? renderCompetitionResultForm(plans) : ""}
@@ -2026,7 +2040,7 @@ function renderCoachDiaryHistory(
   `;
 }
 
-function renderPlanCard(plan: AssignedPlanSummary) {
+function renderPlanCard(plan: AssignedPlanSummary, isCoachView = false) {
   const blocks = plan.day.sessions.flatMap((session) => session.blocks);
   const exerciseCount = countPlanExercises(plan);
   const dayFocus = formatAssignedPlanDayFocus(plan);
@@ -2038,7 +2052,9 @@ function renderPlanCard(plan: AssignedPlanSummary) {
           <strong>${formatDate(plan.day.dayDate)} · ${escapeHtml(plan.day.label)}</strong>
           <span>${escapeHtml(plan.templateName)} · ${blocks.length} блоков · ${exerciseCount} упражнений</span>
         </div>
-        <em>${escapeHtml(dayFocus)}</em>
+        ${isCoachView
+          ? `<button class="mobile-plan-open-day" data-coach-open-day="${escapeHtml(plan.day.dayDate)}" data-coach-open-screen="dashboard" type="button">Открыть день</button>`
+          : `<em>${escapeHtml(dayFocus)}</em>`}
       </header>
       <div class="mobile-plan-day-card-body">
         ${plan.day.sessions.map((session) => `

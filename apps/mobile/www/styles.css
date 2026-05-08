@@ -1840,6 +1840,18 @@ button.list-card {
   padding: 12px;
 }
 
+button.timeline-card {
+  width: 100%;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+button.timeline-card:active {
+  transform: translateY(1px);
+}
+
 .timeline-card.is-linked {
   border-color: rgba(15, 118, 110, 0.32);
 }
@@ -1855,6 +1867,21 @@ button.list-card {
   color: var(--muted);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.mobile-plan-open-day {
+  min-width: 0;
+  min-height: 38px;
+  padding: 7px 10px;
+  border: 1px solid rgba(15, 118, 110, 0.22);
+  border-radius: 14px;
+  background: #fff;
+  color: var(--accent-dark);
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 900;
+  line-height: 1.1;
+  white-space: normal;
 }
 
 .coach-diary-history {
