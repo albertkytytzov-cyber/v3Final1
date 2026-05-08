@@ -1013,14 +1013,14 @@ function renderCoachAthleteCard(athlete: CoachAthleteSummary) {
 
 function renderCoachAthleteDayBrief(state: MobileAppState, athleteId: string) {
   const selectedDayDate = state.selectedDayDate;
-  const entry = getReadinessEntryForDate(state, athleteId, selectedDayDate);
-  const daySummary = getCoachDaySummary(state, athleteId, selectedDayDate);
+  const dayData = getCoachDayCleanSummary(state, athleteId, selectedDayDate);
+  const entry = dayData.readinessEntry;
+  const daySummary = dayData.summary;
   const nextStart = getNextCompetitionPlan(getCompetitionPlansForAthlete(state, athleteId));
   const cardStateClass = entry ? `readiness-${escapeHtml(entry.status)}` : "is-missing-readiness";
   const startLabel = nextStart
     ? `${formatShortDate(nextStart.competitionStartDate)} · через ${daysUntil(nextStart.competitionStartDate)} дн.`
     : "стартов нет";
-  const coachNote = daySummary.latestDiaryEntry?.notes?.trim() || "Комментария за выбранный день пока нет.";
 
   return `
     <section class="athlete-day-brief-card ${cardStateClass}">
@@ -1038,7 +1038,7 @@ function renderCoachAthleteDayBrief(state: MobileAppState, athleteId: string) {
         ${renderCoachAthleteBriefMetric("Нагрузка", `${formatLoadValue(daySummary.actualLoad)} / ${formatLoadValue(daySummary.plannedLoad)}`, formatCoachTodayLoadDelta(daySummary))}
         ${renderCoachAthleteBriefMetric("Ближайший старт", nextStart ? formatShortDate(nextStart.competitionStartDate) : "-", startLabel)}
       </div>
-      <p class="athlete-day-brief-note">Комментарий: ${escapeHtml(coachNote)}</p>
+      <p class="athlete-day-brief-note">Комментарий: ${escapeHtml(dayData.coachNote)}</p>
       <div class="athlete-day-brief-actions" aria-label="Быстрые действия по спортсмену">
         <button class="primary-action" data-screen="dashboard" type="button">Открыть день</button>
         <button class="secondary-action" data-screen="plans" type="button">Планы</button>
@@ -1059,10 +1059,10 @@ function renderCoachAthleteBriefMetric(label: string, value: string, detail: str
 }
 
 function renderAthleteDayIndicators(state: MobileAppState, athleteId: string, date: string) {
-  const athlete = state.data.athletes.find((item) => item.athleteId === athleteId) ?? null;
-  const entry = getReadinessEntryForDate(state, athleteId, date);
-  const daySummary = getCoachDaySummary(state, athleteId, date);
-  const title = athlete ? `Показатели дня · ${athlete.fullName}` : "Показатели дня";
+  const dayData = getCoachDayCleanSummary(state, athleteId, date);
+  const entry = dayData.readinessEntry;
+  const daySummary = dayData.summary;
+  const title = dayData.athlete ? `Показатели дня · ${dayData.athlete.fullName}` : "Показатели дня";
   const cardStateClass = entry ? `readiness-${escapeHtml(entry.status)}` : "is-missing-readiness";
 
   return `
@@ -1097,10 +1097,10 @@ function renderAthleteDayIndicators(state: MobileAppState, athleteId: string, da
       </div>
       <div class="today-coach-note">
         <strong>Комментарий тренера</strong>
-        ${daySummary.latestDiaryEntry
+        ${dayData.latestDiaryEntry
           ? `
-            <p>${escapeHtml(daySummary.latestDiaryEntry.notes)}</p>
-            <small>${escapeHtml(daySummary.latestDiaryEntry.coachName)} · ${formatDateTime(daySummary.latestDiaryEntry.updatedAt)}</small>
+            <p>${escapeHtml(dayData.latestDiaryEntry.notes)}</p>
+            <small>${escapeHtml(dayData.latestDiaryEntry.coachName)} · ${formatDateTime(dayData.latestDiaryEntry.updatedAt)}</small>
           `
           : "<p>Комментария за выбранный день пока нет.</p>"}
       </div>
@@ -1247,17 +1247,16 @@ function renderCoachExecutionReviewSummary(
     return renderEmpty("Выберите спортсмена", "После выбора спортсмена разбор покажет план, факт, выполнение и комментарий за выбранный день.");
   }
 
-  const athlete = state.data.athletes.find((item) => item.athleteId === athleteId) ?? null;
-  const summary = getCoachDaySummary(state, athleteId, selectedDayDate);
-  const readinessEntry = getReadinessEntryForDate(state, athleteId, selectedDayDate);
-  const coachNote = summary.latestDiaryEntry?.notes?.trim() || "Комментария тренера за выбранный день пока нет.";
+  const dayData = getCoachDayCleanSummary(state, athleteId, selectedDayDate);
+  const summary = dayData.summary;
+  const readinessEntry = dayData.readinessEntry;
 
   return `
     <section class="coach-execution-review-card ${summary.status === "no-plan" ? "is-empty" : ""}">
       <div class="coach-execution-review-head">
         <div>
           <span>Выбранный день</span>
-          <h3>${escapeHtml(athlete?.fullName ?? "Спортсмен")}</h3>
+          <h3>${escapeHtml(dayData.athleteName)}</h3>
           <p>${formatDate(selectedDayDate)} · ${escapeHtml(summary.statusLabel.toLowerCase())}</p>
         </div>
         <span class="execution-day-status is-${summary.status}">${escapeHtml(summary.statusLabel)}</span>
@@ -1270,7 +1269,7 @@ function renderCoachExecutionReviewSummary(
       </div>
       <div class="coach-execution-review-note">
         <strong>Комментарий тренера</strong>
-        <p>${escapeHtml(coachNote)}</p>
+        <p>${escapeHtml(dayData.coachNote)}</p>
       </div>
     </section>
   `;
@@ -1572,6 +1571,49 @@ interface CoachTodayDaySummary {
   actualLoad: number;
   templateNames: string[];
   latestDiaryEntry: CoachDiaryEntry | null;
+}
+
+interface CoachDayExerciseCleanSummary {
+  assignedExerciseId: string;
+  assignedPlanId: string;
+  assignedBlockId: string;
+  blockName: string;
+  sessionName: string;
+  name: string;
+  plannedWork: string;
+  plannedControl: string;
+  actualDetails: string;
+  status: ExecutionDayStatus;
+  statusLabel: string;
+}
+
+interface CoachDayBlockCleanSummary {
+  assignedPlanId: string;
+  assignedBlockId: string;
+  planName: string;
+  sessionName: string;
+  name: string;
+  target: string;
+  notes: string;
+  status: ExecutionDayStatus;
+  statusLabel: string;
+  plannedLoad: number;
+  actualLoad: number;
+  loadDeltaLabel: string;
+  exercises: CoachDayExerciseCleanSummary[];
+}
+
+interface CoachDayCleanSummary {
+  athlete: CoachAthleteSummary | null;
+  athleteId: string;
+  athleteName: string;
+  date: string;
+  summary: CoachTodayDaySummary;
+  readinessEntry: ReadinessEntry | null;
+  latestDiaryEntry: CoachDiaryEntry | null;
+  coachNote: string;
+  plans: AssignedPlanSummary[];
+  blocks: CoachDayBlockCleanSummary[];
 }
 
 function renderExecutionForm(state: MobileAppState, plans: AssignedPlanSummary[]) {
@@ -2508,6 +2550,78 @@ function getCoachDaySummary(
   };
 }
 
+function getCoachDayCleanSummary(
+  state: MobileAppState,
+  athleteId: string,
+  date: string,
+): CoachDayCleanSummary {
+  const athlete = state.data.athletes.find((item) => item.athleteId === athleteId) ?? null;
+  const plans = getPlansForAthlete(state, athleteId)
+    .filter((plan) => plan.day.dayDate === date);
+  const groups = getExecutionPlanGroups(plans);
+  const summary = getCoachDaySummary(state, athleteId, date);
+  const readinessEntry = getReadinessEntryForDate(state, athleteId, date);
+  const blocks = groups.flatMap((group) =>
+    group.blockItems.map((item) => {
+      const result = getExecutionResultForBlock(state, item.plan.id, item.block.id);
+      const plannedLoad = getExecutionBlockPlannedLoad(item.block, result);
+      const actualLoad = getExecutionBlockActualLoad(item.block, result, plannedLoad);
+      const status = getExecutionBlockStatus(item.block, result);
+      const exercises = (item.block.exercises ?? [])
+        .slice()
+        .sort((left, right) => left.orderIndex - right.orderIndex)
+        .map((exercise) => {
+          const exerciseResult = getExerciseResult(result, exercise.id);
+          const exerciseStatus = getExecutionExerciseStatus(exerciseResult);
+
+          return {
+            actualDetails: formatExerciseActualDetails(exerciseResult),
+            assignedBlockId: item.block.id,
+            assignedExerciseId: exercise.id,
+            assignedPlanId: item.plan.id,
+            blockName: item.block.name,
+            name: exercise.name,
+            plannedControl: formatExerciseControlCell(exercise),
+            plannedWork: formatExerciseWorkCell(exercise),
+            sessionName: item.sessionName,
+            status: exerciseStatus,
+            statusLabel: formatExerciseResultStatus(exerciseResult),
+          };
+        });
+
+      return {
+        actualLoad: roundLoad(actualLoad),
+        assignedBlockId: item.block.id,
+        assignedPlanId: item.plan.id,
+        exercises,
+        loadDeltaLabel: formatExecutionBlockLoadDelta(actualLoad, plannedLoad),
+        name: item.block.name,
+        notes: item.block.notes,
+        plannedLoad: roundLoad(plannedLoad),
+        planName: item.plan.templateName,
+        sessionName: item.sessionName,
+        status,
+        statusLabel: getExecutionDayStatusLabel(status),
+        target: formatBlockTarget(item.block),
+      };
+    }),
+  );
+  const latestDiaryEntry = summary.latestDiaryEntry;
+
+  return {
+    athlete,
+    athleteId,
+    athleteName: athlete?.fullName ?? plans[0]?.athleteName ?? "Спортсмен",
+    blocks,
+    coachNote: latestDiaryEntry?.notes?.trim() || "Комментария тренера за выбранный день пока нет.",
+    date,
+    latestDiaryEntry,
+    plans,
+    readinessEntry,
+    summary,
+  };
+}
+
 function getReadinessEntryForDate(
   state: MobileAppState,
   athleteId: string | null,
@@ -2691,7 +2805,7 @@ function hasExerciseResultDetails(result: ExecutionExerciseResult) {
   );
 }
 
-function getExecutionExerciseStatus(result: ExecutionExerciseResult | null) {
+function getExecutionExerciseStatus(result: ExecutionExerciseResult | null): ExecutionDayStatus {
   if (!result) {
     return "missed";
   }
