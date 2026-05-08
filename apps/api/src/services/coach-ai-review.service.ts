@@ -4,6 +4,7 @@ import type {
   UserRole,
 } from "@training-platform/shared";
 import { pool } from "../db";
+import { tryBuildCoachDayAiModelReview } from "./coach-ai-model-review.service";
 
 interface CoachDayAiReviewRow {
   id: string;
@@ -19,7 +20,16 @@ interface CoachDayAiReviewRow {
   created_at: string;
 }
 
-export function buildCoachDayAiReview(input: {
+export async function buildCoachDayAiReview(input: {
+  athleteId: string;
+  entryDate: string;
+  dayPayload: CoachDayAiPayload;
+}): Promise<CoachDayAiReview> {
+  const serverRulesReview = buildServerRulesCoachDayAiReview(input);
+  return (await tryBuildCoachDayAiModelReview(input, serverRulesReview)) ?? serverRulesReview;
+}
+
+function buildServerRulesCoachDayAiReview(input: {
   athleteId: string;
   entryDate: string;
   dayPayload: CoachDayAiPayload;

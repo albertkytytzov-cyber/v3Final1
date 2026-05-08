@@ -56,7 +56,7 @@ export function registerCoachAiReviewRoutes(
     }
 
     await dependencies.guards.assertAthleteAccess(user, athleteId);
-    const review = buildCoachDayAiReview({
+    const review = await buildCoachDayAiReview({
       athleteId,
       dayPayload: payload.dayPayload,
       entryDate: payload.entryDate,
