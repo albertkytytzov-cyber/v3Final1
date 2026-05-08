@@ -1971,6 +1971,190 @@ button {
   background: #f8fcff;
 }
 
+.coach-day-status-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.coach-day-status-card,
+.coach-day-quality-card,
+.coach-day-exercise-card,
+.coach-team-day-panel {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--surface);
+}
+
+.coach-day-status-card {
+  border-color: rgba(15, 118, 110, 0.2);
+  background: #f6fbfa;
+}
+
+.coach-day-status-head,
+.summary-inline-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+}
+
+.coach-day-status-head h3,
+.summary-inline-head h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: 1.08rem;
+  line-height: 1.15;
+}
+
+.coach-day-status-head span,
+.summary-inline-head span {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 850;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.coach-day-status-head p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 740;
+}
+
+.coach-day-status-head > strong,
+.summary-inline-head > strong {
+  min-width: 44px;
+  padding: 8px 10px;
+  border-radius: 14px;
+  background: #dff2ef;
+  color: var(--accent-dark);
+  font-size: 1.15rem;
+  line-height: 1;
+  text-align: center;
+}
+
+.coach-day-status-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.coach-day-quality-card.is-complete {
+  border-color: rgba(15, 118, 110, 0.24);
+  background: #ecfdf5;
+}
+
+.coach-day-quality-card.is-partial {
+  border-color: rgba(201, 121, 43, 0.24);
+  background: #fff7ed;
+}
+
+.coach-day-quality-card.is-insufficient {
+  border-color: rgba(185, 28, 28, 0.22);
+  background: #fef2f2;
+}
+
+.coach-day-quality-actions {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text);
+  font-size: 0.84rem;
+  font-weight: 760;
+  line-height: 1.3;
+}
+
+.coach-day-exercise-list,
+.coach-team-day-list {
+  display: grid;
+  gap: 8px;
+}
+
+.coach-day-exercise-list article,
+.coach-team-day-row {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.coach-day-exercise-list article {
+  display: grid;
+  gap: 3px;
+}
+
+.coach-day-exercise-list article.is-completed {
+  border-color: rgba(15, 118, 110, 0.22);
+}
+
+.coach-day-exercise-list article.is-missed {
+  border-color: rgba(185, 28, 28, 0.18);
+}
+
+.coach-day-exercise-list span,
+.coach-team-day-row span {
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 850;
+}
+
+.coach-day-exercise-list strong,
+.coach-team-day-row strong {
+  color: var(--text);
+  font-size: 0.9rem;
+  font-weight: 950;
+}
+
+.coach-day-exercise-list p,
+.coach-team-day-row p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 740;
+  line-height: 1.3;
+}
+
+.coach-team-day-row {
+  display: grid;
+  gap: 8px;
+}
+
+.coach-team-day-row.is-complete {
+  border-color: rgba(15, 118, 110, 0.2);
+}
+
+.coach-team-day-row.is-insufficient {
+  border-color: rgba(185, 28, 28, 0.18);
+}
+
+.coach-team-day-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.coach-team-day-metrics span {
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: rgba(248, 252, 255, 0.9);
+}
+
+.coach-team-day-row button {
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+  color: var(--accent-dark);
+  cursor: pointer;
+  font-weight: 900;
+}
+
 .device-health-head {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

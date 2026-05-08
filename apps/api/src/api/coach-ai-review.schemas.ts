@@ -7,6 +7,7 @@ import type {
 
 const datePattern = /^\d{4}-\d{2}-\d{2}$/;
 const dayStatuses: CoachDayAiExecutionStatus[] = ["completed", "partial", "missed", "no-plan"];
+const dataQualityStatuses = ["complete", "partial", "insufficient"] as const;
 const executionStatuses: Array<Exclude<CoachDayAiExecutionStatus, "no-plan">> = [
   "completed",
   "partial",
@@ -47,6 +48,9 @@ function readDayPayload(value: unknown): CoachDayAiPayload {
   const exerciseCounts = readRecord(execution.exercises, "execution.exercises");
   const load = readRecord(payload.load, "load");
   const plan = readRecord(payload.plan, "plan");
+  const dataQuality = payload.dataQuality === null || payload.dataQuality === undefined
+    ? null
+    : readDataQuality(payload.dataQuality);
   const deviceHealth = payload.deviceHealth === null || payload.deviceHealth === undefined
     ? null
     : readDeviceHealth(payload.deviceHealth);
@@ -62,6 +66,7 @@ function readDayPayload(value: unknown): CoachDayAiPayload {
       weightClass: readNullableString(athlete.weightClass, "athlete.weightClass"),
     },
     coachComment: readNullableString(payload.coachComment, "coachComment"),
+    dataQuality,
     date: readEntryDate(payload.date),
     deviceHealth,
     execution: {
@@ -128,6 +133,36 @@ function readPlanExercise(value: unknown) {
     ),
     plannedWork: readString(exercise.plannedWork, "plan.blocks[].exercises[].plannedWork"),
     status: readEnum(exercise.status, executionStatuses, "plan.blocks[].exercises[].status"),
+  };
+}
+
+function readDataQuality(value: unknown): CoachDayAiPayload["dataQuality"] {
+  const dataQuality = readRecord(value, "dataQuality");
+
+  return {
+    actions: readArray(dataQuality.actions ?? [], "dataQuality.actions").map((item) =>
+      readString(item, "dataQuality.actions[]")
+    ),
+    available: readArray(dataQuality.available ?? [], "dataQuality.available").map((item) =>
+      readString(item, "dataQuality.available[]")
+    ),
+    missing: readArray(dataQuality.missing ?? [], "dataQuality.missing").map((item) =>
+      readString(item, "dataQuality.missing[]")
+    ),
+    signals: readArray(dataQuality.signals ?? [], "dataQuality.signals").map(readDataQualitySignal),
+    status: readEnum(dataQuality.status, [...dataQualityStatuses], "dataQuality.status"),
+    statusLabel: readString(dataQuality.statusLabel, "dataQuality.statusLabel"),
+  };
+}
+
+function readDataQualitySignal(value: unknown) {
+  const signal = readRecord(value, "dataQuality.signals[]");
+
+  return {
+    action: readNullableString(signal.action, "dataQuality.signals[].action"),
+    key: readString(signal.key, "dataQuality.signals[].key"),
+    label: readString(signal.label, "dataQuality.signals[].label"),
+    present: readBoolean(signal.present, "dataQuality.signals[].present"),
   };
 }
 
@@ -245,6 +280,14 @@ function readNullableNumber(value: unknown, fieldName: string) {
   }
 
   return readNumber(value, fieldName);
+}
+
+function readBoolean(value: unknown, fieldName: string) {
+  if (typeof value !== "boolean") {
+    throw new Error(`${fieldName} must be a boolean`);
+  }
+
+  return value;
 }
 
 function readCount(value: unknown, fieldName: string) {

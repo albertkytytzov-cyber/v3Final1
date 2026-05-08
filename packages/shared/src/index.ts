@@ -754,6 +754,24 @@ export type CoachDayAiExecutionStatus =
   | "missed"
   | "no-plan";
 
+export type CoachDayDataQualityStatus = "complete" | "partial" | "insufficient";
+
+export interface CoachDayDataQualitySignal {
+  key: string;
+  label: string;
+  present: boolean;
+  action: string | null;
+}
+
+export interface CoachDayDataQuality {
+  actions: string[];
+  available: string[];
+  missing: string[];
+  signals: CoachDayDataQualitySignal[];
+  status: CoachDayDataQualityStatus;
+  statusLabel: string;
+}
+
 export interface CoachDayAiPayload {
   athlete: {
     displayName: string;
@@ -762,6 +780,7 @@ export interface CoachDayAiPayload {
     weightClass: string | null;
   };
   coachComment: string | null;
+  dataQuality: CoachDayDataQuality | null;
   date: string;
   deviceHealth: {
     heartRate: {

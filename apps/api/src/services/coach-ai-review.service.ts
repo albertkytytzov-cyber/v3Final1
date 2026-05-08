@@ -85,6 +85,31 @@ function buildDiagnosticCoachDayPayload(entryDate: string): CoachDayAiPayload {
       weightClass: null,
     },
     coachComment: "Тестовая проверка подключения ИИ. Не записывать в дневник.",
+    dataQuality: {
+      actions: [],
+      available: [
+        "готовность",
+        "план",
+        "выполнение",
+        "комментарий тренера",
+        "сон",
+        "пульс покоя",
+        "тренировки с устройства",
+      ],
+      missing: [],
+      signals: [
+        { action: null, key: "readiness", label: "готовность", present: true },
+        { action: null, key: "plan", label: "план", present: true },
+        { action: null, key: "execution", label: "выполнение", present: true },
+        { action: null, key: "coachComment", label: "комментарий тренера", present: true },
+        { action: null, key: "deviceSync", label: "синхронизация устройства", present: true },
+        { action: null, key: "sleep", label: "сон", present: true },
+        { action: null, key: "restingHr", label: "пульс покоя", present: true },
+        { action: null, key: "deviceWorkout", label: "тренировки с устройства", present: true },
+      ],
+      status: "complete",
+      statusLabel: "Данных достаточно",
+    },
     date: entryDate,
     deviceHealth: {
       heartRate: {
@@ -322,6 +347,8 @@ function buildRiskNotes(payload: CoachDayAiPayload) {
     risks.push("Нет плановой нагрузки: сравнение плана и факта для этого дня ограничено.");
   }
 
+  addDataQualityRiskNotes(risks, payload);
+
   if (payload.load.planned > 0) {
     const loadRatio = payload.load.actual / payload.load.planned;
 
@@ -351,6 +378,8 @@ function buildRiskNotes(payload: CoachDayAiPayload) {
 
 function buildTomorrowActions(payload: CoachDayAiPayload) {
   const actions: string[] = [];
+
+  addDataQualityTomorrowActions(actions, payload);
 
   if (payload.plan.count === 0) {
     actions.push("Сначала назначьте план на день или выберите дату с планом, чтобы рекомендация была предметной.");
@@ -399,6 +428,34 @@ function buildDeviceHealthObservation(payload: CoachDayAiPayload) {
   ].filter((item): item is string => Boolean(item));
 
   return parts.length ? `По устройству: ${parts.join(", ")}.` : "Данные устройства пришли неполностью.";
+}
+
+function addDataQualityRiskNotes(risks: string[], payload: CoachDayAiPayload) {
+  const dataQuality = payload.dataQuality;
+
+  if (!dataQuality) {
+    risks.push("Качество данных дня не передано: вывод ограничен доступными полями карточки.");
+    return;
+  }
+
+  if (dataQuality.status === "partial") {
+    risks.push(`Вывод ограничен: не хватает ${dataQuality.missing.slice(0, 4).join(", ")}.`);
+  } else if (dataQuality.status === "insufficient") {
+    risks.push(`Данных мало для анализа: не хватает ${dataQuality.missing.slice(0, 5).join(", ")}.`);
+  }
+}
+
+function addDataQualityTomorrowActions(actions: string[], payload: CoachDayAiPayload) {
+  const dataQuality = payload.dataQuality;
+
+  if (!dataQuality) {
+    actions.push("Проверьте полноту данных дня перед принятием решения по нагрузке.");
+    return;
+  }
+
+  for (const action of dataQuality.actions.slice(0, 2)) {
+    actions.push(action);
+  }
 }
 
 function addDeviceHealthRiskNotes(risks: string[], payload: CoachDayAiPayload) {

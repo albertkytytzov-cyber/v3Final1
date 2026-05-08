@@ -1073,16 +1073,17 @@ function renderDashboardScreen(state: MobileAppState, athleteId: string | null) 
     ? plans.filter((plan) => plan.day.dayDate === selectedDayDate)
     : plans;
 
+  if (isCoachView) {
+    return renderCoachDayStatusScreen(state, athleteId, selectedDayDate);
+  }
+
   return `
     <div class="screen-head">
-      <h2>${isCoachView ? "День спортсмена" : "Сегодня"}</h2>
-      <p>${isCoachView
-        ? `${formatDate(selectedDayDate)} · ${nextStart ? `до старта ${daysUntil(nextStart.competitionStartDate)} дн.` : "ближайший старт не выбран"}`
-        : nextStart ? `До старта ${daysUntil(nextStart.competitionStartDate)} дн.` : "Ближайший старт не выбран"}</p>
+      <h2>Сегодня</h2>
+      <p>${nextStart ? `До старта ${daysUntil(nextStart.competitionStartDate)} дн.` : "Ближайший старт не выбран"}</p>
     </div>
-    ${isCoachView ? renderCoachDayControl(state, athleteId) : ""}
     <div class="metric-grid">
-      <article><span>${isCoachView ? "Планы дня" : "Планы"}</span><strong>${visiblePlans.length}</strong></article>
+      <article><span>Планы</span><strong>${visiblePlans.length}</strong></article>
       <article><span>Старты</span><strong>${competitionPlans.length}</strong></article>
       <article><span>Очередь</span><strong>${pendingQueue.length}</strong></article>
       <article><span>Связь</span><strong>${state.isOnline ? "Есть" : "Нет"}</strong></article>
@@ -1097,6 +1098,188 @@ function renderDashboardScreen(state: MobileAppState, athleteId: string | null) 
       </article>
     ` : ""}
     ${state.queue.length ? renderQueue(state) : ""}
+  `;
+}
+
+function renderCoachDayStatusScreen(
+  state: MobileAppState,
+  athleteId: string | null,
+  selectedDayDate: string,
+) {
+  const dayData = athleteId ? getCoachDayCleanSummary(state, athleteId, selectedDayDate) : null;
+  const aiReviewHistory = athleteId
+    ? getCoachAiReviewsForDay(state.data.coachAiReviews, athleteId, selectedDayDate)
+    : [];
+  const aiReview = athleteId
+    ? state.aiReviewByDay[getCoachDayAiReviewKey(athleteId, selectedDayDate)] ?? aiReviewHistory[0] ?? null
+    : null;
+
+  return `
+    <div class="screen-head">
+      <h2>Статус дня</h2>
+      <p>${formatDate(selectedDayDate)} · план, факт, восстановление, устройство и ИИ в одной карточке</p>
+    </div>
+    ${renderCoachDayControl(state, athleteId)}
+    ${dayData
+      ? `
+        <div class="coach-day-status-stack">
+          ${renderCoachDayStatusCard(dayData, aiReview)}
+          ${renderCoachDayDataQualityCard(dayData)}
+          ${renderCoachDayExerciseChecklist(dayData)}
+          ${renderDeviceHealthCard(state, dayData.athleteId, selectedDayDate)}
+          ${renderCoachAiReviewCard(
+            dayData,
+            aiReview,
+            aiReviewHistory,
+            state.coachAiStatus,
+            state.coachAiDiagnostic,
+            state.isBusy,
+          )}
+        </div>
+      `
+      : renderEmpty("Выберите спортсмена", "После выбора спортсмена экран покажет статус выбранного дня.")}
+    ${renderCoachTeamDayPanel(state, selectedDayDate)}
+  `;
+}
+
+function renderCoachDayStatusCard(dayData: CoachDayCleanSummary, aiReview: CoachDayAiReview | null) {
+  const summary = dayData.summary;
+  const readiness = dayData.readinessEntry;
+  const deviceHealth = dayData.deviceHealthSummary;
+
+  return `
+    <section class="coach-day-status-card">
+      <div class="coach-day-status-head">
+        <div>
+          <span>Карточка дня</span>
+          <h3>${escapeHtml(dayData.athleteName)}</h3>
+          <p>${formatDate(dayData.date)} · ${escapeHtml(summary.statusLabel.toLowerCase())}</p>
+        </div>
+        <strong>${readiness ? readiness.score : "-"}</strong>
+      </div>
+      <div class="coach-day-status-grid">
+        ${renderCoachExecutionReviewMetric("Готовность", readiness ? String(readiness.score) : "-", readiness ? formatReadinessStatus(readiness.status) : "спортсмен не отправил")}
+        ${renderCoachExecutionReviewMetric("Плановая нагрузка", formatLoadValue(summary.plannedLoad), formatCoachTodayPlanNames(summary))}
+        ${renderCoachExecutionReviewMetric("Фактическая нагрузка", formatLoadValue(summary.actualLoad), formatCoachTodayLoadDelta(summary))}
+        ${renderCoachExecutionReviewMetric("Выполнение", `${summary.completedExerciseCount}/${summary.exerciseCount || 0}`, formatCoachTodayExerciseBreakdown(summary))}
+        ${renderCoachExecutionReviewMetric("Сон", formatDeviceHealthSleepValue(deviceHealth), formatDeviceHealthSleepDetail(deviceHealth))}
+        ${renderCoachExecutionReviewMetric("Пульс покоя", formatDeviceHealthRestingHrValue(deviceHealth), formatDeviceHealthHeartRateDetail(deviceHealth))}
+        ${renderCoachExecutionReviewMetric("Тренировки устройства", formatDeviceHealthWorkoutValue(deviceHealth), formatDeviceHealthWorkoutDetail(deviceHealth))}
+        ${renderCoachExecutionReviewMetric("ИИ", formatCoachAiBriefValue(aiReview), formatCoachAiBriefDetail(aiReview))}
+      </div>
+      <div class="coach-execution-review-note">
+        <strong>Комментарий тренера</strong>
+        <p>${escapeHtml(dayData.coachNote)}</p>
+      </div>
+    </section>
+  `;
+}
+
+function renderCoachDayDataQualityCard(dayData: CoachDayCleanSummary) {
+  const dataQuality = buildCoachDayDataQuality(dayData);
+
+  return `
+    <section class="coach-day-quality-card is-${dataQuality.status}">
+      <div class="summary-inline-head">
+        <div>
+          <span>Качество данных</span>
+          <h3>${escapeHtml(dataQuality.statusLabel)}</h3>
+        </div>
+        <strong>${dataQuality.available.length}/${dataQuality.signals.length}</strong>
+      </div>
+      <div class="device-health-signal-list">
+        <article>
+          <strong>Что есть</strong>
+          <p>${escapeHtml(dataQuality.available.length ? dataQuality.available.join(", ") : "пока ничего")}</p>
+        </article>
+        <article>
+          <strong>Чего не хватает</strong>
+          <p>${escapeHtml(dataQuality.missing.length ? dataQuality.missing.join(", ") : "данных достаточно")}</p>
+        </article>
+      </div>
+      <ul class="coach-day-quality-actions">
+        ${(dataQuality.actions.length ? dataQuality.actions : ["Можно формировать разбор дня."])
+          .map((action) => `<li>${escapeHtml(action)}</li>`)
+          .join("")}
+      </ul>
+    </section>
+  `;
+}
+
+function renderCoachDayExerciseChecklist(dayData: CoachDayCleanSummary) {
+  const exercises = dayData.blocks.flatMap((block) =>
+    block.exercises.map((exercise) => ({ block, exercise })),
+  );
+
+  if (exercises.length === 0) {
+    return renderEmpty("Упражнений в плане нет", "Если на день назначены только блоки без упражнений, смотрите статус блоков в разделе выполнения.");
+  }
+
+  return `
+    <section class="coach-day-exercise-card">
+      <div class="summary-inline-head">
+        <div>
+          <span>Упражнения дня</span>
+          <h3>Что выполнено и что нет</h3>
+        </div>
+        <strong>${dayData.summary.completedExerciseCount}/${dayData.summary.exerciseCount || 0}</strong>
+      </div>
+      <div class="coach-day-exercise-list">
+        ${exercises.map(({ block, exercise }) => `
+          <article class="is-${exercise.status}">
+            <span>${escapeHtml(exercise.statusLabel)}</span>
+            <strong>${escapeHtml(exercise.name)}</strong>
+            <p>${escapeHtml(block.sessionName)} · ${escapeHtml(block.name)} · ${escapeHtml(exercise.plannedWork || "-")}</p>
+          </article>
+        `).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderCoachTeamDayPanel(state: MobileAppState, selectedDayDate: string) {
+  if (!isCoachRole(state.session.user?.role) || state.data.athletes.length === 0) {
+    return "";
+  }
+
+  const rows = state.data.athletes.map((athlete) => {
+    const dayData = getCoachDayCleanSummary(state, athlete.athleteId, selectedDayDate);
+    const dataQuality = buildCoachDayDataQuality(dayData);
+    const aiReview = state.aiReviewByDay[getCoachDayAiReviewKey(athlete.athleteId, selectedDayDate)] ??
+      getCoachAiReviewsForDay(state.data.coachAiReviews, athlete.athleteId, selectedDayDate)[0] ??
+      null;
+
+    return { aiReview, athlete, dataQuality, dayData };
+  });
+
+  return `
+    <section class="coach-team-day-panel">
+      <div class="summary-inline-head">
+        <div>
+          <span>Команда сегодня</span>
+          <h3>${formatDate(selectedDayDate)}</h3>
+        </div>
+        <strong>${rows.length}</strong>
+      </div>
+      <div class="coach-team-day-list">
+        ${rows.map(({ aiReview, athlete, dataQuality, dayData }) => `
+          <article class="coach-team-day-row is-${dataQuality.status}">
+            <div>
+              <strong>${escapeHtml(athlete.fullName)}</strong>
+              <span>${escapeHtml(dayData.summary.statusLabel)} · ${escapeHtml(dataQuality.statusLabel)}</span>
+            </div>
+            <div class="coach-team-day-metrics">
+              <span>Гот. ${dayData.readinessEntry ? dayData.readinessEntry.score : "-"}</span>
+              <span>${formatLoadValue(dayData.summary.actualLoad)} / ${formatLoadValue(dayData.summary.plannedLoad)}</span>
+              <span>Сон ${formatDeviceHealthSleepValue(dayData.deviceHealthSummary)}</span>
+              <span>Пульс ${formatDeviceHealthRestingHrValue(dayData.deviceHealthSummary)}</span>
+            </div>
+            <p>${escapeHtml(aiReview?.riskNotes[0] ?? formatCoachAiBriefDetail(aiReview))}</p>
+            <button data-athlete-card="${escapeHtml(athlete.athleteId)}" type="button">Открыть день</button>
+          </article>
+        `).join("")}
+      </div>
+    </section>
   `;
 }
 
@@ -1712,6 +1895,7 @@ function renderCoachExecutionReviewSummary(
         <p>${escapeHtml(dayData.coachNote)}</p>
       </div>
     </section>
+    ${renderCoachDayDataQualityCard(dayData)}
     ${renderCoachAiReviewCard(
       dayData,
       aiReview,
@@ -1783,7 +1967,7 @@ function renderCoachAiReviewCard(
         `
         : `
           <p class="coach-ai-review-empty">
-            Нажмите кнопку, чтобы отправить готовность, план/факт, выполнение упражнений и комментарий тренера в серверный разбор.
+            Нажмите кнопку, чтобы отправить качество данных, готовность, план/факт, выполнение упражнений, устройство и комментарий тренера в серверный разбор.
           </p>
           ${renderCoachAiReviewHistory(reviewHistory)}
         `}
@@ -2178,6 +2362,7 @@ interface CoachDayCleanSummary {
   athleteName: string;
   date: string;
   deviceHealthSummary: DeviceHealthDailySummary | null;
+  hasExecutionMarks: boolean;
   summary: CoachTodayDaySummary;
   readinessEntry: ReadinessEntry | null;
   latestDiaryEntry: CoachDiaryEntry | null;
@@ -3132,9 +3317,11 @@ function getCoachDayCleanSummary(
   const summary = getCoachDaySummary(state, athleteId, date);
   const readinessEntry = getReadinessEntryForDate(state, athleteId, date);
   const deviceHealthSummary = getDeviceHealthSummaryForDate(state, athleteId, date);
+  let hasExecutionMarks = false;
   const blocks = groups.flatMap((group) =>
     group.blockItems.map((item) => {
       const result = getExecutionResultForBlock(state, item.plan.id, item.block.id);
+      hasExecutionMarks = hasExecutionMarks || Boolean(result);
       const plannedLoad = getExecutionBlockPlannedLoad(item.block, result);
       const actualLoad = getExecutionBlockActualLoad(item.block, result, plannedLoad);
       const status = getExecutionBlockStatus(item.block, result);
@@ -3187,6 +3374,7 @@ function getCoachDayCleanSummary(
     coachNote: latestDiaryEntry?.notes?.trim() || "Комментария тренера за выбранный день пока нет.",
     date,
     deviceHealthSummary,
+    hasExecutionMarks,
     latestDiaryEntry,
     plans,
     readinessEntry,
@@ -3272,6 +3460,7 @@ function buildCoachDayAiPayload(dayData: CoachDayCleanSummary): CoachDayAiPayloa
       weightClass: dayData.athlete?.weightClass || null,
     },
     coachComment: dayData.latestDiaryEntry ? dayData.coachNote : null,
+    dataQuality: buildCoachDayDataQuality(dayData),
     date: dayData.date,
     deviceHealth: buildCoachDayAiDeviceHealth(dayData.deviceHealthSummary),
     execution: {
@@ -3321,6 +3510,90 @@ function buildCoachDayAiPayload(dayData: CoachDayCleanSummary): CoachDayAiPayloa
         statusLabel: formatReadinessStatus(readiness.status),
       }
       : null,
+  };
+}
+
+function buildCoachDayDataQuality(dayData: CoachDayCleanSummary): NonNullable<CoachDayAiPayload["dataQuality"]> {
+  const device = dayData.deviceHealthSummary;
+  const hasDeviceSync = Boolean(device);
+  const hasSleep = hasDeviceSleepData(device);
+  const hasRestingHr = device?.heartRate?.restingBpm !== null && device?.heartRate?.restingBpm !== undefined;
+  const hasDeviceWorkout = Boolean(device?.workout);
+  const signals = [
+    {
+      action: "Попросите спортсмена отправить готовность за выбранный день.",
+      key: "readiness",
+      label: "готовность",
+      present: Boolean(dayData.readinessEntry),
+    },
+    {
+      action: "Назначьте план или выберите день с планом.",
+      key: "plan",
+      label: "план",
+      present: dayData.summary.planCount > 0,
+    },
+    {
+      action: "Попросите спортсмена отметить выполнение упражнений.",
+      key: "execution",
+      label: "выполнение",
+      present: dayData.summary.planCount === 0 || dayData.hasExecutionMarks,
+    },
+    {
+      action: "Добавьте короткий комментарий тренера по дню.",
+      key: "coachComment",
+      label: "комментарий тренера",
+      present: Boolean(dayData.latestDiaryEntry),
+    },
+    {
+      action: "Попросите спортсмена синхронизировать Huawei Health.",
+      key: "deviceSync",
+      label: "синхронизация устройства",
+      present: hasDeviceSync,
+    },
+    {
+      action: "Проверьте доступ Huawei Health ко сну и повторите синхронизацию.",
+      key: "sleep",
+      label: "сон",
+      present: hasSleep,
+    },
+    {
+      action: "Проверьте доступ Huawei Health к пульсу и повторите синхронизацию.",
+      key: "restingHr",
+      label: "пульс покоя",
+      present: hasRestingHr,
+    },
+    {
+      action: "Проверьте, пришли ли тренировки с устройства за выбранный день.",
+      key: "deviceWorkout",
+      label: "тренировки с устройства",
+      present: hasDeviceWorkout,
+    },
+  ];
+  const available = signals.filter((signal) => signal.present).map((signal) => signal.label);
+  const missingSignals = signals.filter((signal) => !signal.present);
+  const missing = missingSignals.map((signal) => signal.label);
+  const criticalMissing = missingSignals.filter((signal) =>
+    ["readiness", "plan", "execution", "sleep", "restingHr"].includes(signal.key)
+  ).length;
+  const status = criticalMissing === 0
+    ? "complete"
+    : criticalMissing <= 2
+      ? "partial"
+      : "insufficient";
+
+  return {
+    actions: missingSignals
+      .map((signal) => signal.action)
+      .filter((action): action is string => Boolean(action)),
+    available,
+    missing,
+    signals,
+    status,
+    statusLabel: status === "complete"
+      ? "Данных достаточно"
+      : status === "partial"
+        ? "Данные частичные"
+        : "Данных мало для анализа",
   };
 }
 
@@ -3398,6 +3671,8 @@ function buildOfflineCoachAiRiskNotes(dayData: CoachDayCleanSummary) {
     risks.push("Нет плановой нагрузки: проверьте выбранную дату или назначение плана после восстановления сети.");
   }
 
+  addOfflineCoachAiDataQualityRisks(risks, dayData);
+
   if (summary.status === "missed") {
     risks.push("День не выполнен: не переносите весь объём автоматически без серверной проверки.");
   } else if (summary.status === "partial") {
@@ -3422,6 +3697,8 @@ function buildOfflineCoachAiTomorrowActions(dayData: CoachDayCleanSummary) {
     "План и дневник не менялись.",
   ];
 
+  addOfflineCoachAiDataQualityActions(actions, dayData);
+
   if (summary.planCount === 0) {
     actions.push("Выберите день с назначенным планом или назначьте план перед повторным разбором.");
   } else if (summary.status === "partial") {
@@ -3433,6 +3710,24 @@ function buildOfflineCoachAiTomorrowActions(dayData: CoachDayCleanSummary) {
   addOfflineCoachAiDeviceActions(actions, dayData.deviceHealthSummary);
 
   return Array.from(new Set(actions)).slice(0, 4);
+}
+
+function addOfflineCoachAiDataQualityRisks(risks: string[], dayData: CoachDayCleanSummary) {
+  const dataQuality = buildCoachDayDataQuality(dayData);
+
+  if (dataQuality.status === "partial") {
+    risks.push(`Вывод ограничен: не хватает ${dataQuality.missing.slice(0, 4).join(", ")}.`);
+  } else if (dataQuality.status === "insufficient") {
+    risks.push(`Данных мало для анализа: не хватает ${dataQuality.missing.slice(0, 5).join(", ")}.`);
+  }
+}
+
+function addOfflineCoachAiDataQualityActions(actions: string[], dayData: CoachDayCleanSummary) {
+  const dataQuality = buildCoachDayDataQuality(dayData);
+
+  for (const action of dataQuality.actions.slice(0, 2)) {
+    actions.push(action);
+  }
 }
 
 function formatOfflineCoachAiDeviceObservation(summary: DeviceHealthDailySummary | null) {

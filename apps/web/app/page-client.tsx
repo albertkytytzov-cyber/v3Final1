@@ -48,6 +48,8 @@ import {
   type CoachDayAiReview,
   type CoachDayAiReviewHistoryResponse,
   type CoachDayAiReviewResponse,
+  type DeviceHealthDailySummariesResponse,
+  type DeviceHealthDailySummary,
   type PlanTemplateRecommendation,
   type PlannerSuggestion,
   type PlannerWarning,
@@ -678,6 +680,206 @@ function formatCoachAiReadinessStatus(status: ReadinessEntry["status"], language
   return copyFor(language, { en: "Red", ru: "Красный", bg: "Червен" });
 }
 
+function getDeviceHealthSummaryForDay(
+  summaries: DeviceHealthDailySummary[],
+  athleteId: string,
+  entryDate: string,
+) {
+  return summaries.find((summary) =>
+    summary.athleteId === athleteId &&
+    summary.entryDate === entryDate
+  ) ?? null;
+}
+
+function hasDeviceSleepData(summary: DeviceHealthDailySummary | null) {
+  return Boolean(
+    summary?.sleep &&
+      (
+        summary.sleep.durationMinutes !== null ||
+        summary.sleep.score !== null ||
+        summary.sleep.deepMinutes !== null ||
+        summary.sleep.lightMinutes !== null ||
+        summary.sleep.remMinutes !== null
+      ),
+  );
+}
+
+function hasReviewExecutionMarks(review: ExecutionReviewPlan | null) {
+  return Boolean(
+    review?.sessions.some((session) =>
+      session.blocks.some((block) =>
+        Boolean(block.actualResult) ||
+        (block.exercises ?? []).some((exercise) => Boolean(exercise.actualResult))
+      )
+    ),
+  );
+}
+
+function formatDeviceDuration(minutes: number | null | undefined, language: Language) {
+  if (minutes === null || minutes === undefined) {
+    return "-";
+  }
+
+  const hours = Math.floor(minutes / 60);
+  const rest = Math.round(minutes % 60);
+
+  if (hours <= 0) {
+    return `${rest} ${copyFor(language, { en: "min", ru: "мин", bg: "мин" })}`;
+  }
+
+  return rest > 0
+    ? `${hours} ${copyFor(language, { en: "h", ru: "ч", bg: "ч" })} ${rest} ${copyFor(language, { en: "min", ru: "мин", bg: "мин" })}`
+    : `${hours} ${copyFor(language, { en: "h", ru: "ч", bg: "ч" })}`;
+}
+
+function formatCoachDayLoadValue(value: number) {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
+}
+
+function formatDeviceSleepValue(summary: DeviceHealthDailySummary | null, language: Language) {
+  if (!summary?.sleep) {
+    return "-";
+  }
+
+  if (summary.sleep.durationMinutes !== null) {
+    return formatDeviceDuration(summary.sleep.durationMinutes, language);
+  }
+
+  return summary.sleep.score !== null ? String(summary.sleep.score) : "-";
+}
+
+function formatDeviceRestingHrValue(summary: DeviceHealthDailySummary | null) {
+  return summary?.heartRate?.restingBpm !== null && summary?.heartRate?.restingBpm !== undefined
+    ? String(summary.heartRate.restingBpm)
+    : "-";
+}
+
+function formatDeviceWorkoutValue(summary: DeviceHealthDailySummary | null) {
+  return summary?.workout ? String(summary.workout.count) : "-";
+}
+
+function buildCoachDayDataQuality(input: {
+  coachComment: string | null;
+  deviceHealthSummary: DeviceHealthDailySummary | null;
+  hasExecutionMarks: boolean;
+  hasPlan: boolean;
+  readinessEntry: ReadinessEntry | null;
+  language: Language;
+}): NonNullable<CoachDayAiPayload["dataQuality"]> {
+  const hasDeviceSync = Boolean(input.deviceHealthSummary);
+  const hasSleep = hasDeviceSleepData(input.deviceHealthSummary);
+  const hasRestingHr =
+    input.deviceHealthSummary?.heartRate?.restingBpm !== null &&
+    input.deviceHealthSummary?.heartRate?.restingBpm !== undefined;
+  const hasDeviceWorkout = Boolean(input.deviceHealthSummary?.workout);
+  const signals = [
+    {
+      action: copyFor(input.language, {
+        en: "Ask the athlete to submit readiness for the selected day.",
+        ru: "Попросите спортсмена отправить готовность за выбранный день.",
+        bg: "Помолете спортиста да подаде готовност за избрания ден.",
+      }),
+      key: "readiness",
+      label: copyFor(input.language, { en: "readiness", ru: "готовность", bg: "готовност" }),
+      present: Boolean(input.readinessEntry),
+    },
+    {
+      action: copyFor(input.language, {
+        en: "Assign a plan or select a day that has a plan.",
+        ru: "Назначьте план или выберите день с планом.",
+        bg: "Назначете план или изберете ден с план.",
+      }),
+      key: "plan",
+      label: copyFor(input.language, { en: "plan", ru: "план", bg: "план" }),
+      present: input.hasPlan,
+    },
+    {
+      action: copyFor(input.language, {
+        en: "Ask the athlete to mark execution for the day.",
+        ru: "Попросите спортсмена отметить выполнение упражнений.",
+        bg: "Помолете спортиста да отбележи изпълнението.",
+      }),
+      key: "execution",
+      label: copyFor(input.language, { en: "execution", ru: "выполнение", bg: "изпълнение" }),
+      present: !input.hasPlan || input.hasExecutionMarks,
+    },
+    {
+      action: copyFor(input.language, {
+        en: "Add a short coach comment for the day.",
+        ru: "Добавьте короткий комментарий тренера по дню.",
+        bg: "Добавете кратък коментар на треньора за деня.",
+      }),
+      key: "coachComment",
+      label: copyFor(input.language, { en: "coach comment", ru: "комментарий тренера", bg: "коментар на треньора" }),
+      present: Boolean(input.coachComment),
+    },
+    {
+      action: copyFor(input.language, {
+        en: "Ask the athlete to sync Huawei Health.",
+        ru: "Попросите спортсмена синхронизировать Huawei Health.",
+        bg: "Помолете спортиста да синхронизира Huawei Health.",
+      }),
+      key: "deviceSync",
+      label: copyFor(input.language, { en: "device sync", ru: "синхронизация устройства", bg: "синхронизация на устройство" }),
+      present: hasDeviceSync,
+    },
+    {
+      action: copyFor(input.language, {
+        en: "Check sleep access in Huawei Health and sync again.",
+        ru: "Проверьте доступ Huawei Health ко сну и повторите синхронизацию.",
+        bg: "Проверете достъпа до сън в Huawei Health и синхронизирайте отново.",
+      }),
+      key: "sleep",
+      label: copyFor(input.language, { en: "sleep", ru: "сон", bg: "сън" }),
+      present: hasSleep,
+    },
+    {
+      action: copyFor(input.language, {
+        en: "Check heart-rate access in Huawei Health and sync again.",
+        ru: "Проверьте доступ Huawei Health к пульсу и повторите синхронизацию.",
+        bg: "Проверете достъпа до пулс в Huawei Health и синхронизирайте отново.",
+      }),
+      key: "restingHr",
+      label: copyFor(input.language, { en: "resting HR", ru: "пульс покоя", bg: "пулс в покой" }),
+      present: hasRestingHr,
+    },
+    {
+      action: copyFor(input.language, {
+        en: "Check whether device workouts arrived for the selected day.",
+        ru: "Проверьте, пришли ли тренировки с устройства за выбранный день.",
+        bg: "Проверете дали тренировките от устройството са дошли за избрания ден.",
+      }),
+      key: "deviceWorkout",
+      label: copyFor(input.language, { en: "device workouts", ru: "тренировки с устройства", bg: "тренировки от устройство" }),
+      present: hasDeviceWorkout,
+    },
+  ];
+  const available = signals.filter((signal) => signal.present).map((signal) => signal.label);
+  const missingSignals = signals.filter((signal) => !signal.present);
+  const missing = missingSignals.map((signal) => signal.label);
+  const criticalMissing = missingSignals.filter((signal) =>
+    ["readiness", "plan", "execution", "sleep", "restingHr"].includes(signal.key)
+  ).length;
+  const status = criticalMissing === 0
+    ? "complete"
+    : criticalMissing <= 2
+      ? "partial"
+      : "insufficient";
+
+  return {
+    actions: missingSignals.map((signal) => signal.action),
+    available,
+    missing,
+    signals,
+    status,
+    statusLabel: status === "complete"
+      ? copyFor(input.language, { en: "Enough data", ru: "Данных достаточно", bg: "Данните са достатъчни" })
+      : status === "partial"
+        ? copyFor(input.language, { en: "Partial data", ru: "Данные частичные", bg: "Частични данни" })
+        : copyFor(input.language, { en: "Too little data for analysis", ru: "Данных мало для анализа", bg: "Малко данни за анализ" }),
+  };
+}
+
 function getCoachAiBlockPlannedLoad(block: ReviewBlock) {
   return roundCoachAiLoad(block.actualResult?.plannedLoad ?? estimateTrainingBlockLoad(block));
 }
@@ -706,6 +908,7 @@ function getCoachAiBlockActualLoad(block: ReviewBlock, plannedLoad: number) {
 
 function buildCoachDayAiPayloadFromReview(input: {
   athlete: CoachAthleteSummary | null;
+  deviceHealthSummary: DeviceHealthDailySummary | null;
   diaryEntry: CoachDiaryEntry | null;
   language: Language;
   readinessEntry: ReadinessEntry | null;
@@ -756,8 +959,67 @@ function buildCoachDayAiPayloadFromReview(input: {
       weightClass: input.athlete?.weightClass || null,
     },
     coachComment: input.diaryEntry?.notes.trim() || null,
+    dataQuality: buildCoachDayDataQuality({
+      coachComment: input.diaryEntry?.notes.trim() || null,
+      deviceHealthSummary: input.deviceHealthSummary,
+      hasExecutionMarks: hasReviewExecutionMarks(input.review),
+      hasPlan: input.review.summary.plannedBlocks > 0,
+      language: input.language,
+      readinessEntry: input.readinessEntry,
+    }),
     date: input.review.dayDate,
-    deviceHealth: null,
+    deviceHealth: input.deviceHealthSummary
+      ? {
+          heartRate: input.deviceHealthSummary.heartRate
+            ? {
+                averageBpm: input.deviceHealthSummary.heartRate.averageBpm,
+                hrvRmssdMs: input.deviceHealthSummary.heartRate.hrvRmssdMs,
+                maxBpm: input.deviceHealthSummary.heartRate.maxBpm,
+                minBpm: input.deviceHealthSummary.heartRate.minBpm,
+                restingBpm: input.deviceHealthSummary.heartRate.restingBpm,
+              }
+            : null,
+          missing: buildCoachDayDataQuality({
+            coachComment: input.diaryEntry?.notes.trim() || null,
+            deviceHealthSummary: input.deviceHealthSummary,
+            hasExecutionMarks: hasReviewExecutionMarks(input.review),
+            hasPlan: input.review.summary.plannedBlocks > 0,
+            language: input.language,
+            readinessEntry: input.readinessEntry,
+          }).missing.filter((item) =>
+            [
+              copyFor(input.language, { en: "sleep", ru: "сон", bg: "сън" }),
+              copyFor(input.language, { en: "resting HR", ru: "пульс покоя", bg: "пулс в покой" }),
+              copyFor(input.language, { en: "device workouts", ru: "тренировки с устройства", bg: "тренировки от устройство" }),
+            ].includes(item)
+          ),
+          sleep: input.deviceHealthSummary.sleep
+            ? {
+                awakeMinutes: input.deviceHealthSummary.sleep.awakeMinutes,
+                deepMinutes: input.deviceHealthSummary.sleep.deepMinutes,
+                durationMinutes: input.deviceHealthSummary.sleep.durationMinutes,
+                lightMinutes: input.deviceHealthSummary.sleep.lightMinutes,
+                remMinutes: input.deviceHealthSummary.sleep.remMinutes,
+                score: input.deviceHealthSummary.sleep.score,
+              }
+            : null,
+          sourceDevice: input.deviceHealthSummary.sourceDevice,
+          statusLabel: input.deviceHealthSummary
+            ? copyFor(input.language, { en: "Device data received", ru: "Данные устройства получены", bg: "Данните от устройството са получени" })
+            : "",
+          syncedAt: input.deviceHealthSummary.syncedAt,
+          workout: input.deviceHealthSummary.workout
+            ? {
+                activeCalories: input.deviceHealthSummary.workout.activeCalories,
+                averageHeartRateBpm: input.deviceHealthSummary.workout.averageHeartRateBpm,
+                count: input.deviceHealthSummary.workout.count,
+                maxHeartRateBpm: input.deviceHealthSummary.workout.maxHeartRateBpm,
+                totalDistanceMeters: input.deviceHealthSummary.workout.totalDistanceMeters,
+                totalDurationMinutes: input.deviceHealthSummary.workout.totalDurationMinutes,
+              }
+            : null,
+        }
+      : null,
     execution: {
       blocks: {
         completed: input.review.summary.completedBlocks,
@@ -4872,6 +5134,12 @@ export function PageClient({
   const [coachDiaryEntries, setCoachDiaryEntries] = useState<CoachDiaryEntry[]>(
     previewState?.coachDiaryEntries ?? [],
   );
+  const [coachDeviceHealthSummaries, setCoachDeviceHealthSummaries] = useState<
+    DeviceHealthDailySummary[]
+  >(previewState?.coachDeviceHealthSummaries ?? []);
+  const [coachReadinessEntries, setCoachReadinessEntries] = useState<ReadinessEntry[]>(
+    previewState?.selectedAthleteEntries ?? [],
+  );
   const [coachDiaryDraft, setCoachDiaryDraft] =
     useState<CoachDiaryDraft>(emptyCoachDiaryDraft);
   const [coachAiReviews, setCoachAiReviews] = useState<CoachDayAiReview[]>([]);
@@ -4995,6 +5263,8 @@ export function PageClient({
     setCoachAdaptedPlan(null);
     setCoachExecutionReview(null);
     setCoachDiaryEntries([]);
+    setCoachDeviceHealthSummaries([]);
+    setCoachReadinessEntries([]);
     setCoachDiaryDraft(emptyCoachDiaryDraft);
     setCoachAiReviews([]);
     setCoachAiReviewMessage("");
@@ -5692,6 +5962,7 @@ export function PageClient({
       setMicrocycleForm((current) => ({ ...current, athleteId }));
       await Promise.all([
         loadCoachAthleteReadiness(athleteId),
+        loadCoachTeamDayData(response.athletes),
         loadCoachAdaptedPlan(athleteId),
         loadCoachExecutionReview(athleteId),
         loadCoachDiaryEntries(),
@@ -5729,6 +6000,10 @@ export function PageClient({
       `/coach/athletes/${athleteId}/readiness`,
     );
     setSelectedAthleteEntries(response.entries);
+    setCoachReadinessEntries((current) => [
+      ...current.filter((entry) => entry.athleteId !== athleteId),
+      ...response.entries,
+    ]);
 
     const latestEntry = response.entries[0];
     if (latestEntry) {
@@ -5747,6 +6022,45 @@ export function PageClient({
         ),
       );
     }
+  }
+
+  async function loadCoachTeamDayData(athletes: CoachAthleteSummary[]) {
+    const athleteIds = Array.from(new Set(athletes.map((athlete) => athlete.athleteId).filter(Boolean)));
+
+    if (athleteIds.length === 0) {
+      setCoachReadinessEntries([]);
+      setCoachDeviceHealthSummaries([]);
+      setExecutionResults([]);
+      return;
+    }
+
+    const [readinessResponses, deviceResponses, executionResponses] = await Promise.all([
+      Promise.all(
+        athleteIds.map((athleteId) =>
+          apiRequest<{ entries: ReadinessEntry[] }>(
+            `/coach/athletes/${encodeURIComponent(athleteId)}/readiness`,
+          ).catch(() => ({ entries: [] })),
+        ),
+      ),
+      Promise.all(
+        athleteIds.map((athleteId) =>
+          apiRequest<DeviceHealthDailySummariesResponse>(
+            `/coach/athletes/${encodeURIComponent(athleteId)}/device-health`,
+          ).catch(() => ({ summaries: [] })),
+        ),
+      ),
+      Promise.all(
+        athleteIds.map((athleteId) =>
+          apiRequest<{ results: ExecutionResult[] }>(
+            `/coach/athletes/${encodeURIComponent(athleteId)}/execution`,
+          ).catch(() => ({ results: [] })),
+        ),
+      ),
+    ]);
+
+    setCoachReadinessEntries(readinessResponses.flatMap((response) => response.entries));
+    setCoachDeviceHealthSummaries(deviceResponses.flatMap((response) => response.summaries));
+    setExecutionResults(executionResponses.flatMap((response) => response.results));
   }
 
   async function loadPlanTemplates() {
@@ -8866,8 +9180,8 @@ export function PageClient({
       return;
     }
 
-    void loadAvailableCoachAthletes();
     if (!isPreviewMode) {
+      void loadAvailableCoachAthletes();
       void loadCoachAiReviews().catch(() => {
         setCoachAiReviews([]);
       });
@@ -8961,8 +9275,14 @@ export function PageClient({
             entry.assignedPlanId === coachExecutionReview.assignedPlanId,
         )
         .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0] ?? null;
+    const deviceHealthSummary = getDeviceHealthSummaryForDay(
+      coachDeviceHealthSummaries,
+      selectedAthleteId,
+      coachExecutionReview.dayDate,
+    );
     const dayPayload = buildCoachDayAiPayloadFromReview({
       athlete: selectedCoachAthlete,
+      deviceHealthSummary,
       diaryEntry,
       language,
       readinessEntry,
@@ -9830,6 +10150,106 @@ export function PageClient({
     ? getCoachAiReviewsForDay(coachAiReviews, selectedAthleteId, coachExecutionReview.dayDate)
     : [];
   const latestCoachAiReview = selectedCoachAiReviewHistory[0] ?? null;
+  const selectedCoachReadinessEntry = coachExecutionReview
+    ? (
+        selectedAthleteEntries.find(
+          (entry) =>
+            entry.athleteId === selectedAthleteId &&
+            entry.entryDate === coachExecutionReview.dayDate,
+        ) ??
+        coachReadinessEntries.find(
+          (entry) =>
+            entry.athleteId === selectedAthleteId &&
+            entry.entryDate === coachExecutionReview.dayDate,
+        ) ??
+        null
+      )
+    : null;
+  const selectedCoachDeviceHealthSummary = coachExecutionReview
+    ? getDeviceHealthSummaryForDay(
+        coachDeviceHealthSummaries,
+        selectedAthleteId,
+        coachExecutionReview.dayDate,
+      )
+    : null;
+  const selectedCoachDayDataQuality = coachExecutionReview
+    ? buildCoachDayDataQuality({
+        coachComment: latestCoachDiaryEntry?.notes.trim() || null,
+        deviceHealthSummary: selectedCoachDeviceHealthSummary,
+        hasExecutionMarks: hasReviewExecutionMarks(coachExecutionReview),
+        hasPlan: coachExecutionReview.summary.plannedBlocks > 0,
+        language,
+        readinessEntry: selectedCoachReadinessEntry,
+      })
+    : null;
+  const coachTeamDayDate = coachExecutionReview?.dayDate ?? getDateInputValue();
+  const coachTeamDayRows = coachAthletes.map((athlete) => {
+    const plansForDay = assignedPlans.filter(
+      (plan) => plan.athleteId === athlete.athleteId && plan.day.dayDate === coachTeamDayDate,
+    );
+    const readinessEntry =
+      coachReadinessEntries.find(
+        (entry) => entry.athleteId === athlete.athleteId && entry.entryDate === coachTeamDayDate,
+      ) ?? null;
+    const deviceHealthSummary = getDeviceHealthSummaryForDay(
+      coachDeviceHealthSummaries,
+      athlete.athleteId,
+      coachTeamDayDate,
+    );
+    const planIds = new Set(plansForDay.map((plan) => plan.id));
+    const dayResults = executionResults.filter(
+      (result) => result.athleteId === athlete.athleteId && planIds.has(result.assignedPlanId),
+    );
+    const plannedLoad = roundCoachAiLoad(
+      plansForDay.reduce(
+        (total, plan) =>
+          total +
+          plan.day.sessions.reduce(
+            (sessionTotal, session) =>
+              sessionTotal +
+              session.blocks.reduce((blockTotal, block) => blockTotal + estimateTrainingBlockLoad(block), 0),
+            0,
+          ),
+        0,
+      ),
+    );
+    const actualLoad = roundCoachAiLoad(
+      dayResults.reduce((total, result) => total + (result.actualLoad ?? 0), 0),
+    );
+    const dataQuality = buildCoachDayDataQuality({
+      coachComment:
+        coachDiaryEntries.find(
+          (entry) =>
+            entry.athleteId === athlete.athleteId &&
+            entry.entryDate === coachTeamDayDate,
+        )?.notes.trim() || null,
+      deviceHealthSummary,
+      hasExecutionMarks: dayResults.length > 0,
+      hasPlan: plansForDay.length > 0,
+      language,
+      readinessEntry,
+    });
+    const aiReview = getCoachAiReviewsForDay(
+      coachAiReviews,
+      athlete.athleteId,
+      coachTeamDayDate,
+    )[0] ?? null;
+
+    return {
+      actualLoad,
+      aiReview,
+      athlete,
+      dataQuality,
+      deviceHealthSummary,
+      plannedLoad,
+      readinessEntry,
+      statusLabel: plansForDay.length === 0
+        ? copyFor(language, { en: "No plan", ru: "Нет плана", bg: "Няма план" })
+        : dayResults.length === 0
+          ? copyFor(language, { en: "No execution", ru: "Нет отметок", bg: "Няма изпълнение" })
+          : copyFor(language, { en: "Execution exists", ru: "Есть выполнение", bg: "Има изпълнение" }),
+    };
+  });
   const athleteChangedToday = adaptedPlan
     ? [
         ...adaptedPlan.reducedBlocks.map((name) => ({
@@ -12993,6 +13413,160 @@ export function PageClient({
                   ) : null}
                   {coachExecutionReview ? (
                     <>
+                      <section className="coach-day-status-panel">
+                        <div className="summary-topline">
+                          <div>
+                            <strong>
+                              {copyFor(language, {
+                                en: "Day status",
+                                ru: "Статус дня",
+                                bg: "Статус на деня",
+                              })}
+                            </strong>
+                            <span>
+                              {selectedCoachAthlete?.fullName ?? coachExecutionReview.athleteName} /{" "}
+                              {coachExecutionReview.dayDate}
+                            </span>
+                          </div>
+                          <span className={`status-chip ${selectedCoachDayDataQuality?.status ?? "pending"}`}>
+                            {selectedCoachDayDataQuality?.statusLabel ??
+                              copyFor(language, {
+                                en: "Not evaluated",
+                                ru: "Не оценено",
+                                bg: "Не е оценено",
+                              })}
+                          </span>
+                        </div>
+                        <div className="coach-day-status-grid">
+                          {[
+                            {
+                              label: copyFor(language, { en: "Readiness", ru: "Готовность", bg: "Готовност" }),
+                              value: selectedCoachReadinessEntry ? selectedCoachReadinessEntry.score : "-",
+                              detail: selectedCoachReadinessEntry
+                                ? formatCoachAiReadinessStatus(selectedCoachReadinessEntry.status, language)
+                                : copyFor(language, { en: "not submitted", ru: "не отправлена", bg: "не е подадена" }),
+                            },
+                            {
+                              label: copyFor(language, { en: "Planned load", ru: "Плановая нагрузка", bg: "Планово натоварване" }),
+                              value: formatCoachDayLoadValue(
+                                coachExecutionReview.sessions.reduce(
+                                  (total, session) =>
+                                    total +
+                                    session.blocks.reduce(
+                                      (blockTotal, block) =>
+                                        blockTotal + getCoachAiBlockPlannedLoad(block),
+                                      0,
+                                    ),
+                                  0,
+                                ),
+                              ),
+                              detail: `${coachExecutionReview.summary.plannedBlocks} ${copyFor(language, {
+                                en: "blocks",
+                                ru: "блоков",
+                                bg: "блока",
+                              })}`,
+                            },
+                            {
+                              label: copyFor(language, { en: "Actual load", ru: "Фактическая нагрузка", bg: "Реално натоварване" }),
+                              value: formatCoachDayLoadValue(
+                                coachExecutionReview.sessions.reduce(
+                                  (total, session) =>
+                                    total +
+                                    session.blocks.reduce((blockTotal, block) => {
+                                      const planned = getCoachAiBlockPlannedLoad(block);
+                                      return blockTotal + getCoachAiBlockActualLoad(block, planned);
+                                    }, 0),
+                                  0,
+                                ),
+                              ),
+                              detail: `${coachExecutionReview.summary.completionRate}% ${ui("completionPercent")}`,
+                            },
+                            {
+                              label: copyFor(language, { en: "Execution", ru: "Выполнение", bg: "Изпълнение" }),
+                              value: `${coachExecutionReview.summary.completedBlocks}/${coachExecutionReview.summary.plannedBlocks}`,
+                              detail: `${coachExecutionReview.summary.partialBlocks} ${copyFor(language, {
+                                en: "partial",
+                                ru: "частично",
+                                bg: "частично",
+                              })}`,
+                            },
+                            {
+                              label: copyFor(language, { en: "Sleep", ru: "Сон", bg: "Сън" }),
+                              value: formatDeviceSleepValue(selectedCoachDeviceHealthSummary, language),
+                              detail: selectedCoachDeviceHealthSummary?.sleep?.score !== null &&
+                                selectedCoachDeviceHealthSummary?.sleep?.score !== undefined
+                                ? `${copyFor(language, { en: "score", ru: "оценка", bg: "оценка" })} ${selectedCoachDeviceHealthSummary.sleep.score}`
+                                : copyFor(language, { en: "device data", ru: "данные устройства", bg: "данни от устройство" }),
+                            },
+                            {
+                              label: copyFor(language, { en: "Resting HR", ru: "Пульс покоя", bg: "Пулс в покой" }),
+                              value: formatDeviceRestingHrValue(selectedCoachDeviceHealthSummary),
+                              detail: selectedCoachDeviceHealthSummary?.heartRate?.averageBpm
+                                ? `${copyFor(language, { en: "avg", ru: "средний", bg: "среден" })} ${selectedCoachDeviceHealthSummary.heartRate.averageBpm}`
+                                : copyFor(language, { en: "not synced", ru: "не синхронизирован", bg: "не е синхронизиран" }),
+                            },
+                            {
+                              label: copyFor(language, { en: "Device workouts", ru: "Тренировки устройства", bg: "Тренировки от устройство" }),
+                              value: formatDeviceWorkoutValue(selectedCoachDeviceHealthSummary),
+                              detail: selectedCoachDeviceHealthSummary?.workout?.totalDurationMinutes
+                                ? formatDeviceDuration(selectedCoachDeviceHealthSummary.workout.totalDurationMinutes, language)
+                                : copyFor(language, { en: "not received", ru: "не пришли", bg: "не са получени" }),
+                            },
+                            {
+                              label: copyFor(language, { en: "AI", ru: "ИИ", bg: "AI" }),
+                              value: latestCoachAiReview
+                                ? formatCoachAiReviewSource(latestCoachAiReview.source, language)
+                                : "-",
+                              detail: latestCoachAiReview
+                                ? latestCoachAiReview.riskNotes[0] ?? latestCoachAiReview.observation
+                                : copyFor(language, { en: "not generated", ru: "не сформирован", bg: "не е генериран" }),
+                            },
+                          ].map((item) => (
+                            <article className="coach-day-status-metric" key={item.label}>
+                              <span>{item.label}</span>
+                              <strong>{item.value}</strong>
+                              <small>{item.detail}</small>
+                            </article>
+                          ))}
+                        </div>
+                        {selectedCoachDayDataQuality ? (
+                          <div className="coach-day-quality-panel">
+                            <article>
+                              <strong>{copyFor(language, { en: "Available", ru: "Что есть", bg: "Налично" })}</strong>
+                              <p>
+                                {selectedCoachDayDataQuality.available.length
+                                  ? selectedCoachDayDataQuality.available.join(", ")
+                                  : copyFor(language, { en: "nothing yet", ru: "пока ничего", bg: "все още нищо" })}
+                              </p>
+                            </article>
+                            <article>
+                              <strong>{copyFor(language, { en: "Missing", ru: "Чего не хватает", bg: "Липсва" })}</strong>
+                              <p>
+                                {selectedCoachDayDataQuality.missing.length
+                                  ? selectedCoachDayDataQuality.missing.join(", ")
+                                  : copyFor(language, {
+                                      en: "enough for analysis",
+                                      ru: "достаточно для анализа",
+                                      bg: "достатъчно за анализ",
+                                    })}
+                              </p>
+                            </article>
+                            <ul>
+                              {(selectedCoachDayDataQuality.actions.length
+                                ? selectedCoachDayDataQuality.actions
+                                : [
+                                    copyFor(language, {
+                                      en: "The day can be reviewed with the current data.",
+                                      ru: "День можно разбирать по текущим данным.",
+                                      bg: "Денят може да се анализира с текущите данни.",
+                                    }),
+                                  ]).slice(0, 4).map((action) => (
+                                <li key={action}>{action}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        ) : null}
+                      </section>
                       <div className="coach-review-summary-grid">
                         {[
                           {
@@ -13338,9 +13912,9 @@ export function PageClient({
                             </strong>
                             <small>
                               {copyFor(language, {
-                                en: "Uses the selected day: readiness, plan, actual execution, and coach note.",
-                                ru: "Используется выбранный день: готовность, план, факт выполнения и запись тренера.",
-                                bg: "Използва избрания ден: готовност, план, реално изпълнение и запис на треньора.",
+                                en: "Uses the selected day: data quality, readiness, plan, execution, device data, and coach note.",
+                                ru: "Используется выбранный день: качество данных, готовность, план, выполнение, устройство и запись тренера.",
+                                bg: "Използва избрания ден: качество на данните, готовност, план, изпълнение, устройство и запис на треньора.",
                               })}
                             </small>
                           </div>
@@ -13432,6 +14006,39 @@ export function PageClient({
                           </div>
                         ) : null}
                       </div>
+                      <div className="coach-day-exercise-status-list">
+                        <div className="summary-topline">
+                          <strong>
+                            {copyFor(language, {
+                              en: "Exercises by status",
+                              ru: "Упражнения по статусу",
+                              bg: "Упражнения по статус",
+                            })}
+                          </strong>
+                          <span>
+                            {coachExecutionReview.summary.completedExercises}/
+                            {coachExecutionReview.summary.plannedExercises}
+                          </span>
+                        </div>
+                        {coachExecutionReview.sessions.flatMap((session) =>
+                          session.blocks.flatMap((block) =>
+                            [...(block.exercises ?? [])]
+                              .sort((left, right) => left.orderIndex - right.orderIndex)
+                              .map((exercise) => (
+                                <article
+                                  className={`coach-day-exercise-status-item ${getCoachAiExerciseStatus(exercise)}`}
+                                  key={exercise.id}
+                                >
+                                  <span>{translateExecutionStatus(exercise.executionStatus, language)}</span>
+                                  <strong>{exercise.name}</strong>
+                                  <small>
+                                    {session.name} / {block.name} / {formatExerciseTarget(exercise, language)}
+                                  </small>
+                                </article>
+                              )),
+                          ),
+                        )}
+                      </div>
                       <div className="coach-review-block-list">
                         {coachExecutionReview.sessions.flatMap((session) =>
                           session.blocks.map((block) => (
@@ -13478,6 +14085,58 @@ export function PageClient({
                       {ui("coachReviewNeedsPlan")}
                     </p>
                   )}
+                </div>
+                ) : null}
+
+                {(isCoachDashboardWorkspace || isCoachReviewWorkspace) && coachTeamDayRows.length > 0 ? (
+                <div className="entry-summary coach-team-day-panel">
+                  <div className="summary-topline">
+                    <strong>
+                      {copyFor(language, {
+                        en: "Team day panel",
+                        ru: "Панель команды",
+                        bg: "Панел на отбора",
+                      })}
+                    </strong>
+                    <span>{coachTeamDayDate}</span>
+                  </div>
+                  <div className="coach-team-day-table">
+                    {coachTeamDayRows.map((row) => (
+                      <article className={`coach-team-day-row ${row.dataQuality.status}`} key={row.athlete.athleteId}>
+                        <div>
+                          <strong>{row.athlete.fullName}</strong>
+                          <span>{row.statusLabel}</span>
+                        </div>
+                        <span>{row.readinessEntry ? row.readinessEntry.score : "-"}</span>
+                        <span>
+                          {formatCoachDayLoadValue(row.actualLoad)} / {formatCoachDayLoadValue(row.plannedLoad)}
+                        </span>
+                        <span>{formatDeviceSleepValue(row.deviceHealthSummary, language)}</span>
+                        <span>{formatDeviceRestingHrValue(row.deviceHealthSummary)}</span>
+                        <span>{row.dataQuality.statusLabel}</span>
+                        <p>{row.aiReview?.riskNotes[0] ?? row.aiReview?.observation ?? "-"}</p>
+                        <button
+                          className="secondary-button"
+                          disabled={busy}
+                          onClick={() => {
+                            setSelectedAthleteId(row.athlete.athleteId);
+                            const assignedPlanId = assignedPlans.find(
+                              (plan) =>
+                                plan.athleteId === row.athlete.athleteId &&
+                                plan.day.dayDate === coachTeamDayDate,
+                            )?.id;
+                            void Promise.all([
+                              loadCoachAthleteReadiness(row.athlete.athleteId),
+                              loadCoachExecutionReview(row.athlete.athleteId, assignedPlanId),
+                            ]);
+                          }}
+                          type="button"
+                        >
+                          {copyFor(language, { en: "Open day", ru: "Открыть день", bg: "Отвори деня" })}
+                        </button>
+                      </article>
+                    ))}
+                  </div>
                 </div>
                 ) : null}
 

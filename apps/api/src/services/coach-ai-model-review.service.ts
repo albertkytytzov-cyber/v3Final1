@@ -37,6 +37,7 @@ const maxExercisesPerBlock = 12;
 const systemPrompt = [
   "Ты серверный помощник тренера в платформе PERFORM.",
   "Разбери только переданную карточку дня спортсмена.",
+  "Если dataQuality показывает неполные данные, явно напиши, что вывод ограничен и чего не хватает.",
   "Если есть данные устройства, учитывай сон, пульс покоя и тренировки с телефона как контекст восстановления, но не делай медицинских выводов.",
   "Не меняй план, дневник, назначения и статусы.",
   "Не ставь медицинские диагнозы и не выдавай рекомендации как медицинское назначение.",
@@ -171,6 +172,27 @@ function readCoachAiModelConfig() {
 function buildModelSafePayload(payload: CoachDayAiPayload) {
   return {
     coachComment: toLimitedNullableString(payload.coachComment, maxStringLength),
+    dataQuality: payload.dataQuality
+      ? {
+        actions: payload.dataQuality.actions
+          .slice(0, 6)
+          .map((item) => toLimitedString(item, maxShortStringLength)),
+        available: payload.dataQuality.available
+          .slice(0, 10)
+          .map((item) => toLimitedString(item, maxShortStringLength)),
+        missing: payload.dataQuality.missing
+          .slice(0, 10)
+          .map((item) => toLimitedString(item, maxShortStringLength)),
+        signals: payload.dataQuality.signals.slice(0, 10).map((signal) => ({
+          action: toLimitedNullableString(signal.action, maxShortStringLength),
+          key: toLimitedString(signal.key, maxShortStringLength),
+          label: toLimitedString(signal.label, maxShortStringLength),
+          present: signal.present,
+        })),
+        status: payload.dataQuality.status,
+        statusLabel: toLimitedString(payload.dataQuality.statusLabel, maxShortStringLength),
+      }
+      : null,
     date: payload.date,
     deviceHealth: payload.deviceHealth
       ? {

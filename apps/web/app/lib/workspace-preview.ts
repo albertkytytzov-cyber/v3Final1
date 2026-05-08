@@ -8,6 +8,7 @@ import type {
   CompetitionPlanSummary,
   CompetitionReviewOverview,
   CompetitionSummary,
+  DeviceHealthDailySummary,
   ExecutionReviewPlan,
   MesocycleSummary,
   OlympicCycleSummary,
@@ -50,6 +51,7 @@ export type WorkspacePreviewState = {
   competitionReview: CompetitionReviewOverview;
   coachExecutionReview: ExecutionReviewPlan;
   coachDiaryEntries: CoachDiaryEntry[];
+  coachDeviceHealthSummaries: DeviceHealthDailySummary[];
   coachAnalyticsOverview: AnalyticsOverview;
   templatePack: TemplatePackRecommendation;
   offlineQueueItems: QueueItem[];
@@ -572,6 +574,44 @@ const previewCoachDiaryEntries: CoachDiaryEntry[] = [
     coachName: "Demo Coach",
     createdAt: "2026-04-21T10:10:00.000Z",
     updatedAt: "2026-04-21T10:10:00.000Z",
+  },
+];
+
+const previewDeviceHealthSummaries: DeviceHealthDailySummary[] = [
+  {
+    id: "device-health-preview-1",
+    athleteId: "athlete-1",
+    entryDate: "2026-04-21",
+    provider: "huawei-health",
+    sourceDevice: "Huawei Watch",
+    sleep: {
+      awakeMinutes: 28,
+      deepMinutes: 86,
+      durationMinutes: 432,
+      endTime: "2026-04-21T06:42:00.000Z",
+      lightMinutes: 238,
+      remMinutes: 80,
+      score: 74,
+      startTime: "2026-04-20T23:30:00.000Z",
+    },
+    heartRate: {
+      averageBpm: 66,
+      hrvRmssdMs: 38,
+      maxBpm: 148,
+      minBpm: 49,
+      restingBpm: 54,
+    },
+    workout: {
+      activeCalories: 280,
+      averageHeartRateBpm: 124,
+      count: 1,
+      maxHeartRateBpm: 151,
+      totalDistanceMeters: null,
+      totalDurationMinutes: 46,
+    },
+    createdAt: "2026-04-21T07:10:00.000Z",
+    updatedAt: "2026-04-21T07:10:00.000Z",
+    syncedAt: "2026-04-21T07:10:00.000Z",
   },
 ];
 
@@ -1401,6 +1441,7 @@ function buildPreviewState(
     competitionReview: previewCompetitionReview,
     coachExecutionReview: previewExecutionReview,
     coachDiaryEntries: previewCoachDiaryEntries,
+    coachDeviceHealthSummaries: previewDeviceHealthSummaries,
     coachAnalyticsOverview: previewAnalytics,
     templatePack: previewTemplatePack,
     offlineQueueItems: previewOfflineQueueItems,

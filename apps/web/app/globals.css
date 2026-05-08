@@ -1615,7 +1615,8 @@ select {
 .status-chip.pending,
 .status-chip.syncing,
 .status-chip.warning,
-.status-chip.yellow {
+.status-chip.yellow,
+.status-chip.partial {
   background: rgba(251, 191, 36, 0.16);
   border-color: rgba(251, 191, 36, 0.3);
   color: #9a6700;
@@ -1623,7 +1624,8 @@ select {
 
 .status-chip.synced,
 .status-chip.accent,
-.status-chip.green {
+.status-chip.green,
+.status-chip.complete {
   background: rgba(16, 185, 129, 0.12);
   border-color: rgba(16, 185, 129, 0.24);
   color: var(--accent-strong);
@@ -1631,7 +1633,8 @@ select {
 
 .status-chip.danger,
 .status-chip.failed,
-.status-chip.red {
+.status-chip.red,
+.status-chip.insufficient {
   background: rgba(180, 62, 45, 0.12);
   border-color: rgba(180, 62, 45, 0.24);
   color: var(--danger);
@@ -2879,6 +2882,90 @@ select {
   min-height: 0;
 }
 
+.coach-day-status-panel {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid rgba(15, 118, 110, 0.18);
+  border-radius: 18px;
+  background: rgba(240, 253, 250, 0.78);
+}
+
+.coach-day-status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 145px), 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+
+.coach-day-status-metric {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.coach-day-status-metric span,
+.coach-day-status-metric small,
+.coach-day-exercise-status-item span,
+.coach-day-exercise-status-item small,
+.coach-team-day-row span {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
+.coach-day-status-metric span,
+.coach-day-exercise-status-item span {
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.coach-day-status-metric strong,
+.coach-day-exercise-status-item strong,
+.coach-team-day-row strong,
+.coach-team-day-row p {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.coach-day-quality-panel {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+
+.coach-day-quality-panel article,
+.coach-day-quality-panel ul {
+  min-width: 0;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.8);
+}
+
+.coach-day-quality-panel ul {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 6px;
+  padding-left: 28px;
+  line-height: 1.5;
+}
+
+.coach-day-quality-panel p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
 .coach-review-summary-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 130px), 1fr));
@@ -2919,6 +3006,34 @@ select {
   display: grid;
   gap: 8px;
   min-width: 0;
+}
+
+.coach-day-exercise-status-list {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 16px;
+  background: rgba(248, 252, 255, 0.78);
+}
+
+.coach-day-exercise-status-item {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.coach-day-exercise-status-item.completed {
+  border-color: rgba(15, 118, 110, 0.22);
+}
+
+.coach-day-exercise-status-item.missed {
+  border-color: rgba(185, 28, 28, 0.18);
 }
 
 .coach-review-block-item {
@@ -3207,6 +3322,51 @@ select {
   display: grid;
   gap: 8px;
   min-width: 0;
+}
+
+.coach-team-day-panel {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.coach-team-day-table {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.coach-team-day-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) repeat(5, minmax(78px, 0.5fr)) minmax(180px, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.coach-team-day-row.complete {
+  border-color: rgba(15, 118, 110, 0.22);
+}
+
+.coach-team-day-row.insufficient {
+  border-color: rgba(185, 28, 28, 0.18);
+}
+
+.coach-team-day-row > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.coach-team-day-row p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.35;
 }
 
 .analytics-mini-grid {
@@ -9244,5 +9404,14 @@ select {
 
   .planning-template-import-file input {
     font-size: 0.82rem;
+  }
+
+  .coach-day-quality-panel,
+  .coach-team-day-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .coach-team-day-row .secondary-button {
+    width: 100%;
   }
 }
