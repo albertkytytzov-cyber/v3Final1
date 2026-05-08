@@ -912,41 +912,51 @@ function renderCoachAthleteCard(athlete: CoachAthleteSummary) {
 }
 
 function renderTodayAthleteIndicators(state: MobileAppState, athleteId: string) {
+  const today = todayValue();
   const athlete = state.data.athletes.find((item) => item.athleteId === athleteId) ?? null;
-  const entry = getReadinessEntryForDate(state, athleteId, todayValue());
+  const entry = getReadinessEntryForDate(state, athleteId, today);
+  const daySummary = getCoachTodayDaySummary(state, athleteId, today);
   const title = athlete ? `Показатели сегодня · ${athlete.fullName}` : "Показатели сегодня";
-
-  if (!entry) {
-    return `
-      <article class="today-indicators-card is-empty">
-        <div class="today-indicators-head">
-          <div>
-            <span>Сегодня</span>
-            <h3>${escapeHtml(title)}</h3>
-          </div>
-        </div>
-        <p>Спортсмен ещё не отправил готовность за ${formatDate(todayValue())}. После обновления здесь появятся сон, пульс, вес, самочувствие и флаги риска.</p>
-      </article>
-    `;
-  }
+  const cardStateClass = entry ? `readiness-${escapeHtml(entry.status)}` : "is-missing-readiness";
 
   return `
-    <section class="today-indicators-card readiness-${escapeHtml(entry.status)}">
+    <section class="today-indicators-card ${cardStateClass}">
       <div class="today-indicators-head">
         <div>
           <span>Сегодня</span>
           <h3>${escapeHtml(title)}</h3>
-          <p>${formatDate(entry.entryDate)} · ${escapeHtml(formatReadinessFlags(entry))}</p>
+          <p>${formatDate(today)} · ${escapeHtml(entry ? formatReadinessFlags(entry) : "готовность не отправлена")} · ${escapeHtml(daySummary.statusLabel.toLowerCase())}</p>
         </div>
-        <strong>${entry.score}</strong>
+        <strong>${entry ? entry.score : "-"}</strong>
       </div>
       <div class="today-indicators-grid">
-        ${renderTodayIndicator("Статус", formatReadinessStatus(entry.status), "итог готовности")}
-        ${renderTodayIndicator("Сон", `${formatReadinessNumber(entry.sleepHours)} ч`, `качество ${entry.sleepQuality}/5`)}
-        ${renderTodayIndicator("Самочувствие", `${entry.generalFeeling}/5`, `мотивация ${entry.motivationLevel}/5`)}
-        ${renderTodayIndicator("Усталость", `${entry.fatigueLevel}/5`, `мышцы ${entry.muscleSoreness}/5`)}
-        ${renderTodayIndicator("Пульс", `${entry.restingHr}`, "покой")}
-        ${renderTodayIndicator("Вес", `${formatReadinessNumber(entry.bodyWeight)} кг`, `боль ${entry.painLevel}/10`)}
+        ${renderTodayIndicator("Готовность", entry ? formatReadinessStatus(entry.status) : "нет записи", entry ? `оценка ${entry.score}` : "спортсмен ещё не отправил")}
+        ${renderTodayIndicator("Сон", entry ? `${formatReadinessNumber(entry.sleepHours)} ч` : "-", entry ? `качество ${entry.sleepQuality}/5` : "нет данных")}
+        ${renderTodayIndicator("Самочувствие", entry ? `${entry.generalFeeling}/5` : "-", entry ? `мотивация ${entry.motivationLevel}/5` : "нет данных")}
+        ${renderTodayIndicator("Усталость", entry ? `${entry.fatigueLevel}/5` : "-", entry ? `мышцы ${entry.muscleSoreness}/5` : "нет данных")}
+        ${renderTodayIndicator("Пульс", entry ? `${entry.restingHr}` : "-", "покой")}
+        ${renderTodayIndicator("Вес", entry ? `${formatReadinessNumber(entry.bodyWeight)} кг` : "-", entry ? `боль ${entry.painLevel}/10` : "нет данных")}
+      </div>
+      <div class="today-day-summary">
+        <div class="today-day-summary-head">
+          <strong>День по плану</strong>
+          <span class="execution-day-status is-${daySummary.status}">${escapeHtml(daySummary.statusLabel)}</span>
+        </div>
+        <div class="today-indicators-grid">
+          ${renderTodayIndicator("План", formatCoachTodayPlanCount(daySummary), formatCoachTodayPlanNames(daySummary))}
+          ${renderTodayIndicator("Блоки", `${daySummary.completedBlockCount}/${daySummary.blockCount || 0}`, formatCoachTodayBlockBreakdown(daySummary))}
+          ${renderTodayIndicator("Упражнения", `${daySummary.completedExerciseCount}/${daySummary.exerciseCount || 0}`, formatCoachTodayExerciseBreakdown(daySummary))}
+          ${renderTodayIndicator("Нагрузка", `${formatLoadValue(daySummary.actualLoad)} / ${formatLoadValue(daySummary.plannedLoad)}`, formatCoachTodayLoadDelta(daySummary))}
+        </div>
+      </div>
+      <div class="today-coach-note">
+        <strong>Комментарий тренера</strong>
+        ${daySummary.latestDiaryEntry
+          ? `
+            <p>${escapeHtml(daySummary.latestDiaryEntry.notes)}</p>
+            <small>${escapeHtml(daySummary.latestDiaryEntry.coachName)} · ${formatDateTime(daySummary.latestDiaryEntry.updatedAt)}</small>
+          `
+          : "<p>Комментария за сегодня пока нет.</p>"}
       </div>
     </section>
   `;
@@ -1320,6 +1330,7 @@ interface ExecutionPlanGroup {
 }
 
 type ExecutionDayStatus = "completed" | "partial" | "missed";
+type CoachTodayDayStatus = ExecutionDayStatus | "no-plan";
 
 interface ExecutionDaySummary {
   status: ExecutionDayStatus;
@@ -1331,6 +1342,26 @@ interface ExecutionDaySummary {
   actualLoad: number;
   latestDiaryEntry: CoachDiaryEntry | null;
   readinessEntry: ReadinessEntry | null;
+}
+
+interface CoachTodayDaySummary {
+  date: string;
+  status: CoachTodayDayStatus;
+  statusLabel: string;
+  planCount: number;
+  sessionCount: number;
+  blockCount: number;
+  completedBlockCount: number;
+  partialBlockCount: number;
+  missedBlockCount: number;
+  exerciseCount: number;
+  completedExerciseCount: number;
+  partialExerciseCount: number;
+  missedExerciseCount: number;
+  plannedLoad: number;
+  actualLoad: number;
+  templateNames: string[];
+  latestDiaryEntry: CoachDiaryEntry | null;
 }
 
 function renderExecutionForm(state: MobileAppState, plans: AssignedPlanSummary[]) {
@@ -2090,6 +2121,95 @@ function getExecutionDaySummary(
   };
 }
 
+function getCoachTodayDaySummary(
+  state: MobileAppState,
+  athleteId: string,
+  date: string,
+): CoachTodayDaySummary {
+  const plans = getPlansForAthlete(state, athleteId)
+    .filter((plan) => plan.day.dayDate === date);
+  const groups = getExecutionPlanGroups(plans);
+  const diaryEntries = getCoachDiaryEntriesForAthleteDate(state, athleteId, date);
+  const templateNames = Array.from(new Set(plans.map((plan) => plan.templateName).filter(Boolean)));
+  let sessionCount = 0;
+  let blockCount = 0;
+  let completedBlockCount = 0;
+  let partialBlockCount = 0;
+  let missedBlockCount = 0;
+  let exerciseCount = 0;
+  let completedExerciseCount = 0;
+  let partialExerciseCount = 0;
+  let missedExerciseCount = 0;
+  let plannedLoad = 0;
+  let actualLoad = 0;
+
+  for (const group of groups) {
+    sessionCount += group.plan.day.sessions.length;
+
+    for (const item of group.blockItems) {
+      const result = getExecutionResultForBlock(state, item.plan.id, item.block.id);
+      const blockPlannedLoad = getExecutionBlockPlannedLoad(item.block, result);
+      const blockStatus = getExecutionBlockStatus(item.block, result);
+      const exercises = item.block.exercises ?? [];
+
+      blockCount += 1;
+      plannedLoad += blockPlannedLoad;
+      actualLoad += getExecutionBlockActualLoad(item.block, result, blockPlannedLoad);
+
+      if (blockStatus === "completed") {
+        completedBlockCount += 1;
+      } else if (blockStatus === "partial") {
+        partialBlockCount += 1;
+      } else {
+        missedBlockCount += 1;
+      }
+
+      exerciseCount += exercises.length;
+
+      for (const exercise of exercises) {
+        const exerciseStatus = getExecutionExerciseStatus(getExerciseResult(result, exercise.id));
+
+        if (exerciseStatus === "completed") {
+          completedExerciseCount += 1;
+        } else if (exerciseStatus === "partial") {
+          partialExerciseCount += 1;
+        } else {
+          missedExerciseCount += 1;
+        }
+      }
+    }
+  }
+
+  const status: CoachTodayDayStatus =
+    blockCount === 0
+      ? "no-plan"
+      : completedBlockCount === blockCount
+        ? "completed"
+        : completedBlockCount + partialBlockCount > 0
+          ? "partial"
+          : "missed";
+
+  return {
+    actualLoad: roundLoad(actualLoad),
+    blockCount,
+    completedBlockCount,
+    completedExerciseCount,
+    date,
+    exerciseCount,
+    latestDiaryEntry: diaryEntries[0] ?? null,
+    missedBlockCount,
+    missedExerciseCount,
+    partialBlockCount,
+    partialExerciseCount,
+    planCount: plans.length,
+    plannedLoad: roundLoad(plannedLoad),
+    sessionCount,
+    status,
+    statusLabel: getCoachTodayDayStatusLabel(status),
+    templateNames,
+  };
+}
+
 function getReadinessEntryForDate(
   state: MobileAppState,
   athleteId: string | null,
@@ -2293,6 +2413,14 @@ function getExecutionDayStatusLabel(status: ExecutionDayStatus) {
   return "Не выполнено";
 }
 
+function getCoachTodayDayStatusLabel(status: CoachTodayDayStatus) {
+  if (status === "no-plan") {
+    return "Нет плана";
+  }
+
+  return getExecutionDayStatusLabel(status);
+}
+
 function roundLoad(value: number) {
   return Number(value.toFixed(1));
 }
@@ -2363,6 +2491,16 @@ function getCoachDiaryEntriesForAthlete(state: MobileAppState, athleteId: string
   return state.data.coachDiaryEntries.filter((entry) =>
     !athleteId || entry.athleteId === athleteId
   );
+}
+
+function getCoachDiaryEntriesForAthleteDate(
+  state: MobileAppState,
+  athleteId: string,
+  entryDate: string,
+) {
+  return getCoachDiaryEntriesForAthlete(state, athleteId)
+    .filter((entry) => entry.entryDate === entryDate)
+    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
 }
 
 function formatCoachDiaryEntryTarget(state: MobileAppState, entry: CoachDiaryEntry) {
@@ -2669,6 +2807,52 @@ function formatReadinessFlags(entry: ReadinessEntry) {
 
 function formatReadinessNumber(value: number) {
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
+}
+
+function formatCoachTodayPlanCount(summary: CoachTodayDaySummary) {
+  if (summary.planCount === 0) {
+    return "нет плана";
+  }
+
+  return `${summary.planCount} ${formatAssignedDayCountLabel(summary.planCount)}`;
+}
+
+function formatCoachTodayPlanNames(summary: CoachTodayDaySummary) {
+  if (summary.templateNames.length === 0) {
+    return summary.planCount > 0 ? `${summary.sessionCount} сесс.` : "на сегодня не назначено";
+  }
+
+  return summary.templateNames.slice(0, 2).join(" · ");
+}
+
+function formatCoachTodayBlockBreakdown(summary: CoachTodayDaySummary) {
+  if (summary.blockCount === 0) {
+    return "нет блоков";
+  }
+
+  return `${summary.completedBlockCount} вып. · ${summary.partialBlockCount} част. · ${summary.missedBlockCount} нет`;
+}
+
+function formatCoachTodayExerciseBreakdown(summary: CoachTodayDaySummary) {
+  if (summary.exerciseCount === 0) {
+    return summary.blockCount > 0 ? "упражнения не заданы" : "нет заданий";
+  }
+
+  return `${summary.completedExerciseCount} вып. · ${summary.partialExerciseCount} част. · ${summary.missedExerciseCount} нет`;
+}
+
+function formatCoachTodayLoadDelta(summary: CoachTodayDaySummary) {
+  if (summary.planCount === 0) {
+    return "нет плановой нагрузки";
+  }
+
+  const delta = roundLoad(summary.actualLoad - summary.plannedLoad);
+
+  if (delta === 0) {
+    return summary.actualLoad > 0 ? "факт совпадает с планом" : "выполнение ещё не отмечено";
+  }
+
+  return delta > 0 ? `+${delta} к плану` : `${delta} к плану`;
 }
 
 function formatInputValue(value: number | null | undefined) {

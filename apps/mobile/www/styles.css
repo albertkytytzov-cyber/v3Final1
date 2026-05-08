@@ -615,6 +615,11 @@ button {
   background: #b91c1c;
 }
 
+.execution-day-status.is-no-plan {
+  background: #64748b;
+  color: #fff;
+}
+
 .execution-day-analytics-card {
   display: grid;
   gap: 10px;
@@ -1532,8 +1537,65 @@ button {
   background: #fef2f2;
 }
 
-.today-indicators-card.is-empty {
+.today-indicators-card.is-empty,
+.today-indicators-card.is-missing-readiness {
   background: rgba(248, 252, 255, 0.88);
+}
+
+.today-day-summary {
+  display: grid;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(148, 163, 184, 0.26);
+}
+
+.today-day-summary-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.today-day-summary-head strong,
+.today-coach-note strong {
+  color: var(--text);
+  font-size: 0.88rem;
+  font-weight: 950;
+}
+
+.today-day-summary-head .execution-day-status {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  padding: 5px 8px;
+  border-radius: 999px;
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 900;
+  line-height: 1.1;
+}
+
+.today-coach-note {
+  display: grid;
+  gap: 4px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(148, 163, 184, 0.26);
+}
+
+.today-coach-note p {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.88rem;
+  font-weight: 760;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.today-coach-note small {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 760;
 }
 
 .focus-card,
