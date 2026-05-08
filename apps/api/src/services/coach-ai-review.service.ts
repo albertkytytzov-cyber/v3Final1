@@ -86,6 +86,35 @@ function buildDiagnosticCoachDayPayload(entryDate: string): CoachDayAiPayload {
     },
     coachComment: "Тестовая проверка подключения ИИ. Не записывать в дневник.",
     date: entryDate,
+    deviceHealth: {
+      heartRate: {
+        averageBpm: 68,
+        hrvRmssdMs: 42,
+        maxBpm: 142,
+        minBpm: 48,
+        restingBpm: 54,
+      },
+      missing: [],
+      sleep: {
+        awakeMinutes: 24,
+        deepMinutes: 92,
+        durationMinutes: 455,
+        lightMinutes: 245,
+        remMinutes: 94,
+        score: 78,
+      },
+      sourceDevice: "Huawei Health",
+      statusLabel: "Данные полные",
+      syncedAt: new Date().toISOString(),
+      workout: {
+        activeCalories: 320,
+        averageHeartRateBpm: 126,
+        count: 1,
+        maxHeartRateBpm: 148,
+        totalDistanceMeters: null,
+        totalDurationMinutes: 48,
+      },
+    },
     execution: {
       blocks: {
         completed: 1,
@@ -281,7 +310,9 @@ function buildObservation(payload: CoachDayAiPayload) {
     ? `${payload.execution.exercises.completed}/${payload.execution.exercises.total} упражнений`
     : `${payload.execution.blocks.completed}/${payload.execution.blocks.total} блоков`;
 
-  return `День отмечен как «${payload.execution.statusLabel.toLowerCase()}»: выполнено ${exerciseLabel}, нагрузка ${formatLoadValue(payload.load.actual)} из ${formatLoadValue(payload.load.planned)}.`;
+  const deviceLabel = buildDeviceHealthObservation(payload);
+
+  return `День отмечен как «${payload.execution.statusLabel.toLowerCase()}»: выполнено ${exerciseLabel}, нагрузка ${formatLoadValue(payload.load.actual)} из ${formatLoadValue(payload.load.planned)}.${deviceLabel ? ` ${deviceLabel}` : ""}`;
 }
 
 function buildRiskNotes(payload: CoachDayAiPayload) {
@@ -313,6 +344,8 @@ function buildRiskNotes(payload: CoachDayAiPayload) {
     risks.push("Готовность требует снижения нагрузки: тяжёлую работу лучше оставить только при необходимости.");
   }
 
+  addDeviceHealthRiskNotes(risks, payload);
+
   return risks.length ? risks : ["Критичных рисков по текущим данным не видно."];
 }
 
@@ -343,7 +376,96 @@ function buildTomorrowActions(payload: CoachDayAiPayload) {
     actions.push("Добавьте короткий комментарий тренера, чтобы следующий разбор учитывал причину решения.");
   }
 
+  addDeviceHealthTomorrowActions(actions, payload);
+
   return Array.from(new Set(actions)).slice(0, 4);
+}
+
+function buildDeviceHealthObservation(payload: CoachDayAiPayload) {
+  const device = payload.deviceHealth;
+
+  if (!device) {
+    return "Данные устройства за этот день не синхронизированы.";
+  }
+
+  const parts = [
+    device.sleep?.durationMinutes !== null && device.sleep?.durationMinutes !== undefined
+      ? `сон ${formatDurationMinutes(device.sleep.durationMinutes)}`
+      : null,
+    device.heartRate?.restingBpm !== null && device.heartRate?.restingBpm !== undefined
+      ? `пульс покоя ${formatLoadValue(device.heartRate.restingBpm)}`
+      : null,
+    device.workout ? `тренировки устройства: ${device.workout.count}` : null,
+  ].filter((item): item is string => Boolean(item));
+
+  return parts.length ? `По устройству: ${parts.join(", ")}.` : "Данные устройства пришли неполностью.";
+}
+
+function addDeviceHealthRiskNotes(risks: string[], payload: CoachDayAiPayload) {
+  const device = payload.deviceHealth;
+
+  if (!device) {
+    risks.push("Нет данных устройства: сон, пульс покоя и тренировки с телефона не учитываются в разборе.");
+    return;
+  }
+
+  if ((device.missing?.length ?? 0) > 0) {
+    risks.push(`Данные устройства неполные: не хватает ${device.missing.join(", ")}.`);
+  }
+
+  if (isDeviceSleepLow(payload)) {
+    risks.push("Сон по устройству низкий: перед высокой нагрузкой важно уточнить восстановление спортсмена.");
+  }
+
+  if (isDeviceRestingHrHigh(payload)) {
+    risks.push("Пульс покоя по устройству высокий: это повод не повышать нагрузку без проверки самочувствия.");
+  }
+
+  if (device.workout && device.workout.count > 0 && payload.execution.status !== "completed") {
+    risks.push("Устройство показывает тренировочную активность, но план отмечен не полностью: проверьте, не была ли работа выполнена вне отметок.");
+  }
+}
+
+function addDeviceHealthTomorrowActions(actions: string[], payload: CoachDayAiPayload) {
+  const device = payload.deviceHealth;
+
+  if (!device) {
+    actions.push("Попросите спортсмена синхронизировать Huawei Health перед следующим разбором.");
+    return;
+  }
+
+  if (isDeviceSleepLow(payload) || isDeviceRestingHrHigh(payload)) {
+    actions.push("Сверьте сон и пульс покоя с самочувствием, прежде чем оставлять тяжёлую работу на следующий день.");
+  }
+}
+
+function isDeviceSleepLow(payload: CoachDayAiPayload) {
+  const sleep = payload.deviceHealth?.sleep;
+
+  return Boolean(
+    sleep &&
+      (
+        (sleep.durationMinutes !== null && sleep.durationMinutes < 360) ||
+        (sleep.score !== null && sleep.score < 60)
+      ),
+  );
+}
+
+function isDeviceRestingHrHigh(payload: CoachDayAiPayload) {
+  const restingBpm = payload.deviceHealth?.heartRate?.restingBpm;
+
+  return restingBpm !== null && restingBpm !== undefined && restingBpm >= 80;
+}
+
+function formatDurationMinutes(value: number) {
+  const hours = Math.floor(value / 60);
+  const minutes = Math.round(value % 60);
+
+  if (hours <= 0) {
+    return `${minutes} мин`;
+  }
+
+  return minutes > 0 ? `${hours} ч ${minutes} мин` : `${hours} ч`;
 }
 
 function formatLoadValue(value: number) {

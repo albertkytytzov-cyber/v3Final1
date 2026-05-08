@@ -37,6 +37,7 @@ const maxExercisesPerBlock = 12;
 const systemPrompt = [
   "Ты серверный помощник тренера в платформе PERFORM.",
   "Разбери только переданную карточку дня спортсмена.",
+  "Если есть данные устройства, учитывай сон, пульс покоя и тренировки с телефона как контекст восстановления, но не делай медицинских выводов.",
   "Не меняй план, дневник, назначения и статусы.",
   "Не ставь медицинские диагнозы и не выдавай рекомендации как медицинское назначение.",
   "Отвечай на русском языке.",
@@ -171,6 +172,45 @@ function buildModelSafePayload(payload: CoachDayAiPayload) {
   return {
     coachComment: toLimitedNullableString(payload.coachComment, maxStringLength),
     date: payload.date,
+    deviceHealth: payload.deviceHealth
+      ? {
+        heartRate: payload.deviceHealth.heartRate
+          ? {
+            averageBpm: payload.deviceHealth.heartRate.averageBpm,
+            hrvRmssdMs: payload.deviceHealth.heartRate.hrvRmssdMs,
+            maxBpm: payload.deviceHealth.heartRate.maxBpm,
+            minBpm: payload.deviceHealth.heartRate.minBpm,
+            restingBpm: payload.deviceHealth.heartRate.restingBpm,
+          }
+          : null,
+        missing: (payload.deviceHealth.missing ?? [])
+          .slice(0, 8)
+          .map((item) => toLimitedString(item, maxShortStringLength)),
+        sleep: payload.deviceHealth.sleep
+          ? {
+            awakeMinutes: payload.deviceHealth.sleep.awakeMinutes,
+            deepMinutes: payload.deviceHealth.sleep.deepMinutes,
+            durationMinutes: payload.deviceHealth.sleep.durationMinutes,
+            lightMinutes: payload.deviceHealth.sleep.lightMinutes,
+            remMinutes: payload.deviceHealth.sleep.remMinutes,
+            score: payload.deviceHealth.sleep.score,
+          }
+          : null,
+        sourceDevice: toLimitedNullableString(payload.deviceHealth.sourceDevice, maxShortStringLength),
+        statusLabel: toLimitedString(payload.deviceHealth.statusLabel, maxShortStringLength),
+        syncedAt: payload.deviceHealth.syncedAt,
+        workout: payload.deviceHealth.workout
+          ? {
+            activeCalories: payload.deviceHealth.workout.activeCalories,
+            averageHeartRateBpm: payload.deviceHealth.workout.averageHeartRateBpm,
+            count: payload.deviceHealth.workout.count,
+            maxHeartRateBpm: payload.deviceHealth.workout.maxHeartRateBpm,
+            totalDistanceMeters: payload.deviceHealth.workout.totalDistanceMeters,
+            totalDurationMinutes: payload.deviceHealth.workout.totalDurationMinutes,
+          }
+          : null,
+      }
+      : null,
     execution: payload.execution,
     load: payload.load,
     plan: {

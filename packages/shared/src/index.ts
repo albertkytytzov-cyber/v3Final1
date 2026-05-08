@@ -763,6 +763,35 @@ export interface CoachDayAiPayload {
   };
   coachComment: string | null;
   date: string;
+  deviceHealth: {
+    heartRate: {
+      averageBpm: number | null;
+      hrvRmssdMs: number | null;
+      maxBpm: number | null;
+      minBpm: number | null;
+      restingBpm: number | null;
+    } | null;
+    missing: string[];
+    sleep: {
+      awakeMinutes: number | null;
+      deepMinutes: number | null;
+      durationMinutes: number | null;
+      lightMinutes: number | null;
+      remMinutes: number | null;
+      score: number | null;
+    } | null;
+    sourceDevice: string | null;
+    statusLabel: string;
+    syncedAt: string | null;
+    workout: {
+      activeCalories: number | null;
+      averageHeartRateBpm: number | null;
+      count: number;
+      maxHeartRateBpm: number | null;
+      totalDistanceMeters: number | null;
+      totalDurationMinutes: number | null;
+    } | null;
+  } | null;
   execution: {
     blocks: {
       completed: number;

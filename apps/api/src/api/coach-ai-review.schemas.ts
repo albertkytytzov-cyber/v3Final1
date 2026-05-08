@@ -47,6 +47,9 @@ function readDayPayload(value: unknown): CoachDayAiPayload {
   const exerciseCounts = readRecord(execution.exercises, "execution.exercises");
   const load = readRecord(payload.load, "load");
   const plan = readRecord(payload.plan, "plan");
+  const deviceHealth = payload.deviceHealth === null || payload.deviceHealth === undefined
+    ? null
+    : readDeviceHealth(payload.deviceHealth);
   const readiness = payload.readiness === null || payload.readiness === undefined
     ? null
     : readRecord(payload.readiness, "readiness");
@@ -60,6 +63,7 @@ function readDayPayload(value: unknown): CoachDayAiPayload {
     },
     coachComment: readNullableString(payload.coachComment, "coachComment"),
     date: readEntryDate(payload.date),
+    deviceHealth,
     execution: {
       blocks: {
         completed: readCount(blockCounts.completed, "execution.blocks.completed"),
@@ -127,6 +131,59 @@ function readPlanExercise(value: unknown) {
   };
 }
 
+function readDeviceHealth(value: unknown): CoachDayAiPayload["deviceHealth"] {
+  const device = readRecord(value, "deviceHealth");
+  const heartRate = device.heartRate === null || device.heartRate === undefined
+    ? null
+    : readRecord(device.heartRate, "deviceHealth.heartRate");
+  const sleep = device.sleep === null || device.sleep === undefined
+    ? null
+    : readRecord(device.sleep, "deviceHealth.sleep");
+  const workout = device.workout === null || device.workout === undefined
+    ? null
+    : readRecord(device.workout, "deviceHealth.workout");
+
+  return {
+    heartRate: heartRate
+      ? {
+        averageBpm: readNullableNumber(heartRate.averageBpm, "deviceHealth.heartRate.averageBpm"),
+        hrvRmssdMs: readNullableNumber(heartRate.hrvRmssdMs, "deviceHealth.heartRate.hrvRmssdMs"),
+        maxBpm: readNullableNumber(heartRate.maxBpm, "deviceHealth.heartRate.maxBpm"),
+        minBpm: readNullableNumber(heartRate.minBpm, "deviceHealth.heartRate.minBpm"),
+        restingBpm: readNullableNumber(heartRate.restingBpm, "deviceHealth.heartRate.restingBpm"),
+      }
+      : null,
+    missing: readArray(device.missing ?? [], "deviceHealth.missing").map((item) =>
+      readString(item, "deviceHealth.missing[]")
+    ),
+    sleep: sleep
+      ? {
+        awakeMinutes: readNullableNumber(sleep.awakeMinutes, "deviceHealth.sleep.awakeMinutes"),
+        deepMinutes: readNullableNumber(sleep.deepMinutes, "deviceHealth.sleep.deepMinutes"),
+        durationMinutes: readNullableNumber(sleep.durationMinutes, "deviceHealth.sleep.durationMinutes"),
+        lightMinutes: readNullableNumber(sleep.lightMinutes, "deviceHealth.sleep.lightMinutes"),
+        remMinutes: readNullableNumber(sleep.remMinutes, "deviceHealth.sleep.remMinutes"),
+        score: readNullableNumber(sleep.score, "deviceHealth.sleep.score"),
+      }
+      : null,
+    sourceDevice: readNullableString(device.sourceDevice, "deviceHealth.sourceDevice"),
+    statusLabel: typeof device.statusLabel === "string"
+      ? readString(device.statusLabel, "deviceHealth.statusLabel")
+      : "",
+    syncedAt: readNullableString(device.syncedAt, "deviceHealth.syncedAt"),
+    workout: workout
+      ? {
+        activeCalories: readNullableNumber(workout.activeCalories, "deviceHealth.workout.activeCalories"),
+        averageHeartRateBpm: readNullableNumber(workout.averageHeartRateBpm, "deviceHealth.workout.averageHeartRateBpm"),
+        count: readCount(workout.count, "deviceHealth.workout.count"),
+        maxHeartRateBpm: readNullableNumber(workout.maxHeartRateBpm, "deviceHealth.workout.maxHeartRateBpm"),
+        totalDistanceMeters: readNullableNumber(workout.totalDistanceMeters, "deviceHealth.workout.totalDistanceMeters"),
+        totalDurationMinutes: readNullableNumber(workout.totalDurationMinutes, "deviceHealth.workout.totalDurationMinutes"),
+      }
+      : null,
+  };
+}
+
 function readRecord(value: unknown, fieldName: string): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error(`${fieldName} must be an object`);
@@ -180,6 +237,14 @@ function readNumber(value: unknown, fieldName: string) {
   }
 
   return numericValue;
+}
+
+function readNullableNumber(value: unknown, fieldName: string) {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  return readNumber(value, fieldName);
 }
 
 function readCount(value: unknown, fieldName: string) {

@@ -757,6 +757,7 @@ function buildCoachDayAiPayloadFromReview(input: {
     },
     coachComment: input.diaryEntry?.notes.trim() || null,
     date: input.review.dayDate,
+    deviceHealth: null,
     execution: {
       blocks: {
         completed: input.review.summary.completedBlocks,
