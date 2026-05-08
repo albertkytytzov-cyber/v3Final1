@@ -753,7 +753,7 @@ export interface CoachDayAiPayload {
   } | null;
 }
 
-export type CoachDayAiReviewSource = "local-rules" | "model";
+export type CoachDayAiReviewSource = "local-rules" | "server-rules" | "model";
 
 export interface CoachDayAiReview {
   athleteId: string;

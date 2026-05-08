@@ -93,14 +93,14 @@ export function bootstrapMobileApp(root: HTMLElement) {
     }
 
     const dayData = getCoachDayCleanSummary(state, athleteId, entryDate);
-    const localReview = buildCoachDayAiReview(dayData);
+    const offlineReview = buildOfflineCoachDayAiReview(dayData);
     const key = getCoachDayAiReviewKey(athleteId, entryDate);
 
     if (!state.isOnline) {
       update({
         aiReviewByDay: {
           ...state.aiReviewByDay,
-          [key]: localReview,
+          [key]: offlineReview,
         },
         error: null,
         message: "Нет сети: показан локальный черновой разбор. План и дневник не изменены.",
@@ -114,7 +114,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
       const response = await client().generateCoachDayAiReview(
         athleteId,
         dayData.date,
-        localReview.dayPayload,
+        offlineReview.dayPayload,
       );
 
       update({
@@ -130,7 +130,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
       update({
         aiReviewByDay: {
           ...state.aiReviewByDay,
-          [key]: localReview,
+          [key]: offlineReview,
         },
         error: error instanceof MobileApiError
           ? `Серверный разбор недоступен: ${error.message}`
@@ -1395,7 +1395,7 @@ function renderCoachAiReviewCard(
             <summary>Данные дня для ИИ</summary>
             <pre>${escapeHtml(review.dayPayloadJson)}</pre>
           </details>
-          <small>Сформировано: ${formatDateTime(review.generatedAt)} · ${review.source === "model" ? "модель" : "правила"}</small>
+          <small>Сформировано: ${formatDateTime(review.generatedAt)} · Источник: ${escapeHtml(formatCoachDayAiReviewSource(review.source))}</small>
         `
         : `
           <p class="coach-ai-review-empty">
@@ -2747,7 +2747,19 @@ function getCoachDayAiReviewKey(athleteId: string, entryDate: string) {
   return `${athleteId}::${entryDate}`;
 }
 
-function buildCoachDayAiReview(dayData: CoachDayCleanSummary): CoachDayAiReview {
+function formatCoachDayAiReviewSource(source: CoachDayAiReview["source"]) {
+  if (source === "model") {
+    return "ИИ-модель";
+  }
+
+  if (source === "server-rules") {
+    return "серверный разбор";
+  }
+
+  return "локальный черновик, сервер недоступен";
+}
+
+function buildOfflineCoachDayAiReview(dayData: CoachDayCleanSummary): CoachDayAiReview {
   const payload = buildCoachDayAiPayload(dayData);
 
   return {
@@ -2756,10 +2768,10 @@ function buildCoachDayAiReview(dayData: CoachDayCleanSummary): CoachDayAiReview 
     dayPayloadJson: JSON.stringify(payload, null, 2),
     entryDate: dayData.date,
     generatedAt: new Date().toISOString(),
-    observation: buildCoachAiObservation(dayData),
-    riskNotes: buildCoachAiRiskNotes(dayData),
+    observation: buildOfflineCoachAiObservation(dayData),
+    riskNotes: buildOfflineCoachAiRiskNotes(dayData),
     source: "local-rules",
-    tomorrowActions: buildCoachAiTomorrowActions(dayData),
+    tomorrowActions: buildOfflineCoachAiTomorrowActions(dayData),
   };
 }
 
@@ -2826,11 +2838,11 @@ function buildCoachDayAiPayload(dayData: CoachDayCleanSummary): CoachDayAiPayloa
   };
 }
 
-function buildCoachAiObservation(dayData: CoachDayCleanSummary) {
+function buildOfflineCoachAiObservation(dayData: CoachDayCleanSummary) {
   const summary = dayData.summary;
 
   if (summary.planCount === 0) {
-    return "На выбранный день нет назначенного плана, поэтому ИИ может оценить только готовность и комментарии.";
+    return "Офлайн-черновик: на выбранный день нет назначенного плана. Серверный разбор нужен для полной рекомендации.";
   }
 
   const loadLabel = `${formatLoadValue(summary.actualLoad)} из ${formatLoadValue(summary.plannedLoad)}`;
@@ -2838,70 +2850,48 @@ function buildCoachAiObservation(dayData: CoachDayCleanSummary) {
     ? `${summary.completedExerciseCount}/${summary.exerciseCount} упражнений`
     : `${summary.completedBlockCount}/${summary.blockCount} блоков`;
 
-  return `День отмечен как «${summary.statusLabel.toLowerCase()}»: выполнено ${exerciseLabel}, нагрузка ${loadLabel}.`;
+  return `Офлайн-черновик: день отмечен как «${summary.statusLabel.toLowerCase()}», выполнено ${exerciseLabel}, нагрузка ${loadLabel}.`;
 }
 
-function buildCoachAiRiskNotes(dayData: CoachDayCleanSummary) {
+function buildOfflineCoachAiRiskNotes(dayData: CoachDayCleanSummary) {
   const summary = dayData.summary;
   const readiness = dayData.readinessEntry;
-  const risks: string[] = [];
+  const risks = [
+    "Серверный разбор недоступен, поэтому это только ограниченная подсказка по данным на устройстве.",
+  ];
 
   if (summary.planCount === 0) {
-    risks.push("Нет плановой нагрузки: сравнение плана и факта для этого дня ограничено.");
-  }
-
-  if (summary.plannedLoad > 0) {
-    const loadRatio = summary.actualLoad / summary.plannedLoad;
-
-    if (loadRatio < 0.5) {
-      risks.push("Фактическая нагрузка сильно ниже плана: причина может быть в самочувствии, пропуске части заданий или неполной отметке выполнения.");
-    } else if (loadRatio > 1.15) {
-      risks.push("Фактическая нагрузка выше плана: стоит проверить восстановление и не добавлять тяжёлую работу автоматически.");
-    }
+    risks.push("Нет плановой нагрузки: проверьте выбранную дату или назначение плана после восстановления сети.");
   }
 
   if (summary.status === "missed") {
-    risks.push("День не выполнен: аналитика следующего дня должна учитывать фактический пропуск, а не плановую нагрузку.");
+    risks.push("День не выполнен: не переносите весь объём автоматически без серверной проверки.");
   } else if (summary.status === "partial") {
-    risks.push("Есть частичное выполнение: важно смотреть, какие упражнения пропущены, а не оценивать день только по общей нагрузке.");
+    risks.push("Есть частичное выполнение: проверьте список отмеченных и пропущенных упражнений вручную.");
   }
 
   if (readiness?.status === "red") {
-    risks.push("Готовность в красной зоне: приоритетом должно быть восстановление и уточнение причины снижения.");
+    risks.push("Готовность в красной зоне: перед нагрузкой нужна ручная проверка самочувствия.");
   } else if (readiness?.status === "yellow") {
-    risks.push("Готовность требует снижения нагрузки: тяжёлую работу лучше оставить только при необходимости.");
+    risks.push("Готовность требует внимания: тяжёлую работу лучше не добавлять до серверного разбора.");
   }
 
-  return risks.length ? risks : ["Критичных рисков по текущим данным не видно."];
+  return risks;
 }
 
-function buildCoachAiTomorrowActions(dayData: CoachDayCleanSummary) {
+function buildOfflineCoachAiTomorrowActions(dayData: CoachDayCleanSummary) {
   const summary = dayData.summary;
-  const readiness = dayData.readinessEntry;
-  const actions: string[] = [];
+  const actions = [
+    "Повторите разбор после восстановления сети, чтобы получить серверную рекомендацию.",
+    "План и дневник не менялись.",
+  ];
 
   if (summary.planCount === 0) {
-    actions.push("Сначала назначьте план на день или выберите дату с планом, чтобы рекомендация была предметной.");
-  } else if (summary.status === "completed") {
-    actions.push("Оставьте следующий день по плану, если готовность не ухудшится.");
+    actions.push("Выберите день с назначенным планом или назначьте план перед повторным разбором.");
   } else if (summary.status === "partial") {
-    actions.push("Разберите невыполненные упражнения и перенесите только ключевую часть, если она важна для микроцикла.");
-  } else {
-    actions.push("Не переносите весь пропущенный объём автоматически; выберите 1-2 ключевых задания или восстановительный день.");
-  }
-
-  if (summary.plannedLoad > 0 && summary.actualLoad > summary.plannedLoad * 1.15) {
-    actions.push("Снизьте ближайшую дополнительную нагрузку и проверьте готовность перед следующей интенсивной сессией.");
-  }
-
-  if (readiness?.status === "red") {
-    actions.push("Поставьте восстановительный акцент и запросите у спортсмена комментарий по самочувствию.");
-  } else if (readiness?.status === "yellow") {
-    actions.push("Сохраните только техническую или лёгкую специальную часть, объём держите ниже плана.");
-  }
-
-  if (!dayData.latestDiaryEntry) {
-    actions.push("Добавьте короткий комментарий тренера, чтобы следующий разбор учитывал причину решения.");
+    actions.push("До серверного разбора смотрите по упражнениям, что именно было пропущено.");
+  } else if (summary.status === "missed") {
+    actions.push("Не переносите пропущенный день целиком без проверки готовности.");
   }
 
   return Array.from(new Set(actions)).slice(0, 4);

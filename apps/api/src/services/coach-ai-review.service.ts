@@ -16,7 +16,7 @@ export function buildCoachDayAiReview(input: {
     generatedAt: new Date().toISOString(),
     observation: buildObservation(input.dayPayload),
     riskNotes: buildRiskNotes(input.dayPayload),
-    source: "local-rules",
+    source: "server-rules",
     tomorrowActions: buildTomorrowActions(input.dayPayload),
   };
 }
