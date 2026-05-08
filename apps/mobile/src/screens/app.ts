@@ -1365,7 +1365,7 @@ function renderCoachAiReviewCard(
         <div>
           <span>Разбор ИИ</span>
           <h3>Черновая рекомендация</h3>
-          <p>Локальный каркас: данные никуда не отправляются, план и дневник не меняются.</p>
+          <p>Онлайн отправляется только карточка дня без email/userId. План и дневник не меняются.</p>
         </div>
         <button class="secondary-action" data-ai-athlete-id="${escapeHtml(dayData.athleteId)}" data-ai-date="${escapeHtml(dayData.date)}" data-generate-coach-ai-review type="button" ${isBusy ? "disabled" : ""}>
           ${isBusy ? "Формируется..." : "Сформировать рекомендацию"}
@@ -1399,7 +1399,7 @@ function renderCoachAiReviewCard(
         `
         : `
           <p class="coach-ai-review-empty">
-            Нажмите кнопку, чтобы собрать готовность, план/факт, выполнение упражнений и комментарий тренера в один черновой разбор.
+            Нажмите кнопку, чтобы отправить готовность, план/факт, выполнение упражнений и комментарий тренера в серверный разбор.
           </p>
         `}
     </section>
