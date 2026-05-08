@@ -21,6 +21,7 @@ import type {
   AssignedPlanBlock,
   AssignedPlanSummary,
   CoachAthleteSummary,
+  CoachDayAiReview,
   CoachDiaryEntry,
   CoachDiaryEntryPayload,
   CompetitionPlanSummary,
@@ -56,6 +57,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
     session: loadSession(runtimeConfig.apiBaseUrl),
     data: loadSnapshot(),
     queue: loadQueue(),
+    aiReviewByDay: {},
     selectedScreen: "dashboard",
     selectedAthleteId: loadSelectedAthleteId(),
     selectedDayDate: todayValue(),
@@ -80,6 +82,26 @@ export function bootstrapMobileApp(root: HTMLElement) {
       planDateFilter: selectedDayDate,
       ...(selectedScreen ? { selectedScreen } : {}),
       selectedDayDate,
+    });
+  };
+
+  const generateCoachAiReview = (athleteId: string | null, entryDate: string) => {
+    if (!athleteId) {
+      update({ error: "Выберите спортсмена для разбора ИИ." });
+      return;
+    }
+
+    const dayData = getCoachDayCleanSummary(state, athleteId, entryDate);
+    const review = buildCoachDayAiReview(dayData);
+    const key = getCoachDayAiReviewKey(athleteId, entryDate);
+
+    update({
+      aiReviewByDay: {
+        ...state.aiReviewByDay,
+        [key]: review,
+      },
+      error: null,
+      message: "Черновой разбор ИИ сформирован локально. План и дневник не изменены.",
     });
   };
 
@@ -710,6 +732,15 @@ export function bootstrapMobileApp(root: HTMLElement) {
       });
     });
 
+    root.querySelectorAll<HTMLButtonElement>("[data-generate-coach-ai-review]").forEach((button) => {
+      button.addEventListener("click", () => {
+        generateCoachAiReview(
+          button.dataset.aiAthleteId ?? state.selectedAthleteId,
+          button.dataset.aiDate ?? state.selectedDayDate,
+        );
+      });
+    });
+
     root.querySelector<HTMLFormElement>("[data-competition-result-form]")?.addEventListener("submit", (event) => {
       event.preventDefault();
       void submitCompetitionResult(event.currentTarget as HTMLFormElement);
@@ -1250,6 +1281,7 @@ function renderCoachExecutionReviewSummary(
   const dayData = getCoachDayCleanSummary(state, athleteId, selectedDayDate);
   const summary = dayData.summary;
   const readinessEntry = dayData.readinessEntry;
+  const aiReview = state.aiReviewByDay[getCoachDayAiReviewKey(athleteId, selectedDayDate)] ?? null;
 
   return `
     <section class="coach-execution-review-card ${summary.status === "no-plan" ? "is-empty" : ""}">
@@ -1272,6 +1304,7 @@ function renderCoachExecutionReviewSummary(
         <p>${escapeHtml(dayData.coachNote)}</p>
       </div>
     </section>
+    ${renderCoachAiReviewCard(dayData, aiReview)}
   `;
 }
 
@@ -1282,6 +1315,54 @@ function renderCoachExecutionReviewMetric(label: string, value: string, detail: 
       <strong>${escapeHtml(value)}</strong>
       <small>${escapeHtml(detail)}</small>
     </article>
+  `;
+}
+
+function renderCoachAiReviewCard(dayData: CoachDayCleanSummary, review: CoachDayAiReview | null) {
+  return `
+    <section class="coach-ai-review-card">
+      <div class="coach-ai-review-head">
+        <div>
+          <span>Разбор ИИ</span>
+          <h3>Черновая рекомендация</h3>
+          <p>Локальный каркас: данные никуда не отправляются, план и дневник не меняются.</p>
+        </div>
+        <button class="secondary-action" data-ai-athlete-id="${escapeHtml(dayData.athleteId)}" data-ai-date="${escapeHtml(dayData.date)}" data-generate-coach-ai-review type="button">
+          Сформировать рекомендацию
+        </button>
+      </div>
+      ${review
+        ? `
+          <div class="coach-ai-review-result">
+            <article>
+              <span>Что видно</span>
+              <p>${escapeHtml(review.observation)}</p>
+            </article>
+            <article>
+              <span>Риски</span>
+              <ul>
+                ${review.riskNotes.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
+              </ul>
+            </article>
+            <article>
+              <span>Что сделать завтра</span>
+              <ul>
+                ${review.tomorrowActions.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
+              </ul>
+            </article>
+          </div>
+          <details class="coach-ai-review-payload">
+            <summary>Данные дня для ИИ</summary>
+            <pre>${escapeHtml(review.dayPayloadJson)}</pre>
+          </details>
+          <small>Сформировано: ${formatDateTime(review.generatedAt)}</small>
+        `
+        : `
+          <p class="coach-ai-review-empty">
+            Нажмите кнопку, чтобы собрать готовность, план/факт, выполнение упражнений и комментарий тренера в один черновой разбор.
+          </p>
+        `}
+    </section>
   `;
 }
 
@@ -2620,6 +2701,168 @@ function getCoachDayCleanSummary(
     readinessEntry,
     summary,
   };
+}
+
+function getCoachDayAiReviewKey(athleteId: string, entryDate: string) {
+  return `${athleteId}::${entryDate}`;
+}
+
+function buildCoachDayAiReview(dayData: CoachDayCleanSummary): CoachDayAiReview {
+  const payload = buildCoachDayAiPayload(dayData);
+
+  return {
+    athleteId: dayData.athleteId,
+    dayPayloadJson: JSON.stringify(payload, null, 2),
+    entryDate: dayData.date,
+    generatedAt: new Date().toISOString(),
+    observation: buildCoachAiObservation(dayData),
+    riskNotes: buildCoachAiRiskNotes(dayData),
+    tomorrowActions: buildCoachAiTomorrowActions(dayData),
+  };
+}
+
+function buildCoachDayAiPayload(dayData: CoachDayCleanSummary) {
+  const summary = dayData.summary;
+  const readiness = dayData.readinessEntry;
+
+  return {
+    athlete: {
+      displayName: dayData.athleteName,
+      discipline: dayData.athlete?.discipline || null,
+      sport: dayData.athlete?.sport || null,
+      weightClass: dayData.athlete?.weightClass || null,
+    },
+    coachComment: dayData.latestDiaryEntry ? dayData.coachNote : null,
+    date: dayData.date,
+    execution: {
+      blocks: {
+        completed: summary.completedBlockCount,
+        missed: summary.missedBlockCount,
+        partial: summary.partialBlockCount,
+        total: summary.blockCount,
+      },
+      exercises: {
+        completed: summary.completedExerciseCount,
+        missed: summary.missedExerciseCount,
+        partial: summary.partialExerciseCount,
+        total: summary.exerciseCount,
+      },
+      status: summary.status,
+      statusLabel: summary.statusLabel,
+    },
+    load: {
+      actual: summary.actualLoad,
+      delta: roundLoad(summary.actualLoad - summary.plannedLoad),
+      planned: summary.plannedLoad,
+    },
+    plan: {
+      blocks: dayData.blocks.map((block) => ({
+        actualLoad: block.actualLoad,
+        exercises: block.exercises.map((exercise) => ({
+          actual: exercise.actualDetails,
+          name: exercise.name,
+          plannedControl: exercise.plannedControl,
+          plannedWork: exercise.plannedWork,
+          status: exercise.status,
+        })),
+        name: block.name,
+        plannedLoad: block.plannedLoad,
+        sessionName: block.sessionName,
+        status: block.status,
+      })),
+      count: summary.planCount,
+      templates: summary.templateNames,
+    },
+    readiness: readiness
+      ? {
+        flags: formatReadinessFlags(readiness),
+        score: readiness.score,
+        status: readiness.status,
+        statusLabel: formatReadinessStatus(readiness.status),
+      }
+      : null,
+  };
+}
+
+function buildCoachAiObservation(dayData: CoachDayCleanSummary) {
+  const summary = dayData.summary;
+
+  if (summary.planCount === 0) {
+    return "На выбранный день нет назначенного плана, поэтому ИИ может оценить только готовность и комментарии.";
+  }
+
+  const loadLabel = `${formatLoadValue(summary.actualLoad)} из ${formatLoadValue(summary.plannedLoad)}`;
+  const exerciseLabel = summary.exerciseCount > 0
+    ? `${summary.completedExerciseCount}/${summary.exerciseCount} упражнений`
+    : `${summary.completedBlockCount}/${summary.blockCount} блоков`;
+
+  return `День отмечен как «${summary.statusLabel.toLowerCase()}»: выполнено ${exerciseLabel}, нагрузка ${loadLabel}.`;
+}
+
+function buildCoachAiRiskNotes(dayData: CoachDayCleanSummary) {
+  const summary = dayData.summary;
+  const readiness = dayData.readinessEntry;
+  const risks: string[] = [];
+
+  if (summary.planCount === 0) {
+    risks.push("Нет плановой нагрузки: сравнение плана и факта для этого дня ограничено.");
+  }
+
+  if (summary.plannedLoad > 0) {
+    const loadRatio = summary.actualLoad / summary.plannedLoad;
+
+    if (loadRatio < 0.5) {
+      risks.push("Фактическая нагрузка сильно ниже плана: причина может быть в самочувствии, пропуске части заданий или неполной отметке выполнения.");
+    } else if (loadRatio > 1.15) {
+      risks.push("Фактическая нагрузка выше плана: стоит проверить восстановление и не добавлять тяжёлую работу автоматически.");
+    }
+  }
+
+  if (summary.status === "missed") {
+    risks.push("День не выполнен: аналитика следующего дня должна учитывать фактический пропуск, а не плановую нагрузку.");
+  } else if (summary.status === "partial") {
+    risks.push("Есть частичное выполнение: важно смотреть, какие упражнения пропущены, а не оценивать день только по общей нагрузке.");
+  }
+
+  if (readiness?.status === "red") {
+    risks.push("Готовность в красной зоне: приоритетом должно быть восстановление и уточнение причины снижения.");
+  } else if (readiness?.status === "yellow") {
+    risks.push("Готовность требует снижения нагрузки: тяжёлую работу лучше оставить только при необходимости.");
+  }
+
+  return risks.length ? risks : ["Критичных рисков по текущим данным не видно."];
+}
+
+function buildCoachAiTomorrowActions(dayData: CoachDayCleanSummary) {
+  const summary = dayData.summary;
+  const readiness = dayData.readinessEntry;
+  const actions: string[] = [];
+
+  if (summary.planCount === 0) {
+    actions.push("Сначала назначьте план на день или выберите дату с планом, чтобы рекомендация была предметной.");
+  } else if (summary.status === "completed") {
+    actions.push("Оставьте следующий день по плану, если готовность не ухудшится.");
+  } else if (summary.status === "partial") {
+    actions.push("Разберите невыполненные упражнения и перенесите только ключевую часть, если она важна для микроцикла.");
+  } else {
+    actions.push("Не переносите весь пропущенный объём автоматически; выберите 1-2 ключевых задания или восстановительный день.");
+  }
+
+  if (summary.plannedLoad > 0 && summary.actualLoad > summary.plannedLoad * 1.15) {
+    actions.push("Снизьте ближайшую дополнительную нагрузку и проверьте готовность перед следующей интенсивной сессией.");
+  }
+
+  if (readiness?.status === "red") {
+    actions.push("Поставьте восстановительный акцент и запросите у спортсмена комментарий по самочувствию.");
+  } else if (readiness?.status === "yellow") {
+    actions.push("Сохраните только техническую или лёгкую специальную часть, объём держите ниже плана.");
+  }
+
+  if (!dayData.latestDiaryEntry) {
+    actions.push("Добавьте короткий комментарий тренера, чтобы следующий разбор учитывал причину решения.");
+  }
+
+  return Array.from(new Set(actions)).slice(0, 4);
 }
 
 function getReadinessEntryForDate(

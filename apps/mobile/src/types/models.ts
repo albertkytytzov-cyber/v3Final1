@@ -89,10 +89,21 @@ export interface PendingSyncAction {
   status?: "pending" | "invalid";
 }
 
+export interface CoachDayAiReview {
+  athleteId: string;
+  entryDate: string;
+  generatedAt: string;
+  observation: string;
+  riskNotes: string[];
+  tomorrowActions: string[];
+  dayPayloadJson: string;
+}
+
 export interface MobileAppState {
   session: MobileSessionState;
   data: MobileDataSnapshot;
   queue: PendingSyncAction[];
+  aiReviewByDay: Record<string, CoachDayAiReview>;
   selectedScreen: MobileScreen;
   selectedAthleteId: string | null;
   selectedDayDate: string;

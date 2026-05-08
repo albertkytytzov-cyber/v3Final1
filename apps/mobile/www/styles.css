@@ -1638,6 +1638,124 @@ button {
   overflow-wrap: anywhere;
 }
 
+.coach-ai-review-card {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid rgba(15, 118, 110, 0.18);
+  border-radius: 18px;
+  background: #f6fbfa;
+}
+
+.coach-ai-review-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+}
+
+.coach-ai-review-head span,
+.coach-ai-review-result span {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 850;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.coach-ai-review-head h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: 1.05rem;
+  line-height: 1.15;
+}
+
+.coach-ai-review-head p,
+.coach-ai-review-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 740;
+  line-height: 1.35;
+}
+
+.coach-ai-review-head button {
+  min-width: 108px;
+  min-height: 40px;
+  padding: 7px 10px;
+  border: 1px solid rgba(15, 118, 110, 0.22);
+  border-radius: 14px;
+  background: #fff;
+  color: var(--accent-dark);
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 900;
+  line-height: 1.1;
+  white-space: normal;
+}
+
+.coach-ai-review-result {
+  display: grid;
+  gap: 8px;
+}
+
+.coach-ai-review-result article {
+  display: grid;
+  gap: 5px;
+  padding: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.coach-ai-review-result p,
+.coach-ai-review-result ul {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.86rem;
+  font-weight: 760;
+  line-height: 1.35;
+}
+
+.coach-ai-review-result ul {
+  display: grid;
+  gap: 4px;
+  padding-left: 18px;
+}
+
+.coach-ai-review-payload {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.coach-ai-review-payload summary {
+  width: fit-content;
+  color: var(--accent-dark);
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 900;
+}
+
+.coach-ai-review-payload pre {
+  max-height: 240px;
+  overflow: auto;
+  margin: 0;
+  padding: 10px;
+  border-radius: 12px;
+  background: #10231f;
+  color: #e9f7f3;
+  font-size: 0.68rem;
+  line-height: 1.35;
+  white-space: pre-wrap;
+}
+
+.coach-ai-review-card > small {
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 760;
+}
+
 .athlete-day-brief-head {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -2103,6 +2221,14 @@ button.timeline-card:active {
 
   .execution-exercise-fields {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .coach-ai-review-head {
+    grid-template-columns: 1fr;
+  }
+
+  .coach-ai-review-head button {
+    width: 100%;
   }
 
   .bottom-nav button {
