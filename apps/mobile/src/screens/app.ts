@@ -881,7 +881,6 @@ function renderAthletesScreen(state: MobileAppState) {
     </div>
     ${renderAthleteSelectControl(state, "athlete-picker athlete-screen-picker")}
     ${selectedAthlete ? renderCoachAthleteCard(selectedAthlete) : ""}
-    ${selectedAthlete ? renderTodayAthleteIndicators(state, selectedAthlete.athleteId) : ""}
   `;
 }
 
