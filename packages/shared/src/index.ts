@@ -767,6 +767,15 @@ export interface CoachDayAiReview {
   dayPayloadJson: string;
 }
 
+export interface CoachDayAiReviewRequest {
+  entryDate: string;
+  dayPayload: CoachDayAiPayload;
+}
+
+export interface CoachDayAiReviewResponse {
+  review: CoachDayAiReview;
+}
+
 export interface ExecutionExerciseResultInput {
   assignedExerciseId: string;
   completed: boolean;

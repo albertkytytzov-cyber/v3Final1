@@ -3,6 +3,8 @@ import type {
   AuthResponse,
   CoachDiaryEntry,
   CoachDiaryEntryPayload,
+  CoachDayAiPayload,
+  CoachDayAiReviewResponse,
   CoachAthleteSummary,
   CompetitionPlanSummary,
   CompetitionResultPayload,
@@ -229,6 +231,20 @@ export class MobileApiClient {
       idempotencyKey,
       method: "POST",
     });
+  }
+
+  generateCoachDayAiReview(
+    athleteId: string,
+    entryDate: string,
+    dayPayload: CoachDayAiPayload,
+  ) {
+    return this.request<CoachDayAiReviewResponse>(
+      `/coach/athletes/${encodeURIComponent(athleteId)}/ai-day-review`,
+      {
+        body: JSON.stringify({ dayPayload, entryDate }),
+        method: "POST",
+      },
+    );
   }
 }
 

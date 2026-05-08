@@ -86,24 +86,59 @@ export function bootstrapMobileApp(root: HTMLElement) {
     });
   };
 
-  const generateCoachAiReview = (athleteId: string | null, entryDate: string) => {
+  const generateCoachAiReview = async (athleteId: string | null, entryDate: string) => {
     if (!athleteId) {
       update({ error: "Выберите спортсмена для разбора ИИ." });
       return;
     }
 
     const dayData = getCoachDayCleanSummary(state, athleteId, entryDate);
-    const review = buildCoachDayAiReview(dayData);
+    const localReview = buildCoachDayAiReview(dayData);
     const key = getCoachDayAiReviewKey(athleteId, entryDate);
 
-    update({
-      aiReviewByDay: {
-        ...state.aiReviewByDay,
-        [key]: review,
-      },
-      error: null,
-      message: "Черновой разбор ИИ сформирован локально. План и дневник не изменены.",
-    });
+    if (!state.isOnline) {
+      update({
+        aiReviewByDay: {
+          ...state.aiReviewByDay,
+          [key]: localReview,
+        },
+        error: null,
+        message: "Нет сети: показан локальный черновой разбор. План и дневник не изменены.",
+      });
+      return;
+    }
+
+    update({ error: null, isBusy: true, message: "Формирую разбор ИИ на сервере..." });
+
+    try {
+      const response = await client().generateCoachDayAiReview(
+        athleteId,
+        dayData.date,
+        localReview.dayPayload,
+      );
+
+      update({
+        aiReviewByDay: {
+          ...state.aiReviewByDay,
+          [key]: response.review,
+        },
+        error: null,
+        isBusy: false,
+        message: "Разбор ИИ получен с сервера. План и дневник не изменены.",
+      });
+    } catch (error) {
+      update({
+        aiReviewByDay: {
+          ...state.aiReviewByDay,
+          [key]: localReview,
+        },
+        error: error instanceof MobileApiError
+          ? `Серверный разбор недоступен: ${error.message}`
+          : "Серверный разбор недоступен.",
+        isBusy: false,
+        message: "Показан локальный черновой разбор. План и дневник не изменены.",
+      });
+    }
   };
 
   const client = () => new MobileApiClient(
@@ -735,7 +770,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
 
     root.querySelectorAll<HTMLButtonElement>("[data-generate-coach-ai-review]").forEach((button) => {
       button.addEventListener("click", () => {
-        generateCoachAiReview(
+        void generateCoachAiReview(
           button.dataset.aiAthleteId ?? state.selectedAthleteId,
           button.dataset.aiDate ?? state.selectedDayDate,
         );
@@ -1305,7 +1340,7 @@ function renderCoachExecutionReviewSummary(
         <p>${escapeHtml(dayData.coachNote)}</p>
       </div>
     </section>
-    ${renderCoachAiReviewCard(dayData, aiReview)}
+    ${renderCoachAiReviewCard(dayData, aiReview, state.isBusy)}
   `;
 }
 
@@ -1319,7 +1354,11 @@ function renderCoachExecutionReviewMetric(label: string, value: string, detail: 
   `;
 }
 
-function renderCoachAiReviewCard(dayData: CoachDayCleanSummary, review: CoachDayAiReview | null) {
+function renderCoachAiReviewCard(
+  dayData: CoachDayCleanSummary,
+  review: CoachDayAiReview | null,
+  isBusy: boolean,
+) {
   return `
     <section class="coach-ai-review-card">
       <div class="coach-ai-review-head">
@@ -1328,8 +1367,8 @@ function renderCoachAiReviewCard(dayData: CoachDayCleanSummary, review: CoachDay
           <h3>Черновая рекомендация</h3>
           <p>Локальный каркас: данные никуда не отправляются, план и дневник не меняются.</p>
         </div>
-        <button class="secondary-action" data-ai-athlete-id="${escapeHtml(dayData.athleteId)}" data-ai-date="${escapeHtml(dayData.date)}" data-generate-coach-ai-review type="button">
-          Сформировать рекомендацию
+        <button class="secondary-action" data-ai-athlete-id="${escapeHtml(dayData.athleteId)}" data-ai-date="${escapeHtml(dayData.date)}" data-generate-coach-ai-review type="button" ${isBusy ? "disabled" : ""}>
+          ${isBusy ? "Формируется..." : "Сформировать рекомендацию"}
         </button>
       </div>
       ${review
@@ -1356,7 +1395,7 @@ function renderCoachAiReviewCard(dayData: CoachDayCleanSummary, review: CoachDay
             <summary>Данные дня для ИИ</summary>
             <pre>${escapeHtml(review.dayPayloadJson)}</pre>
           </details>
-          <small>Сформировано: ${formatDateTime(review.generatedAt)}</small>
+          <small>Сформировано: ${formatDateTime(review.generatedAt)} · ${review.source === "model" ? "модель" : "правила"}</small>
         `
         : `
           <p class="coach-ai-review-empty">

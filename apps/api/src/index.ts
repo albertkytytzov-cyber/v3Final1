@@ -10,6 +10,7 @@ import {
 import { registerAdaptationRoutes } from "./api/adaptation.routes";
 import { registerAnalyticsRoutes } from "./api/analytics/analytics.routes";
 import { registerAuthRoutes } from "./api/auth.routes";
+import { registerCoachAiReviewRoutes } from "./api/coach-ai-review.routes";
 import { registerCoachDiaryRoutes } from "./api/coach-diary.routes";
 import { registerCompetitionRoutes } from "./api/competition/competition.routes";
 import { createApiGuards } from "./api/guards";
@@ -91,6 +92,11 @@ registerExecutionRoutes(app, {
 });
 
 registerCoachDiaryRoutes(app, {
+  guards,
+  httpError,
+});
+
+registerCoachAiReviewRoutes(app, {
   guards,
   httpError,
 });
