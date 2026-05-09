@@ -1756,7 +1756,11 @@ function formatHealthConnectRestingHrEstimate(rawPayload: Record<string, unknown
   }
 
   if (source === "calculated-from-sleep-heart-rate" && estimatedBpm !== null) {
-    return `≈${formatLoadValue(estimatedBpm)} средний за сон (${sleepSamples} зам.)`;
+    const windowLabel = formatDeviceHealthRawTimeRange(rawPayload);
+    return `≈${formatLoadValue(estimatedBpm)} средний за сон (${[
+      `${sleepSamples} зам.`,
+      windowLabel,
+    ].filter(Boolean).join(", ")})`;
   }
 
   if (source === "estimated-from-sleep-heart-rate" && estimatedBpm !== null) {
@@ -1884,8 +1888,27 @@ function formatDeviceHealthHeartRateDetail(summary: DeviceHealthDailySummary | n
     return "пульс не пришёл";
   }
 
+  const rawPayload = summary.rawPayload ?? {};
+  const restingSource = readDeviceHealthRawText(rawPayload, "restingHeartRateSource");
+
+  if (restingSource === "calculated-from-sleep-heart-rate") {
+    const parts = [
+      "средний за сон",
+      readDeviceHealthRawCount(rawPayload, "sleepHeartRateSampleCount") > 0
+        ? `${readDeviceHealthRawCount(rawPayload, "sleepHeartRateSampleCount")} зам.`
+        : null,
+      formatDeviceHealthRawTimeRange(rawPayload),
+    ].filter((item): item is string => Boolean(item));
+
+    return parts.join(" · ");
+  }
+
+  if (restingSource === "health-connect-resting-record") {
+    return "получен напрямую из Health Connect";
+  }
+
   const parts = [
-    isEstimatedRestingHrSource(readDeviceHealthRawText(summary.rawPayload ?? {}, "restingHeartRateSource"))
+    isEstimatedRestingHrSource(restingSource)
       ? "пульс покоя рассчитан"
       : null,
     summary.heartRate.averageBpm !== null ? `средний ${formatLoadValue(summary.heartRate.averageBpm)}` : null,
@@ -1894,6 +1917,17 @@ function formatDeviceHealthHeartRateDetail(summary: DeviceHealthDailySummary | n
   ].filter((item): item is string => Boolean(item));
 
   return parts.length ? parts.join(" · ") : "нет пульса покоя";
+}
+
+function formatDeviceHealthRawTimeRange(rawPayload: Record<string, unknown>) {
+  const start = readDeviceHealthRawText(rawPayload, "restingHeartRateWindowStart");
+  const end = readDeviceHealthRawText(rawPayload, "restingHeartRateWindowEnd");
+
+  if (!start || !end) {
+    return null;
+  }
+
+  return `сон ${formatTime(start)}-${formatTime(end)}`;
 }
 
 function formatDeviceHealthWorkoutValue(summary: DeviceHealthDailySummary | null) {
@@ -4998,6 +5032,13 @@ function formatDateTime(value: string) {
     hour: "2-digit",
     minute: "2-digit",
     month: "short",
+  }).format(new Date(value));
+}
+
+function formatTime(value: string) {
+  return new Intl.DateTimeFormat("ru", {
+    hour: "2-digit",
+    minute: "2-digit",
   }).format(new Date(value));
 }
 

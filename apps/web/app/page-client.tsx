@@ -777,9 +777,60 @@ function formatDeviceRestingHrValue(summary: DeviceHealthDailySummary | null) {
     : "-";
 }
 
+function formatDeviceRestingHrDetail(summary: DeviceHealthDailySummary | null, language: Language) {
+  if (!summary?.heartRate?.restingBpm) {
+    return copyFor(language, { en: "not synced", ru: "не синхронизирован", bg: "не е синхронизиран" });
+  }
+
+  const source = readDeviceRawText(summary.rawPayload ?? null, "restingHeartRateSource");
+
+  if (source === "calculated-from-sleep-heart-rate") {
+    const sampleCount = readDeviceRawCount(summary.rawPayload ?? null, "sleepHeartRateSampleCount");
+    const windowLabel = formatDeviceRawTimeRange(summary.rawPayload ?? null, language);
+    return [
+      copyFor(language, { en: "sleep average", ru: "средний за сон", bg: "среден за сън" }),
+      sampleCount > 0
+        ? `${sampleCount} ${copyFor(language, { en: "samples", ru: "зам.", bg: "изм." })}`
+        : null,
+      windowLabel,
+    ].filter((item): item is string => Boolean(item)).join(" · ");
+  }
+
+  if (source === "health-connect-resting-record") {
+    return copyFor(language, {
+      en: "received directly from Health Connect",
+      ru: "получен напрямую из Health Connect",
+      bg: "получен директно от Health Connect",
+    });
+  }
+
+  return summary.heartRate.averageBpm
+    ? `${copyFor(language, { en: "avg", ru: "средний", bg: "среден" })} ${summary.heartRate.averageBpm}`
+    : copyFor(language, { en: "not synced", ru: "не синхронизирован", bg: "не е синхронизиран" });
+}
+
 function readDeviceRawText(rawPayload: Record<string, unknown> | null | undefined, key: string) {
   const value = rawPayload?.[key];
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function readDeviceRawCount(rawPayload: Record<string, unknown> | null | undefined, key: string) {
+  const value = rawPayload?.[key];
+  const numericValue = Number(value ?? 0);
+  return Number.isFinite(numericValue) ? Math.max(0, Math.trunc(numericValue)) : 0;
+}
+
+function formatDeviceRawTimeRange(rawPayload: Record<string, unknown> | null | undefined, language: Language) {
+  const start = readDeviceRawText(rawPayload, "restingHeartRateWindowStart");
+  const end = readDeviceRawText(rawPayload, "restingHeartRateWindowEnd");
+
+  if (!start || !end) {
+    return null;
+  }
+
+  const locale = language === "en" ? "en-US" : language === "bg" ? "bg-BG" : "ru-RU";
+  const formatter = new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit" });
+  return `${copyFor(language, { en: "sleep", ru: "сон", bg: "сън" })} ${formatter.format(new Date(start))}-${formatter.format(new Date(end))}`;
 }
 
 function isEstimatedDeviceRestingHrSource(source: string | null) {
@@ -13533,9 +13584,7 @@ export function PageClient({
                             {
                               label: copyFor(language, { en: "Resting HR", ru: "Пульс покоя", bg: "Пулс в покой" }),
                               value: formatDeviceRestingHrValue(selectedCoachDeviceHealthSummary),
-                              detail: selectedCoachDeviceHealthSummary?.heartRate?.averageBpm
-                                ? `${copyFor(language, { en: "avg", ru: "средний", bg: "среден" })} ${selectedCoachDeviceHealthSummary.heartRate.averageBpm}`
-                                : copyFor(language, { en: "not synced", ru: "не синхронизирован", bg: "не е синхронизиран" }),
+                              detail: formatDeviceRestingHrDetail(selectedCoachDeviceHealthSummary, language),
                             },
                             {
                               label: copyFor(language, { en: "Device workouts", ru: "Тренировки устройства", bg: "Тренировки от устройство" }),
