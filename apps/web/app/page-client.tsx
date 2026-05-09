@@ -5393,8 +5393,12 @@ export function PageClient({
   const [coachDeviceHealthSummaries, setCoachDeviceHealthSummaries] = useState<
     DeviceHealthDailySummary[]
   >(previewState?.coachDeviceHealthSummaries ?? []);
-  const [coachDeviceWorkouts, setCoachDeviceWorkouts] = useState<DeviceWorkout[]>([]);
-  const [coachDeviceWorkoutLinks, setCoachDeviceWorkoutLinks] = useState<DeviceWorkoutLink[]>([]);
+  const [coachDeviceWorkouts, setCoachDeviceWorkouts] = useState<DeviceWorkout[]>(
+    previewState?.coachDeviceWorkouts ?? [],
+  );
+  const [coachDeviceWorkoutLinks, setCoachDeviceWorkoutLinks] = useState<DeviceWorkoutLink[]>(
+    previewState?.coachDeviceWorkoutLinks ?? [],
+  );
   const [coachReadinessEntries, setCoachReadinessEntries] = useState<ReadinessEntry[]>(
     previewState?.selectedAthleteEntries ?? [],
   );
@@ -6604,6 +6608,28 @@ export function PageClient({
       `/coach/athletes/${athleteId}/execution-review${query}`,
     );
     setCoachExecutionReview(response.review);
+    if (response.review) {
+      await loadCoachDeviceWorkoutsForDay(athleteId, response.review.dayDate).catch(() => null);
+    }
+  }
+
+  async function loadCoachDeviceWorkoutsForDay(athleteId: string, entryDate: string) {
+    const response = await apiRequest<DeviceWorkoutsResponse>(
+      `/coach/athletes/${encodeURIComponent(athleteId)}/device-workouts?entryDate=${encodeURIComponent(entryDate)}`,
+    );
+    setCoachDeviceWorkoutLinks((current) =>
+      (response.links ?? []).reduce(
+        (items, link) => upsertDeviceWorkoutLink(items, link),
+        current,
+      ),
+    );
+    setCoachDeviceWorkouts((current) =>
+      response.workouts.reduce(
+        (items, workout) => upsertDeviceWorkout(items, workout),
+        current,
+      ),
+    );
+    return response;
   }
 
   async function loadCoachDiaryEntries() {
@@ -6884,6 +6910,39 @@ export function PageClient({
           ru: "Связь с тренировкой устройства удалена.",
           bg: "Връзката с тренировката от устройство е премахната.",
         }),
+      );
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleRefreshCoachDeviceWorkouts() {
+    if (!selectedAthleteId || !coachExecutionReview) {
+      return;
+    }
+
+    setBusy(true);
+    setErrorMessage("");
+
+    try {
+      const response = await loadCoachDeviceWorkoutsForDay(
+        selectedAthleteId,
+        coachExecutionReview.dayDate,
+      );
+      setStatusMessage(
+        response.workouts.length
+          ? copyFor(language, {
+              en: "Device workouts for the selected day were refreshed.",
+              ru: "Тренировки устройства за выбранный день обновлены.",
+              bg: "Тренировките от устройство за избрания ден са обновени.",
+            })
+          : copyFor(language, {
+              en: "No detailed device workouts were found for the selected day yet.",
+              ru: "Детальные тренировки устройства за выбранный день пока не найдены.",
+              bg: "Все още няма детайлни тренировки от устройство за избрания ден.",
+            }),
       );
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : String(error));
@@ -13943,13 +14002,25 @@ export function PageClient({
                                     })}
                               </span>
                             </div>
+                            <button
+                              className="secondary-button"
+                              disabled={busy || !selectedAthleteId}
+                              onClick={() => void handleRefreshCoachDeviceWorkouts()}
+                              type="button"
+                            >
+                              {copyFor(language, {
+                                en: "Refresh",
+                                ru: "Обновить",
+                                bg: "Обнови",
+                              })}
+                            </button>
                           </div>
                           {selectedCoachDeviceWorkouts.length === 0 ? (
                             <p className="device-workout-empty">
                               {copyFor(language, {
-                                en: "Ask the athlete to sync Mi Fitness / Health Connect after the workout.",
-                                ru: "Попросите спортсмена синхронизировать Mi Fitness / Health Connect после тренировки.",
-                                bg: "Помолете спортиста да синхронизира Mi Fitness / Health Connect след тренировка.",
+                                en: "The selector becomes active after the athlete syncs detailed Mi Fitness / Health Connect workouts for this date.",
+                                ru: "Выбор станет активным после того, как спортсмен синхронизирует детальные тренировки Mi Fitness / Health Connect за эту дату.",
+                                bg: "Изборът става активен след като спортистът синхронизира детайлни тренировки Mi Fitness / Health Connect за тази дата.",
                               })}
                             </p>
                           ) : null}

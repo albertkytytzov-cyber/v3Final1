@@ -220,7 +220,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
         loadedData,
         coachAiStatus,
       ] = await Promise.all([
-        api.loadAppData(auth.user.role),
+        api.loadAppData(auth.user.role, state.selectedDayDate),
         isCoachRole(auth.user.role)
           ? api.getCoachAiReviewStatus().catch(() => ({ status: null }))
           : Promise.resolve({ status: null }),
@@ -927,8 +927,10 @@ export function bootstrapMobileApp(root: HTMLElement) {
       });
     });
 
-    root.querySelector<HTMLButtonElement>("[data-refresh]")?.addEventListener("click", () => {
-      void refreshData();
+    root.querySelectorAll<HTMLButtonElement>("[data-refresh]").forEach((button) => {
+      button.addEventListener("click", () => {
+        void refreshData();
+      });
     });
 
     root.querySelector<HTMLButtonElement>("[data-sync]")?.addEventListener("click", () => {
@@ -1384,10 +1386,15 @@ function renderCoachDeviceWorkoutPanel(dayData: CoachDayCleanSummary, isBusy: bo
           <span>Данные тренировки с устройства</span>
           <h3>${workouts.length ? `${workouts.length} тренировок пришло` : "Нет тренировок устройства"}</h3>
         </div>
-        <strong>${dayData.deviceWorkoutLinks.length}/${dayData.blocks.length || 0}</strong>
+        <div class="device-health-actions">
+          <strong>${dayData.deviceWorkoutLinks.length}/${dayData.blocks.length || 0}</strong>
+          <button class="secondary-action" data-refresh type="button" ${isBusy ? "disabled" : ""}>
+            Обновить
+          </button>
+        </div>
       </div>
       ${workouts.length === 0
-        ? `<p class="muted-copy">Попросите спортсмена синхронизировать Mi Fitness / Health Connect после тренировки.</p>`
+        ? `<p class="muted-copy">Выбор станет активным после того, как спортсмен синхронизирует детальные тренировки Mi Fitness / Health Connect за эту дату.</p>`
         : ""}
       <div class="coach-day-exercise-list">
         ${dayData.blocks.map((block) => {

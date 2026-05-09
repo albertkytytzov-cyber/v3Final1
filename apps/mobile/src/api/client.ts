@@ -15,6 +15,8 @@ import type {
   DeviceHealthDailySummariesResponse,
   DeviceHealthDailySummaryPayload,
   DeviceHealthDailySummaryResponse,
+  DeviceWorkout,
+  DeviceWorkoutLink,
   DeviceWorkoutLinkPayload,
   DeviceWorkoutLinkResponse,
   DeviceWorkoutsResponse,
@@ -112,7 +114,7 @@ export class MobileApiClient {
     });
   }
 
-  async loadAppData(userRole: string) {
+  async loadAppData(userRole: string, selectedEntryDate?: string) {
     const [
       assignedPlans,
       competitions,
@@ -181,7 +183,11 @@ export class MobileApiClient {
         : deviceHealth.summaries;
     const deviceWorkoutData =
       userRole === "coach" || userRole === "admin"
-        ? await this.loadCoachDeviceWorkouts(assignedPlans.assignedPlans, athletes.athletes)
+        ? await this.loadCoachDeviceWorkouts(
+            assignedPlans.assignedPlans,
+            athletes.athletes,
+            selectedEntryDate,
+          )
         : { links: [], workouts: deviceWorkouts.workouts };
 
     return {
@@ -260,22 +266,44 @@ export class MobileApiClient {
   private async loadCoachDeviceWorkouts(
     assignedPlans: AssignedPlanSummary[],
     athletes: CoachAthleteSummary[],
+    selectedEntryDate?: string,
   ) {
     const athleteIds = Array.from(new Set([
       ...assignedPlans.map((plan) => plan.athleteId),
       ...athletes.map((athlete) => athlete.athleteId),
     ].filter(Boolean)));
     const responses = await Promise.all(
-      athleteIds.map((athleteId) =>
-        this.request<DeviceWorkoutsResponse>(
-          `/coach/athletes/${encodeURIComponent(athleteId)}/device-workouts`,
-        ).catch(() => ({ links: [], workouts: [] })),
-      ),
+      athleteIds.flatMap((athleteId) => {
+        const basePath = `/coach/athletes/${encodeURIComponent(athleteId)}/device-workouts`;
+        const paths = selectedEntryDate
+          ? [
+              basePath,
+              `${basePath}?entryDate=${encodeURIComponent(selectedEntryDate)}`,
+            ]
+          : [basePath];
+
+        return paths.map((path) =>
+          this.request<DeviceWorkoutsResponse>(path)
+            .catch(() => ({ links: [], workouts: [] })),
+        );
+      }),
     );
 
+    const linksById = new Map<string, DeviceWorkoutLink>();
+    const workoutsById = new Map<string, DeviceWorkout>();
+
+    responses.forEach((response) => {
+      response.workouts.forEach((workout) => {
+        workoutsById.set(workout.id, workout);
+      });
+      (response.links ?? []).forEach((link) => {
+        linksById.set(link.id, link);
+      });
+    });
+
     return {
-      links: responses.flatMap((response) => response.links ?? []),
-      workouts: responses.flatMap((response) => response.workouts),
+      links: Array.from(linksById.values()),
+      workouts: Array.from(workoutsById.values()),
     };
   }
 

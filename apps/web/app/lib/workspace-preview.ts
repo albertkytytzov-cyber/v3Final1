@@ -9,6 +9,8 @@ import type {
   CompetitionReviewOverview,
   CompetitionSummary,
   DeviceHealthDailySummary,
+  DeviceWorkout,
+  DeviceWorkoutLink,
   ExecutionReviewPlan,
   MesocycleSummary,
   OlympicCycleSummary,
@@ -52,6 +54,8 @@ export type WorkspacePreviewState = {
   coachExecutionReview: ExecutionReviewPlan;
   coachDiaryEntries: CoachDiaryEntry[];
   coachDeviceHealthSummaries: DeviceHealthDailySummary[];
+  coachDeviceWorkouts: DeviceWorkout[];
+  coachDeviceWorkoutLinks: DeviceWorkoutLink[];
   coachAnalyticsOverview: AnalyticsOverview;
   templatePack: TemplatePackRecommendation;
   offlineQueueItems: QueueItem[];
@@ -612,6 +616,103 @@ const previewDeviceHealthSummaries: DeviceHealthDailySummary[] = [
     createdAt: "2026-04-21T07:10:00.000Z",
     updatedAt: "2026-04-21T07:10:00.000Z",
     syncedAt: "2026-04-21T07:10:00.000Z",
+  },
+];
+
+const previewDeviceWorkouts: DeviceWorkout[] = [
+  {
+    id: "device-workout-preview-1",
+    athleteId: "athlete-1",
+    entryDate: "2026-04-21",
+    provider: "health-connect",
+    sourceDevice: "Mi Fitness / Health Connect",
+    sourceWorkoutId: "preview-mi-fitness-2026-04-21-1",
+    workoutType: "running",
+    startTime: "2026-04-21T08:10:00.000Z",
+    endTime: "2026-04-21T08:54:00.000Z",
+    durationMinutes: 44,
+    distanceMeters: 6200,
+    activeCalories: 276,
+    averageHeartRateBpm: 132,
+    maxHeartRateBpm: 154,
+    minHeartRateBpm: 92,
+    sampleCount: 5,
+    samples: [
+      {
+        id: "device-workout-sample-preview-1",
+        deviceWorkoutId: "device-workout-preview-1",
+        sampleTime: "2026-04-21T08:12:00.000Z",
+        heartRateBpm: 112,
+        distanceMeters: 300,
+        speedMetersPerSecond: 2.8,
+        paceSecondsPerKm: 357,
+        oxygenSaturationPercent: 98,
+        createdAt: "2026-04-21T09:05:00.000Z",
+      },
+      {
+        id: "device-workout-sample-preview-2",
+        deviceWorkoutId: "device-workout-preview-1",
+        sampleTime: "2026-04-21T08:22:00.000Z",
+        heartRateBpm: 126,
+        distanceMeters: 1800,
+        speedMetersPerSecond: 3.1,
+        paceSecondsPerKm: 323,
+        oxygenSaturationPercent: 98,
+        createdAt: "2026-04-21T09:05:00.000Z",
+      },
+      {
+        id: "device-workout-sample-preview-3",
+        deviceWorkoutId: "device-workout-preview-1",
+        sampleTime: "2026-04-21T08:32:00.000Z",
+        heartRateBpm: 145,
+        distanceMeters: 3400,
+        speedMetersPerSecond: 3.5,
+        paceSecondsPerKm: 286,
+        oxygenSaturationPercent: 97,
+        createdAt: "2026-04-21T09:05:00.000Z",
+      },
+      {
+        id: "device-workout-sample-preview-4",
+        deviceWorkoutId: "device-workout-preview-1",
+        sampleTime: "2026-04-21T08:43:00.000Z",
+        heartRateBpm: 154,
+        distanceMeters: 5200,
+        speedMetersPerSecond: 3.4,
+        paceSecondsPerKm: 294,
+        oxygenSaturationPercent: 97,
+        createdAt: "2026-04-21T09:05:00.000Z",
+      },
+      {
+        id: "device-workout-sample-preview-5",
+        deviceWorkoutId: "device-workout-preview-1",
+        sampleTime: "2026-04-21T08:53:00.000Z",
+        heartRateBpm: 121,
+        distanceMeters: 6200,
+        speedMetersPerSecond: 2.2,
+        paceSecondsPerKm: 455,
+        oxygenSaturationPercent: 98,
+        createdAt: "2026-04-21T09:05:00.000Z",
+      },
+    ],
+    rawPayload: null,
+    syncedAt: "2026-04-21T09:05:00.000Z",
+    createdAt: "2026-04-21T09:05:00.000Z",
+    updatedAt: "2026-04-21T09:05:00.000Z",
+  },
+];
+
+const previewDeviceWorkoutLinks: DeviceWorkoutLink[] = [
+  {
+    id: "device-workout-link-preview-1",
+    athleteId: "athlete-1",
+    assignedPlanId: "assigned-plan-1",
+    assignedBlockId: "block-2",
+    assignedExerciseId: null,
+    deviceWorkoutId: "device-workout-preview-1",
+    linkedByUserId: "preview-coach-user",
+    linkedAt: "2026-04-21T09:08:00.000Z",
+    createdAt: "2026-04-21T09:08:00.000Z",
+    workout: previewDeviceWorkouts[0],
   },
 ];
 
@@ -1442,6 +1543,8 @@ function buildPreviewState(
     coachExecutionReview: previewExecutionReview,
     coachDiaryEntries: previewCoachDiaryEntries,
     coachDeviceHealthSummaries: previewDeviceHealthSummaries,
+    coachDeviceWorkouts: previewDeviceWorkouts,
+    coachDeviceWorkoutLinks: previewDeviceWorkoutLinks,
     coachAnalyticsOverview: previewAnalytics,
     templatePack: previewTemplatePack,
     offlineQueueItems: previewOfflineQueueItems,

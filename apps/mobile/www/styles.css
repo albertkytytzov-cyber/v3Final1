@@ -2037,6 +2037,39 @@ button {
   text-align: center;
 }
 
+.summary-inline-head .device-health-actions {
+  align-items: center;
+}
+
+.summary-inline-head .device-health-actions > strong {
+  min-width: 44px;
+  padding: 8px 10px;
+  border-radius: 14px;
+  background: #dff2ef;
+  color: var(--accent-dark);
+  font-size: 1.15rem;
+  line-height: 1;
+  text-align: center;
+}
+
+.summary-inline-head .secondary-action {
+  min-width: 0;
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  background: #fff;
+  color: var(--accent-dark);
+  cursor: pointer;
+  font-weight: 850;
+  white-space: normal;
+}
+
+.summary-inline-head .secondary-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .coach-day-status-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
