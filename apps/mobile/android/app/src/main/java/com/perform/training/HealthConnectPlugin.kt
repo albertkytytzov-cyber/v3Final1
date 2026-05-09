@@ -166,6 +166,7 @@ class HealthConnectPlugin : Plugin() {
         )
         val restingHeartRateRecords = readAllRecords(client, RestingHeartRateRecord::class, range)
         val heartRateRecords = readAllRecords(client, HeartRateRecord::class, range)
+        val sleepHeartRateRecords = readAllRecords(client, HeartRateRecord::class, sleepRange)
         val exerciseRecords = readAllRecords(client, ExerciseSessionRecord::class, range)
         val distanceRecords = readAllRecords(client, DistanceRecord::class, range)
         val totalCaloriesRecords = readAllRecords(client, TotalCaloriesBurnedRecord::class, range)
@@ -191,8 +192,16 @@ class HealthConnectPlugin : Plugin() {
             "sourceDevice",
             if (installedKnownSources.isNotEmpty()) "Xiaomi / Health Connect" else "Health Connect",
         )
+        val heartRateSummary = buildHeartRateSummary(
+            restingHeartRateRecords,
+            heartRateRecords,
+            sleepHeartRateRecords,
+            sleepRecords,
+            exerciseRecords,
+        )
+
         putNullable(result, "sleep", buildSleepSummary(sleepRecords))
-        putNullable(result, "heartRate", buildHeartRateSummary(restingHeartRateRecords, heartRateRecords))
+        putNullable(result, "heartRate", heartRateSummary.summary)
         putNullable(
             result,
             "workout",
@@ -220,6 +229,11 @@ class HealthConnectPlugin : Plugin() {
         rawPayload.put("sleepRecordCount", sleepRecords.size)
         rawPayload.put("restingHeartRateRecordCount", restingHeartRateRecords.size)
         rawPayload.put("heartRateRecordCount", heartRateRecords.size)
+        rawPayload.put("sleepHeartRateRecordCount", sleepHeartRateRecords.size)
+        rawPayload.put("sleepHeartRateSampleCount", heartRateSummary.sleepSampleCount)
+        rawPayload.put("nonExerciseHeartRateSampleCount", heartRateSummary.nonExerciseSampleCount)
+        rawPayload.put("restingHeartRateSource", heartRateSummary.restingSource)
+        putNullableNumber(rawPayload, "estimatedRestingHeartRate", heartRateSummary.estimatedRestingBpm)
         rawPayload.put("exerciseRecordCount", exerciseRecords.size)
         rawPayload.put("distanceRecordCount", distanceRecords.size)
         rawPayload.put("totalCaloriesRecordCount", totalCaloriesRecords.size)
@@ -339,24 +353,69 @@ class HealthConnectPlugin : Plugin() {
     private fun buildHeartRateSummary(
         restingRecords: List<RestingHeartRateRecord>,
         heartRateRecords: List<HeartRateRecord>,
-    ): JSObject? {
-        val values = heartRateRecords.flatMap { record ->
-            record.samples.map { sample -> sample.beatsPerMinute.toDouble() }
+        sleepHeartRateRecords: List<HeartRateRecord>,
+        sleepRecords: List<SleepSessionRecord>,
+        exerciseRecords: List<ExerciseSessionRecord>,
+    ): HeartRateSummaryResult {
+        val samples = collectHeartRateSamples(heartRateRecords)
+        val sleepSamples = collectHeartRateSamples(sleepHeartRateRecords).filter { sample ->
+            sleepRecords.any { record -> sample.time >= record.startTime && sample.time <= record.endTime }
         }
+        val nonExerciseSamples = samples.filter { sample ->
+            exerciseRecords.none { record -> sample.time >= record.startTime && sample.time <= record.endTime }
+        }
+        val values = samples.map { sample -> sample.bpm }
         val restingValues = restingRecords.map { record -> record.beatsPerMinute.toDouble() }
+        val sleepRestingEstimate = estimateRestingHeartRate(sleepSamples)
+        val nonExerciseRestingEstimate = estimateRestingHeartRate(nonExerciseSamples)
+        val estimatedResting = sleepRestingEstimate ?: nonExerciseRestingEstimate
+        val restingSource = when {
+            restingValues.isNotEmpty() -> "health-connect-resting-record"
+            sleepRestingEstimate != null -> "estimated-from-sleep-heart-rate"
+            nonExerciseRestingEstimate != null -> "estimated-from-non-exercise-heart-rate"
+            else -> "missing"
+        }
 
-        if (values.isEmpty() && restingValues.isEmpty()) {
-            return null
+        if (values.isEmpty() && restingValues.isEmpty() && estimatedResting == null) {
+            return HeartRateSummaryResult(null, restingSource, null, sleepSamples.size, nonExerciseSamples.size)
         }
 
         val heartRate = JSObject()
-        putNullableNumber(heartRate, "restingBpm", average(restingValues))
+        putNullableNumber(heartRate, "restingBpm", average(restingValues) ?: estimatedResting)
         putNullableNumber(heartRate, "averageBpm", average(values))
         putNullableNumber(heartRate, "minBpm", values.minOrNull())
         putNullableNumber(heartRate, "maxBpm", values.maxOrNull())
         putNullable(heartRate, "hrvRmssdMs", null)
 
-        return heartRate
+        return HeartRateSummaryResult(heartRate, restingSource, estimatedResting, sleepSamples.size, nonExerciseSamples.size)
+    }
+
+    private fun collectHeartRateSamples(records: List<HeartRateRecord>): List<HeartRateSample> {
+        return records.flatMap { record ->
+            record.samples.map { sample ->
+                HeartRateSample(sample.time, sample.beatsPerMinute.toDouble())
+            }
+        }.filter { sample ->
+            sample.bpm >= MIN_REASONABLE_HEART_RATE && sample.bpm <= MAX_REASONABLE_HEART_RATE
+        }
+    }
+
+    private fun estimateRestingHeartRate(samples: List<HeartRateSample>): Double? {
+        if (samples.size < MIN_RESTING_ESTIMATE_SAMPLES) {
+            return null
+        }
+
+        val values = samples
+            .map { sample -> sample.bpm }
+            .filter { bpm -> bpm >= MIN_RESTING_HEART_RATE && bpm <= MAX_RESTING_HEART_RATE }
+            .sorted()
+
+        if (values.size < MIN_RESTING_ESTIMATE_SAMPLES) {
+            return null
+        }
+
+        val lowSampleCount = max(1, kotlin.math.ceil(values.size * RESTING_LOW_SAMPLE_FRACTION).toInt())
+        return average(values.take(lowSampleCount))
     }
 
     private fun buildWorkoutSummary(
@@ -451,6 +510,19 @@ class HealthConnectPlugin : Plugin() {
         val sleepLookupStart: Instant,
     )
 
+    private data class HeartRateSample(
+        val time: Instant,
+        val bpm: Double,
+    )
+
+    private data class HeartRateSummaryResult(
+        val summary: JSObject?,
+        val restingSource: String,
+        val estimatedRestingBpm: Double?,
+        val sleepSampleCount: Int,
+        val nonExerciseSampleCount: Int,
+    )
+
     companion object {
         private const val HEALTH_CONNECT_PACKAGE = "com.google.android.apps.healthdata"
         private const val MI_FITNESS_PACKAGE = "com.xiaomi.wearable"
@@ -459,6 +531,12 @@ class HealthConnectPlugin : Plugin() {
         private const val PROVIDER = "health-connect"
         private const val MILLIS_PER_MINUTE = 60000.0
         private const val SLEEP_LOOKUP_HOURS_BEFORE_DAY = 18L
+        private const val MIN_REASONABLE_HEART_RATE = 25.0
+        private const val MAX_REASONABLE_HEART_RATE = 240.0
+        private const val MIN_RESTING_HEART_RATE = 30.0
+        private const val MAX_RESTING_HEART_RATE = 120.0
+        private const val MIN_RESTING_ESTIMATE_SAMPLES = 3
+        private const val RESTING_LOW_SAMPLE_FRACTION = 0.2
         private val XIAOMI_HEALTH_SOURCE_PACKAGES = listOf(
             MI_FITNESS_PACKAGE,
             XIAOMI_HEALTH_PACKAGE,

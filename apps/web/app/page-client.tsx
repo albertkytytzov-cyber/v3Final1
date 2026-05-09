@@ -771,9 +771,19 @@ function formatDeviceSleepValue(summary: DeviceHealthDailySummary | null, langua
 }
 
 function formatDeviceRestingHrValue(summary: DeviceHealthDailySummary | null) {
+  const source = readDeviceRawText(summary?.rawPayload ?? null, "restingHeartRateSource");
   return summary?.heartRate?.restingBpm !== null && summary?.heartRate?.restingBpm !== undefined
-    ? String(summary.heartRate.restingBpm)
+    ? `${isEstimatedDeviceRestingHrSource(source) ? "≈" : ""}${summary.heartRate.restingBpm}`
     : "-";
+}
+
+function readDeviceRawText(rawPayload: Record<string, unknown> | null | undefined, key: string) {
+  const value = rawPayload?.[key];
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function isEstimatedDeviceRestingHrSource(source: string | null) {
+  return source === "estimated-from-sleep-heart-rate" || source === "estimated-from-non-exercise-heart-rate";
 }
 
 function formatDeviceWorkoutValue(summary: DeviceHealthDailySummary | null) {

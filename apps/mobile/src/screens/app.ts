@@ -1625,6 +1625,10 @@ function renderHealthConnectDiagnostics(summary: DeviceHealthDailySummary | null
       ),
     },
     {
+      label: "Расчёт покоя",
+      value: formatHealthConnectRestingHrEstimate(rawPayload),
+    },
+    {
       label: "Пульс",
       value: formatHealthConnectDiagnosticCount(rawPayload, "heartRateRecordCount", "allHeartRateRecordCount"),
     },
@@ -1649,10 +1653,13 @@ function renderHealthConnectDiagnostics(summary: DeviceHealthDailySummary | null
   const restingHrCount = readDeviceHealthRawCount(rawPayload, "restingHeartRateRecordCount");
   const allSleepCount = readDeviceHealthRawOptionalCount(rawPayload, "allSleepRecordCount");
   const allRestingHrCount = readDeviceHealthRawOptionalCount(rawPayload, "allRestingHeartRateRecordCount");
+  const restingHrSource = readDeviceHealthRawText(rawPayload, "restingHeartRateSource");
   const guidance = sleepCount === 0 && (allSleepCount ?? 0) > 0
     ? "Сон есть в Health Connect, но источник не Xiaomi/Zepp. Проверьте, какое приложение записало сон."
     : restingHrCount === 0 && (allRestingHrCount ?? 0) > 0
       ? "Пульс покоя есть в Health Connect, но источник не Xiaomi/Zepp. Проверьте источник записи пульса покоя."
+      : restingHrCount === 0 && isEstimatedRestingHrSource(restingHrSource)
+        ? "Отдельного пульса покоя нет, поэтому PERFORM рассчитал ориентир по спокойным замерам пульса. Для аналитики это помечено как оценка."
       : sleepCount === 0 || restingHrCount === 0
         ? "Если разрешения включены, но счётчик Xiaomi/Zepp 0, значит приложение-источник не передало этот тип данных в Health Connect за выбранный день."
     : "Health Connect отдал ключевые записи для разбора дня.";
@@ -1708,6 +1715,16 @@ function readDeviceHealthRawCount(rawPayload: Record<string, unknown>, key: stri
   return Number.isFinite(numericValue) ? Math.max(0, Math.trunc(numericValue)) : 0;
 }
 
+function readDeviceHealthRawNumber(rawPayload: Record<string, unknown>, key: string) {
+  const value = rawPayload[key];
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? numericValue : null;
+}
+
 function readDeviceHealthRawOptionalCount(rawPayload: Record<string, unknown>, key: string) {
   if (!(key in rawPayload)) {
     return null;
@@ -1727,6 +1744,31 @@ function formatHealthConnectDiagnosticCount(
   return allSourcesCount === null
     ? `${miFitnessCount} Xiaomi/Zepp`
     : `${miFitnessCount} Xiaomi/Zepp / ${allSourcesCount} всего`;
+}
+
+function formatHealthConnectRestingHrEstimate(rawPayload: Record<string, unknown>) {
+  const source = readDeviceHealthRawText(rawPayload, "restingHeartRateSource");
+  const estimatedBpm = readDeviceHealthRawNumber(rawPayload, "estimatedRestingHeartRate");
+  const sleepSamples = readDeviceHealthRawCount(rawPayload, "sleepHeartRateSampleCount");
+  const nonExerciseSamples = readDeviceHealthRawCount(rawPayload, "nonExerciseHeartRateSampleCount");
+
+  if (source === "health-connect-resting-record") {
+    return "получен напрямую";
+  }
+
+  if (source === "estimated-from-sleep-heart-rate" && estimatedBpm !== null) {
+    return `≈${formatLoadValue(estimatedBpm)} по сну (${sleepSamples} зам.)`;
+  }
+
+  if (source === "estimated-from-non-exercise-heart-rate" && estimatedBpm !== null) {
+    return `≈${formatLoadValue(estimatedBpm)} вне тренировки (${nonExerciseSamples} зам.)`;
+  }
+
+  return "нет данных";
+}
+
+function isEstimatedRestingHrSource(source: string | null) {
+  return source === "estimated-from-sleep-heart-rate" || source === "estimated-from-non-exercise-heart-rate";
 }
 
 function getDeviceHealthStatus(summary: DeviceHealthDailySummary | null) {
@@ -1832,8 +1874,9 @@ function formatDeviceHealthSleepDetail(summary: DeviceHealthDailySummary | null)
 }
 
 function formatDeviceHealthRestingHrValue(summary: DeviceHealthDailySummary | null) {
+  const source = readDeviceHealthRawText(summary?.rawPayload ?? {}, "restingHeartRateSource");
   return summary?.heartRate?.restingBpm !== null && summary?.heartRate?.restingBpm !== undefined
-    ? `${formatLoadValue(summary.heartRate.restingBpm)}`
+    ? `${isEstimatedRestingHrSource(source) ? "≈" : ""}${formatLoadValue(summary.heartRate.restingBpm)}`
     : "-";
 }
 
@@ -1843,6 +1886,9 @@ function formatDeviceHealthHeartRateDetail(summary: DeviceHealthDailySummary | n
   }
 
   const parts = [
+    isEstimatedRestingHrSource(readDeviceHealthRawText(summary.rawPayload ?? {}, "restingHeartRateSource"))
+      ? "пульс покоя рассчитан"
+      : null,
     summary.heartRate.averageBpm !== null ? `средний ${formatLoadValue(summary.heartRate.averageBpm)}` : null,
     summary.heartRate.minBpm !== null ? `мин ${formatLoadValue(summary.heartRate.minBpm)}` : null,
     summary.heartRate.maxBpm !== null ? `макс ${formatLoadValue(summary.heartRate.maxBpm)}` : null,
