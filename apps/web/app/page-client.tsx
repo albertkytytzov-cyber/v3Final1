@@ -1003,12 +1003,124 @@ function limitDeviceWorkoutSamples<T>(samples: T[], maxCount = 180) {
   return Array.from({ length: maxCount }, (_, index) => samples[Math.round(index * step)]);
 }
 
+type DeviceWorkoutGraphKind = "heartRate" | "pace" | "speed" | "spo2";
+
+interface DeviceWorkoutGraphSeries {
+  key: DeviceWorkoutGraphKind;
+  label: string;
+  samples: { value: number }[];
+  valueLabel: (value: number) => string;
+}
+
+function formatPaceSeconds(value: number, language: Language) {
+  const rounded = Math.max(0, Math.round(value));
+  const minutes = Math.floor(rounded / 60);
+  const seconds = rounded % 60;
+  const suffix = copyFor(language, { en: "/km", ru: "/км", bg: "/км" });
+  return `${minutes}:${seconds.toString().padStart(2, "0")} ${suffix}`;
+}
+
+function getDeviceWorkoutPaceSeconds(sample: DeviceWorkout["samples"][number]) {
+  if (sample.paceSecondsPerKm !== null) {
+    return sample.paceSecondsPerKm;
+  }
+
+  if (sample.speedMetersPerSecond !== null && sample.speedMetersPerSecond > 0) {
+    return 1000 / sample.speedMetersPerSecond;
+  }
+
+  return null;
+}
+
+function buildDeviceWorkoutGraphSeries(workout: DeviceWorkout, language: Language): DeviceWorkoutGraphSeries[] {
+  const heartRateSamples = workout.samples
+    .filter((sample) => sample.heartRateBpm !== null)
+    .map((sample) => ({ value: sample.heartRateBpm ?? 0 }));
+  const paceSamples = workout.samples
+    .map((sample) => getDeviceWorkoutPaceSeconds(sample))
+    .filter((value): value is number => value !== null)
+    .map((value) => ({ value }));
+  const speedSamples = workout.samples
+    .filter((sample) => sample.speedMetersPerSecond !== null)
+    .map((sample) => ({ value: (sample.speedMetersPerSecond ?? 0) * 3.6 }));
+  const spo2Samples = workout.samples
+    .filter((sample) => sample.oxygenSaturationPercent !== null)
+    .map((sample) => ({ value: sample.oxygenSaturationPercent ?? 0 }));
+
+  const series: DeviceWorkoutGraphSeries[] = [];
+
+  if (heartRateSamples.length > 1) {
+    series.push({
+      key: "heartRate",
+      label: copyFor(language, { en: "Heart rate", ru: "Пульс", bg: "Пулс" }),
+      samples: heartRateSamples,
+      valueLabel: (value) => `${Math.round(value)} ${copyFor(language, { en: "bpm", ru: "уд/мин", bg: "уд/мин" })}`,
+    });
+  }
+
+  if (paceSamples.length > 1) {
+    series.push({
+      key: "pace",
+      label: copyFor(language, { en: "Pace", ru: "Темп", bg: "Темпо" }),
+      samples: paceSamples,
+      valueLabel: (value) => formatPaceSeconds(value, language),
+    });
+  } else if (speedSamples.length > 1) {
+    series.push({
+      key: "speed",
+      label: copyFor(language, { en: "Speed", ru: "Скорость", bg: "Скорост" }),
+      samples: speedSamples,
+      valueLabel: (value) => `${value.toFixed(1)} ${copyFor(language, { en: "km/h", ru: "км/ч", bg: "км/ч" })}`,
+    });
+  }
+
+  if (spo2Samples.length > 1) {
+    series.push({
+      key: "spo2",
+      label: "SpO2",
+      samples: spo2Samples,
+      valueLabel: (value) => `${Math.round(value)}%`,
+    });
+  }
+
+  return series;
+}
+
 function hasDeviceWorkoutGraph(workout: DeviceWorkout) {
-  return workout.samples.some((sample) =>
-    sample.heartRateBpm !== null ||
-    sample.speedMetersPerSecond !== null ||
-    sample.oxygenSaturationPercent !== null ||
-    sample.distanceMeters !== null
+  return buildDeviceWorkoutGraphSeries(workout, "ru").length > 0;
+}
+
+function DeviceWorkoutSeriesGraph({
+  series,
+}: {
+  series: DeviceWorkoutGraphSeries;
+}) {
+  const shownSamples = limitDeviceWorkoutSamples(series.samples);
+  const values = shownSamples.map((sample) => sample.value);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = Math.max(1, max - min);
+  const points = shownSamples
+    .map((sample, index) => {
+      const x = shownSamples.length === 1 ? 0 : (index / (shownSamples.length - 1)) * 100;
+      const y = 42 - ((sample.value - min) / range) * 34;
+      return `${x.toFixed(2)},${y.toFixed(2)}`;
+    })
+    .join(" ");
+
+  return (
+    <div className={`device-workout-series ${series.key}`}>
+      <div className="device-workout-series-caption">
+        <strong>{series.label}</strong>
+        <span>
+          {series.valueLabel(min)}-{series.valueLabel(max)}
+          {series.samples.length > shownSamples.length ? " · компактно" : ""}
+        </span>
+      </div>
+      <svg aria-hidden="true" viewBox="0 0 100 48" preserveAspectRatio="none">
+        <polyline fill="none" points={points} />
+      </svg>
+    </div>
   );
 }
 
@@ -1019,9 +1131,9 @@ function DeviceWorkoutMiniGraph({
   language: Language;
   workout: DeviceWorkout;
 }) {
-  const allHeartRateSamples = workout.samples.filter((sample) => sample.heartRateBpm !== null);
+  const series = buildDeviceWorkoutGraphSeries(workout, language);
 
-  if (!hasDeviceWorkoutGraph(workout) || allHeartRateSamples.length < 2) {
+  if (series.length === 0) {
     return (
       <p className="device-workout-empty">
         {copyFor(language, {
@@ -1033,34 +1145,11 @@ function DeviceWorkoutMiniGraph({
     );
   }
 
-  const heartRateSamples = limitDeviceWorkoutSamples(allHeartRateSamples);
-  const values = heartRateSamples.map((sample) => sample.heartRateBpm ?? 0);
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const range = Math.max(1, max - min);
-  const points = heartRateSamples
-    .map((sample, index) => {
-      const x = heartRateSamples.length === 1 ? 0 : (index / (heartRateSamples.length - 1)) * 100;
-      const y = 42 - (((sample.heartRateBpm ?? min) - min) / range) * 34;
-      return `${x.toFixed(2)},${y.toFixed(2)}`;
-    })
-    .join(" ");
-  const hasSpeed = workout.samples.some((sample) => sample.speedMetersPerSecond !== null);
-  const hasSpo2 = workout.samples.some((sample) => sample.oxygenSaturationPercent !== null);
-
   return (
     <div className="device-workout-graph">
-      <svg aria-hidden="true" viewBox="0 0 100 48" preserveAspectRatio="none">
-        <polyline fill="none" points={points} />
-      </svg>
-      <small>
-        {copyFor(language, { en: "HR", ru: "Пульс", bg: "Пулс" })} {Math.round(min)}-{Math.round(max)}
-        {hasSpeed ? ` · ${copyFor(language, { en: "pace/speed", ru: "темп/скорость", bg: "темпо/скорост" })}` : ""}
-        {hasSpo2 ? " · SpO2" : ""}
-        {allHeartRateSamples.length > heartRateSamples.length
-          ? ` · ${copyFor(language, { en: "shown compactly", ru: "показано компактно", bg: "показано компактно" })}`
-          : ""}
-      </small>
+      {series.map((item) => (
+        <DeviceWorkoutSeriesGraph key={item.key} series={item} />
+      ))}
     </div>
   );
 }

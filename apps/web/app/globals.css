@@ -3424,18 +3424,44 @@ select {
 
 .device-workout-graph {
   display: grid;
-  gap: 6px;
+  gap: 10px;
   min-width: 0;
 }
 
-.device-workout-graph svg {
+.device-workout-series {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.device-workout-series-caption {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.device-workout-series-caption strong {
+  color: var(--text);
+  font-size: 0.82rem;
+}
+
+.device-workout-series-caption span {
+  min-width: 0;
+  text-align: right;
+}
+
+.device-workout-series svg {
   width: 100%;
-  height: 72px;
+  height: 64px;
   border-radius: 12px;
   background: linear-gradient(180deg, rgba(15, 23, 42, 0.04), rgba(15, 118, 110, 0.05));
 }
 
-.device-workout-graph polyline {
+.device-workout-series polyline {
   fill: none;
   stroke: var(--accent);
   stroke-linecap: round;
@@ -3443,9 +3469,27 @@ select {
   stroke-width: 2.5;
 }
 
+.device-workout-series.pace polyline,
+.device-workout-series.speed polyline {
+  stroke: #2563eb;
+}
+
+.device-workout-series.spo2 polyline {
+  stroke: #7c3aed;
+}
+
 @media (max-width: 860px) {
   .device-workout-block-card {
     grid-template-columns: 1fr;
+  }
+
+  .device-workout-series-caption {
+    display: grid;
+    gap: 2px;
+  }
+
+  .device-workout-series-caption span {
+    text-align: left;
   }
 }
 

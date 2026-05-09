@@ -2186,41 +2186,127 @@ function limitDeviceWorkoutSamples<T>(samples: T[], maxCount = 180) {
   return Array.from({ length: maxCount }, (_, index) => samples[Math.round(index * step)]);
 }
 
-function hasDeviceWorkoutGraph(workout: DeviceWorkout) {
-  return workout.samples.some((sample) =>
-    sample.heartRateBpm !== null ||
-    sample.distanceMeters !== null ||
-    sample.speedMetersPerSecond !== null ||
-    sample.oxygenSaturationPercent !== null
-  );
+type DeviceWorkoutGraphKind = "heartRate" | "pace" | "speed" | "spo2";
+
+interface DeviceWorkoutGraphSeries {
+  key: DeviceWorkoutGraphKind;
+  label: string;
+  samples: { value: number }[];
+  valueLabel: (value: number) => string;
 }
 
-function renderDeviceWorkoutGraph(workout: DeviceWorkout) {
-  const allHeartRateSamples = workout.samples.filter((sample) => sample.heartRateBpm !== null);
+function formatPaceSeconds(value: number) {
+  const rounded = Math.max(0, Math.round(value));
+  const minutes = Math.floor(rounded / 60);
+  const seconds = rounded % 60;
+  return `${minutes}:${seconds.toString().padStart(2, "0")} /км`;
+}
 
-  if (!hasDeviceWorkoutGraph(workout) || allHeartRateSamples.length < 2) {
-    return `<small>Устройство передало только итоговые данные, график недоступен.</small>`;
+function getDeviceWorkoutPaceSeconds(sample: DeviceWorkout["samples"][number]) {
+  if (sample.paceSecondsPerKm !== null) {
+    return sample.paceSecondsPerKm;
   }
 
-  const heartRateSamples = limitDeviceWorkoutSamples(allHeartRateSamples);
-  const values = heartRateSamples.map((sample) => sample.heartRateBpm ?? 0);
+  if (sample.speedMetersPerSecond !== null && sample.speedMetersPerSecond > 0) {
+    return 1000 / sample.speedMetersPerSecond;
+  }
+
+  return null;
+}
+
+function buildDeviceWorkoutGraphSeries(workout: DeviceWorkout): DeviceWorkoutGraphSeries[] {
+  const heartRateSamples = workout.samples
+    .filter((sample) => sample.heartRateBpm !== null)
+    .map((sample) => ({ value: sample.heartRateBpm ?? 0 }));
+  const paceSamples = workout.samples
+    .map((sample) => getDeviceWorkoutPaceSeconds(sample))
+    .filter((value): value is number => value !== null)
+    .map((value) => ({ value }));
+  const speedSamples = workout.samples
+    .filter((sample) => sample.speedMetersPerSecond !== null)
+    .map((sample) => ({ value: (sample.speedMetersPerSecond ?? 0) * 3.6 }));
+  const spo2Samples = workout.samples
+    .filter((sample) => sample.oxygenSaturationPercent !== null)
+    .map((sample) => ({ value: sample.oxygenSaturationPercent ?? 0 }));
+
+  const series: DeviceWorkoutGraphSeries[] = [];
+
+  if (heartRateSamples.length > 1) {
+    series.push({
+      key: "heartRate",
+      label: "Пульс",
+      samples: heartRateSamples,
+      valueLabel: (value) => `${Math.round(value)} уд/мин`,
+    });
+  }
+
+  if (paceSamples.length > 1) {
+    series.push({
+      key: "pace",
+      label: "Темп",
+      samples: paceSamples,
+      valueLabel: (value) => formatPaceSeconds(value),
+    });
+  } else if (speedSamples.length > 1) {
+    series.push({
+      key: "speed",
+      label: "Скорость",
+      samples: speedSamples,
+      valueLabel: (value) => `${value.toFixed(1)} км/ч`,
+    });
+  }
+
+  if (spo2Samples.length > 1) {
+    series.push({
+      key: "spo2",
+      label: "SpO2",
+      samples: spo2Samples,
+      valueLabel: (value) => `${Math.round(value)}%`,
+    });
+  }
+
+  return series;
+}
+
+function hasDeviceWorkoutGraph(workout: DeviceWorkout) {
+  return buildDeviceWorkoutGraphSeries(workout).length > 0;
+}
+
+function renderDeviceWorkoutSeriesGraph(series: DeviceWorkoutGraphSeries) {
+  const shownSamples = limitDeviceWorkoutSamples(series.samples);
+  const values = shownSamples.map((sample) => sample.value);
   const min = Math.min(...values);
   const max = Math.max(...values);
   const range = Math.max(1, max - min);
-  const points = heartRateSamples.map((sample, index) => {
-    const x = heartRateSamples.length === 1 ? 0 : (index / (heartRateSamples.length - 1)) * 100;
-    const y = 42 - (((sample.heartRateBpm ?? min) - min) / range) * 34;
+  const points = shownSamples.map((sample, index) => {
+    const x = shownSamples.length === 1 ? 0 : (index / (shownSamples.length - 1)) * 100;
+    const y = 42 - ((sample.value - min) / range) * 34;
     return `${x.toFixed(2)},${y.toFixed(2)}`;
   }).join(" ");
-  const hasSpeed = workout.samples.some((sample) => sample.speedMetersPerSecond !== null);
-  const hasSpo2 = workout.samples.some((sample) => sample.oxygenSaturationPercent !== null);
 
   return `
-    <div class="device-workout-graph">
+    <div class="device-workout-series ${escapeHtml(series.key)}">
+      <div class="device-workout-series-caption">
+        <strong>${escapeHtml(series.label)}</strong>
+        <span>${escapeHtml(series.valueLabel(min))}-${escapeHtml(series.valueLabel(max))}${series.samples.length > shownSamples.length ? " · компактно" : ""}</span>
+      </div>
       <svg aria-hidden="true" viewBox="0 0 100 48" preserveAspectRatio="none">
         <polyline fill="none" points="${escapeHtml(points)}"></polyline>
       </svg>
-      <small>Пульс ${Math.round(min)}-${Math.round(max)}${hasSpeed ? " · темп/скорость" : ""}${hasSpo2 ? " · SpO2" : ""}${allHeartRateSamples.length > heartRateSamples.length ? " · показано компактно" : ""}</small>
+    </div>
+  `;
+}
+
+function renderDeviceWorkoutGraph(workout: DeviceWorkout) {
+  const series = buildDeviceWorkoutGraphSeries(workout);
+
+  if (series.length === 0) {
+    return `<small>Устройство передало только итоговые данные, график недоступен.</small>`;
+  }
+
+  return `
+    <div class="device-workout-graph">
+      ${series.map((item) => renderDeviceWorkoutSeriesGraph(item)).join("")}
     </div>
   `;
 }
