@@ -819,6 +819,70 @@ button {
   padding: 9px 0;
 }
 
+.mobile-unified-session-card {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid rgba(15, 118, 110, 0.16);
+  border-radius: 14px;
+  background: rgba(240, 253, 250, 0.76);
+}
+
+.mobile-unified-session-card.is-partial {
+  border-color: rgba(217, 119, 6, 0.22);
+  background: rgba(255, 251, 235, 0.78);
+}
+
+.mobile-unified-session-card.is-missed {
+  border-color: rgba(148, 163, 184, 0.22);
+  background: rgba(248, 250, 252, 0.86);
+}
+
+.mobile-unified-session-head,
+.execution-session-check {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px;
+  min-width: 0;
+}
+
+.execution-session-check {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+}
+
+.execution-session-check input {
+  margin-top: 3px;
+}
+
+.execution-session-check span,
+.mobile-unified-session-head {
+  min-width: 0;
+}
+
+.execution-session-check strong,
+.mobile-unified-session-head strong {
+  color: var(--text);
+  font-size: 0.92rem;
+  font-weight: 950;
+  line-height: 1.2;
+}
+
+.execution-session-check small,
+.mobile-unified-session-head span,
+.mobile-unified-session-note {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
+.mobile-unified-session-note {
+  margin: 0;
+}
+
 .execution-readonly-row {
   align-items: start;
 }
@@ -3056,6 +3120,7 @@ button.timeline-card:active {
 }
 
 .mobile-plan-work::before,
+.mobile-plan-volume::before,
 .mobile-plan-control::before {
   color: var(--muted);
   font-size: 0.68rem;
@@ -3065,6 +3130,10 @@ button.timeline-card:active {
 
 .mobile-plan-work::before {
   content: "Подходы";
+}
+
+.mobile-plan-volume::before {
+  content: "Объём";
 }
 
 .mobile-plan-control::before {

@@ -64,6 +64,7 @@ const mobileLoadBlockProfiles: Record<AssignedPlanBlock["blockType"], { duration
   technical: { durationMinutes: 35, rpe: 5 },
 };
 const defaultMobileLoadProfile = { durationMinutes: 20, rpe: 5 };
+type MobileAssignedPlanSession = AssignedPlanSummary["day"]["sessions"][number];
 
 export function bootstrapMobileApp(root: HTMLElement) {
   const initialData = loadSnapshot();
@@ -593,6 +594,34 @@ export function bootstrapMobileApp(root: HTMLElement) {
     };
   };
 
+  const readExecutionSessionPayloads = (form: HTMLFormElement): ExecutionResultInput[] | null => {
+    const assignedPlanId = readString(form, "assignedPlanId");
+    const assignedBlockIds = readString(form, "assignedBlockIds")
+      .split(",")
+      .map((id) => id.trim())
+      .filter(Boolean);
+
+    if (!assignedPlanId || assignedBlockIds.length === 0) {
+      update({ error: "Выберите сессию плана" });
+      return null;
+    }
+
+    const completed = readCheckbox(form, "completed");
+    const notes = readString(form, "notes");
+
+    return assignedBlockIds.map((assignedBlockId) => ({
+      assignedBlockId,
+      assignedPlanId,
+      completed,
+      durationMinutes: null,
+      notes,
+      repsCompleted: null,
+      rpe: null,
+      setsCompleted: null,
+      weightKg: null,
+    }));
+  };
+
   const saveExecutionResultsSnapshot = (results: ExecutionResult[]) => {
     const snapshot = {
       ...state.data,
@@ -610,7 +639,9 @@ export function bootstrapMobileApp(root: HTMLElement) {
 
   const submitExecutionDay = async (button: HTMLButtonElement) => {
     const group = button.closest<HTMLElement>("[data-execution-plan-group]");
-    const forms = Array.from(group?.querySelectorAll<HTMLFormElement>("[data-execution-form]") ?? []);
+    const forms = Array.from(
+      group?.querySelectorAll<HTMLFormElement>("[data-execution-form], [data-execution-session-form]") ?? [],
+    );
 
     if (forms.length === 0) {
       update({ error: "Нет блоков для сохранения." });
@@ -620,13 +651,18 @@ export function bootstrapMobileApp(root: HTMLElement) {
     const payloads: ExecutionResultInput[] = [];
 
     for (const form of forms) {
-      const payload = readExecutionPayload(form);
+      const formPayloads = form.hasAttribute("data-execution-session-form")
+        ? readExecutionSessionPayloads(form)
+        : (() => {
+            const payload = readExecutionPayload(form);
+            return payload ? [payload] : null;
+          })();
 
-      if (!payload) {
+      if (!formPayloads) {
         return;
       }
 
-      payloads.push(payload);
+      payloads.push(...formPayloads);
     }
 
     const userRole = state.session.user?.role ?? null;
@@ -662,7 +698,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
 
       update({
         isBusy: false,
-        message: `Сохранено локально: ${payloads.length} блоков. Отправим при появлении интернета.`,
+        message: "Сохранено локально. Отправим при появлении интернета.",
         queue,
       });
       return;
@@ -679,7 +715,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
       saveExecutionResultsSnapshot(savedResults);
       update({
         isBusy: false,
-        message: `Сохранено выполнение: ${savedResults.length} блоков.`,
+        message: "Сохранено выполнение дня.",
         queue: loadQueue(),
       });
       await refreshData(true);
@@ -1010,7 +1046,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
       });
     });
 
-    root.querySelectorAll<HTMLFormElement>("[data-execution-form]").forEach((form) => {
+    root.querySelectorAll<HTMLFormElement>("[data-execution-form], [data-execution-session-form]").forEach((form) => {
       form.addEventListener("submit", (event) => {
         event.preventDefault();
         const saveButton = (event.currentTarget as HTMLFormElement)
@@ -3230,6 +3266,13 @@ interface ExecutionDaySummary {
   readinessEntry: ReadinessEntry | null;
 }
 
+interface ExecutionDisplayCompletion {
+  completedCount: number;
+  partialCount: number;
+  missedCount: number;
+  totalCount: number;
+}
+
 interface CoachTodayDaySummary {
   date: string;
   status: CoachTodayDayStatus;
@@ -3310,8 +3353,14 @@ function renderExecutionForm(state: MobileAppState, plans: AssignedPlanSummary[]
   const planGroups = selectedDate
     ? allPlanGroups.filter((group) => group.plan.day.dayDate === selectedDate)
     : allPlanGroups;
-  const totalBlockCount = allPlanGroups.reduce((total, group) => total + group.blockItems.length, 0);
-  const blockCount = planGroups.reduce((total, group) => total + group.blockItems.length, 0);
+  const totalDisplayUnitCount = allPlanGroups.reduce(
+    (total, group) => total + countPlanDisplayUnits(group.plan),
+    0,
+  );
+  const displayUnitCount = planGroups.reduce(
+    (total, group) => total + countPlanDisplayUnits(group.plan),
+    0,
+  );
   const exerciseCount = planGroups.reduce(
     (total, group) =>
       total + group.blockItems.reduce(
@@ -3321,7 +3370,7 @@ function renderExecutionForm(state: MobileAppState, plans: AssignedPlanSummary[]
     0,
   );
 
-  if (totalBlockCount === 0) {
+  if (totalDisplayUnitCount === 0) {
     return renderEmpty("Нет блоков для результата", "Назначенный план появится после обновления данных.");
   }
 
@@ -3330,8 +3379,8 @@ function renderExecutionForm(state: MobileAppState, plans: AssignedPlanSummary[]
       <div class="section-title">
         <h3>${canSubmitExecution ? "Выполнение тренировки" : "Дни по плану"}</h3>
         <p>${canSubmitExecution
-          ? `${plans.length} назначенных дней · ${blockCount} блоков · ${exerciseCount} упражнений. Ближайший день открыт сверху.`
-          : `Режим просмотра · ${formatDate(selectedDate)} · ${blockCount} блоков · ${exerciseCount} упражнений.`}</p>
+          ? `${plans.length} назначенных дней · ${formatPlanUnitCount(displayUnitCount)} · ${exerciseCount} упражнений. Ближайший день открыт сверху.`
+          : `Режим просмотра · ${formatDate(selectedDate)} · ${formatPlanUnitCount(displayUnitCount)} · ${exerciseCount} упражнений.`}</p>
       </div>
       ${renderExecutionDateFilter(dateOptions, selectedDate, isCoachView)}
       <div class="execution-plan-stack">
@@ -3373,16 +3422,100 @@ function renderExecutionDateFilter(
   `;
 }
 
+function isUnifiedPlanSession(session: MobileAssignedPlanSession) {
+  const normalizedName = session.name.replace(/\s+/g, " ").trim().toLowerCase();
+
+  return session.blocks.length > 1 &&
+    normalizedName.includes("единая сессия") &&
+    session.blocks.every((block) => (block.exercises?.length ?? 0) === 0);
+}
+
+function countPlanDisplayUnits(plan: AssignedPlanSummary) {
+  return plan.day.sessions.reduce(
+    (total, session) => total + (isUnifiedPlanSession(session) ? 1 : session.blocks.length),
+    0,
+  );
+}
+
+function formatPlanUnitCount(count: number) {
+  return count === 1 ? "1 сессия" : `${count} заданий`;
+}
+
+function getExecutionDisplayCompletion(
+  state: MobileAppState,
+  plan: AssignedPlanSummary,
+): ExecutionDisplayCompletion {
+  const completion: ExecutionDisplayCompletion = {
+    completedCount: 0,
+    missedCount: 0,
+    partialCount: 0,
+    totalCount: 0,
+  };
+
+  for (const session of plan.day.sessions) {
+    if (isUnifiedPlanSession(session)) {
+      const status = getUnifiedSessionExecutionStatus(state, plan.id, session);
+      completion.totalCount += 1;
+      if (status === "completed") {
+        completion.completedCount += 1;
+      } else if (status === "partial") {
+        completion.partialCount += 1;
+      } else {
+        completion.missedCount += 1;
+      }
+      continue;
+    }
+
+    for (const block of session.blocks) {
+      const status = getExecutionBlockStatus(
+        block,
+        getExecutionResultForBlock(state, plan.id, block.id),
+      );
+      completion.totalCount += 1;
+      if (status === "completed") {
+        completion.completedCount += 1;
+      } else if (status === "partial") {
+        completion.partialCount += 1;
+      } else {
+        completion.missedCount += 1;
+      }
+    }
+  }
+
+  return completion;
+}
+
+function getUnifiedSessionExecutionStatus(
+  state: MobileAppState,
+  assignedPlanId: string,
+  session: MobileAssignedPlanSession,
+): ExecutionDayStatus {
+  const statuses = session.blocks.map((block) =>
+    getExecutionBlockStatus(block, getExecutionResultForBlock(state, assignedPlanId, block.id))
+  );
+
+  if (statuses.length > 0 && statuses.every((status) => status === "completed")) {
+    return "completed";
+  }
+
+  if (statuses.some((status) => status === "completed" || status === "partial")) {
+    return "partial";
+  }
+
+  return "missed";
+}
+
 function renderExecutionPlanGroup(
   state: MobileAppState,
   group: ExecutionPlanGroup,
   isOpen: boolean,
   canSubmitExecution: boolean,
 ) {
-  const blockCount = group.blockItems.length;
+  const displayUnitCount = countPlanDisplayUnits(group.plan);
   const canSubmitCoachDiary = state.session.user?.role === "coach" || state.session.user?.role === "admin";
   const diaryEntries = getCoachDiaryEntriesForPlan(state, group.plan.id);
   const daySummary = getExecutionDaySummary(state, group, diaryEntries);
+  const displayCompletion = getExecutionDisplayCompletion(state, group.plan);
   const exerciseCount = group.blockItems.reduce(
     (total, item) => total + (item.block.exercises?.length ?? 0),
     0,
@@ -3393,48 +3526,52 @@ function renderExecutionPlanGroup(
       <summary class="mobile-plan-day-card-head">
         <div>
           <strong>${formatDate(group.plan.day.dayDate)} · ${escapeHtml(group.plan.day.label)}</strong>
-          <span>${escapeHtml(group.plan.templateName)} · ${blockCount} блоков · ${exerciseCount} упр.</span>
+          <span>${escapeHtml(group.plan.templateName)} · ${formatPlanUnitCount(displayUnitCount)} · ${exerciseCount} упр.</span>
           <div class="execution-day-meta">
             <span class="execution-day-status is-${daySummary.status}">${escapeHtml(daySummary.statusLabel)}</span>
             <span>Факт нагрузки: ${formatLoadValue(daySummary.actualLoad)}</span>
             <span>План: ${formatLoadValue(daySummary.plannedLoad)}</span>
           </div>
         </div>
-        <em>${daySummary.completedBlockCount}/${blockCount}</em>
+        <em>${displayCompletion.completedCount}/${displayCompletion.totalCount}</em>
       </summary>
       <div class="mobile-plan-day-card-body">
-        ${renderExecutionDayAnalyticsCard(daySummary)}
+        ${renderExecutionDayAnalyticsCard(daySummary, displayCompletion)}
         ${group.plan.day.sessions.map((session) => `
           <section class="mobile-plan-session">
             <h4>${escapeHtml(session.name)}</h4>
-            <div class="mobile-plan-table">
-              <div class="mobile-plan-table-head">
-                <span>Упр.</span>
-                <span>Подходы</span>
-                <span>Контр.</span>
-              </div>
-              ${session.blocks
-                .map((block) =>
-                  canSubmitExecution
-                    ? renderExecutionBlockForm(
-                        {
-                          block,
-                          plan: group.plan,
-                          sessionName: session.name,
-                        },
-                        getExecutionResultForBlock(state, group.plan.id, block.id),
-                      )
-                    : renderExecutionBlockReadonly(
-                        {
-                          block,
-                          plan: group.plan,
-                          sessionName: session.name,
-                        },
-                        getExecutionResultForBlock(state, group.plan.id, block.id),
-                      ),
-                )
-                .join("")}
-            </div>
+            ${isUnifiedPlanSession(session)
+              ? renderExecutionUnifiedSession(state, group.plan, session, canSubmitExecution)
+              : `
+                <div class="mobile-plan-table">
+                  <div class="mobile-plan-table-head">
+                    <span>Упр.</span>
+                    <span>Подходы</span>
+                    <span>Контр.</span>
+                  </div>
+                  ${session.blocks
+                    .map((block) =>
+                      canSubmitExecution
+                        ? renderExecutionBlockForm(
+                            {
+                              block,
+                              plan: group.plan,
+                              sessionName: session.name,
+                            },
+                            getExecutionResultForBlock(state, group.plan.id, block.id),
+                          )
+                        : renderExecutionBlockReadonly(
+                            {
+                              block,
+                              plan: group.plan,
+                              sessionName: session.name,
+                            },
+                            getExecutionResultForBlock(state, group.plan.id, block.id),
+                          ),
+                    )
+                    .join("")}
+                </div>
+              `}
           </section>
         `).join("")}
         ${canSubmitExecution ? `
@@ -3450,7 +3587,73 @@ function renderExecutionPlanGroup(
   `;
 }
 
-function renderExecutionDayAnalyticsCard(summary: ExecutionDaySummary) {
+function renderExecutionUnifiedSession(
+  state: MobileAppState,
+  plan: AssignedPlanSummary,
+  session: MobileAssignedPlanSession,
+  canSubmitExecution: boolean,
+) {
+  const status = getUnifiedSessionExecutionStatus(state, plan.id, session);
+  const results = session.blocks.map((block) => getExecutionResultForBlock(state, plan.id, block.id));
+  const latestNote = results.find((result) => result?.notes)?.notes ?? "";
+  const blockIds = session.blocks.map((block) => block.id);
+
+  if (!canSubmitExecution) {
+    return `
+      <div class="mobile-unified-session-card is-${status}">
+        <div class="mobile-unified-session-head">
+          <strong>${escapeHtml(getExecutionDayStatusLabel(status))}</strong>
+          <span>${session.blocks.length} строк плана сохраняются как одна сессия</span>
+        </div>
+        ${renderUnifiedSessionPlanTable(session)}
+        ${latestNote ? `<p class="mobile-unified-session-note">${escapeHtml(latestNote)}</p>` : ""}
+      </div>
+    `;
+  }
+
+  return `
+    <form class="mobile-execution-session-form mobile-unified-session-card is-${status}" data-execution-session-form>
+      <input name="assignedPlanId" type="hidden" value="${escapeHtml(plan.id)}" />
+      <input name="assignedBlockIds" type="hidden" value="${escapeHtml(blockIds.join(","))}" />
+      <label class="execution-session-check">
+        <input name="completed" type="checkbox" ${status === "completed" ? "checked" : ""} />
+        <span>
+          <strong>Отметить всю сессию</strong>
+          <small>Все строки этой сессии сохраняются вместе.</small>
+        </span>
+      </label>
+      ${renderUnifiedSessionPlanTable(session)}
+      <label class="exercise-note">
+        <span>Комментарий</span>
+        <input name="notes" value="${escapeHtml(latestNote)}" />
+      </label>
+    </form>
+  `;
+}
+
+function renderUnifiedSessionPlanTable(session: MobileAssignedPlanSession) {
+  return `
+    <div class="mobile-plan-table mobile-unified-plan-table">
+      <div class="mobile-plan-table-head">
+        <span>Блок</span>
+        <span>Объём</span>
+        <span>Контроль</span>
+      </div>
+      ${session.blocks.map((block) => `
+        <div class="mobile-plan-row mobile-unified-plan-row">
+          <span class="mobile-plan-exercise-name-static">${escapeHtml(block.name)}</span>
+          <span class="mobile-plan-cell mobile-plan-volume">${escapeHtml(formatBlockTarget(block))}</span>
+          <span class="mobile-plan-cell mobile-plan-control">${escapeHtml(block.notes || "-")}</span>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
+function renderExecutionDayAnalyticsCard(
+  summary: ExecutionDaySummary,
+  displayCompletion: ExecutionDisplayCompletion,
+) {
   return `
     <aside class="execution-day-analytics-card">
       <div class="execution-day-analytics-head">
@@ -3460,8 +3663,8 @@ function renderExecutionDayAnalyticsCard(summary: ExecutionDaySummary) {
       <div class="execution-day-analytics-grid">
         <div class="execution-day-analytics-metric">
           <span>Выполнение</span>
-          <strong>${summary.completedBlockCount}/${summary.completedBlockCount + summary.partialBlockCount + summary.missedBlockCount}</strong>
-          <small>${escapeHtml(formatExecutionDayBreakdown(summary))}</small>
+          <strong>${displayCompletion.completedCount}/${displayCompletion.totalCount}</strong>
+          <small>${escapeHtml(formatExecutionDisplayBreakdown(displayCompletion))}</small>
         </div>
         <div class="execution-day-analytics-metric">
           <span>Плановая нагрузка</span>
@@ -3817,7 +4020,7 @@ function renderCoachDiaryHistory(
 }
 
 function renderPlanCard(plan: AssignedPlanSummary, isCoachView = false) {
-  const blocks = plan.day.sessions.flatMap((session) => session.blocks);
+  const displayUnitCount = countPlanDisplayUnits(plan);
   const exerciseCount = countPlanExercises(plan);
   const dayFocus = formatAssignedPlanDayFocus(plan);
 
@@ -3826,7 +4029,7 @@ function renderPlanCard(plan: AssignedPlanSummary, isCoachView = false) {
       <header class="mobile-plan-day-card-head">
         <div>
           <strong>${formatDate(plan.day.dayDate)} · ${escapeHtml(plan.day.label)}</strong>
-          <span>${escapeHtml(plan.templateName)} · ${blocks.length} блоков · ${exerciseCount} упражнений</span>
+          <span>${escapeHtml(plan.templateName)} · ${formatPlanUnitCount(displayUnitCount)} · ${exerciseCount} упражнений</span>
         </div>
         ${isCoachView
           ? `<button class="mobile-plan-open-day" data-coach-open-day="${escapeHtml(plan.day.dayDate)}" data-coach-open-screen="dashboard" type="button">Открыть день</button>`
@@ -3836,14 +4039,18 @@ function renderPlanCard(plan: AssignedPlanSummary, isCoachView = false) {
         ${plan.day.sessions.map((session) => `
           <section class="mobile-plan-session">
             <h4>${escapeHtml(session.name)}</h4>
-            <div class="mobile-plan-table">
-              <div class="mobile-plan-table-head">
-                <span>Упр.</span>
-                <span>Подходы</span>
-                <span>Контр.</span>
-              </div>
-              ${session.blocks.map((block) => renderPlanBlock(block)).join("")}
-            </div>
+            ${isUnifiedPlanSession(session)
+              ? renderUnifiedSessionPlanTable(session)
+              : `
+                <div class="mobile-plan-table">
+                  <div class="mobile-plan-table-head">
+                    <span>Упр.</span>
+                    <span>Подходы</span>
+                    <span>Контр.</span>
+                  </div>
+                  ${session.blocks.map((block) => renderPlanBlock(block)).join("")}
+                </div>
+              `}
           </section>
         `).join("")}
       </div>
@@ -5526,6 +5733,10 @@ function formatDurationHours(minutes: number) {
 
 function formatExecutionDayBreakdown(summary: ExecutionDaySummary) {
   return `${summary.completedBlockCount} вып. · ${summary.partialBlockCount} част. · ${summary.missedBlockCount} нет`;
+}
+
+function formatExecutionDisplayBreakdown(completion: ExecutionDisplayCompletion) {
+  return `${completion.completedCount} вып. · ${completion.partialCount} част. · ${completion.missedCount} нет`;
 }
 
 function formatExecutionLoadDelta(summary: ExecutionDaySummary) {
