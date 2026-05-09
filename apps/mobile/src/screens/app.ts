@@ -3422,21 +3422,27 @@ function renderExecutionDateFilter(
   `;
 }
 
-function isUnifiedPlanSession(session: MobileAssignedPlanSession) {
-  const normalizedName = session.name.replace(/\s+/g, " ").trim().toLowerCase();
-
-  return session.blocks.length > 1 && normalizedName.includes("единая сессия");
+function isSessionLevelPlanUnit(session: MobileAssignedPlanSession) {
+  return session.blocks.length > 1;
 }
 
 function countPlanDisplayUnits(plan: AssignedPlanSummary) {
   return plan.day.sessions.reduce(
-    (total, session) => total + (isUnifiedPlanSession(session) ? 1 : session.blocks.length),
+    (total, session) => total + (session.blocks.length > 0 ? 1 : 0),
     0,
   );
 }
 
 function formatPlanUnitCount(count: number) {
-  return count === 1 ? "1 сессия" : `${count} заданий`;
+  const lastDigit = count % 10;
+  const lastTwoDigits = count % 100;
+  const label = lastDigit === 1 && lastTwoDigits !== 11
+    ? "сессия"
+    : lastDigit >= 2 && lastDigit <= 4 && (lastTwoDigits < 12 || lastTwoDigits > 14)
+      ? "сессии"
+      : "сессий";
+
+  return `${count} ${label}`;
 }
 
 function getExecutionDisplayCompletion(
@@ -3451,7 +3457,7 @@ function getExecutionDisplayCompletion(
   };
 
   for (const session of plan.day.sessions) {
-    if (isUnifiedPlanSession(session)) {
+    if (isSessionLevelPlanUnit(session)) {
       const status = getUnifiedSessionExecutionStatus(state, plan.id, session);
       completion.totalCount += 1;
       if (status === "completed") {
@@ -3538,7 +3544,7 @@ function renderExecutionPlanGroup(
         ${group.plan.day.sessions.map((session) => `
           <section class="mobile-plan-session">
             <h4>${escapeHtml(session.name)}</h4>
-            ${isUnifiedPlanSession(session)
+            ${isSessionLevelPlanUnit(session)
               ? renderExecutionUnifiedSession(state, group.plan, session, canSubmitExecution)
               : `
                 <div class="mobile-plan-table">
@@ -3640,12 +3646,52 @@ function renderUnifiedSessionPlanTable(session: MobileAssignedPlanSession) {
       ${session.blocks.map((block) => `
         <div class="mobile-plan-row mobile-unified-plan-row">
           <span class="mobile-plan-exercise-name-static">${escapeHtml(block.name)}</span>
-          <span class="mobile-plan-cell mobile-plan-volume">${escapeHtml(formatBlockTarget(block))}</span>
-          <span class="mobile-plan-cell mobile-plan-control">${escapeHtml(block.notes || "-")}</span>
+          <span class="mobile-plan-cell mobile-plan-volume">${escapeHtml(formatUnifiedSessionBlockTarget(block))}</span>
+          <span class="mobile-plan-cell mobile-plan-control">${escapeHtml(formatUnifiedSessionBlockControl(block))}</span>
         </div>
       `).join("")}
     </div>
   `;
+}
+
+function getSortedBlockExercises(block: AssignedPlanBlock) {
+  return (block.exercises ?? []).slice().sort((a, b) => a.orderIndex - b.orderIndex);
+}
+
+function formatUnifiedSessionBlockTarget(block: AssignedPlanBlock) {
+  const exercises = getSortedBlockExercises(block);
+
+  if (exercises.length === 0) {
+    return formatBlockTarget(block);
+  }
+
+  if (exercises.length === 1) {
+    return formatExerciseWorkCell(exercises[0]);
+  }
+
+  return exercises
+    .map((exercise) => `${exercise.name}: ${formatExerciseWorkCell(exercise)}`)
+    .join("; ");
+}
+
+function formatUnifiedSessionBlockControl(block: AssignedPlanBlock) {
+  const exercises = getSortedBlockExercises(block);
+
+  if (block.notes) {
+    return block.notes;
+  }
+
+  if (exercises.length === 0) {
+    return "-";
+  }
+
+  if (exercises.length === 1) {
+    return formatExerciseControlCell(exercises[0]);
+  }
+
+  return exercises
+    .map((exercise) => `${exercise.name}: ${formatExerciseControlCell(exercise)}`)
+    .join("; ");
 }
 
 function renderExecutionDayAnalyticsCard(
@@ -4037,7 +4083,7 @@ function renderPlanCard(plan: AssignedPlanSummary, isCoachView = false) {
         ${plan.day.sessions.map((session) => `
           <section class="mobile-plan-session">
             <h4>${escapeHtml(session.name)}</h4>
-            ${isUnifiedPlanSession(session)
+            ${isSessionLevelPlanUnit(session)
               ? renderUnifiedSessionPlanTable(session)
               : `
                 <div class="mobile-plan-table">
