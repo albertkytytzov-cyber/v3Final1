@@ -994,13 +994,40 @@ function buildDeviceWorkoutMetrics(workout: DeviceWorkout, language: Language) {
   ];
 }
 
-function limitDeviceWorkoutSamples<T>(samples: T[], maxCount = 180) {
+function limitDeviceWorkoutSamples<T extends { value: number }>(samples: T[], maxCount = 260) {
   if (samples.length <= maxCount) {
     return samples;
   }
 
-  const step = (samples.length - 1) / (maxCount - 1);
-  return Array.from({ length: maxCount }, (_, index) => samples[Math.round(index * step)]);
+  const bucketCount = Math.max(1, Math.floor(maxCount / 2));
+  const selected = new Map<number, T>();
+  selected.set(0, samples[0]);
+  selected.set(samples.length - 1, samples[samples.length - 1]);
+
+  for (let bucketIndex = 0; bucketIndex < bucketCount; bucketIndex += 1) {
+    const start = Math.floor((bucketIndex * samples.length) / bucketCount);
+    const end = Math.min(samples.length, Math.floor(((bucketIndex + 1) * samples.length) / bucketCount));
+    if (start >= end) {
+      continue;
+    }
+
+    let minIndex = start;
+    let maxIndex = start;
+    for (let index = start + 1; index < end; index += 1) {
+      if (samples[index].value < samples[minIndex].value) {
+        minIndex = index;
+      }
+      if (samples[index].value > samples[maxIndex].value) {
+        maxIndex = index;
+      }
+    }
+    selected.set(minIndex, samples[minIndex]);
+    selected.set(maxIndex, samples[maxIndex]);
+  }
+
+  return [...selected.entries()]
+    .sort(([left], [right]) => left - right)
+    .map(([, sample]) => sample);
 }
 
 type DeviceWorkoutGraphKind = "heartRate" | "pace" | "speed" | "spo2";
@@ -1008,7 +1035,7 @@ type DeviceWorkoutGraphKind = "heartRate" | "pace" | "speed" | "spo2";
 interface DeviceWorkoutGraphSeries {
   key: DeviceWorkoutGraphKind;
   label: string;
-  samples: { value: number }[];
+  samples: { sampleTime: string; value: number }[];
   valueLabel: (value: number) => string;
 }
 
@@ -1035,17 +1062,19 @@ function getDeviceWorkoutPaceSeconds(sample: DeviceWorkout["samples"][number]) {
 function buildDeviceWorkoutGraphSeries(workout: DeviceWorkout, language: Language): DeviceWorkoutGraphSeries[] {
   const heartRateSamples = workout.samples
     .filter((sample) => sample.heartRateBpm !== null)
-    .map((sample) => ({ value: sample.heartRateBpm ?? 0 }));
+    .map((sample) => ({ sampleTime: sample.sampleTime, value: sample.heartRateBpm ?? 0 }));
   const paceSamples = workout.samples
-    .map((sample) => getDeviceWorkoutPaceSeconds(sample))
-    .filter((value): value is number => value !== null)
-    .map((value) => ({ value }));
+    .map((sample) => {
+      const value = getDeviceWorkoutPaceSeconds(sample);
+      return value === null ? null : { sampleTime: sample.sampleTime, value };
+    })
+    .filter((sample): sample is { sampleTime: string; value: number } => sample !== null);
   const speedSamples = workout.samples
     .filter((sample) => sample.speedMetersPerSecond !== null)
-    .map((sample) => ({ value: (sample.speedMetersPerSecond ?? 0) * 3.6 }));
+    .map((sample) => ({ sampleTime: sample.sampleTime, value: (sample.speedMetersPerSecond ?? 0) * 3.6 }));
   const spo2Samples = workout.samples
     .filter((sample) => sample.oxygenSaturationPercent !== null)
-    .map((sample) => ({ value: sample.oxygenSaturationPercent ?? 0 }));
+    .map((sample) => ({ sampleTime: sample.sampleTime, value: sample.oxygenSaturationPercent ?? 0 }));
 
   const series: DeviceWorkoutGraphSeries[] = [];
 
@@ -1090,36 +1119,95 @@ function hasDeviceWorkoutGraph(workout: DeviceWorkout) {
   return buildDeviceWorkoutGraphSeries(workout, "ru").length > 0;
 }
 
+function formatDeviceWorkoutGraphTime(value: number, language: Language) {
+  const locale = language === "en" ? "en-US" : language === "bg" ? "bg-BG" : "ru-RU";
+  return new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit" }).format(new Date(value));
+}
+
+function getDeviceWorkoutGraphTime(value: string) {
+  const time = Date.parse(value);
+  return Number.isFinite(time) ? time : null;
+}
+
 function DeviceWorkoutSeriesGraph({
+  language,
   series,
 }: {
+  language: Language;
   series: DeviceWorkoutGraphSeries;
 }) {
   const shownSamples = limitDeviceWorkoutSamples(series.samples);
-  const values = shownSamples.map((sample) => sample.value);
+  const values = series.samples.map((sample) => sample.value);
   const min = Math.min(...values);
   const max = Math.max(...values);
-  const range = Math.max(1, max - min);
+  const average = values.reduce((total, value) => total + value, 0) / values.length;
+  const rawRange = Math.max(1, max - min);
+  const lower = min - rawRange * 0.08;
+  const upper = max + rawRange * 0.08;
+  const range = Math.max(1, upper - lower);
+  const firstTime = getDeviceWorkoutGraphTime(series.samples[0]?.sampleTime ?? "");
+  const lastTime = getDeviceWorkoutGraphTime(series.samples[series.samples.length - 1]?.sampleTime ?? "");
+  const hasTimeAxis = firstTime !== null && lastTime !== null && lastTime > firstTime;
+  const middleTime = hasTimeAxis ? firstTime + (lastTime - firstTime) / 2 : null;
+  const valueToY = (value: number) => 92 - ((value - lower) / range) * 84;
+  const averageY = valueToY(average);
   const points = shownSamples
     .map((sample, index) => {
-      const x = shownSamples.length === 1 ? 0 : (index / (shownSamples.length - 1)) * 100;
-      const y = 42 - ((sample.value - min) / range) * 34;
+      const sampleTime = getDeviceWorkoutGraphTime(sample.sampleTime);
+      const x =
+        hasTimeAxis && sampleTime !== null
+          ? ((sampleTime - firstTime) / (lastTime - firstTime)) * 100
+          : shownSamples.length === 1
+            ? 0
+            : (index / (shownSamples.length - 1)) * 100;
+      const y = valueToY(sample.value);
       return `${x.toFixed(2)},${y.toFixed(2)}`;
     })
     .join(" ");
+  const axisLabels = [max, average, min].map((value) => series.valueLabel(value));
+  const timeLabels =
+    hasTimeAxis && middleTime !== null
+      ? [
+          formatDeviceWorkoutGraphTime(firstTime, language),
+          formatDeviceWorkoutGraphTime(middleTime, language),
+          formatDeviceWorkoutGraphTime(lastTime, language),
+        ]
+      : [];
 
   return (
     <div className={`device-workout-series ${series.key}`}>
       <div className="device-workout-series-caption">
         <strong>{series.label}</strong>
         <span>
-          {series.valueLabel(min)}-{series.valueLabel(max)}
-          {series.samples.length > shownSamples.length ? " · компактно" : ""}
+          {copyFor(language, { en: "min", ru: "мин", bg: "мин" })} {series.valueLabel(min)} ·{" "}
+          {copyFor(language, { en: "avg", ru: "сред", bg: "средно" })} {series.valueLabel(average)} ·{" "}
+          {copyFor(language, { en: "max", ru: "макс", bg: "макс" })} {series.valueLabel(max)} ·{" "}
+          {series.samples.length} {copyFor(language, { en: "points", ru: "точек", bg: "точки" })}
         </span>
       </div>
-      <svg aria-hidden="true" viewBox="0 0 100 48" preserveAspectRatio="none">
-        <polyline fill="none" points={points} />
-      </svg>
+      <div className="device-workout-chart">
+        <div className="device-workout-axis-y" aria-hidden="true">
+          {axisLabels.map((label) => (
+            <span key={label}>{label}</span>
+          ))}
+        </div>
+        <div className="device-workout-chart-plot">
+          <svg aria-label={series.label} role="img" viewBox="0 0 100 100" preserveAspectRatio="none">
+            <line className="grid" x1="0" x2="100" y1="8" y2="8" />
+            <line className="grid" x1="0" x2="100" y1="50" y2="50" />
+            <line className="grid" x1="0" x2="100" y1="92" y2="92" />
+            <line className="average" x1="0" x2="100" y1={averageY.toFixed(2)} y2={averageY.toFixed(2)} />
+            <polyline fill="none" points={points} />
+          </svg>
+        </div>
+        {timeLabels.length > 0 ? (
+          <div className="device-workout-axis-x" aria-hidden="true">
+            {timeLabels.map((label) => (
+              <span key={label}>{label}</span>
+            ))}
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -1148,7 +1236,7 @@ function DeviceWorkoutMiniGraph({
   return (
     <div className="device-workout-graph">
       {series.map((item) => (
-        <DeviceWorkoutSeriesGraph key={item.key} series={item} />
+        <DeviceWorkoutSeriesGraph key={item.key} language={language} series={item} />
       ))}
     </div>
   );
