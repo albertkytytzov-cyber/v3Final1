@@ -1589,11 +1589,109 @@ function renderDeviceHealthCard(state: MobileAppState, athleteId: string, date: 
           <p>${escapeHtml(status.missing.length ? status.missing.join(", ") : "достаточно для разбора дня")}</p>
         </article>
       </div>
+      ${renderHealthConnectDiagnostics(summary)}
       <p class="device-health-guidance">
         Данные устройства не заменяют отметки выполнения. Они помогают тренеру сопоставить план, факт, сон, пульс и внешнюю активность за выбранный день.
       </p>
     </section>
   `;
+}
+
+function renderHealthConnectDiagnostics(summary: DeviceHealthDailySummary | null) {
+  if (!summary || summary.provider !== "health-connect") {
+    return "";
+  }
+
+  const rawPayload = summary.rawPayload ?? {};
+  const items = [
+    {
+      label: "Источник",
+      value: readDeviceHealthRawText(rawPayload, "dataOrigin") || "Health Connect",
+    },
+    {
+      label: "Mi Fitness",
+      value: readDeviceHealthRawBoolean(rawPayload, "hasMiFitness") === false ? "не найден" : "найден",
+    },
+    {
+      label: "Сон",
+      value: `${readDeviceHealthRawCount(rawPayload, "sleepRecordCount")} записей`,
+    },
+    {
+      label: "Пульс покоя",
+      value: `${readDeviceHealthRawCount(rawPayload, "restingHeartRateRecordCount")} записей`,
+    },
+    {
+      label: "Пульс",
+      value: `${readDeviceHealthRawCount(rawPayload, "heartRateRecordCount")} записей`,
+    },
+    {
+      label: "Тренировки",
+      value: `${readDeviceHealthRawCount(rawPayload, "exerciseRecordCount")} записей`,
+    },
+    {
+      label: "Дистанция",
+      value: `${readDeviceHealthRawCount(rawPayload, "distanceRecordCount")} записей`,
+    },
+    {
+      label: "Калории",
+      value: `${readDeviceHealthRawCount(rawPayload, "activeCaloriesRecordCount")} активных / ${readDeviceHealthRawCount(rawPayload, "totalCaloriesRecordCount")} всего`,
+    },
+  ];
+  const sleepCount = readDeviceHealthRawCount(rawPayload, "sleepRecordCount");
+  const restingHrCount = readDeviceHealthRawCount(rawPayload, "restingHeartRateRecordCount");
+  const guidance = sleepCount === 0 || restingHrCount === 0
+    ? "Если разрешения включены, но счётчик 0, значит Mi Fitness не передал этот тип данных в Health Connect за выбранный день."
+    : "Health Connect отдал ключевые записи для разбора дня.";
+
+  return `
+    <div class="device-health-diagnostics">
+      <div class="summary-inline-head">
+        <div>
+          <span>Диагностика Health Connect</span>
+          <h3>Что реально отдал Mi Fitness</h3>
+        </div>
+      </div>
+      <div class="device-health-diagnostics-grid">
+        ${items.map((item) => `
+          <article>
+            <span>${escapeHtml(item.label)}</span>
+            <strong>${escapeHtml(item.value)}</strong>
+          </article>
+        `).join("")}
+      </div>
+      <p>${escapeHtml(guidance)}</p>
+    </div>
+  `;
+}
+
+function readDeviceHealthRawText(rawPayload: Record<string, unknown>, key: string) {
+  const value = rawPayload[key];
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function readDeviceHealthRawBoolean(rawPayload: Record<string, unknown>, key: string) {
+  const value = rawPayload[key];
+
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    if (value.toLowerCase() === "true") {
+      return true;
+    }
+    if (value.toLowerCase() === "false") {
+      return false;
+    }
+  }
+
+  return null;
+}
+
+function readDeviceHealthRawCount(rawPayload: Record<string, unknown>, key: string) {
+  const value = rawPayload[key];
+  const numericValue = Number(value ?? 0);
+  return Number.isFinite(numericValue) ? Math.max(0, Math.trunc(numericValue)) : 0;
 }
 
 function getDeviceHealthStatus(summary: DeviceHealthDailySummary | null) {
