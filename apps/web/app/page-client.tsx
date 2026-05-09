@@ -783,7 +783,7 @@ function readDeviceRawText(rawPayload: Record<string, unknown> | null | undefine
 }
 
 function isEstimatedDeviceRestingHrSource(source: string | null) {
-  return source === "estimated-from-sleep-heart-rate" || source === "estimated-from-non-exercise-heart-rate";
+  return source === "calculated-from-sleep-heart-rate" || source === "estimated-from-sleep-heart-rate";
 }
 
 function formatDeviceWorkoutValue(summary: DeviceHealthDailySummary | null) {

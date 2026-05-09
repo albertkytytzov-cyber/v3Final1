@@ -1659,7 +1659,7 @@ function renderHealthConnectDiagnostics(summary: DeviceHealthDailySummary | null
     : restingHrCount === 0 && (allRestingHrCount ?? 0) > 0
       ? "Пульс покоя есть в Health Connect, но источник не Xiaomi/Zepp. Проверьте источник записи пульса покоя."
       : restingHrCount === 0 && isEstimatedRestingHrSource(restingHrSource)
-        ? "Отдельного пульса покоя нет, поэтому PERFORM рассчитал ориентир по спокойным замерам пульса. Для аналитики это помечено как оценка."
+        ? "Отдельного пульса покоя нет, поэтому PERFORM рассчитал средний пульс только по замерам внутри интервала сна. Для аналитики это помечено как оценка."
       : sleepCount === 0 || restingHrCount === 0
         ? "Если разрешения включены, но счётчик Xiaomi/Zepp 0, значит приложение-источник не передало этот тип данных в Health Connect за выбранный день."
     : "Health Connect отдал ключевые записи для разбора дня.";
@@ -1750,25 +1750,24 @@ function formatHealthConnectRestingHrEstimate(rawPayload: Record<string, unknown
   const source = readDeviceHealthRawText(rawPayload, "restingHeartRateSource");
   const estimatedBpm = readDeviceHealthRawNumber(rawPayload, "estimatedRestingHeartRate");
   const sleepSamples = readDeviceHealthRawCount(rawPayload, "sleepHeartRateSampleCount");
-  const nonExerciseSamples = readDeviceHealthRawCount(rawPayload, "nonExerciseHeartRateSampleCount");
 
   if (source === "health-connect-resting-record") {
     return "получен напрямую";
+  }
+
+  if (source === "calculated-from-sleep-heart-rate" && estimatedBpm !== null) {
+    return `≈${formatLoadValue(estimatedBpm)} средний за сон (${sleepSamples} зам.)`;
   }
 
   if (source === "estimated-from-sleep-heart-rate" && estimatedBpm !== null) {
     return `≈${formatLoadValue(estimatedBpm)} по сну (${sleepSamples} зам.)`;
   }
 
-  if (source === "estimated-from-non-exercise-heart-rate" && estimatedBpm !== null) {
-    return `≈${formatLoadValue(estimatedBpm)} вне тренировки (${nonExerciseSamples} зам.)`;
-  }
-
   return "нет данных";
 }
 
 function isEstimatedRestingHrSource(source: string | null) {
-  return source === "estimated-from-sleep-heart-rate" || source === "estimated-from-non-exercise-heart-rate";
+  return source === "calculated-from-sleep-heart-rate" || source === "estimated-from-sleep-heart-rate";
 }
 
 function getDeviceHealthStatus(summary: DeviceHealthDailySummary | null) {
