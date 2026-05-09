@@ -987,10 +987,6 @@ function buildDeviceWorkoutMetrics(workout: DeviceWorkout, language: Language) {
       label: copyFor(language, { en: "Calories", ru: "Калории", bg: "Калории" }),
       value: workout.activeCalories !== null ? Math.round(workout.activeCalories).toString() : "-",
     },
-    {
-      label: copyFor(language, { en: "Graph points", ru: "Точки графика", bg: "Точки на графиката" }),
-      value: workout.sampleCount.toString(),
-    },
   ];
 }
 
@@ -1318,102 +1314,121 @@ function DeviceWorkoutSeriesGraph({
         ]
       : [];
   const coverageNote =
-    axis !== null &&
-    sampleStartTime !== null &&
-    sampleEndTime !== null
-      ? `${copyFor(language, { en: "Full workout", ru: "Вся тренировка", bg: "Цялата тренировка" })}: ${formatDeviceWorkoutGraphTime(axis.start, language)}-${formatDeviceWorkoutGraphTime(axis.end, language)} · ${copyFor(language, { en: "graph points", ru: "точки графика", bg: "точки на графиката" })}: ${formatDeviceWorkoutGraphTime(sampleStartTime, language)}-${formatDeviceWorkoutGraphTime(sampleEndTime, language)}${dataCoveragePercent !== null ? ` · ${Math.round(dataCoveragePercent)}%` : ""}`
+    isHeartRate && dataCoveragePercent !== null
+      ? `${copyFor(language, { en: "Data coverage", ru: "Покрытие данных", bg: "Покритие на данните" })}: ${Math.round(dataCoveragePercent)}%`
       : null;
+  const captionDetail = isHeartRate
+    ? copyFor(language, { en: "HR, bpm", ru: "ЧСС, уд/мин", bg: "Пулс, уд/мин" })
+    : [
+        `${copyFor(language, { en: "min", ru: "мин", bg: "мин" })} ${series.valueLabel(min)}`,
+        `${copyFor(language, { en: "avg", ru: "сред", bg: "средно" })} ${series.valueLabel(average)}`,
+        `${copyFor(language, { en: "max", ru: "макс", bg: "макс" })} ${series.valueLabel(max)}`,
+      ].join(" · ");
 
-  const graph = (
-    <div className={`device-workout-series ${series.key}`}>
-      <div className="device-workout-series-caption">
-        <strong>{series.label}</strong>
-        <span>
-          {copyFor(language, { en: "min", ru: "мин", bg: "мин" })} {series.valueLabel(min)} ·{" "}
-          {copyFor(language, { en: "avg", ru: "сред", bg: "средно" })} {series.valueLabel(average)} ·{" "}
-          {copyFor(language, { en: "max", ru: "макс", bg: "макс" })} {series.valueLabel(max)} ·{" "}
-          {series.samples.length} {copyFor(language, { en: "points", ru: "точек", bg: "точки" })}
-        </span>
+  const caption = (
+    <div className="device-workout-series-caption">
+      <strong>{series.label}</strong>
+      <span>{captionDetail}</span>
+    </div>
+  );
+
+  const chart = (
+    <div className="device-workout-chart">
+      <div className="device-workout-axis-y" aria-hidden="true">
+        {axisLabels.map((label, index) => (
+          <span key={`${label}-${index}`}>{label}</span>
+        ))}
       </div>
-      <div className="device-workout-chart">
-        <div className="device-workout-axis-y" aria-hidden="true">
-          {axisLabels.map((label, index) => (
-            <span key={`${label}-${index}`}>{label}</span>
+      <div className="device-workout-chart-plot">
+        <svg aria-label={series.label} role="img" viewBox="0 0 100 100" preserveAspectRatio="none">
+          {isHeartRate
+            ? heartRateZones.map((zone) => {
+                const zoneTop = valueToY(zone.upper);
+                const zoneBottom = valueToY(zone.zone === 1 ? lower : zone.lower);
+                return (
+                  <rect
+                    className={`hr-zone-strip z${zone.zone}`}
+                    height={Math.max(0, zoneBottom - zoneTop).toFixed(2)}
+                    key={zone.zone}
+                    width="1.6"
+                    x="0"
+                    y={zoneTop.toFixed(2)}
+                  />
+                );
+              })
+            : null}
+          {gridValues.map((value, index) => (
+            <line className="grid" key={`${value}-${index}`} x1="0" x2="100" y1={valueToY(value).toFixed(2)} y2={valueToY(value).toFixed(2)} />
+          ))}
+          <line className="average" x1="0" x2="100" y1={averageY.toFixed(2)} y2={averageY.toFixed(2)} />
+          {coverageStartX !== null && coverageEndX !== null ? (
+            <line
+              className="coverage"
+              x1={coverageStartX.toFixed(2)}
+              x2={coverageEndX.toFixed(2)}
+              y1="97"
+              y2="97"
+            />
+          ) : null}
+          <polyline fill="none" points={points} />
+        </svg>
+      </div>
+      {timeLabels.length > 0 ? (
+        <div className="device-workout-axis-x" aria-hidden="true">
+          {timeLabels.map((label) => (
+            <span key={label}>{label}</span>
           ))}
         </div>
-        <div className="device-workout-chart-plot">
-          <svg aria-label={series.label} role="img" viewBox="0 0 100 100" preserveAspectRatio="none">
-            {isHeartRate
-              ? heartRateZones.map((zone) => {
-                  const zoneTop = valueToY(zone.upper);
-                  const zoneBottom = valueToY(zone.zone === 1 ? lower : zone.lower);
-                  return (
-                    <rect
-                      className={`hr-zone-strip z${zone.zone}`}
-                      height={Math.max(0, zoneBottom - zoneTop).toFixed(2)}
-                      key={zone.zone}
-                      width="1.6"
-                      x="0"
-                      y={zoneTop.toFixed(2)}
-                    />
-                  );
-                })
-              : null}
-            {gridValues.map((value, index) => (
-              <line className="grid" key={`${value}-${index}`} x1="0" x2="100" y1={valueToY(value).toFixed(2)} y2={valueToY(value).toFixed(2)} />
-            ))}
-            <line className="average" x1="0" x2="100" y1={averageY.toFixed(2)} y2={averageY.toFixed(2)} />
-            {coverageStartX !== null && coverageEndX !== null ? (
-              <line
-                className="coverage"
-                x1={coverageStartX.toFixed(2)}
-                x2={coverageEndX.toFixed(2)}
-                y1="97"
-                y2="97"
-              />
-            ) : null}
-            <polyline fill="none" points={points} />
-          </svg>
-        </div>
-        {timeLabels.length > 0 ? (
-          <div className="device-workout-axis-x" aria-hidden="true">
-            {timeLabels.map((label) => (
-              <span key={label}>{label}</span>
-            ))}
-          </div>
-        ) : null}
-      </div>
+      ) : null}
+    </div>
+  );
+
+  const chartColumn = (
+    <div className="device-workout-chart-column">
+      {chart}
       {coverageNote ? <small className="device-workout-coverage-note">{coverageNote}</small> : null}
     </div>
   );
 
+  const zonePanel = (
+    <div className="device-workout-zone-panel">
+      <strong>
+        {copyFor(language, {
+          en: "Heart-rate zones",
+          ru: "Зоны ЧСС",
+          bg: "Зони на пулса",
+        })}
+      </strong>
+      <div className="device-workout-zone-list">
+        {heartRateZones.map((zone) => (
+          <div className={`device-workout-zone-row z${zone.zone}`} key={zone.zone}>
+            <span className="zone-number">{zone.zone}</span>
+            <span className="zone-bar">
+              <i style={{ width: zone.percent > 0 ? `${Math.max(2, zone.percent).toFixed(1)}%` : "0%" }} />
+              <b>{Math.round(zone.percent)}%</b>
+            </span>
+            <span className="zone-time">{formatDeviceWorkoutDurationMs(zone.durationMs)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
   if (!isHeartRate) {
-    return graph;
+    return (
+      <div className={`device-workout-series ${series.key}`}>
+        {caption}
+        {chartColumn}
+      </div>
+    );
   }
 
   return (
-    <div className="device-workout-heart-rate-layout">
-      {graph}
-      <div className="device-workout-zone-panel">
-        <strong>
-          {copyFor(language, {
-            en: "Heart-rate zones",
-            ru: "Зоны ЧСС",
-            bg: "Зони на пулса",
-          })}
-        </strong>
-        <div className="device-workout-zone-list">
-          {heartRateZones.map((zone) => (
-            <div className={`device-workout-zone-row z${zone.zone}`} key={zone.zone}>
-              <span className="zone-number">{zone.zone}</span>
-              <span className="zone-bar">
-                <i style={{ width: zone.percent > 0 ? `${Math.max(2, zone.percent).toFixed(1)}%` : "0%" }} />
-                <b>{Math.round(zone.percent)}%</b>
-              </span>
-              <span className="zone-time">{formatDeviceWorkoutDurationMs(zone.durationMs)}</span>
-            </div>
-          ))}
-        </div>
+    <div className={`device-workout-series ${series.key}`}>
+      {caption}
+      <div className="device-workout-heart-rate-layout">
+        {chartColumn}
+        {zonePanel}
       </div>
     </div>
   );

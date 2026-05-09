@@ -3454,11 +3454,17 @@ select {
   text-align: right;
 }
 
+.device-workout-chart-column {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
 .device-workout-heart-rate-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(190px, 260px);
   gap: 18px;
-  align-items: end;
+  align-items: start;
   min-width: 0;
 }
 

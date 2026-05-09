@@ -2229,6 +2229,12 @@ button {
   font-size: 0.78rem;
 }
 
+.device-workout-chart-column {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
 .device-workout-heart-rate-layout {
   display: grid;
   gap: 12px;

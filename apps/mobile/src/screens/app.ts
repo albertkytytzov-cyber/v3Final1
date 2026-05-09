@@ -2162,7 +2162,6 @@ function renderDeviceWorkoutMetrics(workout: DeviceWorkout) {
     { label: "Средний пульс", value: workout.averageHeartRateBpm !== null ? formatLoadValue(workout.averageHeartRateBpm) : "-" },
     { label: "Макс. пульс", value: workout.maxHeartRateBpm !== null ? formatLoadValue(workout.maxHeartRateBpm) : "-" },
     { label: "Калории", value: workout.activeCalories !== null ? String(Math.round(workout.activeCalories)) : "-" },
-    { label: "Точки графика", value: String(workout.sampleCount) },
   ];
 
   return `
@@ -2488,65 +2487,79 @@ function renderDeviceWorkoutSeriesGraph(series: DeviceWorkoutGraphSeries, workou
           formatDeviceWorkoutGraphTime(axis.end),
         ]
       : [];
-  const coverageNote =
-    axis !== null &&
-    sampleStartTime !== null &&
-    sampleEndTime !== null
-      ? `Вся тренировка: ${formatDeviceWorkoutGraphTime(axis.start)}-${formatDeviceWorkoutGraphTime(axis.end)} · точки графика: ${formatDeviceWorkoutGraphTime(sampleStartTime)}-${formatDeviceWorkoutGraphTime(sampleEndTime)}${dataCoveragePercent !== null ? ` · ${Math.round(dataCoveragePercent)}%` : ""}`
-      : "";
+  const coverageNote = isHeartRate && dataCoveragePercent !== null ? `Покрытие данных: ${Math.round(dataCoveragePercent)}%` : "";
+  const captionDetail = isHeartRate
+    ? "ЧСС, уд/мин"
+    : `мин ${series.valueLabel(min)} · сред ${series.valueLabel(average)} · макс ${series.valueLabel(max)}`;
 
-  const graph = `
-    <div class="device-workout-series ${escapeHtml(series.key)}">
-      <div class="device-workout-series-caption">
-        <strong>${escapeHtml(series.label)}</strong>
-        <span>мин ${escapeHtml(series.valueLabel(min))} · сред ${escapeHtml(series.valueLabel(average))} · макс ${escapeHtml(series.valueLabel(max))} · ${series.samples.length} точек</span>
+  const caption = `
+    <div class="device-workout-series-caption">
+      <strong>${escapeHtml(series.label)}</strong>
+      <span>${escapeHtml(captionDetail)}</span>
+    </div>
+  `;
+  const chart = `
+    <div class="device-workout-chart">
+      <div class="device-workout-axis-y" aria-hidden="true">
+        ${axisLabels.map((label) => `<span>${escapeHtml(label)}</span>`).join("")}
       </div>
-      <div class="device-workout-chart">
-        <div class="device-workout-axis-y" aria-hidden="true">
-          ${axisLabels.map((label) => `<span>${escapeHtml(label)}</span>`).join("")}
-        </div>
-        <div class="device-workout-chart-plot">
-          <svg aria-label="${escapeHtml(series.label)}" role="img" viewBox="0 0 100 100" preserveAspectRatio="none">
-            ${isHeartRate ? heartRateZones.map((zone) => {
-              const zoneTop = valueToY(zone.upper);
-              const zoneBottom = valueToY(zone.zone === 1 ? lower : zone.lower);
-              return `<rect class="hr-zone-strip z${zone.zone}" height="${Math.max(0, zoneBottom - zoneTop).toFixed(2)}" width="1.6" x="0" y="${zoneTop.toFixed(2)}"></rect>`;
-            }).join("") : ""}
-            ${gridValues.map((value) => `<line class="grid" x1="0" x2="100" y1="${valueToY(value).toFixed(2)}" y2="${valueToY(value).toFixed(2)}"></line>`).join("")}
-            <line class="average" x1="0" x2="100" y1="${averageY.toFixed(2)}" y2="${averageY.toFixed(2)}"></line>
-            ${coverageStartX !== null && coverageEndX !== null ? `<line class="coverage" x1="${coverageStartX.toFixed(2)}" x2="${coverageEndX.toFixed(2)}" y1="97" y2="97"></line>` : ""}
-            <polyline fill="none" points="${escapeHtml(points)}"></polyline>
-          </svg>
-        </div>
-        ${timeLabels.length > 0
-          ? `<div class="device-workout-axis-x" aria-hidden="true">${timeLabels.map((label) => `<span>${escapeHtml(label)}</span>`).join("")}</div>`
-          : ""}
+      <div class="device-workout-chart-plot">
+        <svg aria-label="${escapeHtml(series.label)}" role="img" viewBox="0 0 100 100" preserveAspectRatio="none">
+          ${isHeartRate ? heartRateZones.map((zone) => {
+            const zoneTop = valueToY(zone.upper);
+            const zoneBottom = valueToY(zone.zone === 1 ? lower : zone.lower);
+            return `<rect class="hr-zone-strip z${zone.zone}" height="${Math.max(0, zoneBottom - zoneTop).toFixed(2)}" width="1.6" x="0" y="${zoneTop.toFixed(2)}"></rect>`;
+          }).join("") : ""}
+          ${gridValues.map((value) => `<line class="grid" x1="0" x2="100" y1="${valueToY(value).toFixed(2)}" y2="${valueToY(value).toFixed(2)}"></line>`).join("")}
+          <line class="average" x1="0" x2="100" y1="${averageY.toFixed(2)}" y2="${averageY.toFixed(2)}"></line>
+          ${coverageStartX !== null && coverageEndX !== null ? `<line class="coverage" x1="${coverageStartX.toFixed(2)}" x2="${coverageEndX.toFixed(2)}" y1="97" y2="97"></line>` : ""}
+          <polyline fill="none" points="${escapeHtml(points)}"></polyline>
+        </svg>
       </div>
+      ${timeLabels.length > 0
+        ? `<div class="device-workout-axis-x" aria-hidden="true">${timeLabels.map((label) => `<span>${escapeHtml(label)}</span>`).join("")}</div>`
+        : ""}
+    </div>
+  `;
+  const chartColumn = `
+    <div class="device-workout-chart-column">
+      ${chart}
       ${coverageNote ? `<small class="device-workout-coverage-note">${escapeHtml(coverageNote)}</small>` : ""}
+    </div>
+  `;
+  const zonePanel = `
+    <div class="device-workout-zone-panel">
+      <strong>Зоны ЧСС</strong>
+      <div class="device-workout-zone-list">
+        ${heartRateZones.map((zone) => `
+          <div class="device-workout-zone-row z${zone.zone}">
+            <span class="zone-number">${zone.zone}</span>
+            <span class="zone-bar">
+              <i style="width: ${zone.percent > 0 ? `${Math.max(2, zone.percent).toFixed(1)}%` : "0%"}"></i>
+              <b>${Math.round(zone.percent)}%</b>
+            </span>
+            <span class="zone-time">${escapeHtml(formatDeviceWorkoutDurationMs(zone.durationMs))}</span>
+          </div>
+        `).join("")}
+      </div>
     </div>
   `;
 
   if (!isHeartRate) {
-    return graph;
+    return `
+      <div class="device-workout-series ${escapeHtml(series.key)}">
+        ${caption}
+        ${chartColumn}
+      </div>
+    `;
   }
 
   return `
-    <div class="device-workout-heart-rate-layout">
-      ${graph}
-      <div class="device-workout-zone-panel">
-        <strong>Зоны ЧСС</strong>
-        <div class="device-workout-zone-list">
-          ${heartRateZones.map((zone) => `
-            <div class="device-workout-zone-row z${zone.zone}">
-              <span class="zone-number">${zone.zone}</span>
-              <span class="zone-bar">
-                <i style="width: ${zone.percent > 0 ? `${Math.max(2, zone.percent).toFixed(1)}%` : "0%"}"></i>
-                <b>${Math.round(zone.percent)}%</b>
-              </span>
-              <span class="zone-time">${escapeHtml(formatDeviceWorkoutDurationMs(zone.durationMs))}</span>
-            </div>
-          `).join("")}
-        </div>
+    <div class="device-workout-series ${escapeHtml(series.key)}">
+      ${caption}
+      <div class="device-workout-heart-rate-layout">
+        ${chartColumn}
+        ${zonePanel}
       </div>
     </div>
   `;
