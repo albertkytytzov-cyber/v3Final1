@@ -5,6 +5,7 @@ import {
   translateApiErrorMessage,
 } from "../permissions.js";
 import { readRuntimeConfig } from "../config.js";
+import { readMiFitnessHealthConnectDailySummary } from "../integrations/health-connect.js";
 import { readHuaweiHealthDailySummary } from "../integrations/huawei-health.js";
 import {
   clearSession,
@@ -393,6 +394,37 @@ export function bootstrapMobileApp(root: HTMLElement) {
       return;
     }
 
+    await submitDeviceHealthPayload(payload);
+  };
+
+  const syncMiFitnessHealthConnect = async (entryDate: string) => {
+    if (state.session.user?.role !== "athlete") {
+      update({
+        error: "Подключение Mi Fitness выполняет спортсмен в своём Android-приложении.",
+        isBusy: false,
+        message: null,
+      });
+      return;
+    }
+
+    update({ error: null, isBusy: true, message: "Читаю данные Mi Fitness через Health Connect..." });
+
+    let payload: DeviceHealthDailySummaryPayload;
+    try {
+      payload = await readMiFitnessHealthConnectDailySummary(entryDate);
+    } catch (error) {
+      update({
+        error: error instanceof Error ? error.message : "Mi Fitness через Health Connect недоступен.",
+        isBusy: false,
+        message: null,
+      });
+      return;
+    }
+
+    await submitDeviceHealthPayload(payload);
+  };
+
+  const submitDeviceHealthPayload = async (payload: DeviceHealthDailySummaryPayload) => {
     await submitOrQueue("device-health", payload, async (idempotencyKey) => {
       const result = await client().submitDeviceHealthSummary(payload, idempotencyKey);
       const snapshot = {
@@ -842,6 +874,12 @@ export function bootstrapMobileApp(root: HTMLElement) {
     root.querySelectorAll<HTMLButtonElement>("[data-huawei-health-sync]").forEach((button) => {
       button.addEventListener("click", () => {
         void syncHuaweiHealth(button.dataset.huaweiHealthDate ?? todayValue());
+      });
+    });
+
+    root.querySelectorAll<HTMLButtonElement>("[data-health-connect-sync]").forEach((button) => {
+      button.addEventListener("click", () => {
+        void syncMiFitnessHealthConnect(button.dataset.healthConnectDate ?? todayValue());
       });
     });
 
@@ -1500,14 +1538,19 @@ function renderDeviceHealthCard(state: MobileAppState, athleteId: string, date: 
     <section class="device-health-card">
       <div class="device-health-head">
         <div>
-          <span>Huawei Health</span>
+          <span>Huawei Health / Mi Fitness</span>
           <h3>Данные устройства</h3>
           <p>${escapeHtml(formatDate(date))} · ${escapeHtml(syncLabel)}</p>
         </div>
         ${canSync ? `
-          <button class="secondary-action" data-huawei-health-sync data-huawei-health-date="${escapeHtml(date)}" type="button" ${state.isBusy ? "disabled" : ""}>
-            Синхронизировать
-          </button>
+          <div class="device-health-actions">
+            <button class="secondary-action" data-huawei-health-sync data-huawei-health-date="${escapeHtml(date)}" type="button" ${state.isBusy ? "disabled" : ""}>
+              Huawei
+            </button>
+            <button class="secondary-action" data-health-connect-sync data-health-connect-date="${escapeHtml(date)}" type="button" ${state.isBusy ? "disabled" : ""}>
+              Mi Fitness
+            </button>
+          </div>
         ` : ""}
       </div>
       <div class="device-health-status ${summary ? "is-connected" : "is-missing"}">
@@ -1619,7 +1662,7 @@ function formatDeviceHealthActionText(summary: DeviceHealthDailySummary | null, 
   if (!summary) {
     return canSync
       ? "Нажмите синхронизацию после сна или тренировки."
-      : "Попросите спортсмена синхронизировать Huawei Health за этот день.";
+      : "Попросите спортсмена синхронизировать Huawei Health или Mi Fitness за этот день.";
   }
 
   if (status.missing.length > 0) {
@@ -3545,19 +3588,19 @@ function buildCoachDayDataQuality(dayData: CoachDayCleanSummary): NonNullable<Co
       present: Boolean(dayData.latestDiaryEntry),
     },
     {
-      action: "Попросите спортсмена синхронизировать Huawei Health.",
+      action: "Попросите спортсмена синхронизировать Huawei Health или Mi Fitness.",
       key: "deviceSync",
       label: "синхронизация устройства",
       present: hasDeviceSync,
     },
     {
-      action: "Проверьте доступ Huawei Health ко сну и повторите синхронизацию.",
+      action: "Проверьте доступ приложения здоровья ко сну и повторите синхронизацию.",
       key: "sleep",
       label: "сон",
       present: hasSleep,
     },
     {
-      action: "Проверьте доступ Huawei Health к пульсу и повторите синхронизацию.",
+      action: "Проверьте доступ приложения здоровья к пульсу и повторите синхронизацию.",
       key: "restingHr",
       label: "пульс покоя",
       present: hasRestingHr,
@@ -3771,7 +3814,7 @@ function addOfflineCoachAiDeviceRisks(risks: string[], dayData: CoachDayCleanSum
 
 function addOfflineCoachAiDeviceActions(actions: string[], summary: DeviceHealthDailySummary | null) {
   if (!summary) {
-    actions.push("Попросите спортсмена синхронизировать Huawei Health перед повторным разбором дня.");
+    actions.push("Попросите спортсмена синхронизировать Huawei Health или Mi Fitness перед повторным разбором дня.");
     return;
   }
 
@@ -3820,10 +3863,32 @@ function getDeviceHealthSummaryForDate(
   athleteId: string | null,
   date: string,
 ) {
-  return state.data.deviceHealthSummaries.find((summary) =>
-    summary.entryDate === date &&
-    (!athleteId || summary.athleteId === athleteId)
-  ) ?? null;
+  return state.data.deviceHealthSummaries
+    .filter((summary) =>
+      summary.entryDate === date &&
+      (!athleteId || summary.athleteId === athleteId)
+    )
+    .sort(compareDeviceHealthSummaries)[0] ?? null;
+}
+
+function compareDeviceHealthSummaries(
+  left: DeviceHealthDailySummary,
+  right: DeviceHealthDailySummary,
+) {
+  const scoreDelta = getDeviceHealthSummaryScore(right) - getDeviceHealthSummaryScore(left);
+  if (scoreDelta !== 0) {
+    return scoreDelta;
+  }
+
+  return right.syncedAt.localeCompare(left.syncedAt);
+}
+
+function getDeviceHealthSummaryScore(summary: DeviceHealthDailySummary) {
+  return [
+    hasDeviceSleepData(summary),
+    summary.heartRate?.restingBpm !== null && summary.heartRate?.restingBpm !== undefined,
+    Boolean(summary.workout),
+  ].filter(Boolean).length;
 }
 
 function estimateAssignedBlockLoad(block: AssignedPlanBlock) {

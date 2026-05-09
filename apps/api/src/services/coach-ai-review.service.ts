@@ -487,7 +487,7 @@ function addDeviceHealthTomorrowActions(actions: string[], payload: CoachDayAiPa
   const device = payload.deviceHealth;
 
   if (!device) {
-    actions.push("Попросите спортсмена синхронизировать Huawei Health перед следующим разбором.");
+    actions.push("Попросите спортсмена синхронизировать Huawei Health или Mi Fitness перед следующим разбором.");
     return;
   }
 

@@ -183,7 +183,7 @@ function getActionLabel(kind: SyncActionKind) {
   }
 
   if (kind === "device-health") {
-    return "Huawei Health";
+    return "Данные устройства";
   }
 
   if (kind === "coach-diary") {

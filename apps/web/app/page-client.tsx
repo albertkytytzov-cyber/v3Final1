@@ -685,10 +685,32 @@ function getDeviceHealthSummaryForDay(
   athleteId: string,
   entryDate: string,
 ) {
-  return summaries.find((summary) =>
-    summary.athleteId === athleteId &&
-    summary.entryDate === entryDate
-  ) ?? null;
+  return summaries
+    .filter((summary) =>
+      summary.athleteId === athleteId &&
+      summary.entryDate === entryDate
+    )
+    .sort(compareDeviceHealthSummaries)[0] ?? null;
+}
+
+function compareDeviceHealthSummaries(
+  left: DeviceHealthDailySummary,
+  right: DeviceHealthDailySummary,
+) {
+  const scoreDelta = getDeviceHealthSummaryScore(right) - getDeviceHealthSummaryScore(left);
+  if (scoreDelta !== 0) {
+    return scoreDelta;
+  }
+
+  return right.syncedAt.localeCompare(left.syncedAt);
+}
+
+function getDeviceHealthSummaryScore(summary: DeviceHealthDailySummary) {
+  return [
+    hasDeviceSleepData(summary),
+    summary.heartRate?.restingBpm !== null && summary.heartRate?.restingBpm !== undefined,
+    Boolean(summary.workout),
+  ].filter(Boolean).length;
 }
 
 function hasDeviceSleepData(summary: DeviceHealthDailySummary | null) {
@@ -815,9 +837,9 @@ function buildCoachDayDataQuality(input: {
     },
     {
       action: copyFor(input.language, {
-        en: "Ask the athlete to sync Huawei Health.",
-        ru: "Попросите спортсмена синхронизировать Huawei Health.",
-        bg: "Помолете спортиста да синхронизира Huawei Health.",
+        en: "Ask the athlete to sync Huawei Health or Mi Fitness.",
+        ru: "Попросите спортсмена синхронизировать Huawei Health или Mi Fitness.",
+        bg: "Помолете спортиста да синхронизира Huawei Health или Mi Fitness.",
       }),
       key: "deviceSync",
       label: copyFor(input.language, { en: "device sync", ru: "синхронизация устройства", bg: "синхронизация на устройство" }),
@@ -825,9 +847,9 @@ function buildCoachDayDataQuality(input: {
     },
     {
       action: copyFor(input.language, {
-        en: "Check sleep access in Huawei Health and sync again.",
-        ru: "Проверьте доступ Huawei Health ко сну и повторите синхронизацию.",
-        bg: "Проверете достъпа до сън в Huawei Health и синхронизирайте отново.",
+        en: "Check sleep access in the health app and sync again.",
+        ru: "Проверьте доступ приложения здоровья ко сну и повторите синхронизацию.",
+        bg: "Проверете достъпа до сън в здравното приложение и синхронизирайте отново.",
       }),
       key: "sleep",
       label: copyFor(input.language, { en: "sleep", ru: "сон", bg: "сън" }),
@@ -835,9 +857,9 @@ function buildCoachDayDataQuality(input: {
     },
     {
       action: copyFor(input.language, {
-        en: "Check heart-rate access in Huawei Health and sync again.",
-        ru: "Проверьте доступ Huawei Health к пульсу и повторите синхронизацию.",
-        bg: "Проверете достъпа до пулс в Huawei Health и синхронизирайте отново.",
+        en: "Check heart-rate access in the health app and sync again.",
+        ru: "Проверьте доступ приложения здоровья к пульсу и повторите синхронизацию.",
+        bg: "Проверете достъпа до пулс в здравното приложение и синхронизирайте отново.",
       }),
       key: "restingHr",
       label: copyFor(input.language, { en: "resting HR", ru: "пульс покоя", bg: "пулс в покой" }),

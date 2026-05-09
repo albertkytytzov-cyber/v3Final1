@@ -2162,6 +2162,13 @@ button {
   align-items: start;
 }
 
+.device-health-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
 .device-health-head .secondary-action {
   min-width: 0;
   min-height: 42px;

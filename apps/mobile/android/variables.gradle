@@ -1,5 +1,5 @@
 ext {
-    minSdkVersion = 24
+    minSdkVersion = 26
     compileSdkVersion = 36
     targetSdkVersion = 36
     androidxActivityVersion = '1.11.0'
@@ -16,4 +16,7 @@ ext {
     huaweiAgConnectVersion = '1.9.5.302'
     huaweiHealthVersion = '6.16.0.300'
     huaweiHwidVersion = '6.14.0.300'
+    kotlinVersion = '2.2.21'
+    kotlinxCoroutinesAndroidVersion = '1.10.2'
+    healthConnectVersion = '1.1.0'
 }
