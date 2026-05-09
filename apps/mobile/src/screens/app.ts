@@ -2310,7 +2310,11 @@ function getDeviceWorkoutGraphTime(value: string) {
   return Number.isFinite(time) ? time : null;
 }
 
-function renderDeviceWorkoutSeriesGraph(series: DeviceWorkoutGraphSeries) {
+function clampDeviceWorkoutGraphX(value: number) {
+  return Math.max(0, Math.min(100, value));
+}
+
+function renderDeviceWorkoutSeriesGraph(series: DeviceWorkoutGraphSeries, workout: DeviceWorkout) {
   const shownSamples = limitDeviceWorkoutSamples(series.samples);
   const values = series.samples.map((sample) => sample.value);
   const min = Math.min(...values);
@@ -2320,17 +2324,41 @@ function renderDeviceWorkoutSeriesGraph(series: DeviceWorkoutGraphSeries) {
   const lower = min - rawRange * 0.08;
   const upper = max + rawRange * 0.08;
   const range = Math.max(1, upper - lower);
-  const firstTime = getDeviceWorkoutGraphTime(series.samples[0]?.sampleTime ?? "");
-  const lastTime = getDeviceWorkoutGraphTime(series.samples[series.samples.length - 1]?.sampleTime ?? "");
-  const hasTimeAxis = firstTime !== null && lastTime !== null && lastTime > firstTime;
-  const middleTime = hasTimeAxis ? firstTime + (lastTime - firstTime) / 2 : null;
+  const sampleStartTime = getDeviceWorkoutGraphTime(series.samples[0]?.sampleTime ?? "");
+  const sampleEndTime = getDeviceWorkoutGraphTime(series.samples[series.samples.length - 1]?.sampleTime ?? "");
+  const workoutStartTime = getDeviceWorkoutGraphTime(workout.startTime);
+  const workoutEndTime = getDeviceWorkoutGraphTime(workout.endTime);
+  let axisStartTime = workoutStartTime ?? sampleStartTime;
+  let axisEndTime = workoutEndTime ?? sampleEndTime;
+
+  if (
+    axisStartTime === null ||
+    axisEndTime === null ||
+    axisEndTime <= axisStartTime ||
+    (sampleStartTime !== null && sampleStartTime < axisStartTime) ||
+    (sampleEndTime !== null && sampleEndTime > axisEndTime)
+  ) {
+    axisStartTime = sampleStartTime;
+    axisEndTime = sampleEndTime;
+  }
+
+  const axis =
+    axisStartTime !== null && axisEndTime !== null && axisEndTime > axisStartTime
+      ? {
+          duration: axisEndTime - axisStartTime,
+          end: axisEndTime,
+          middle: axisStartTime + (axisEndTime - axisStartTime) / 2,
+          start: axisStartTime,
+        }
+      : null;
+  const axisDuration = axis?.duration ?? 0;
   const valueToY = (value: number) => 92 - ((value - lower) / range) * 84;
   const averageY = valueToY(average);
   const points = shownSamples.map((sample, index) => {
     const sampleTime = getDeviceWorkoutGraphTime(sample.sampleTime);
     const x =
-      hasTimeAxis && sampleTime !== null
-        ? ((sampleTime - firstTime) / (lastTime - firstTime)) * 100
+      axis !== null && sampleTime !== null
+        ? clampDeviceWorkoutGraphX(((sampleTime - axis.start) / axis.duration) * 100)
         : shownSamples.length === 1
           ? 0
           : (index / (shownSamples.length - 1)) * 100;
@@ -2338,14 +2366,32 @@ function renderDeviceWorkoutSeriesGraph(series: DeviceWorkoutGraphSeries) {
     return `${x.toFixed(2)},${y.toFixed(2)}`;
   }).join(" ");
   const axisLabels = [max, average, min].map((value) => series.valueLabel(value));
+  const coverageStartX =
+    axis !== null && sampleStartTime !== null
+      ? clampDeviceWorkoutGraphX(((sampleStartTime - axis.start) / axis.duration) * 100)
+      : null;
+  const coverageEndX =
+    axis !== null && sampleEndTime !== null
+      ? clampDeviceWorkoutGraphX(((sampleEndTime - axis.start) / axis.duration) * 100)
+      : null;
+  const dataCoveragePercent =
+    axisDuration > 0 && sampleStartTime !== null && sampleEndTime !== null
+      ? clampDeviceWorkoutGraphX(((sampleEndTime - sampleStartTime) / axisDuration) * 100)
+      : null;
   const timeLabels =
-    hasTimeAxis && middleTime !== null
+    axis !== null
       ? [
-          formatDeviceWorkoutGraphTime(firstTime),
-          formatDeviceWorkoutGraphTime(middleTime),
-          formatDeviceWorkoutGraphTime(lastTime),
+          formatDeviceWorkoutGraphTime(axis.start),
+          formatDeviceWorkoutGraphTime(axis.middle),
+          formatDeviceWorkoutGraphTime(axis.end),
         ]
       : [];
+  const coverageNote =
+    axis !== null &&
+    sampleStartTime !== null &&
+    sampleEndTime !== null
+      ? `Вся тренировка: ${formatDeviceWorkoutGraphTime(axis.start)}-${formatDeviceWorkoutGraphTime(axis.end)} · точки графика: ${formatDeviceWorkoutGraphTime(sampleStartTime)}-${formatDeviceWorkoutGraphTime(sampleEndTime)}${dataCoveragePercent !== null ? ` · ${Math.round(dataCoveragePercent)}%` : ""}`
+      : "";
 
   return `
     <div class="device-workout-series ${escapeHtml(series.key)}">
@@ -2363,6 +2409,7 @@ function renderDeviceWorkoutSeriesGraph(series: DeviceWorkoutGraphSeries) {
             <line class="grid" x1="0" x2="100" y1="50" y2="50"></line>
             <line class="grid" x1="0" x2="100" y1="92" y2="92"></line>
             <line class="average" x1="0" x2="100" y1="${averageY.toFixed(2)}" y2="${averageY.toFixed(2)}"></line>
+            ${coverageStartX !== null && coverageEndX !== null ? `<line class="coverage" x1="${coverageStartX.toFixed(2)}" x2="${coverageEndX.toFixed(2)}" y1="97" y2="97"></line>` : ""}
             <polyline fill="none" points="${escapeHtml(points)}"></polyline>
           </svg>
         </div>
@@ -2370,6 +2417,7 @@ function renderDeviceWorkoutSeriesGraph(series: DeviceWorkoutGraphSeries) {
           ? `<div class="device-workout-axis-x" aria-hidden="true">${timeLabels.map((label) => `<span>${escapeHtml(label)}</span>`).join("")}</div>`
           : ""}
       </div>
+      ${coverageNote ? `<small class="device-workout-coverage-note">${escapeHtml(coverageNote)}</small>` : ""}
     </div>
   `;
 }
@@ -2383,7 +2431,7 @@ function renderDeviceWorkoutGraph(workout: DeviceWorkout) {
 
   return `
     <div class="device-workout-graph">
-      ${series.map((item) => renderDeviceWorkoutSeriesGraph(item)).join("")}
+      ${series.map((item) => renderDeviceWorkoutSeriesGraph(item, workout)).join("")}
     </div>
   `;
 }

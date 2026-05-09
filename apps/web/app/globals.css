@@ -3498,6 +3498,14 @@ select {
   stroke: rgba(15, 23, 42, 0.38);
   stroke-dasharray: 4 4;
   stroke-width: 0.9;
+  vector-effect: non-scaling-stroke;
+}
+
+.device-workout-chart-plot .coverage {
+  stroke: rgba(15, 118, 110, 0.46);
+  stroke-linecap: round;
+  stroke-width: 4;
+  vector-effect: non-scaling-stroke;
 }
 
 .device-workout-chart-plot polyline {
@@ -3505,7 +3513,12 @@ select {
   stroke: var(--accent);
   stroke-linecap: round;
   stroke-linejoin: round;
-  stroke-width: 1.8;
+  stroke-width: 1.55;
+  vector-effect: non-scaling-stroke;
+}
+
+.device-workout-chart-plot .grid {
+  vector-effect: non-scaling-stroke;
 }
 
 .device-workout-axis-x {
@@ -3524,6 +3537,12 @@ select {
 
 .device-workout-axis-x span:nth-child(3) {
   text-align: right;
+}
+
+.device-workout-coverage-note {
+  color: var(--muted);
+  font-size: 0.76rem;
+  line-height: 1.35;
 }
 
 .device-workout-series.pace .device-workout-chart-plot polyline,
