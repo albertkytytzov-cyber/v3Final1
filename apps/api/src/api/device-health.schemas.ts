@@ -4,6 +4,10 @@ import type {
   DeviceHealthProvider,
   DeviceHealthSleepSummary,
   DeviceHealthWorkoutSummary,
+  DeviceWorkoutLinkPayload,
+  DeviceWorkoutPayload,
+  DeviceWorkoutSamplePayload,
+  DeviceWorkoutsSyncPayload,
 } from "@training-platform/shared";
 
 const datePattern = /^\d{4}-\d{2}-\d{2}$/;
@@ -17,6 +21,24 @@ export function parseDeviceHealthAthleteParams(params: unknown): { athleteId: st
   }
 
   return { athleteId };
+}
+
+export function parseDeviceWorkoutLinkParams(params: unknown): {
+  athleteId: string;
+  linkId: string;
+} {
+  const athleteId = (params as { athleteId?: unknown } | null)?.athleteId;
+  const linkId = (params as { linkId?: unknown } | null)?.linkId;
+
+  if (typeof athleteId !== "string" || !athleteId) {
+    throw new Error("athleteId is required");
+  }
+
+  if (typeof linkId !== "string" || !linkId) {
+    throw new Error("linkId is required");
+  }
+
+  return { athleteId, linkId };
 }
 
 export function parseDeviceHealthSummaryBody(body: unknown): DeviceHealthDailySummaryPayload {
@@ -37,6 +59,42 @@ export function parseDeviceHealthSummaryBody(body: unknown): DeviceHealthDailySu
       : readWorkoutSummary(payload.workout),
     rawPayload: readRawPayload(payload.rawPayload),
     syncedAt: readNullableIsoDateTime(payload.syncedAt, "syncedAt"),
+  };
+}
+
+export function parseDeviceWorkoutsQuery(query: unknown): { entryDate?: string } {
+  const entryDate = (query as { entryDate?: unknown } | null)?.entryDate;
+
+  if (entryDate === undefined || entryDate === null || entryDate === "") {
+    return {};
+  }
+
+  return { entryDate: readEntryDate(entryDate) };
+}
+
+export function parseDeviceWorkoutsSyncBody(body: unknown): DeviceWorkoutsSyncPayload {
+  const payload = readRecord(body, "payload");
+  const entryDate = readEntryDate(payload.entryDate);
+  const provider = readEnum(payload.provider, providers, "provider");
+  const workouts = readArray(payload.workouts, "workouts", MAX_WORKOUTS_PER_DAY).map((value, index) =>
+    readDeviceWorkoutPayload(value, entryDate, provider, index),
+  );
+
+  return {
+    entryDate,
+    provider,
+    workouts,
+  };
+}
+
+export function parseDeviceWorkoutLinkBody(body: unknown): DeviceWorkoutLinkPayload {
+  const payload = readRecord(body, "payload");
+
+  return {
+    assignedPlanId: readRequiredString(payload.assignedPlanId, "assignedPlanId"),
+    assignedBlockId: readRequiredString(payload.assignedBlockId, "assignedBlockId"),
+    assignedExerciseId: readNullableString(payload.assignedExerciseId, "assignedExerciseId"),
+    deviceWorkoutId: readRequiredString(payload.deviceWorkoutId, "deviceWorkoutId"),
   };
 }
 
@@ -89,12 +147,114 @@ function readWorkoutSummary(value: unknown): DeviceHealthWorkoutSummary {
   };
 }
 
+function readDeviceWorkoutPayload(
+  value: unknown,
+  expectedEntryDate: string,
+  expectedProvider: DeviceHealthProvider,
+  index: number,
+): DeviceWorkoutPayload {
+  const workout = readRecord(value, `workouts[${index}]`);
+  const entryDate = readEntryDate(workout.entryDate);
+  const provider = readEnum(workout.provider, providers, `workouts[${index}].provider`);
+
+  if (entryDate !== expectedEntryDate) {
+    throw new Error(`workouts[${index}].entryDate must match entryDate`);
+  }
+
+  if (provider !== expectedProvider) {
+    throw new Error(`workouts[${index}].provider must match provider`);
+  }
+
+  const startTime = readRequiredIsoDateTime(workout.startTime, `workouts[${index}].startTime`);
+  const endTime = readRequiredIsoDateTime(workout.endTime, `workouts[${index}].endTime`);
+
+  if (new Date(endTime).getTime() <= new Date(startTime).getTime()) {
+    throw new Error(`workouts[${index}].endTime must be after startTime`);
+  }
+
+  return {
+    activeCalories: readNullableNumber(workout.activeCalories, `workouts[${index}].activeCalories`),
+    averageHeartRateBpm: readNullableNumber(
+      workout.averageHeartRateBpm,
+      `workouts[${index}].averageHeartRateBpm`,
+    ),
+    distanceMeters: readNullableNumber(workout.distanceMeters, `workouts[${index}].distanceMeters`),
+    durationMinutes: readNullableNumber(workout.durationMinutes, `workouts[${index}].durationMinutes`),
+    endTime,
+    entryDate,
+    maxHeartRateBpm: readNullableNumber(workout.maxHeartRateBpm, `workouts[${index}].maxHeartRateBpm`),
+    minHeartRateBpm: readNullableNumber(workout.minHeartRateBpm, `workouts[${index}].minHeartRateBpm`),
+    provider,
+    rawPayload: readRawPayload(workout.rawPayload),
+    samples: readArray(workout.samples, `workouts[${index}].samples`, MAX_SAMPLES_PER_WORKOUT).map(
+      (sample, sampleIndex) => readDeviceWorkoutSample(sample, index, sampleIndex),
+    ),
+    sourceDevice: readNullableString(workout.sourceDevice, `workouts[${index}].sourceDevice`),
+    sourceWorkoutId: readRequiredString(workout.sourceWorkoutId, `workouts[${index}].sourceWorkoutId`),
+    startTime,
+    syncedAt: readNullableIsoDateTime(workout.syncedAt, `workouts[${index}].syncedAt`),
+    workoutType: readRequiredString(workout.workoutType, `workouts[${index}].workoutType`),
+  };
+}
+
+function readDeviceWorkoutSample(
+  value: unknown,
+  workoutIndex: number,
+  sampleIndex: number,
+): DeviceWorkoutSamplePayload {
+  const sample = readRecord(value, `workouts[${workoutIndex}].samples[${sampleIndex}]`);
+
+  return {
+    distanceMeters: readNullableNumber(
+      sample.distanceMeters,
+      `workouts[${workoutIndex}].samples[${sampleIndex}].distanceMeters`,
+    ),
+    heartRateBpm: readNullableNumber(
+      sample.heartRateBpm,
+      `workouts[${workoutIndex}].samples[${sampleIndex}].heartRateBpm`,
+    ),
+    oxygenSaturationPercent: readNullableNumber(
+      sample.oxygenSaturationPercent,
+      `workouts[${workoutIndex}].samples[${sampleIndex}].oxygenSaturationPercent`,
+    ),
+    paceSecondsPerKm: readNullableNumber(
+      sample.paceSecondsPerKm,
+      `workouts[${workoutIndex}].samples[${sampleIndex}].paceSecondsPerKm`,
+    ),
+    rawPayload: readRawPayload(sample.rawPayload),
+    sampleTime: readRequiredIsoDateTime(
+      sample.sampleTime,
+      `workouts[${workoutIndex}].samples[${sampleIndex}].sampleTime`,
+    ),
+    speedMetersPerSecond: readNullableNumber(
+      sample.speedMetersPerSecond,
+      `workouts[${workoutIndex}].samples[${sampleIndex}].speedMetersPerSecond`,
+    ),
+  };
+}
+
 function readRecord(value: unknown, fieldName: string): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error(`${fieldName} must be an object`);
   }
 
   return value as Record<string, unknown>;
+}
+
+function readArray(value: unknown, fieldName: string, maxLength: number): unknown[] {
+  if (value === null || value === undefined) {
+    return [];
+  }
+
+  if (!Array.isArray(value)) {
+    throw new Error(`${fieldName} must be an array`);
+  }
+
+  if (value.length > maxLength) {
+    throw new Error(`${fieldName} is too large`);
+  }
+
+  return value;
 }
 
 function readEntryDate(value: unknown) {
@@ -108,6 +268,15 @@ function readEntryDate(value: unknown) {
   }
 
   return value;
+}
+
+function readRequiredIsoDateTime(value: unknown, fieldName: string) {
+  const dateTime = readNullableIsoDateTime(value, fieldName);
+  if (!dateTime) {
+    throw new Error(`${fieldName} is required`);
+  }
+
+  return dateTime;
 }
 
 function readNullableIsoDateTime(value: unknown, fieldName: string) {
@@ -125,6 +294,14 @@ function readNullableIsoDateTime(value: unknown, fieldName: string) {
   }
 
   return parsedDate.toISOString();
+}
+
+function readRequiredString(value: unknown, fieldName: string) {
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error(`${fieldName} is required`);
+  }
+
+  return value.trim();
 }
 
 function readNullableString(value: unknown, fieldName: string) {
@@ -182,3 +359,6 @@ function readEnum<T extends string>(value: unknown, allowedValues: T[], fieldNam
 
   return value as T;
 }
+
+const MAX_WORKOUTS_PER_DAY = 20;
+const MAX_SAMPLES_PER_WORKOUT = 2500;

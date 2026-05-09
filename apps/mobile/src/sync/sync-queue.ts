@@ -10,6 +10,7 @@ import type {
   CoachDiaryEntryPayload,
   CompetitionResultPayload,
   DeviceHealthDailySummaryPayload,
+  DeviceWorkoutsSyncPayload,
   ExecutionResultInput,
   PendingSyncAction,
   ReadinessSubmissionPayload,
@@ -23,6 +24,7 @@ export function createPendingAction(
     | ReadinessSubmissionPayload
     | ExecutionResultInput
     | DeviceHealthDailySummaryPayload
+    | DeviceWorkoutsSyncPayload
     | CompetitionResultPayload
     | CoachDiaryEntryPayload,
   ownerUserId: string | null,
@@ -36,9 +38,11 @@ export function createPendingAction(
         ? "/execution"
         : kind === "device-health"
           ? "/device-health/daily-summaries"
-          : kind === "competition-result"
-            ? "/competition-results"
-            : "/coach/diary";
+          : kind === "device-workouts"
+            ? "/device-health/workouts"
+            : kind === "competition-result"
+              ? "/competition-results"
+              : "/coach/diary";
 
   return {
     id,
@@ -184,6 +188,10 @@ function getActionLabel(kind: SyncActionKind) {
 
   if (kind === "device-health") {
     return "Данные устройства";
+  }
+
+  if (kind === "device-workouts") {
+    return "Тренировки устройства";
   }
 
   if (kind === "coach-diary") {

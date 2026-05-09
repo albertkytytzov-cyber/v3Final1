@@ -50,6 +50,11 @@ import {
   type CoachDayAiReviewResponse,
   type DeviceHealthDailySummariesResponse,
   type DeviceHealthDailySummary,
+  type DeviceWorkout,
+  type DeviceWorkoutLink,
+  type DeviceWorkoutLinkPayload,
+  type DeviceWorkoutLinkResponse,
+  type DeviceWorkoutsResponse,
   type PlanTemplateRecommendation,
   type PlannerSuggestion,
   type PlannerWarning,
@@ -536,6 +541,34 @@ function upsertCoachDiaryEntry(entries: CoachDiaryEntry[], entry: CoachDiaryEntr
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
 }
 
+function upsertDeviceWorkout(workouts: DeviceWorkout[], workout: DeviceWorkout) {
+  return [
+    workout,
+    ...workouts.filter((item) =>
+      item.id !== workout.id &&
+      (
+        item.athleteId !== workout.athleteId ||
+        item.provider !== workout.provider ||
+        item.sourceWorkoutId !== workout.sourceWorkoutId
+      )
+    ),
+  ].slice(0, 250);
+}
+
+function upsertDeviceWorkoutLink(links: DeviceWorkoutLink[], link: DeviceWorkoutLink) {
+  return [
+    link,
+    ...links.filter((item) =>
+      item.id !== link.id &&
+      (
+        item.athleteId !== link.athleteId ||
+        item.assignedBlockId !== link.assignedBlockId ||
+        item.deviceWorkoutId !== link.deviceWorkoutId
+      )
+    ),
+  ].slice(0, 250);
+}
+
 function sortCoachAiReviewsNewestFirst(left: CoachDayAiReview, right: CoachDayAiReview) {
   return right.generatedAt.localeCompare(left.generatedAt);
 }
@@ -693,6 +726,39 @@ function getDeviceHealthSummaryForDay(
     .sort(compareDeviceHealthSummaries)[0] ?? null;
 }
 
+function getDeviceWorkoutsForDay(
+  workouts: DeviceWorkout[],
+  athleteId: string,
+  entryDate: string,
+) {
+  return workouts
+    .filter((workout) =>
+      workout.athleteId === athleteId &&
+      workout.entryDate === entryDate
+    )
+    .sort((left, right) => left.startTime.localeCompare(right.startTime));
+}
+
+function getDeviceWorkoutLinksForDay(
+  links: DeviceWorkoutLink[],
+  athleteId: string,
+  entryDate: string,
+) {
+  return links
+    .filter((link) =>
+      link.athleteId === athleteId &&
+      link.workout.entryDate === entryDate
+    )
+    .sort((left, right) => left.workout.startTime.localeCompare(right.workout.startTime));
+}
+
+function getDeviceWorkoutLinkForBlock(
+  links: DeviceWorkoutLink[],
+  assignedBlockId: string,
+) {
+  return links.find((link) => link.assignedBlockId === assignedBlockId) ?? null;
+}
+
 function compareDeviceHealthSummaries(
   left: DeviceHealthDailySummary,
   right: DeviceHealthDailySummary,
@@ -839,6 +905,85 @@ function isEstimatedDeviceRestingHrSource(source: string | null) {
 
 function formatDeviceWorkoutValue(summary: DeviceHealthDailySummary | null) {
   return summary?.workout ? String(summary.workout.count) : "-";
+}
+
+function formatDeviceWorkoutTitle(workout: DeviceWorkout, language: Language) {
+  const time = formatDeviceWorkoutTimeRange(workout, language);
+  return `${workout.workoutType || "workout"}${time ? ` · ${time}` : ""}`;
+}
+
+function formatDeviceWorkoutTimeRange(workout: DeviceWorkout, language: Language) {
+  const locale = language === "en" ? "en-US" : language === "bg" ? "bg-BG" : "ru-RU";
+  const formatter = new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit" });
+  return `${formatter.format(new Date(workout.startTime))}-${formatter.format(new Date(workout.endTime))}`;
+}
+
+function formatDeviceWorkoutSummary(workout: DeviceWorkout, language: Language) {
+  return [
+    workout.durationMinutes !== null ? formatDeviceDuration(workout.durationMinutes, language) : null,
+    workout.distanceMeters !== null ? `${(workout.distanceMeters / 1000).toFixed(2)} km` : null,
+    workout.averageHeartRateBpm !== null ? `HR ${Math.round(workout.averageHeartRateBpm)}` : null,
+    workout.maxHeartRateBpm !== null ? `max ${Math.round(workout.maxHeartRateBpm)}` : null,
+    workout.activeCalories !== null ? `${Math.round(workout.activeCalories)} kcal` : null,
+  ].filter(Boolean).join(" · ");
+}
+
+function hasDeviceWorkoutGraph(workout: DeviceWorkout) {
+  return workout.samples.some((sample) =>
+    sample.heartRateBpm !== null ||
+    sample.speedMetersPerSecond !== null ||
+    sample.oxygenSaturationPercent !== null ||
+    sample.distanceMeters !== null
+  );
+}
+
+function DeviceWorkoutMiniGraph({
+  language,
+  workout,
+}: {
+  language: Language;
+  workout: DeviceWorkout;
+}) {
+  const heartRateSamples = workout.samples.filter((sample) => sample.heartRateBpm !== null);
+
+  if (!hasDeviceWorkoutGraph(workout) || heartRateSamples.length < 2) {
+    return (
+      <p className="device-workout-empty">
+        {copyFor(language, {
+          en: "The device sent only summary data. The graph is not available.",
+          ru: "Устройство передало только итоговые данные, график недоступен.",
+          bg: "Устройството е изпратило само обобщени данни. Графиката не е налична.",
+        })}
+      </p>
+    );
+  }
+
+  const values = heartRateSamples.map((sample) => sample.heartRateBpm ?? 0);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = Math.max(1, max - min);
+  const points = heartRateSamples
+    .map((sample, index) => {
+      const x = heartRateSamples.length === 1 ? 0 : (index / (heartRateSamples.length - 1)) * 100;
+      const y = 42 - (((sample.heartRateBpm ?? min) - min) / range) * 34;
+      return `${x.toFixed(2)},${y.toFixed(2)}`;
+    })
+    .join(" ");
+  const hasSpeed = workout.samples.some((sample) => sample.speedMetersPerSecond !== null);
+  const hasSpo2 = workout.samples.some((sample) => sample.oxygenSaturationPercent !== null);
+
+  return (
+    <div className="device-workout-graph">
+      <svg aria-hidden="true" viewBox="0 0 100 48" preserveAspectRatio="none">
+        <polyline points={points} />
+      </svg>
+      <small>
+        HR {Math.round(min)}-{Math.round(max)}
+        {hasSpeed ? " · pace/speed" : ""}
+        {hasSpo2 ? " · SpO2" : ""}
+      </small>
+    </div>
+  );
 }
 
 function buildCoachDayDataQuality(input: {
@@ -992,6 +1137,7 @@ function getCoachAiBlockActualLoad(block: ReviewBlock, plannedLoad: number) {
 function buildCoachDayAiPayloadFromReview(input: {
   athlete: CoachAthleteSummary | null;
   deviceHealthSummary: DeviceHealthDailySummary | null;
+  deviceWorkoutLinks?: DeviceWorkoutLink[];
   diaryEntry: CoachDiaryEntry | null;
   language: Language;
   readinessEntry: ReadinessEntry | null;
@@ -1025,6 +1171,32 @@ function buildCoachDayAiPayloadFromReview(input: {
   );
   const plannedLoad = roundCoachAiLoad(blocks.reduce((sum, block) => sum + block.plannedLoad, 0));
   const actualLoad = roundCoachAiLoad(blocks.reduce((sum, block) => sum + block.actualLoad, 0));
+  const linkedWorkouts = (input.deviceWorkoutLinks ?? []).map((link) => {
+    const planBlockName =
+      input.review.sessions
+        .flatMap((session) => session.blocks)
+        .find((block) => block.id === link.assignedBlockId)?.name ?? "";
+
+    return {
+      averageHeartRateBpm: link.workout.averageHeartRateBpm,
+      distanceMeters: link.workout.distanceMeters,
+      durationMinutes: link.workout.durationMinutes,
+      endTime: link.workout.endTime,
+      hasDistance: link.workout.distanceMeters !== null ||
+        link.workout.samples.some((sample) => sample.distanceMeters !== null),
+      hasGraph: hasDeviceWorkoutGraph(link.workout),
+      hasHeartRate: link.workout.averageHeartRateBpm !== null ||
+        link.workout.samples.some((sample) => sample.heartRateBpm !== null),
+      hasSpO2: link.workout.samples.some((sample) => sample.oxygenSaturationPercent !== null),
+      maxHeartRateBpm: link.workout.maxHeartRateBpm,
+      planBlockId: link.assignedBlockId,
+      planBlockName,
+      sourceDevice: link.workout.sourceDevice,
+      startTime: link.workout.startTime,
+      workoutId: link.workout.id,
+      workoutType: link.workout.workoutType,
+    };
+  });
   const executionStatus =
     input.review.summary.plannedBlocks === 0
       ? "no-plan"
@@ -1051,15 +1223,15 @@ function buildCoachDayAiPayloadFromReview(input: {
       readinessEntry: input.readinessEntry,
     }),
     date: input.review.dayDate,
-    deviceHealth: input.deviceHealthSummary
+    deviceHealth: input.deviceHealthSummary || linkedWorkouts.length
       ? {
-          heartRate: input.deviceHealthSummary.heartRate
+          heartRate: input.deviceHealthSummary?.heartRate
             ? {
-                averageBpm: input.deviceHealthSummary.heartRate.averageBpm,
-                hrvRmssdMs: input.deviceHealthSummary.heartRate.hrvRmssdMs,
-                maxBpm: input.deviceHealthSummary.heartRate.maxBpm,
-                minBpm: input.deviceHealthSummary.heartRate.minBpm,
-                restingBpm: input.deviceHealthSummary.heartRate.restingBpm,
+                averageBpm: input.deviceHealthSummary?.heartRate?.averageBpm ?? null,
+                hrvRmssdMs: input.deviceHealthSummary?.heartRate?.hrvRmssdMs ?? null,
+                maxBpm: input.deviceHealthSummary?.heartRate?.maxBpm ?? null,
+                minBpm: input.deviceHealthSummary?.heartRate?.minBpm ?? null,
+                restingBpm: input.deviceHealthSummary?.heartRate?.restingBpm ?? null,
               }
             : null,
           missing: buildCoachDayDataQuality({
@@ -1076,29 +1248,30 @@ function buildCoachDayAiPayloadFromReview(input: {
               copyFor(input.language, { en: "device workouts", ru: "тренировки с устройства", bg: "тренировки от устройство" }),
             ].includes(item)
           ),
-          sleep: input.deviceHealthSummary.sleep
+          linkedWorkouts,
+          sleep: input.deviceHealthSummary?.sleep
             ? {
-                awakeMinutes: input.deviceHealthSummary.sleep.awakeMinutes,
-                deepMinutes: input.deviceHealthSummary.sleep.deepMinutes,
-                durationMinutes: input.deviceHealthSummary.sleep.durationMinutes,
-                lightMinutes: input.deviceHealthSummary.sleep.lightMinutes,
-                remMinutes: input.deviceHealthSummary.sleep.remMinutes,
-                score: input.deviceHealthSummary.sleep.score,
+                awakeMinutes: input.deviceHealthSummary?.sleep?.awakeMinutes ?? null,
+                deepMinutes: input.deviceHealthSummary?.sleep?.deepMinutes ?? null,
+                durationMinutes: input.deviceHealthSummary?.sleep?.durationMinutes ?? null,
+                lightMinutes: input.deviceHealthSummary?.sleep?.lightMinutes ?? null,
+                remMinutes: input.deviceHealthSummary?.sleep?.remMinutes ?? null,
+                score: input.deviceHealthSummary?.sleep?.score ?? null,
               }
             : null,
-          sourceDevice: input.deviceHealthSummary.sourceDevice,
+          sourceDevice: input.deviceHealthSummary?.sourceDevice ?? linkedWorkouts[0]?.sourceDevice ?? null,
           statusLabel: input.deviceHealthSummary
             ? copyFor(input.language, { en: "Device data received", ru: "Данные устройства получены", bg: "Данните от устройството са получени" })
-            : "",
-          syncedAt: input.deviceHealthSummary.syncedAt,
-          workout: input.deviceHealthSummary.workout
+            : copyFor(input.language, { en: "Device workout linked", ru: "Тренировка устройства связана", bg: "Тренировка от устройство е свързана" }),
+          syncedAt: input.deviceHealthSummary?.syncedAt ?? null,
+          workout: input.deviceHealthSummary?.workout
             ? {
-                activeCalories: input.deviceHealthSummary.workout.activeCalories,
-                averageHeartRateBpm: input.deviceHealthSummary.workout.averageHeartRateBpm,
-                count: input.deviceHealthSummary.workout.count,
-                maxHeartRateBpm: input.deviceHealthSummary.workout.maxHeartRateBpm,
-                totalDistanceMeters: input.deviceHealthSummary.workout.totalDistanceMeters,
-                totalDurationMinutes: input.deviceHealthSummary.workout.totalDurationMinutes,
+                activeCalories: input.deviceHealthSummary?.workout?.activeCalories ?? null,
+                averageHeartRateBpm: input.deviceHealthSummary?.workout?.averageHeartRateBpm ?? null,
+                count: input.deviceHealthSummary?.workout?.count ?? 0,
+                maxHeartRateBpm: input.deviceHealthSummary?.workout?.maxHeartRateBpm ?? null,
+                totalDistanceMeters: input.deviceHealthSummary?.workout?.totalDistanceMeters ?? null,
+                totalDurationMinutes: input.deviceHealthSummary?.workout?.totalDurationMinutes ?? null,
               }
             : null,
         }
@@ -5220,6 +5393,8 @@ export function PageClient({
   const [coachDeviceHealthSummaries, setCoachDeviceHealthSummaries] = useState<
     DeviceHealthDailySummary[]
   >(previewState?.coachDeviceHealthSummaries ?? []);
+  const [coachDeviceWorkouts, setCoachDeviceWorkouts] = useState<DeviceWorkout[]>([]);
+  const [coachDeviceWorkoutLinks, setCoachDeviceWorkoutLinks] = useState<DeviceWorkoutLink[]>([]);
   const [coachReadinessEntries, setCoachReadinessEntries] = useState<ReadinessEntry[]>(
     previewState?.selectedAthleteEntries ?? [],
   );
@@ -5347,6 +5522,8 @@ export function PageClient({
     setCoachExecutionReview(null);
     setCoachDiaryEntries([]);
     setCoachDeviceHealthSummaries([]);
+    setCoachDeviceWorkoutLinks([]);
+    setCoachDeviceWorkouts([]);
     setCoachReadinessEntries([]);
     setCoachDiaryDraft(emptyCoachDiaryDraft);
     setCoachAiReviews([]);
@@ -6113,11 +6290,18 @@ export function PageClient({
     if (athleteIds.length === 0) {
       setCoachReadinessEntries([]);
       setCoachDeviceHealthSummaries([]);
+      setCoachDeviceWorkoutLinks([]);
+      setCoachDeviceWorkouts([]);
       setExecutionResults([]);
       return;
     }
 
-    const [readinessResponses, deviceResponses, executionResponses] = await Promise.all([
+    const [
+      readinessResponses,
+      deviceResponses,
+      deviceWorkoutResponses,
+      executionResponses,
+    ] = await Promise.all([
       Promise.all(
         athleteIds.map((athleteId) =>
           apiRequest<{ entries: ReadinessEntry[] }>(
@@ -6134,6 +6318,13 @@ export function PageClient({
       ),
       Promise.all(
         athleteIds.map((athleteId) =>
+          apiRequest<DeviceWorkoutsResponse>(
+            `/coach/athletes/${encodeURIComponent(athleteId)}/device-workouts`,
+          ).catch(() => ({ links: [], workouts: [] })),
+        ),
+      ),
+      Promise.all(
+        athleteIds.map((athleteId) =>
           apiRequest<{ results: ExecutionResult[] }>(
             `/coach/athletes/${encodeURIComponent(athleteId)}/execution`,
           ).catch(() => ({ results: [] })),
@@ -6143,6 +6334,8 @@ export function PageClient({
 
     setCoachReadinessEntries(readinessResponses.flatMap((response) => response.entries));
     setCoachDeviceHealthSummaries(deviceResponses.flatMap((response) => response.summaries));
+    setCoachDeviceWorkoutLinks(deviceWorkoutResponses.flatMap((response) => response.links ?? []));
+    setCoachDeviceWorkouts(deviceWorkoutResponses.flatMap((response) => response.workouts));
     setExecutionResults(executionResponses.flatMap((response) => response.results));
   }
 
@@ -6634,6 +6827,66 @@ export function PageClient({
               bg: "Избраният ден не можа да се зареди.",
             }),
       );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleLinkDeviceWorkout(payload: DeviceWorkoutLinkPayload) {
+    if (!selectedAthleteId) {
+      return;
+    }
+
+    setBusy(true);
+    setErrorMessage("");
+
+    try {
+      const response = await apiRequest<DeviceWorkoutLinkResponse>(
+        `/coach/athletes/${encodeURIComponent(selectedAthleteId)}/device-workout-links`,
+        {
+          method: "POST",
+          body: JSON.stringify(payload),
+        },
+      );
+      setCoachDeviceWorkoutLinks((current) => upsertDeviceWorkoutLink(current, response.link));
+      setCoachDeviceWorkouts((current) => upsertDeviceWorkout(current, response.link.workout));
+      setStatusMessage(
+        copyFor(language, {
+          en: "Device workout linked to the plan block.",
+          ru: "Тренировка устройства связана с блоком плана.",
+          bg: "Тренировката от устройство е свързана с блока от плана.",
+        }),
+      );
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleUnlinkDeviceWorkout(linkId: string) {
+    if (!selectedAthleteId) {
+      return;
+    }
+
+    setBusy(true);
+    setErrorMessage("");
+
+    try {
+      await apiRequest<{ ok: boolean }>(
+        `/coach/athletes/${encodeURIComponent(selectedAthleteId)}/device-workout-links/${encodeURIComponent(linkId)}`,
+        { method: "DELETE" },
+      );
+      setCoachDeviceWorkoutLinks((current) => current.filter((link) => link.id !== linkId));
+      setStatusMessage(
+        copyFor(language, {
+          en: "Device workout link removed.",
+          ru: "Связь с тренировкой устройства удалена.",
+          bg: "Връзката с тренировката от устройство е премахната.",
+        }),
+      );
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : String(error));
     } finally {
       setBusy(false);
     }
@@ -9366,6 +9619,11 @@ export function PageClient({
     const dayPayload = buildCoachDayAiPayloadFromReview({
       athlete: selectedCoachAthlete,
       deviceHealthSummary,
+      deviceWorkoutLinks: getDeviceWorkoutLinksForDay(
+        coachDeviceWorkoutLinks,
+        selectedAthleteId,
+        coachExecutionReview.dayDate,
+      ),
       diaryEntry,
       language,
       readinessEntry,
@@ -10255,6 +10513,20 @@ export function PageClient({
         coachExecutionReview.dayDate,
       )
     : null;
+  const selectedCoachDeviceWorkouts = coachExecutionReview
+    ? getDeviceWorkoutsForDay(
+        coachDeviceWorkouts,
+        selectedAthleteId,
+        coachExecutionReview.dayDate,
+      )
+    : [];
+  const selectedCoachDeviceWorkoutLinks = coachExecutionReview
+    ? getDeviceWorkoutLinksForDay(
+        coachDeviceWorkoutLinks,
+        selectedAthleteId,
+        coachExecutionReview.dayDate,
+      )
+    : [];
   const selectedCoachDayDataQuality = coachExecutionReview
     ? buildCoachDayDataQuality({
         coachComment: latestCoachDiaryEntry?.notes.trim() || null,
@@ -13647,6 +13919,121 @@ export function PageClient({
                             </ul>
                           </div>
                         ) : null}
+                        <div className="device-workout-link-panel">
+                          <div className="summary-topline">
+                            <div>
+                              <strong>
+                                {copyFor(language, {
+                                  en: "Device workout data",
+                                  ru: "Данные тренировки с устройства",
+                                  bg: "Данни за тренировка от устройство",
+                                })}
+                              </strong>
+                              <span>
+                                {selectedCoachDeviceWorkouts.length
+                                  ? `${selectedCoachDeviceWorkouts.length} ${copyFor(language, {
+                                      en: "workouts received",
+                                      ru: "тренировок пришло",
+                                      bg: "получени тренировки",
+                                    })}`
+                                  : copyFor(language, {
+                                      en: "No device workouts for this day",
+                                      ru: "За этот день тренировок устройства нет",
+                                      bg: "Няма тренировки от устройство за този ден",
+                                    })}
+                              </span>
+                            </div>
+                          </div>
+                          {selectedCoachDeviceWorkouts.length === 0 ? (
+                            <p className="device-workout-empty">
+                              {copyFor(language, {
+                                en: "Ask the athlete to sync Mi Fitness / Health Connect after the workout.",
+                                ru: "Попросите спортсмена синхронизировать Mi Fitness / Health Connect после тренировки.",
+                                bg: "Помолете спортиста да синхронизира Mi Fitness / Health Connect след тренировка.",
+                              })}
+                            </p>
+                          ) : null}
+                          <div className="device-workout-block-list">
+                            {coachExecutionReview.sessions.flatMap((session) =>
+                              session.blocks.map((block) => {
+                                const link = getDeviceWorkoutLinkForBlock(
+                                  selectedCoachDeviceWorkoutLinks,
+                                  block.id,
+                                );
+                                const linkedWorkout = link?.workout ?? null;
+
+                                return (
+                                  <article className="device-workout-block-card" key={block.id}>
+                                    <div>
+                                      <strong>{block.name}</strong>
+                                      <span>{session.name}</span>
+                                    </div>
+                                    <span className={`status-chip ${linkedWorkout ? "complete" : selectedCoachDeviceWorkouts.length ? "partial" : "pending"}`}>
+                                      {linkedWorkout
+                                        ? copyFor(language, {
+                                            en: "linked to device",
+                                            ru: "связано с устройством",
+                                            bg: "свързано с устройство",
+                                          })
+                                        : selectedCoachDeviceWorkouts.length
+                                          ? copyFor(language, {
+                                              en: "not linked",
+                                              ru: "не связано",
+                                              bg: "не е свързано",
+                                            })
+                                          : copyFor(language, {
+                                              en: "no device data",
+                                              ru: "нет данных устройства",
+                                              bg: "няма данни от устройство",
+                                            })}
+                                    </span>
+                                    <select
+                                      disabled={busy || selectedCoachDeviceWorkouts.length === 0}
+                                      value={linkedWorkout?.id ?? ""}
+                                      onChange={(event) => {
+                                        const deviceWorkoutId = event.currentTarget.value;
+                                        if (!deviceWorkoutId) {
+                                          if (link) {
+                                            void handleUnlinkDeviceWorkout(link.id);
+                                          }
+                                          return;
+                                        }
+
+                                        void handleLinkDeviceWorkout({
+                                          assignedBlockId: block.id,
+                                          assignedPlanId: coachExecutionReview.assignedPlanId,
+                                          deviceWorkoutId,
+                                        });
+                                      }}
+                                    >
+                                      <option value="">
+                                        {copyFor(language, {
+                                          en: "Select device workout",
+                                          ru: "Выбрать тренировку устройства",
+                                          bg: "Изберете тренировка от устройство",
+                                        })}
+                                      </option>
+                                      {selectedCoachDeviceWorkouts.map((workout) => (
+                                        <option key={workout.id} value={workout.id}>
+                                          {formatDeviceWorkoutTitle(workout, language)}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    {linkedWorkout ? (
+                                      <div className="device-workout-linked-summary">
+                                        <p>{formatDeviceWorkoutSummary(linkedWorkout, language) || linkedWorkout.sourceDevice}</p>
+                                        <small>
+                                          {linkedWorkout.sourceDevice ?? "Health Connect"} · {formatDeviceWorkoutTimeRange(linkedWorkout, language)}
+                                        </small>
+                                        <DeviceWorkoutMiniGraph language={language} workout={linkedWorkout} />
+                                      </div>
+                                    ) : null}
+                                  </article>
+                                );
+                              }),
+                            )}
+                          </div>
+                        </div>
                       </section>
                       <div className="coach-review-summary-grid">
                         {[

@@ -5,7 +5,10 @@ import {
   translateApiErrorMessage,
 } from "../permissions.js";
 import { readRuntimeConfig } from "../config.js";
-import { readMiFitnessHealthConnectDailySummary } from "../integrations/health-connect.js";
+import {
+  readMiFitnessHealthConnectDailySummary,
+  readMiFitnessHealthConnectDeviceWorkouts,
+} from "../integrations/health-connect.js";
 import { readHuaweiHealthDailySummary } from "../integrations/huawei-health.js";
 import {
   clearSession,
@@ -33,6 +36,9 @@ import type {
   CompetitionResultPayload,
   DeviceHealthDailySummary,
   DeviceHealthDailySummaryPayload,
+  DeviceWorkout,
+  DeviceWorkoutLink,
+  DeviceWorkoutsSyncPayload,
   ExecutionExerciseResult,
   ExecutionResult,
   ExecutionResultInput,
@@ -410,8 +416,10 @@ export function bootstrapMobileApp(root: HTMLElement) {
     update({ error: null, isBusy: true, message: "Читаю данные из Health Connect..." });
 
     let payload: DeviceHealthDailySummaryPayload;
+    let workoutsPayload: DeviceWorkoutsSyncPayload | null = null;
     try {
       payload = await readMiFitnessHealthConnectDailySummary(entryDate);
+      workoutsPayload = await readMiFitnessHealthConnectDeviceWorkouts(entryDate).catch(() => null);
     } catch (error) {
       update({
         error: error instanceof Error ? error.message : "Health Connect недоступен.",
@@ -422,6 +430,9 @@ export function bootstrapMobileApp(root: HTMLElement) {
     }
 
     await submitDeviceHealthPayload(payload);
+    if (workoutsPayload && workoutsPayload.workouts.length > 0) {
+      await submitDeviceWorkoutsPayload(workoutsPayload);
+    }
   };
 
   const submitDeviceHealthPayload = async (payload: DeviceHealthDailySummaryPayload) => {
@@ -438,6 +449,86 @@ export function bootstrapMobileApp(root: HTMLElement) {
       saveSnapshot(snapshot);
       update({ data: snapshot });
     });
+  };
+
+  const submitDeviceWorkoutsPayload = async (payload: DeviceWorkoutsSyncPayload) => {
+    await submitOrQueue("device-workouts", payload, async (idempotencyKey) => {
+      const result = await client().submitDeviceWorkouts(payload, idempotencyKey);
+      const snapshot = {
+        ...state.data,
+        deviceWorkoutLinks: upsertDeviceWorkoutLinks(
+          state.data.deviceWorkoutLinks,
+          result.links ?? [],
+        ),
+        deviceWorkouts: upsertDeviceWorkouts(state.data.deviceWorkouts, result.workouts),
+        savedAt: new Date().toISOString(),
+      };
+      saveSnapshot(snapshot);
+      update({ data: snapshot });
+    });
+  };
+
+  const linkDeviceWorkoutToBlock = async (select: HTMLSelectElement) => {
+    if (!isCoachRole(state.session.user?.role)) {
+      return;
+    }
+
+    const athleteId = state.selectedAthleteId;
+    const assignedPlanId = select.dataset.deviceWorkoutPlanId ?? "";
+    const assignedBlockId = select.dataset.deviceWorkoutBlockId ?? "";
+    const linkId = select.dataset.deviceWorkoutLinkId ?? "";
+    const deviceWorkoutId = select.value;
+
+    if (!athleteId || !assignedPlanId || !assignedBlockId) {
+      update({ error: "Не выбран спортсмен или блок плана" });
+      return;
+    }
+
+    if (!navigator.onLine) {
+      update({ error: "Связь с тренировкой устройства можно сохранить только при наличии интернета." });
+      return;
+    }
+
+    update({ error: null, isBusy: true, message: null });
+
+    try {
+      if (!deviceWorkoutId) {
+        if (linkId) {
+          await client().unlinkDeviceWorkout(athleteId, linkId);
+          const snapshot = {
+            ...state.data,
+            deviceWorkoutLinks: state.data.deviceWorkoutLinks.filter((link) => link.id !== linkId),
+            savedAt: new Date().toISOString(),
+          };
+          saveSnapshot(snapshot);
+          update({ data: snapshot, isBusy: false, message: "Связь с тренировкой устройства удалена." });
+          return;
+        }
+
+        update({ isBusy: false });
+        return;
+      }
+
+      const response = await client().linkDeviceWorkout(athleteId, {
+        assignedBlockId,
+        assignedPlanId,
+        deviceWorkoutId,
+      });
+      const snapshot = {
+        ...state.data,
+        deviceWorkoutLinks: upsertDeviceWorkoutLinks(state.data.deviceWorkoutLinks, [response.link]),
+        deviceWorkouts: upsertDeviceWorkouts(state.data.deviceWorkouts, [response.link.workout]),
+        savedAt: new Date().toISOString(),
+      };
+      saveSnapshot(snapshot);
+      update({ data: snapshot, isBusy: false, message: "Тренировка устройства связана с блоком плана." });
+    } catch (error) {
+      update({
+        error: error instanceof Error ? error.message : "Не удалось сохранить связь с тренировкой устройства.",
+        isBusy: false,
+        message: null,
+      });
+    }
   };
 
   const readExecutionPayload = (form: HTMLFormElement): ExecutionResultInput | null => {
@@ -688,6 +779,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
       | ReadinessSubmissionPayload
       | ExecutionResultInput
       | DeviceHealthDailySummaryPayload
+      | DeviceWorkoutsSyncPayload
       | CompetitionResultPayload
       | CoachDiaryEntryPayload,
     submit: (idempotencyKey: string) => Promise<void>,
@@ -787,6 +879,12 @@ export function bootstrapMobileApp(root: HTMLElement) {
       }
 
       update({ executionDateFilter });
+    });
+
+    root.querySelectorAll<HTMLSelectElement>("[data-device-workout-link]").forEach((select) => {
+      select.addEventListener("change", () => {
+        void linkDeviceWorkoutToBlock(select);
+      });
     });
 
     root.querySelector<HTMLSelectElement>("[data-plan-date-filter]")?.addEventListener("change", (event) => {
@@ -1164,6 +1262,7 @@ function renderCoachDayStatusScreen(
           ${renderCoachDayStatusCard(dayData, aiReview)}
           ${renderCoachDayDataQualityCard(dayData)}
           ${renderCoachDayExerciseChecklist(dayData)}
+          ${renderCoachDeviceWorkoutPanel(dayData, state.isBusy)}
           ${renderDeviceHealthCard(state, dayData.athleteId, selectedDayDate)}
           ${renderCoachAiReviewCard(
             dayData,
@@ -1270,6 +1369,58 @@ function renderCoachDayExerciseChecklist(dayData: CoachDayCleanSummary) {
             <p>${escapeHtml(block.sessionName)} · ${escapeHtml(block.name)} · ${escapeHtml(exercise.plannedWork || "-")}</p>
           </article>
         `).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderCoachDeviceWorkoutPanel(dayData: CoachDayCleanSummary, isBusy: boolean) {
+  const workouts = dayData.deviceWorkouts;
+
+  return `
+    <section class="coach-day-exercise-card">
+      <div class="summary-inline-head">
+        <div>
+          <span>Данные тренировки с устройства</span>
+          <h3>${workouts.length ? `${workouts.length} тренировок пришло` : "Нет тренировок устройства"}</h3>
+        </div>
+        <strong>${dayData.deviceWorkoutLinks.length}/${dayData.blocks.length || 0}</strong>
+      </div>
+      ${workouts.length === 0
+        ? `<p class="muted-copy">Попросите спортсмена синхронизировать Mi Fitness / Health Connect после тренировки.</p>`
+        : ""}
+      <div class="coach-day-exercise-list">
+        ${dayData.blocks.map((block) => {
+          const link = getDeviceWorkoutLinkForBlock(dayData.deviceWorkoutLinks, block.assignedBlockId);
+          const linkedWorkout = link?.workout ?? null;
+
+          return `
+            <article class="is-${linkedWorkout ? "completed" : workouts.length ? "partial" : "missed"}">
+              <span>${linkedWorkout ? "связано с устройством" : workouts.length ? "не связано" : "нет данных устройства"}</span>
+              <strong>${escapeHtml(block.name)}</strong>
+              <p>${escapeHtml(block.sessionName)} · ${escapeHtml(block.target || "-")}</p>
+              <select
+                data-device-workout-link
+                data-device-workout-plan-id="${escapeHtml(block.assignedPlanId)}"
+                data-device-workout-block-id="${escapeHtml(block.assignedBlockId)}"
+                data-device-workout-link-id="${escapeHtml(link?.id ?? "")}"
+                ${isBusy || workouts.length === 0 ? "disabled" : ""}
+              >
+                <option value="">Выбрать тренировку устройства</option>
+                ${workouts.map((workout) => `
+                  <option value="${escapeHtml(workout.id)}" ${linkedWorkout?.id === workout.id ? "selected" : ""}>
+                    ${escapeHtml(formatDeviceWorkoutTitle(workout))}
+                  </option>
+                `).join("")}
+              </select>
+              ${linkedWorkout ? `
+                <p>${escapeHtml(formatDeviceWorkoutSummary(linkedWorkout) || linkedWorkout.sourceDevice || "Health Connect")}</p>
+                <small>${escapeHtml(linkedWorkout.sourceDevice ?? "Health Connect")} · ${escapeHtml(formatTimeRange(linkedWorkout.startTime, linkedWorkout.endTime))}</small>
+                ${renderDeviceWorkoutGraph(linkedWorkout)}
+              ` : ""}
+            </article>
+          `;
+        }).join("")}
       </div>
     </section>
   `;
@@ -1529,6 +1680,7 @@ function renderAthleteDayIndicators(state: MobileAppState, athleteId: string, da
 
 function renderDeviceHealthCard(state: MobileAppState, athleteId: string, date: string) {
   const summary = getDeviceHealthSummaryForDate(state, athleteId, date);
+  const workouts = getDeviceWorkoutsForDate(state, athleteId, date);
   const canSync = state.session.user?.role === "athlete" &&
     state.session.user.athleteId === athleteId;
   const syncLabel = formatDeviceHealthSyncLabel(summary);
@@ -1590,6 +1742,16 @@ function renderDeviceHealthCard(state: MobileAppState, athleteId: string, date: 
         </article>
       </div>
       ${renderHealthConnectDiagnostics(summary)}
+      ${workouts.length ? `
+        <div class="device-health-signal-list">
+          ${workouts.map((workout) => `
+            <article>
+              <strong>${escapeHtml(formatDeviceWorkoutTitle(workout))}</strong>
+              <p>${escapeHtml(formatDeviceWorkoutSummary(workout) || workout.sourceDevice || "Health Connect")}</p>
+            </article>
+          `).join("")}
+        </div>
+      ` : ""}
       <p class="device-health-guidance">
         Данные устройства не заменяют отметки выполнения. Они помогают тренеру сопоставить план, факт, сон, пульс и внешнюю активность за выбранный день.
       </p>
@@ -1948,6 +2110,58 @@ function formatDeviceHealthWorkoutDetail(summary: DeviceHealthDailySummary | nul
   return parts.length ? parts.join(" · ") : "внешних тренировок нет";
 }
 
+function formatDeviceWorkoutTitle(workout: DeviceWorkout) {
+  return `${workout.workoutType || "тренировка"} · ${formatTimeRange(workout.startTime, workout.endTime)}`;
+}
+
+function formatDeviceWorkoutSummary(workout: DeviceWorkout) {
+  return [
+    workout.durationMinutes !== null ? formatDurationHours(workout.durationMinutes) : null,
+    workout.distanceMeters !== null ? formatDistanceMeters(workout.distanceMeters) : null,
+    workout.averageHeartRateBpm !== null ? `ср. пульс ${formatLoadValue(workout.averageHeartRateBpm)}` : null,
+    workout.maxHeartRateBpm !== null ? `макс ${formatLoadValue(workout.maxHeartRateBpm)}` : null,
+    workout.activeCalories !== null ? `${Math.round(workout.activeCalories)} ккал` : null,
+  ].filter((item): item is string => Boolean(item)).join(" · ");
+}
+
+function hasDeviceWorkoutGraph(workout: DeviceWorkout) {
+  return workout.samples.some((sample) =>
+    sample.heartRateBpm !== null ||
+    sample.distanceMeters !== null ||
+    sample.speedMetersPerSecond !== null ||
+    sample.oxygenSaturationPercent !== null
+  );
+}
+
+function renderDeviceWorkoutGraph(workout: DeviceWorkout) {
+  const heartRateSamples = workout.samples.filter((sample) => sample.heartRateBpm !== null);
+
+  if (!hasDeviceWorkoutGraph(workout) || heartRateSamples.length < 2) {
+    return `<small>Устройство передало только итоговые данные, график недоступен.</small>`;
+  }
+
+  const values = heartRateSamples.map((sample) => sample.heartRateBpm ?? 0);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = Math.max(1, max - min);
+  const points = heartRateSamples.map((sample, index) => {
+    const x = heartRateSamples.length === 1 ? 0 : (index / (heartRateSamples.length - 1)) * 100;
+    const y = 42 - (((sample.heartRateBpm ?? min) - min) / range) * 34;
+    return `${x.toFixed(2)},${y.toFixed(2)}`;
+  }).join(" ");
+  const hasSpeed = workout.samples.some((sample) => sample.speedMetersPerSecond !== null);
+  const hasSpo2 = workout.samples.some((sample) => sample.oxygenSaturationPercent !== null);
+
+  return `
+    <div class="device-workout-graph">
+      <svg aria-hidden="true" viewBox="0 0 100 48" preserveAspectRatio="none">
+        <polyline points="${escapeHtml(points)}"></polyline>
+      </svg>
+      <small>HR ${Math.round(min)}-${Math.round(max)}${hasSpeed ? " · темп/скорость" : ""}${hasSpo2 ? " · SpO2" : ""}</small>
+    </div>
+  `;
+}
+
 function formatDeviceHealthBriefValue(summary: DeviceHealthDailySummary | null) {
   if (!summary) {
     return "-";
@@ -2151,6 +2365,7 @@ function renderCoachExecutionReviewSummary(
       </div>
     </section>
     ${renderCoachDayDataQualityCard(dayData)}
+    ${renderCoachDeviceWorkoutPanel(dayData, state.isBusy)}
     ${renderCoachAiReviewCard(
       dayData,
       aiReview,
@@ -2617,6 +2832,8 @@ interface CoachDayCleanSummary {
   athleteName: string;
   date: string;
   deviceHealthSummary: DeviceHealthDailySummary | null;
+  deviceWorkoutLinks: DeviceWorkoutLink[];
+  deviceWorkouts: DeviceWorkout[];
   hasExecutionMarks: boolean;
   summary: CoachTodayDaySummary;
   readinessEntry: ReadinessEntry | null;
@@ -3572,6 +3789,8 @@ function getCoachDayCleanSummary(
   const summary = getCoachDaySummary(state, athleteId, date);
   const readinessEntry = getReadinessEntryForDate(state, athleteId, date);
   const deviceHealthSummary = getDeviceHealthSummaryForDate(state, athleteId, date);
+  const deviceWorkouts = getDeviceWorkoutsForDate(state, athleteId, date);
+  const deviceWorkoutLinks = getDeviceWorkoutLinksForDate(state, athleteId, date);
   let hasExecutionMarks = false;
   const blocks = groups.flatMap((group) =>
     group.blockItems.map((item) => {
@@ -3629,6 +3848,8 @@ function getCoachDayCleanSummary(
     coachNote: latestDiaryEntry?.notes?.trim() || "Комментария тренера за выбранный день пока нет.",
     date,
     deviceHealthSummary,
+    deviceWorkoutLinks,
+    deviceWorkouts,
     hasExecutionMarks,
     latestDiaryEntry,
     plans,
@@ -3717,7 +3938,7 @@ function buildCoachDayAiPayload(dayData: CoachDayCleanSummary): CoachDayAiPayloa
     coachComment: dayData.latestDiaryEntry ? dayData.coachNote : null,
     dataQuality: buildCoachDayDataQuality(dayData),
     date: dayData.date,
-    deviceHealth: buildCoachDayAiDeviceHealth(dayData.deviceHealthSummary),
+    deviceHealth: buildCoachDayAiDeviceHealth(dayData),
     execution: {
       blocks: {
         completed: summary.completedBlockCount,
@@ -3773,7 +3994,7 @@ function buildCoachDayDataQuality(dayData: CoachDayCleanSummary): NonNullable<Co
   const hasDeviceSync = Boolean(device);
   const hasSleep = hasDeviceSleepData(device);
   const hasRestingHr = device?.heartRate?.restingBpm !== null && device?.heartRate?.restingBpm !== undefined;
-  const hasDeviceWorkout = Boolean(device?.workout);
+  const hasDeviceWorkout = Boolean(device?.workout) || dayData.deviceWorkouts.length > 0;
   const signals = [
     {
       action: "Попросите спортсмена отправить готовность за выбранный день.",
@@ -3852,17 +4073,42 @@ function buildCoachDayDataQuality(dayData: CoachDayCleanSummary): NonNullable<Co
   };
 }
 
-function buildCoachDayAiDeviceHealth(
-  summary: DeviceHealthDailySummary | null,
-): CoachDayAiPayload["deviceHealth"] {
-  if (!summary) {
+function buildCoachDayAiDeviceHealth(dayData: CoachDayCleanSummary): CoachDayAiPayload["deviceHealth"] {
+  const summary = dayData.deviceHealthSummary;
+  const linkedWorkouts = dayData.deviceWorkoutLinks.map((link) => {
+    const block = dayData.blocks.find((item) => item.assignedBlockId === link.assignedBlockId);
+
+    return {
+      averageHeartRateBpm: link.workout.averageHeartRateBpm,
+      distanceMeters: link.workout.distanceMeters,
+      durationMinutes: link.workout.durationMinutes,
+      endTime: link.workout.endTime,
+      hasDistance: link.workout.distanceMeters !== null ||
+        link.workout.samples.some((sample) => sample.distanceMeters !== null),
+      hasGraph: hasDeviceWorkoutGraph(link.workout),
+      hasHeartRate: link.workout.averageHeartRateBpm !== null ||
+        link.workout.samples.some((sample) => sample.heartRateBpm !== null),
+      hasSpO2: link.workout.samples.some((sample) => sample.oxygenSaturationPercent !== null),
+      maxHeartRateBpm: link.workout.maxHeartRateBpm,
+      planBlockId: link.assignedBlockId,
+      planBlockName: block?.name ?? "",
+      sourceDevice: link.workout.sourceDevice,
+      startTime: link.workout.startTime,
+      workoutId: link.workout.id,
+      workoutType: link.workout.workoutType,
+    };
+  });
+
+  if (!summary && linkedWorkouts.length === 0) {
     return null;
   }
 
-  const status = getDeviceHealthStatus(summary);
+  const status = summary
+    ? getDeviceHealthStatus(summary)
+    : { missing: [], present: [], statusLabel: "Тренировка устройства связана" };
 
   return {
-    heartRate: summary.heartRate
+    heartRate: summary?.heartRate
       ? {
         averageBpm: summary.heartRate.averageBpm,
         hrvRmssdMs: summary.heartRate.hrvRmssdMs,
@@ -3871,8 +4117,9 @@ function buildCoachDayAiDeviceHealth(
         restingBpm: summary.heartRate.restingBpm,
       }
       : null,
+    linkedWorkouts,
     missing: status.missing,
-    sleep: summary.sleep
+    sleep: summary?.sleep
       ? {
         awakeMinutes: summary.sleep.awakeMinutes,
         deepMinutes: summary.sleep.deepMinutes,
@@ -3882,10 +4129,10 @@ function buildCoachDayAiDeviceHealth(
         score: summary.sleep.score,
       }
       : null,
-    sourceDevice: summary.sourceDevice,
+    sourceDevice: summary?.sourceDevice ?? linkedWorkouts[0]?.sourceDevice ?? null,
     statusLabel: status.statusLabel,
-    syncedAt: summary.syncedAt,
-    workout: summary.workout
+    syncedAt: summary?.syncedAt ?? null,
+    workout: summary?.workout
       ? {
         activeCalories: summary.workout.activeCalories,
         averageHeartRateBpm: summary.workout.averageHeartRateBpm,
@@ -4081,6 +4328,39 @@ function getDeviceHealthSummaryForDate(
       (!athleteId || summary.athleteId === athleteId)
     )
     .sort(compareDeviceHealthSummaries)[0] ?? null;
+}
+
+function getDeviceWorkoutsForDate(
+  state: MobileAppState,
+  athleteId: string | null,
+  date: string,
+) {
+  return state.data.deviceWorkouts
+    .filter((workout) =>
+      workout.entryDate === date &&
+      (!athleteId || workout.athleteId === athleteId)
+    )
+    .sort((left, right) => left.startTime.localeCompare(right.startTime));
+}
+
+function getDeviceWorkoutLinksForDate(
+  state: MobileAppState,
+  athleteId: string | null,
+  date: string,
+) {
+  return state.data.deviceWorkoutLinks
+    .filter((link) =>
+      link.workout.entryDate === date &&
+      (!athleteId || link.athleteId === athleteId)
+    )
+    .sort((left, right) => left.workout.startTime.localeCompare(right.workout.startTime));
+}
+
+function getDeviceWorkoutLinkForBlock(
+  links: DeviceWorkoutLink[],
+  assignedBlockId: string,
+) {
+  return links.find((link) => link.assignedBlockId === assignedBlockId) ?? null;
 }
 
 function compareDeviceHealthSummaries(
@@ -4918,6 +5198,32 @@ function upsertDeviceHealthSummary(
     .slice(0, 120);
 }
 
+function upsertDeviceWorkouts(items: DeviceWorkout[], workouts: DeviceWorkout[]) {
+  const nextItems = items.filter((item) => !workouts.some((workout) =>
+    workout.id === item.id ||
+    (workout.athleteId === item.athleteId &&
+      workout.provider === item.provider &&
+      workout.sourceWorkoutId === item.sourceWorkoutId)
+  ));
+  nextItems.unshift(...workouts);
+  return nextItems
+    .sort((left, right) =>
+      right.entryDate.localeCompare(left.entryDate) || right.startTime.localeCompare(left.startTime),
+    )
+    .slice(0, 200);
+}
+
+function upsertDeviceWorkoutLinks(items: DeviceWorkoutLink[], links: DeviceWorkoutLink[]) {
+  const nextItems = items.filter((item) => !links.some((link) =>
+    link.id === item.id ||
+    (link.athleteId === item.athleteId &&
+      link.assignedBlockId === item.assignedBlockId &&
+      link.deviceWorkoutId === item.deviceWorkoutId)
+  ));
+  nextItems.unshift(...links);
+  return nextItems.slice(0, 200);
+}
+
 function upsertExecutionResult(items: ExecutionResult[], result: ExecutionResult) {
   const nextItems = items.filter((item) =>
     item.id !== result.id &&
@@ -5040,6 +5346,10 @@ function formatTime(value: string) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(value));
+}
+
+function formatTimeRange(start: string, end: string) {
+  return `${formatTime(start)}-${formatTime(end)}`;
 }
 
 function getRoleLabel(role: string | undefined) {

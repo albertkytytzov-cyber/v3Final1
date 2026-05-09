@@ -15,6 +15,10 @@ import type {
   DeviceHealthDailySummariesResponse,
   DeviceHealthDailySummaryPayload,
   DeviceHealthDailySummaryResponse,
+  DeviceWorkoutLinkPayload,
+  DeviceWorkoutLinkResponse,
+  DeviceWorkoutsResponse,
+  DeviceWorkoutsSyncPayload,
   ExecutionResult,
   ExecutionResultInput,
   ReadinessEntry,
@@ -117,6 +121,7 @@ export class MobileApiClient {
       coachAiReviews,
       coachDiary,
       deviceHealth,
+      deviceWorkouts,
       readiness,
       readinessHistory,
       athleteExecution,
@@ -146,6 +151,10 @@ export class MobileApiClient {
             .catch(() => ({ summaries: [] }))
         : Promise.resolve({ summaries: [] }),
       userRole === "athlete"
+        ? this.request<DeviceWorkoutsResponse>("/device-health/workouts")
+            .catch(() => ({ workouts: [] }))
+        : Promise.resolve({ workouts: [] }),
+      userRole === "athlete"
         ? this.request<{ entry: ReadinessEntry | null }>("/readiness/today")
             .catch(() => ({ entry: null }))
         : Promise.resolve({ entry: null }),
@@ -170,6 +179,10 @@ export class MobileApiClient {
       userRole === "coach" || userRole === "admin"
         ? await this.loadCoachDeviceHealthSummaries(assignedPlans.assignedPlans, athletes.athletes)
         : deviceHealth.summaries;
+    const deviceWorkoutData =
+      userRole === "coach" || userRole === "admin"
+        ? await this.loadCoachDeviceWorkouts(assignedPlans.assignedPlans, athletes.athletes)
+        : { links: [], workouts: deviceWorkouts.workouts };
 
     return {
       assignedPlans: assignedPlans.assignedPlans,
@@ -179,6 +192,8 @@ export class MobileApiClient {
       competitionPlans: competitionPlans.competitionPlans,
       competitions: competitions.competitions,
       deviceHealthSummaries,
+      deviceWorkoutLinks: deviceWorkoutData.links,
+      deviceWorkouts: deviceWorkoutData.workouts,
       executionResults,
       readinessEntry: readiness.entry,
       readinessHistory: coachReadinessHistory,
@@ -242,6 +257,28 @@ export class MobileApiClient {
     return responses.flatMap((response) => response.summaries);
   }
 
+  private async loadCoachDeviceWorkouts(
+    assignedPlans: AssignedPlanSummary[],
+    athletes: CoachAthleteSummary[],
+  ) {
+    const athleteIds = Array.from(new Set([
+      ...assignedPlans.map((plan) => plan.athleteId),
+      ...athletes.map((athlete) => athlete.athleteId),
+    ].filter(Boolean)));
+    const responses = await Promise.all(
+      athleteIds.map((athleteId) =>
+        this.request<DeviceWorkoutsResponse>(
+          `/coach/athletes/${encodeURIComponent(athleteId)}/device-workouts`,
+        ).catch(() => ({ links: [], workouts: [] })),
+      ),
+    );
+
+    return {
+      links: responses.flatMap((response) => response.links ?? []),
+      workouts: responses.flatMap((response) => response.workouts),
+    };
+  }
+
   submitReadiness(payload: ReadinessSubmissionPayload, idempotencyKey: string) {
     return this.request<{ entry: ReadinessEntry }>("/readiness", {
       body: JSON.stringify(payload),
@@ -264,6 +301,34 @@ export class MobileApiClient {
       idempotencyKey,
       method: "POST",
     });
+  }
+
+  submitDeviceWorkouts(payload: DeviceWorkoutsSyncPayload, idempotencyKey: string) {
+    return this.request<DeviceWorkoutsResponse>("/device-health/workouts", {
+      body: JSON.stringify(payload),
+      idempotencyKey,
+      method: "POST",
+    });
+  }
+
+  linkDeviceWorkout(
+    athleteId: string,
+    payload: DeviceWorkoutLinkPayload,
+  ) {
+    return this.request<DeviceWorkoutLinkResponse>(
+      `/coach/athletes/${encodeURIComponent(athleteId)}/device-workout-links`,
+      {
+        body: JSON.stringify(payload),
+        method: "POST",
+      },
+    );
+  }
+
+  unlinkDeviceWorkout(athleteId: string, linkId: string) {
+    return this.request<{ ok: boolean }>(
+      `/coach/athletes/${encodeURIComponent(athleteId)}/device-workout-links/${encodeURIComponent(linkId)}`,
+      { method: "DELETE" },
+    );
   }
 
   submitCompetitionResult(payload: CompetitionResultPayload, idempotencyKey: string) {

@@ -2,7 +2,14 @@ import type {
   DeviceHealthDailySummary,
   DeviceHealthDailySummaryPayload,
   DeviceHealthProvider,
+  DeviceWorkout,
+  DeviceWorkoutLink,
+  DeviceWorkoutLinkPayload,
+  DeviceWorkoutPayload,
+  DeviceWorkoutSample,
+  DeviceWorkoutsSyncPayload,
 } from "@training-platform/shared";
+import type { PoolClient } from "pg";
 import { pool } from "../db";
 
 interface DeviceHealthDailySummaryRow {
@@ -35,6 +42,56 @@ interface DeviceHealthDailySummaryRow {
   created_at: string;
   updated_at: string;
 }
+
+interface DeviceWorkoutRow {
+  id: string;
+  athlete_id: string;
+  provider: DeviceHealthProvider;
+  entry_date: string;
+  source_device: string | null;
+  source_workout_id: string;
+  workout_type: string;
+  start_time: string;
+  end_time: string;
+  duration_minutes: string | null;
+  distance_meters: string | null;
+  active_calories: string | null;
+  average_hr: string | null;
+  max_hr: string | null;
+  min_hr: string | null;
+  raw_payload_json: Record<string, unknown> | null;
+  sample_count: number;
+  synced_at: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface DeviceWorkoutSampleRow {
+  id: string;
+  device_workout_id: string;
+  sample_time: string;
+  heart_rate_bpm: string | null;
+  distance_meters: string | null;
+  speed_meters_per_second: string | null;
+  pace_seconds_per_km: string | null;
+  oxygen_saturation_percent: string | null;
+  raw_payload_json: Record<string, unknown> | null;
+  created_at: string;
+}
+
+interface DeviceWorkoutLinkRow {
+  id: string;
+  athlete_id: string;
+  assigned_plan_id: string;
+  assigned_block_id: string;
+  assigned_exercise_id: string | null;
+  device_workout_id: string;
+  linked_by_user_id: string;
+  linked_at: string;
+  created_at: string;
+}
+
+type QueryClient = PoolClient | typeof pool;
 
 function toNullableNumber(value: string | null) {
   return value !== null ? Number(value) : null;
@@ -78,6 +135,68 @@ function mapDeviceHealthDailySummary(
       totalDistanceMeters: toNullableNumber(row.workout_distance_meters),
       totalDurationMinutes: toNullableNumber(row.workout_duration_minutes),
     },
+  };
+}
+
+function mapDeviceWorkoutSample(row: DeviceWorkoutSampleRow): DeviceWorkoutSample {
+  return {
+    id: row.id,
+    createdAt: row.created_at,
+    deviceWorkoutId: row.device_workout_id,
+    distanceMeters: toNullableNumber(row.distance_meters),
+    heartRateBpm: toNullableNumber(row.heart_rate_bpm),
+    oxygenSaturationPercent: toNullableNumber(row.oxygen_saturation_percent),
+    paceSecondsPerKm: toNullableNumber(row.pace_seconds_per_km),
+    rawPayload: row.raw_payload_json,
+    sampleTime: row.sample_time,
+    speedMetersPerSecond: toNullableNumber(row.speed_meters_per_second),
+  };
+}
+
+function mapDeviceWorkout(
+  row: DeviceWorkoutRow,
+  samples: DeviceWorkoutSample[] = [],
+): DeviceWorkout {
+  return {
+    id: row.id,
+    activeCalories: toNullableNumber(row.active_calories),
+    athleteId: row.athlete_id,
+    averageHeartRateBpm: toNullableNumber(row.average_hr),
+    createdAt: row.created_at,
+    distanceMeters: toNullableNumber(row.distance_meters),
+    durationMinutes: toNullableNumber(row.duration_minutes),
+    endTime: row.end_time,
+    entryDate: row.entry_date,
+    maxHeartRateBpm: toNullableNumber(row.max_hr),
+    minHeartRateBpm: toNullableNumber(row.min_hr),
+    provider: row.provider,
+    rawPayload: row.raw_payload_json,
+    sampleCount: row.sample_count,
+    samples,
+    sourceDevice: row.source_device,
+    sourceWorkoutId: row.source_workout_id,
+    startTime: row.start_time,
+    syncedAt: row.synced_at,
+    updatedAt: row.updated_at,
+    workoutType: row.workout_type,
+  };
+}
+
+function mapDeviceWorkoutLink(
+  row: DeviceWorkoutLinkRow,
+  workout: DeviceWorkout,
+): DeviceWorkoutLink {
+  return {
+    id: row.id,
+    assignedBlockId: row.assigned_block_id,
+    assignedExerciseId: row.assigned_exercise_id,
+    assignedPlanId: row.assigned_plan_id,
+    athleteId: row.athlete_id,
+    createdAt: row.created_at,
+    deviceWorkoutId: row.device_workout_id,
+    linkedAt: row.linked_at,
+    linkedByUserId: row.linked_by_user_id,
+    workout,
   };
 }
 
@@ -275,4 +394,485 @@ export async function upsertDeviceHealthDailySummary(input: {
   );
 
   return mapDeviceHealthDailySummary(result.rows[0]);
+}
+
+export async function listDeviceWorkoutsForAthlete(
+  athleteId: string,
+  entryDate?: string,
+): Promise<DeviceWorkout[]> {
+  const values: unknown[] = [athleteId];
+  const dateFilter = entryDate ? "AND device_workouts.entry_date = $2::date" : "";
+  if (entryDate) {
+    values.push(entryDate);
+  }
+
+  const result = await pool.query<DeviceWorkoutRow>(
+    `
+      SELECT
+        device_workouts.id,
+        device_workouts.athlete_id,
+        device_workouts.provider,
+        device_workouts.entry_date::text,
+        device_workouts.source_device,
+        device_workouts.source_workout_id,
+        device_workouts.workout_type,
+        device_workouts.start_time::text,
+        device_workouts.end_time::text,
+        device_workouts.duration_minutes::text,
+        device_workouts.distance_meters::text,
+        device_workouts.active_calories::text,
+        device_workouts.average_hr::text,
+        device_workouts.max_hr::text,
+        device_workouts.min_hr::text,
+        device_workouts.raw_payload_json,
+        (
+          SELECT COUNT(*)::int
+          FROM device_workout_samples
+          WHERE device_workout_samples.device_workout_id = device_workouts.id
+        ) AS sample_count,
+        device_workouts.synced_at::text,
+        device_workouts.created_at::text,
+        device_workouts.updated_at::text
+      FROM device_workouts
+      WHERE device_workouts.athlete_id = $1
+        ${dateFilter}
+      ORDER BY device_workouts.entry_date DESC, device_workouts.start_time DESC
+      LIMIT 90
+    `,
+    values,
+  );
+
+  return attachDeviceWorkoutSamples(result.rows);
+}
+
+export async function syncDeviceWorkouts(input: {
+  athleteId: string;
+  payload: DeviceWorkoutsSyncPayload;
+}): Promise<DeviceWorkout[]> {
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    for (const workout of input.payload.workouts) {
+      await upsertDeviceWorkout(client, input.athleteId, workout);
+    }
+
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+
+  return listDeviceWorkoutsForAthlete(input.athleteId, input.payload.entryDate);
+}
+
+export async function listDeviceWorkoutLinksForAthlete(
+  athleteId: string,
+  entryDate?: string,
+): Promise<DeviceWorkoutLink[]> {
+  const values: unknown[] = [athleteId];
+  const dateFilter = entryDate ? "AND device_workouts.entry_date = $2::date" : "";
+  if (entryDate) {
+    values.push(entryDate);
+  }
+
+  const result = await pool.query<DeviceWorkoutLinkRow>(
+    `
+      SELECT
+        training_plan_device_links.id,
+        training_plan_device_links.athlete_id,
+        training_plan_device_links.assigned_plan_id,
+        training_plan_device_links.assigned_block_id,
+        training_plan_device_links.assigned_exercise_id,
+        training_plan_device_links.device_workout_id,
+        training_plan_device_links.linked_by_user_id,
+        training_plan_device_links.linked_at::text,
+        training_plan_device_links.created_at::text
+      FROM training_plan_device_links
+      JOIN device_workouts ON device_workouts.id = training_plan_device_links.device_workout_id
+      WHERE training_plan_device_links.athlete_id = $1
+        ${dateFilter}
+      ORDER BY device_workouts.entry_date DESC, device_workouts.start_time DESC
+      LIMIT 90
+    `,
+    values,
+  );
+
+  return hydrateDeviceWorkoutLinks(result.rows);
+}
+
+export async function linkDeviceWorkoutToPlanBlock(input: {
+  athleteId: string;
+  linkedByUserId: string;
+  payload: DeviceWorkoutLinkPayload;
+}): Promise<DeviceWorkoutLink> {
+  await assertDeviceWorkoutLinkTarget(input.athleteId, input.payload);
+
+  const result = await pool.query<DeviceWorkoutLinkRow>(
+    `
+      INSERT INTO training_plan_device_links (
+        athlete_id,
+        assigned_plan_id,
+        assigned_block_id,
+        assigned_exercise_id,
+        device_workout_id,
+        linked_by_user_id,
+        linked_at
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, NOW())
+      ON CONFLICT (athlete_id, assigned_block_id, device_workout_id)
+      DO UPDATE SET
+        assigned_plan_id = EXCLUDED.assigned_plan_id,
+        assigned_exercise_id = EXCLUDED.assigned_exercise_id,
+        linked_by_user_id = EXCLUDED.linked_by_user_id,
+        linked_at = NOW()
+      RETURNING
+        id,
+        athlete_id,
+        assigned_plan_id,
+        assigned_block_id,
+        assigned_exercise_id,
+        device_workout_id,
+        linked_by_user_id,
+        linked_at::text,
+        created_at::text
+    `,
+    [
+      input.athleteId,
+      input.payload.assignedPlanId,
+      input.payload.assignedBlockId,
+      input.payload.assignedExerciseId ?? null,
+      input.payload.deviceWorkoutId,
+      input.linkedByUserId,
+    ],
+  );
+
+  const [link] = await hydrateDeviceWorkoutLinks(result.rows);
+  return link;
+}
+
+export async function deleteDeviceWorkoutLink(input: {
+  athleteId: string;
+  linkId: string;
+}): Promise<boolean> {
+  const result = await pool.query(
+    `
+      DELETE FROM training_plan_device_links
+      WHERE id = $1
+        AND athlete_id = $2
+    `,
+    [input.linkId, input.athleteId],
+  );
+
+  return (result.rowCount ?? 0) > 0;
+}
+
+async function upsertDeviceWorkout(
+  client: PoolClient,
+  athleteId: string,
+  workout: DeviceWorkoutPayload,
+) {
+  const syncedAt = workout.syncedAt ?? new Date().toISOString();
+  const result = await client.query<DeviceWorkoutRow>(
+    `
+      INSERT INTO device_workouts (
+        athlete_id,
+        provider,
+        entry_date,
+        source_device,
+        source_workout_id,
+        workout_type,
+        start_time,
+        end_time,
+        duration_minutes,
+        distance_meters,
+        active_calories,
+        average_hr,
+        max_hr,
+        min_hr,
+        raw_payload_json,
+        synced_at,
+        updated_at
+      )
+      VALUES (
+        $1,
+        $2,
+        $3::date,
+        $4,
+        $5,
+        $6,
+        $7::timestamptz,
+        $8::timestamptz,
+        $9,
+        $10,
+        $11,
+        $12,
+        $13,
+        $14,
+        $15::jsonb,
+        $16::timestamptz,
+        NOW()
+      )
+      ON CONFLICT (athlete_id, provider, source_workout_id)
+      DO UPDATE SET
+        entry_date = EXCLUDED.entry_date,
+        source_device = EXCLUDED.source_device,
+        workout_type = EXCLUDED.workout_type,
+        start_time = EXCLUDED.start_time,
+        end_time = EXCLUDED.end_time,
+        duration_minutes = EXCLUDED.duration_minutes,
+        distance_meters = EXCLUDED.distance_meters,
+        active_calories = EXCLUDED.active_calories,
+        average_hr = EXCLUDED.average_hr,
+        max_hr = EXCLUDED.max_hr,
+        min_hr = EXCLUDED.min_hr,
+        raw_payload_json = EXCLUDED.raw_payload_json,
+        synced_at = EXCLUDED.synced_at,
+        updated_at = NOW()
+      RETURNING
+        id,
+        athlete_id,
+        provider,
+        entry_date::text,
+        source_device,
+        source_workout_id,
+        workout_type,
+        start_time::text,
+        end_time::text,
+        duration_minutes::text,
+        distance_meters::text,
+        active_calories::text,
+        average_hr::text,
+        max_hr::text,
+        min_hr::text,
+        raw_payload_json,
+        0 AS sample_count,
+        synced_at::text,
+        created_at::text,
+        updated_at::text
+    `,
+    [
+      athleteId,
+      workout.provider,
+      workout.entryDate,
+      workout.sourceDevice,
+      workout.sourceWorkoutId,
+      workout.workoutType,
+      workout.startTime,
+      workout.endTime,
+      workout.durationMinutes,
+      workout.distanceMeters,
+      workout.activeCalories,
+      workout.averageHeartRateBpm,
+      workout.maxHeartRateBpm,
+      workout.minHeartRateBpm,
+      JSON.stringify(workout.rawPayload ?? {}),
+      syncedAt,
+    ],
+  );
+  const workoutId = result.rows[0].id;
+
+  await client.query("DELETE FROM device_workout_samples WHERE device_workout_id = $1", [workoutId]);
+
+  for (const sample of workout.samples) {
+    await client.query(
+      `
+        INSERT INTO device_workout_samples (
+          device_workout_id,
+          sample_time,
+          heart_rate_bpm,
+          distance_meters,
+          speed_meters_per_second,
+          pace_seconds_per_km,
+          oxygen_saturation_percent,
+          raw_payload_json
+        )
+        VALUES ($1, $2::timestamptz, $3, $4, $5, $6, $7, $8::jsonb)
+        ON CONFLICT (device_workout_id, sample_time)
+        DO UPDATE SET
+          heart_rate_bpm = EXCLUDED.heart_rate_bpm,
+          distance_meters = EXCLUDED.distance_meters,
+          speed_meters_per_second = EXCLUDED.speed_meters_per_second,
+          pace_seconds_per_km = EXCLUDED.pace_seconds_per_km,
+          oxygen_saturation_percent = EXCLUDED.oxygen_saturation_percent,
+          raw_payload_json = EXCLUDED.raw_payload_json
+      `,
+      [
+        workoutId,
+        sample.sampleTime,
+        sample.heartRateBpm,
+        sample.distanceMeters,
+        sample.speedMetersPerSecond,
+        sample.paceSecondsPerKm,
+        sample.oxygenSaturationPercent,
+        JSON.stringify(sample.rawPayload ?? {}),
+      ],
+    );
+  }
+}
+
+async function assertDeviceWorkoutLinkTarget(
+  athleteId: string,
+  payload: DeviceWorkoutLinkPayload,
+) {
+  const result = await pool.query<{
+    plan_day_date: string;
+    workout_date: string;
+    exercise_matches: boolean;
+  }>(
+    `
+      SELECT
+        assigned_plan_days.day_date::text AS plan_day_date,
+        device_workouts.entry_date::text AS workout_date,
+        ($3::uuid IS NULL OR assigned_block_exercises.id IS NOT NULL) AS exercise_matches
+      FROM assigned_plans
+      JOIN assigned_plan_days
+        ON assigned_plan_days.assigned_plan_id = assigned_plans.id
+      JOIN assigned_day_sessions
+        ON assigned_day_sessions.assigned_day_id = assigned_plan_days.id
+      JOIN assigned_day_blocks
+        ON assigned_day_blocks.assigned_session_id = assigned_day_sessions.id
+      JOIN device_workouts
+        ON device_workouts.id = $5
+       AND device_workouts.athlete_id = assigned_plans.athlete_id
+      LEFT JOIN assigned_block_exercises
+        ON assigned_block_exercises.assigned_block_id = assigned_day_blocks.id
+       AND assigned_block_exercises.id = $3::uuid
+      WHERE assigned_plans.id = $1
+        AND assigned_day_blocks.id = $2
+        AND assigned_plans.athlete_id = $4
+      LIMIT 1
+    `,
+    [
+      payload.assignedPlanId,
+      payload.assignedBlockId,
+      payload.assignedExerciseId ?? null,
+      athleteId,
+      payload.deviceWorkoutId,
+    ],
+  );
+
+  const target = result.rows[0];
+  if (!target) {
+    throw new Error("Selected plan block or device workout was not found");
+  }
+
+  if (!target.exercise_matches) {
+    throw new Error("Selected exercise does not belong to the plan block");
+  }
+
+  if (target.plan_day_date !== target.workout_date) {
+    throw new Error("Device workout date must match the plan block date");
+  }
+}
+
+async function hydrateDeviceWorkoutLinks(rows: DeviceWorkoutLinkRow[]): Promise<DeviceWorkoutLink[]> {
+  if (rows.length === 0) {
+    return [];
+  }
+
+  const workouts = await listDeviceWorkoutsByIds(rows.map((row) => row.device_workout_id));
+  const workoutsById = new Map(workouts.map((workout) => [workout.id, workout]));
+
+  return rows
+    .map((row) => {
+      const workout = workoutsById.get(row.device_workout_id);
+      return workout ? mapDeviceWorkoutLink(row, workout) : null;
+    })
+    .filter((link): link is DeviceWorkoutLink => Boolean(link));
+}
+
+async function listDeviceWorkoutsByIds(workoutIds: string[]): Promise<DeviceWorkout[]> {
+  const ids = Array.from(new Set(workoutIds.filter(Boolean)));
+  if (ids.length === 0) {
+    return [];
+  }
+
+  const result = await pool.query<DeviceWorkoutRow>(
+    `
+      SELECT
+        device_workouts.id,
+        device_workouts.athlete_id,
+        device_workouts.provider,
+        device_workouts.entry_date::text,
+        device_workouts.source_device,
+        device_workouts.source_workout_id,
+        device_workouts.workout_type,
+        device_workouts.start_time::text,
+        device_workouts.end_time::text,
+        device_workouts.duration_minutes::text,
+        device_workouts.distance_meters::text,
+        device_workouts.active_calories::text,
+        device_workouts.average_hr::text,
+        device_workouts.max_hr::text,
+        device_workouts.min_hr::text,
+        device_workouts.raw_payload_json,
+        (
+          SELECT COUNT(*)::int
+          FROM device_workout_samples
+          WHERE device_workout_samples.device_workout_id = device_workouts.id
+        ) AS sample_count,
+        device_workouts.synced_at::text,
+        device_workouts.created_at::text,
+        device_workouts.updated_at::text
+      FROM device_workouts
+      WHERE device_workouts.id = ANY($1::uuid[])
+      ORDER BY device_workouts.entry_date DESC, device_workouts.start_time DESC
+    `,
+    [ids],
+  );
+
+  return attachDeviceWorkoutSamples(result.rows);
+}
+
+async function attachDeviceWorkoutSamples(rows: DeviceWorkoutRow[]): Promise<DeviceWorkout[]> {
+  if (rows.length === 0) {
+    return [];
+  }
+
+  const samplesByWorkoutId = await listDeviceWorkoutSamplesByWorkoutId(rows.map((row) => row.id));
+
+  return rows.map((row) => mapDeviceWorkout(row, samplesByWorkoutId.get(row.id) ?? []));
+}
+
+async function listDeviceWorkoutSamplesByWorkoutId(
+  workoutIds: string[],
+  queryClient: QueryClient = pool,
+) {
+  const ids = Array.from(new Set(workoutIds.filter(Boolean)));
+  const samplesByWorkoutId = new Map<string, DeviceWorkoutSample[]>();
+  if (ids.length === 0) {
+    return samplesByWorkoutId;
+  }
+
+  const result = await queryClient.query<DeviceWorkoutSampleRow>(
+    `
+      SELECT
+        id,
+        device_workout_id,
+        sample_time::text,
+        heart_rate_bpm::text,
+        distance_meters::text,
+        speed_meters_per_second::text,
+        pace_seconds_per_km::text,
+        oxygen_saturation_percent::text,
+        raw_payload_json,
+        created_at::text
+      FROM device_workout_samples
+      WHERE device_workout_id = ANY($1::uuid[])
+      ORDER BY device_workout_id, sample_time
+    `,
+    [ids],
+  );
+
+  for (const row of result.rows) {
+    const items = samplesByWorkoutId.get(row.device_workout_id) ?? [];
+    items.push(mapDeviceWorkoutSample(row));
+    samplesByWorkoutId.set(row.device_workout_id, items);
+  }
+
+  return samplesByWorkoutId;
 }

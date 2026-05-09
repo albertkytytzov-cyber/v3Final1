@@ -208,6 +208,23 @@ function buildModelSafePayload(payload: CoachDayAiPayload) {
         missing: (payload.deviceHealth.missing ?? [])
           .slice(0, 8)
           .map((item) => toLimitedString(item, maxShortStringLength)),
+        linkedWorkouts: (payload.deviceHealth.linkedWorkouts ?? [])
+          .slice(0, 8)
+          .map((workout) => ({
+            averageHeartRateBpm: workout.averageHeartRateBpm,
+            distanceMeters: workout.distanceMeters,
+            durationMinutes: workout.durationMinutes,
+            endTime: workout.endTime,
+            hasDistance: workout.hasDistance,
+            hasGraph: workout.hasGraph,
+            hasHeartRate: workout.hasHeartRate,
+            hasSpO2: workout.hasSpO2,
+            maxHeartRateBpm: workout.maxHeartRateBpm,
+            planBlockName: toLimitedString(workout.planBlockName, maxShortStringLength),
+            sourceDevice: toLimitedNullableString(workout.sourceDevice, maxShortStringLength),
+            startTime: workout.startTime,
+            workoutType: toLimitedString(workout.workoutType, maxShortStringLength),
+          })),
         sleep: payload.deviceHealth.sleep
           ? {
             awakeMinutes: payload.deviceHealth.sleep.awakeMinutes,

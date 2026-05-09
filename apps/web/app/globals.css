@@ -3324,6 +3324,91 @@ select {
   min-width: 0;
 }
 
+.device-workout-link-panel {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(14, 116, 144, 0.18);
+  background: rgba(236, 254, 255, 0.68);
+}
+
+.device-workout-block-list {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.device-workout-block-card {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto minmax(220px, 0.8fr);
+  gap: 10px;
+  align-items: start;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.device-workout-block-card > div:first-child,
+.device-workout-linked-summary {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.device-workout-block-card strong,
+.device-workout-linked-summary p {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.device-workout-block-card span,
+.device-workout-linked-summary small,
+.device-workout-empty {
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.device-workout-block-card select {
+  width: 100%;
+  min-width: 0;
+}
+
+.device-workout-empty {
+  margin: 0;
+}
+
+.device-workout-graph {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.device-workout-graph svg {
+  width: 100%;
+  height: 48px;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.04);
+}
+
+.device-workout-graph polyline {
+  fill: none;
+  stroke: var(--accent);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.5;
+}
+
+@media (max-width: 860px) {
+  .device-workout-block-card {
+    grid-template-columns: 1fr;
+  }
+}
+
 .coach-team-day-panel {
   display: grid;
   gap: 12px;

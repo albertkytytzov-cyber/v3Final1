@@ -24,6 +24,14 @@ import type {
   DeviceHealthHeartRateSummary,
   DeviceHealthSleepSummary,
   DeviceHealthWorkoutSummary,
+  DeviceWorkout,
+  DeviceWorkoutLink,
+  DeviceWorkoutLinkPayload,
+  DeviceWorkoutLinkResponse,
+  DeviceWorkoutPayload,
+  DeviceWorkoutSamplePayload,
+  DeviceWorkoutsResponse,
+  DeviceWorkoutsSyncPayload,
   ExecutionExerciseResult,
   ExecutionResult,
   ExecutionResultInput,
@@ -59,6 +67,14 @@ export type {
   DeviceHealthHeartRateSummary,
   DeviceHealthSleepSummary,
   DeviceHealthWorkoutSummary,
+  DeviceWorkout,
+  DeviceWorkoutLink,
+  DeviceWorkoutLinkPayload,
+  DeviceWorkoutLinkResponse,
+  DeviceWorkoutPayload,
+  DeviceWorkoutSamplePayload,
+  DeviceWorkoutsResponse,
+  DeviceWorkoutsSyncPayload,
   ExecutionExerciseResult,
   ExecutionResult,
   ExecutionResultInput,
@@ -90,6 +106,8 @@ export interface MobileDataSnapshot {
   coachDiaryEntries: CoachDiaryEntry[];
   coachAiReviews: CoachDayAiReview[];
   deviceHealthSummaries: DeviceHealthDailySummary[];
+  deviceWorkoutLinks: DeviceWorkoutLink[];
+  deviceWorkouts: DeviceWorkout[];
   readinessEntry: ReadinessEntry | null;
   readinessHistory: ReadinessEntry[];
   executionResults: ExecutionResult[];
@@ -99,6 +117,7 @@ export type SyncActionKind =
   | "readiness"
   | "execution"
   | "device-health"
+  | "device-workouts"
   | "competition-result"
   | "coach-diary";
 
@@ -112,6 +131,7 @@ export interface PendingSyncAction {
     | ReadinessSubmissionPayload
     | ExecutionResultInput
     | DeviceHealthDailySummaryPayload
+    | DeviceWorkoutsSyncPayload
     | CompetitionResultPayload
     | CoachDiaryEntryPayload;
   idempotencyKey: string;
@@ -152,6 +172,8 @@ export function createEmptySnapshot(): MobileDataSnapshot {
     competitions: [],
     competitionPlans: [],
     deviceHealthSummaries: [],
+    deviceWorkoutLinks: [],
+    deviceWorkouts: [],
     readinessEntry: null,
     readinessHistory: [],
     executionResults: [],

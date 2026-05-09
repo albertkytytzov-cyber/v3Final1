@@ -66,7 +66,12 @@ export function translateApiErrorMessage(message: string) {
 }
 
 export function canSubmitSyncAction(role: UserRole | null | undefined, kind: SyncActionKind) {
-  if (kind === "readiness" || kind === "execution" || kind === "device-health") {
+  if (
+    kind === "readiness" ||
+    kind === "execution" ||
+    kind === "device-health" ||
+    kind === "device-workouts"
+  ) {
     return role === "athlete";
   }
 
@@ -97,7 +102,7 @@ export function getSyncActionRestrictionMessage(
     return ATHLETE_EXECUTION_REQUIRED_MESSAGE;
   }
 
-  if (kind === "readiness" || kind === "device-health") {
+  if (kind === "readiness" || kind === "device-health" || kind === "device-workouts") {
     return ATHLETE_READINESS_REQUIRED_MESSAGE;
   }
 
@@ -117,7 +122,7 @@ export function isPermanentPermissionError(kind: SyncActionKind, message: string
       translatedMessage === ADMIN_EXECUTION_READ_ONLY_MESSAGE;
   }
 
-  if (kind === "readiness" || kind === "device-health") {
+  if (kind === "readiness" || kind === "device-health" || kind === "device-workouts") {
     return translatedMessage === ATHLETE_READINESS_REQUIRED_MESSAGE;
   }
 

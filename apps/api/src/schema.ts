@@ -449,6 +449,56 @@ export async function ensureSchema() {
       UNIQUE (athlete_id, provider, entry_date)
     );
 
+    CREATE TABLE IF NOT EXISTS device_workouts (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      athlete_id UUID NOT NULL REFERENCES athletes(id) ON DELETE CASCADE,
+      provider TEXT NOT NULL CHECK (provider IN ('huawei-health', 'health-connect')),
+      entry_date DATE NOT NULL,
+      source_device TEXT,
+      source_workout_id TEXT NOT NULL,
+      workout_type TEXT NOT NULL DEFAULT '',
+      start_time TIMESTAMPTZ NOT NULL,
+      end_time TIMESTAMPTZ NOT NULL,
+      duration_minutes NUMERIC(7, 2),
+      distance_meters NUMERIC(10, 2),
+      active_calories NUMERIC(8, 2),
+      average_hr NUMERIC(5, 1),
+      max_hr NUMERIC(5, 1),
+      min_hr NUMERIC(5, 1),
+      raw_payload_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+      synced_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (athlete_id, provider, source_workout_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS device_workout_samples (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      device_workout_id UUID NOT NULL REFERENCES device_workouts(id) ON DELETE CASCADE,
+      sample_time TIMESTAMPTZ NOT NULL,
+      heart_rate_bpm NUMERIC(5, 1),
+      distance_meters NUMERIC(10, 2),
+      speed_meters_per_second NUMERIC(8, 3),
+      pace_seconds_per_km NUMERIC(8, 2),
+      oxygen_saturation_percent NUMERIC(5, 2),
+      raw_payload_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (device_workout_id, sample_time)
+    );
+
+    CREATE TABLE IF NOT EXISTS training_plan_device_links (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      athlete_id UUID NOT NULL REFERENCES athletes(id) ON DELETE CASCADE,
+      assigned_plan_id UUID NOT NULL REFERENCES assigned_plans(id) ON DELETE CASCADE,
+      assigned_block_id UUID NOT NULL REFERENCES assigned_day_blocks(id) ON DELETE CASCADE,
+      assigned_exercise_id UUID REFERENCES assigned_block_exercises(id) ON DELETE SET NULL,
+      device_workout_id UUID NOT NULL REFERENCES device_workouts(id) ON DELETE CASCADE,
+      linked_by_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      linked_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (athlete_id, assigned_block_id, device_workout_id)
+    );
+
     CREATE TABLE IF NOT EXISTS olympic_cycles (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       name TEXT NOT NULL,
@@ -831,6 +881,87 @@ export async function ensureSchema() {
   await ensureColumn("device_health_daily_summaries", "synced_at", "TIMESTAMPTZ NOT NULL DEFAULT NOW()");
   await ensureColumn("device_health_daily_summaries", "created_at", "TIMESTAMPTZ NOT NULL DEFAULT NOW()");
   await ensureColumn("device_health_daily_summaries", "updated_at", "TIMESTAMPTZ NOT NULL DEFAULT NOW()");
+  await ensureUuidDefault("device_workouts");
+  await ensureUuidDefault("device_workout_samples");
+  await ensureUuidDefault("training_plan_device_links");
+  await ensureColumn(
+    "device_workouts",
+    "athlete_id",
+    "UUID REFERENCES athletes(id) ON DELETE CASCADE",
+  );
+  await ensureColumn(
+    "device_workouts",
+    "provider",
+    "TEXT NOT NULL DEFAULT 'health-connect' CHECK (provider IN ('huawei-health', 'health-connect'))",
+  );
+  await pool.query(`
+    ALTER TABLE device_workouts
+      DROP CONSTRAINT IF EXISTS device_workouts_provider_check;
+    ALTER TABLE device_workouts
+      ADD CONSTRAINT device_workouts_provider_check
+      CHECK (provider IN ('huawei-health', 'health-connect'));
+  `);
+  await ensureColumn("device_workouts", "entry_date", "DATE");
+  await ensureColumn("device_workouts", "source_device", "TEXT");
+  await ensureColumn("device_workouts", "source_workout_id", "TEXT NOT NULL DEFAULT ''");
+  await ensureColumn("device_workouts", "workout_type", "TEXT NOT NULL DEFAULT ''");
+  await ensureColumn("device_workouts", "start_time", "TIMESTAMPTZ");
+  await ensureColumn("device_workouts", "end_time", "TIMESTAMPTZ");
+  await ensureColumn("device_workouts", "duration_minutes", "NUMERIC(7, 2)");
+  await ensureColumn("device_workouts", "distance_meters", "NUMERIC(10, 2)");
+  await ensureColumn("device_workouts", "active_calories", "NUMERIC(8, 2)");
+  await ensureColumn("device_workouts", "average_hr", "NUMERIC(5, 1)");
+  await ensureColumn("device_workouts", "max_hr", "NUMERIC(5, 1)");
+  await ensureColumn("device_workouts", "min_hr", "NUMERIC(5, 1)");
+  await ensureColumn("device_workouts", "raw_payload_json", "JSONB NOT NULL DEFAULT '{}'::jsonb");
+  await ensureColumn("device_workouts", "synced_at", "TIMESTAMPTZ NOT NULL DEFAULT NOW()");
+  await ensureColumn("device_workouts", "created_at", "TIMESTAMPTZ NOT NULL DEFAULT NOW()");
+  await ensureColumn("device_workouts", "updated_at", "TIMESTAMPTZ NOT NULL DEFAULT NOW()");
+  await ensureColumn(
+    "device_workout_samples",
+    "device_workout_id",
+    "UUID REFERENCES device_workouts(id) ON DELETE CASCADE",
+  );
+  await ensureColumn("device_workout_samples", "sample_time", "TIMESTAMPTZ");
+  await ensureColumn("device_workout_samples", "heart_rate_bpm", "NUMERIC(5, 1)");
+  await ensureColumn("device_workout_samples", "distance_meters", "NUMERIC(10, 2)");
+  await ensureColumn("device_workout_samples", "speed_meters_per_second", "NUMERIC(8, 3)");
+  await ensureColumn("device_workout_samples", "pace_seconds_per_km", "NUMERIC(8, 2)");
+  await ensureColumn("device_workout_samples", "oxygen_saturation_percent", "NUMERIC(5, 2)");
+  await ensureColumn("device_workout_samples", "raw_payload_json", "JSONB NOT NULL DEFAULT '{}'::jsonb");
+  await ensureColumn("device_workout_samples", "created_at", "TIMESTAMPTZ NOT NULL DEFAULT NOW()");
+  await ensureColumn(
+    "training_plan_device_links",
+    "athlete_id",
+    "UUID REFERENCES athletes(id) ON DELETE CASCADE",
+  );
+  await ensureColumn(
+    "training_plan_device_links",
+    "assigned_plan_id",
+    "UUID REFERENCES assigned_plans(id) ON DELETE CASCADE",
+  );
+  await ensureColumn(
+    "training_plan_device_links",
+    "assigned_block_id",
+    "UUID REFERENCES assigned_day_blocks(id) ON DELETE CASCADE",
+  );
+  await ensureColumn(
+    "training_plan_device_links",
+    "assigned_exercise_id",
+    "UUID REFERENCES assigned_block_exercises(id) ON DELETE SET NULL",
+  );
+  await ensureColumn(
+    "training_plan_device_links",
+    "device_workout_id",
+    "UUID REFERENCES device_workouts(id) ON DELETE CASCADE",
+  );
+  await ensureColumn(
+    "training_plan_device_links",
+    "linked_by_user_id",
+    "UUID REFERENCES users(id) ON DELETE CASCADE",
+  );
+  await ensureColumn("training_plan_device_links", "linked_at", "TIMESTAMPTZ NOT NULL DEFAULT NOW()");
+  await ensureColumn("training_plan_device_links", "created_at", "TIMESTAMPTZ NOT NULL DEFAULT NOW()");
   await ensureColumn(
     "training_load_logs",
     "athlete_id",
@@ -913,6 +1044,12 @@ export async function ensureSchema() {
       WHERE client_request_id IS NOT NULL;
     CREATE UNIQUE INDEX IF NOT EXISTS idx_device_health_daily_provider_date
       ON device_health_daily_summaries (athlete_id, provider, entry_date);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_device_workouts_athlete_provider_source
+      ON device_workouts (athlete_id, provider, source_workout_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_device_workout_samples_workout_time_unique
+      ON device_workout_samples (device_workout_id, sample_time);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_training_plan_device_links_block_workout
+      ON training_plan_device_links (athlete_id, assigned_block_id, device_workout_id);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_exercise_results_athlete_assigned_block
       ON exercise_results (athlete_id, assigned_block_id);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_exercise_result_exercises_result_assigned
@@ -1180,6 +1317,14 @@ export async function ensureSchema() {
       ON coach_ai_day_reviews (coach_user_id, generated_at DESC);
     CREATE INDEX IF NOT EXISTS idx_device_health_daily_athlete_date
       ON device_health_daily_summaries (athlete_id, entry_date DESC);
+    CREATE INDEX IF NOT EXISTS idx_device_workouts_athlete_date
+      ON device_workouts (athlete_id, entry_date DESC, start_time DESC);
+    CREATE INDEX IF NOT EXISTS idx_device_workout_samples_workout_time
+      ON device_workout_samples (device_workout_id, sample_time);
+    CREATE INDEX IF NOT EXISTS idx_training_plan_device_links_block
+      ON training_plan_device_links (athlete_id, assigned_block_id);
+    CREATE INDEX IF NOT EXISTS idx_training_plan_device_links_workout
+      ON training_plan_device_links (device_workout_id);
   `);
 
   await backfillPlanHierarchy();

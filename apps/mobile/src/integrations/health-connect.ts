@@ -3,6 +3,9 @@ import type {
   DeviceHealthHeartRateSummary,
   DeviceHealthSleepSummary,
   DeviceHealthWorkoutSummary,
+  DeviceWorkoutPayload,
+  DeviceWorkoutSamplePayload,
+  DeviceWorkoutsSyncPayload,
 } from "../types/models.js";
 
 interface HealthConnectPlugin {
@@ -14,6 +17,7 @@ interface HealthConnectPlugin {
   }>;
   requestAuthorization?: () => Promise<{ granted?: boolean; reason?: string }>;
   readDailySummary?: (input: { entryDate: string }) => Promise<Partial<DeviceHealthDailySummaryPayload>>;
+  readDailyWorkouts?: (input: { entryDate: string }) => Promise<Partial<DeviceWorkoutsSyncPayload>>;
 }
 
 type CapacitorWithHealthConnect = {
@@ -65,8 +69,111 @@ export async function readMiFitnessHealthConnectDailySummary(
   };
 }
 
+export async function readMiFitnessHealthConnectDeviceWorkouts(
+  entryDate: string,
+): Promise<DeviceWorkoutsSyncPayload> {
+  const plugin = getHealthConnectPlugin();
+
+  if (!plugin?.readDailyWorkouts) {
+    throw new Error(
+      "Health Connect bridge does not support device workout details yet.",
+    );
+  }
+
+  if (plugin.isAvailable) {
+    const availability = await plugin.isAvailable();
+
+    if (!availability.available) {
+      throw new Error(availability.reason || "Health Connect РЅРµРґРѕСЃС‚СѓРїРµРЅ РЅР° СЌС‚РѕРј СѓСЃС‚СЂРѕР№СЃС‚РІРµ.");
+    }
+  }
+
+  if (plugin.requestAuthorization) {
+    const authorization = await plugin.requestAuthorization();
+
+    if (!authorization.granted) {
+      throw new Error(authorization.reason || "РќРµС‚ СЂР°Р·СЂРµС€РµРЅРёСЏ Health Connect РЅР° С‡С‚РµРЅРёРµ С‚СЂРµРЅРёСЂРѕРІРѕРє.");
+    }
+  }
+
+  const payload = await plugin.readDailyWorkouts({ entryDate });
+
+  return {
+    entryDate,
+    provider: "health-connect",
+    workouts: Array.isArray(payload.workouts)
+      ? payload.workouts
+          .map((workout) => normalizeDeviceWorkout(workout, entryDate))
+          .filter((workout): workout is DeviceWorkoutPayload => Boolean(workout))
+      : [],
+  };
+}
+
 function getHealthConnectPlugin() {
   return (globalThis as CapacitorWithHealthConnect).Capacitor?.Plugins?.HealthConnect ?? null;
+}
+
+function normalizeDeviceWorkout(
+  value: unknown,
+  entryDate: string,
+): DeviceWorkoutPayload | null {
+  if (!isPlainRecord(value)) {
+    return null;
+  }
+
+  const startTime = normalizeIsoString(value.startTime);
+  const endTime = normalizeIsoString(value.endTime);
+  if (!startTime || !endTime) {
+    return null;
+  }
+
+  const workoutType = normalizeNullableString(value.workoutType) ?? "workout";
+  const sourceWorkoutId = normalizeNullableString(value.sourceWorkoutId) ??
+    `health-connect:${workoutType}:${startTime}:${endTime}`;
+
+  return {
+    activeCalories: normalizeNumber(value.activeCalories),
+    averageHeartRateBpm: normalizeNumber(value.averageHeartRateBpm),
+    distanceMeters: normalizeNumber(value.distanceMeters),
+    durationMinutes: normalizeNumber(value.durationMinutes),
+    endTime,
+    entryDate,
+    maxHeartRateBpm: normalizeNumber(value.maxHeartRateBpm),
+    minHeartRateBpm: normalizeNumber(value.minHeartRateBpm),
+    provider: "health-connect",
+    rawPayload: isPlainRecord(value.rawPayload) ? value.rawPayload : null,
+    samples: Array.isArray(value.samples)
+      ? value.samples
+          .map(normalizeDeviceWorkoutSample)
+          .filter((sample): sample is DeviceWorkoutSamplePayload => Boolean(sample))
+      : [],
+    sourceDevice: normalizeNullableString(value.sourceDevice) ?? "Health Connect",
+    sourceWorkoutId,
+    startTime,
+    syncedAt: new Date().toISOString(),
+    workoutType,
+  };
+}
+
+function normalizeDeviceWorkoutSample(value: unknown): DeviceWorkoutSamplePayload | null {
+  if (!isPlainRecord(value)) {
+    return null;
+  }
+
+  const sampleTime = normalizeIsoString(value.sampleTime);
+  if (!sampleTime) {
+    return null;
+  }
+
+  return {
+    distanceMeters: normalizeNumber(value.distanceMeters),
+    heartRateBpm: normalizeNumber(value.heartRateBpm),
+    oxygenSaturationPercent: normalizeNumber(value.oxygenSaturationPercent),
+    paceSecondsPerKm: normalizeNumber(value.paceSecondsPerKm),
+    rawPayload: isPlainRecord(value.rawPayload) ? value.rawPayload : null,
+    sampleTime,
+    speedMetersPerSecond: normalizeNumber(value.speedMetersPerSecond),
+  };
 }
 
 function normalizeSleepSummary(value: unknown): DeviceHealthSleepSummary | null {

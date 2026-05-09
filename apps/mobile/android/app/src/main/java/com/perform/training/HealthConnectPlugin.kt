@@ -10,9 +10,11 @@ import androidx.health.connect.client.records.ActiveCaloriesBurnedRecord
 import androidx.health.connect.client.records.DistanceRecord
 import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.health.connect.client.records.HeartRateRecord
+import androidx.health.connect.client.records.OxygenSaturationRecord
 import androidx.health.connect.client.records.Record
 import androidx.health.connect.client.records.RestingHeartRateRecord
 import androidx.health.connect.client.records.SleepSessionRecord
+import androidx.health.connect.client.records.SpeedRecord
 import androidx.health.connect.client.records.TotalCaloriesBurnedRecord
 import androidx.health.connect.client.records.metadata.DataOrigin
 import androidx.health.connect.client.request.ReadRecordsRequest
@@ -35,6 +37,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
 import org.json.JSONObject
 
 @CapacitorPlugin(name = "HealthConnect")
@@ -77,7 +80,7 @@ class HealthConnectPlugin : Plugin() {
                     client.permissionController.getGrantedPermissions()
                 }
 
-                if (granted.containsAll(permissions)) {
+                if (granted.containsAll(requiredPermissions)) {
                     val response = JSObject()
                     response.put("granted", true)
                     response.put("reason", JSONObject.NULL)
@@ -102,10 +105,10 @@ class HealthConnectPlugin : Plugin() {
         try {
             val granted = permissionContract.parseResult(result.resultCode, result.data)
             val response = JSObject()
-            response.put("granted", granted.containsAll(permissions))
+            response.put("granted", granted.containsAll(requiredPermissions))
             response.put(
                 "reason",
-                if (granted.containsAll(permissions)) {
+                if (granted.containsAll(requiredPermissions)) {
                     JSONObject.NULL
                 } else {
                     "Health Connect не выдал все разрешения на чтение сна, пульса и тренировок."
@@ -139,7 +142,7 @@ class HealthConnectPlugin : Plugin() {
                     client.permissionController.getGrantedPermissions()
                 }
 
-                if (!granted.containsAll(permissions)) {
+                if (!granted.containsAll(requiredPermissions)) {
                     call.reject("Нет разрешения Health Connect на чтение сна, пульса и тренировок.")
                     return@launch
                 }
@@ -150,6 +153,43 @@ class HealthConnectPlugin : Plugin() {
                 call.resolve(summary)
             } catch (error: Exception) {
                 call.reject("Не удалось прочитать Mi Fitness через Health Connect: ${safeMessage(error)}", error)
+            }
+        }
+    }
+
+    @PluginMethod
+    fun readDailyWorkouts(call: PluginCall) {
+        val entryDate = call.getString("entryDate")
+        if (entryDate.isNullOrBlank()) {
+            call.reject("entryDate is required")
+            return
+        }
+
+        val dayRange = try {
+            parseDayRange(entryDate)
+        } catch (error: DateTimeParseException) {
+            call.reject("entryDate must use YYYY-MM-DD format", error)
+            return
+        }
+
+        pluginScope.launch {
+            try {
+                val client = HealthConnectClient.getOrCreate(context)
+                val granted = withContext(Dispatchers.IO) {
+                    client.permissionController.getGrantedPermissions()
+                }
+
+                if (!granted.containsAll(requiredWorkoutPermissions)) {
+                    call.reject("РќРµС‚ СЂР°Р·СЂРµС€РµРЅРёСЏ Health Connect РЅР° С‡С‚РµРЅРёРµ С‚СЂРµРЅРёСЂРѕРІРѕРє.")
+                    return@launch
+                }
+
+                val workouts = withContext(Dispatchers.IO) {
+                    readMiFitnessDailyWorkouts(client, dayRange, granted)
+                }
+                call.resolve(workouts)
+            } catch (error: Exception) {
+                call.reject("РќРµ СѓРґР°Р»РѕСЃСЊ РїСЂРѕС‡РёС‚Р°С‚СЊ С‚СЂРµРЅРёСЂРѕРІРєРё Health Connect: ${safeMessage(error)}", error)
             }
         }
     }
@@ -264,6 +304,199 @@ class HealthConnectPlugin : Plugin() {
         result.put("rawPayload", rawPayload)
 
         return result
+    }
+
+    private suspend fun readMiFitnessDailyWorkouts(
+        client: HealthConnectClient,
+        dayRange: DayRange,
+        grantedPermissions: Set<String>,
+    ): JSObject {
+        val range = TimeRangeFilter.between(dayRange.start, dayRange.end)
+        val exerciseRecords = readAllRecords(client, ExerciseSessionRecord::class, range)
+        val heartRateRecords = readAllRecords(client, HeartRateRecord::class, range)
+        val distanceRecords = readAllRecords(client, DistanceRecord::class, range)
+        val activeCaloriesRecords = readAllRecords(client, ActiveCaloriesBurnedRecord::class, range)
+        val totalCaloriesRecords = readAllRecords(client, TotalCaloriesBurnedRecord::class, range)
+        val speedRecords = if (grantedPermissions.contains(HealthPermission.getReadPermission(SpeedRecord::class))) {
+            readAllRecords(client, SpeedRecord::class, range)
+        } else {
+            emptyList()
+        }
+        val oxygenSaturationRecords = if (grantedPermissions.contains(HealthPermission.getReadPermission(OxygenSaturationRecord::class))) {
+            readAllRecords(client, OxygenSaturationRecord::class, range)
+        } else {
+            emptyList()
+        }
+        val installedKnownSources = installedKnownHealthSourcePackages()
+        val workouts = JSONArray()
+
+        for (record in exerciseRecords.sortedBy { exercise -> exercise.startTime }) {
+            workouts.put(
+                buildDeviceWorkout(
+                    record,
+                    heartRateRecords,
+                    distanceRecords,
+                    activeCaloriesRecords,
+                    totalCaloriesRecords,
+                    speedRecords,
+                    oxygenSaturationRecords,
+                    dayRange,
+                    installedKnownSources,
+                ),
+            )
+        }
+
+        val result = JSObject()
+        result.put("entryDate", dayRange.entryDate)
+        result.put("provider", PROVIDER)
+        result.put("workouts", workouts)
+
+        return result
+    }
+
+    private fun buildDeviceWorkout(
+        exerciseRecord: ExerciseSessionRecord,
+        heartRateRecords: List<HeartRateRecord>,
+        distanceRecords: List<DistanceRecord>,
+        activeCaloriesRecords: List<ActiveCaloriesBurnedRecord>,
+        totalCaloriesRecords: List<TotalCaloriesBurnedRecord>,
+        speedRecords: List<SpeedRecord>,
+        oxygenSaturationRecords: List<OxygenSaturationRecord>,
+        dayRange: DayRange,
+        installedKnownSources: List<String>,
+    ): JSObject {
+        val startTime = exerciseRecord.startTime
+        val endTime = exerciseRecord.endTime
+        val workoutHeartRateSamples = collectHeartRateSamples(heartRateRecords)
+            .filter { sample -> sample.time >= startTime && sample.time <= endTime }
+        val heartRateValues = workoutHeartRateSamples.map { sample -> sample.bpm }
+        val workoutDistanceRecords = distanceRecords
+            .filter { record -> overlaps(record.startTime, record.endTime, startTime, endTime) }
+            .sortedBy { record -> record.endTime }
+        val workoutActiveCalories = activeCaloriesRecords
+            .filter { record -> overlaps(record.startTime, record.endTime, startTime, endTime) }
+            .sumOf { record -> record.energy.inKilocalories }
+        val workoutTotalCalories = totalCaloriesRecords
+            .filter { record -> overlaps(record.startTime, record.endTime, startTime, endTime) }
+            .sumOf { record -> record.energy.inKilocalories }
+        val distanceMeters = workoutDistanceRecords.sumOf { record -> record.distance.inMeters }
+        val rawPayload = JSObject()
+        rawPayload.put("exerciseType", exerciseRecord.exerciseType)
+        rawPayload.put("dataOrigin", exerciseRecord.metadata.dataOrigin.packageName)
+        rawPayload.put("sampleCount", workoutHeartRateSamples.size)
+
+        val workout = JSObject()
+        workout.put("entryDate", dayRange.entryDate)
+        workout.put("provider", PROVIDER)
+        workout.put(
+            "sourceDevice",
+            if (installedKnownSources.isNotEmpty()) "Xiaomi / Health Connect" else "Health Connect",
+        )
+        workout.put(
+            "sourceWorkoutId",
+            buildSourceWorkoutId(exerciseRecord),
+        )
+        workout.put("workoutType", exerciseRecord.title?.takeIf { title -> title.isNotBlank() } ?: "exercise-${exerciseRecord.exerciseType}")
+        workout.put("startTime", startTime.toString())
+        workout.put("endTime", endTime.toString())
+        putNullableNumber(workout, "durationMinutes", minutesBetween(startTime, endTime).takeIf { it > 0 })
+        putNullableNumber(workout, "distanceMeters", distanceMeters.takeIf { it > 0 })
+        putNullableNumber(
+            workout,
+            "activeCalories",
+            workoutActiveCalories.takeIf { it > 0 } ?: workoutTotalCalories.takeIf { it > 0 },
+        )
+        putNullableNumber(workout, "averageHeartRateBpm", average(heartRateValues))
+        putNullableNumber(workout, "maxHeartRateBpm", heartRateValues.maxOrNull())
+        putNullableNumber(workout, "minHeartRateBpm", heartRateValues.minOrNull())
+        workout.put(
+            "samples",
+            buildDeviceWorkoutSamples(
+                workoutHeartRateSamples,
+                workoutDistanceRecords,
+                speedRecords.filter { record -> overlaps(record.startTime, record.endTime, startTime, endTime) },
+                oxygenSaturationRecords.filter { record -> record.time >= startTime && record.time <= endTime },
+                startTime,
+                endTime,
+            ),
+        )
+        workout.put("rawPayload", rawPayload)
+        workout.put("syncedAt", Instant.now().toString())
+
+        return workout
+    }
+
+    private fun buildDeviceWorkoutSamples(
+        heartRateSamples: List<HeartRateSample>,
+        distanceRecords: List<DistanceRecord>,
+        speedRecords: List<SpeedRecord>,
+        oxygenSaturationRecords: List<OxygenSaturationRecord>,
+        workoutStart: Instant,
+        workoutEnd: Instant,
+    ): JSONArray {
+        val samplesByTime = linkedMapOf<Instant, JSObject>()
+
+        fun sampleAt(time: Instant): JSObject {
+            val sample = samplesByTime.getOrPut(time) {
+                val next = JSObject()
+                next.put("sampleTime", time.toString())
+                putNullable(next, "heartRateBpm", null)
+                putNullable(next, "distanceMeters", null)
+                putNullable(next, "speedMetersPerSecond", null)
+                putNullable(next, "paceSecondsPerKm", null)
+                putNullable(next, "oxygenSaturationPercent", null)
+                next
+            }
+            return sample
+        }
+
+        for (sample in heartRateSamples) {
+            putNullableNumber(sampleAt(sample.time), "heartRateBpm", sample.bpm)
+        }
+
+        var cumulativeDistanceMeters = 0.0
+        for (record in distanceRecords.sortedBy { distance -> distance.endTime }) {
+            cumulativeDistanceMeters += record.distance.inMeters
+            val sampleTime = clampInstant(record.endTime, workoutStart, workoutEnd)
+            putNullableNumber(sampleAt(sampleTime), "distanceMeters", cumulativeDistanceMeters.takeIf { it > 0 })
+        }
+
+        for (record in speedRecords) {
+            for (sample in record.samples) {
+                if (sample.time < workoutStart || sample.time > workoutEnd) {
+                    continue
+                }
+                val speedMetersPerSecond = sample.speed.inMetersPerSecond
+                putNullableNumber(sampleAt(sample.time), "speedMetersPerSecond", speedMetersPerSecond)
+                putNullableNumber(
+                    sampleAt(sample.time),
+                    "paceSecondsPerKm",
+                    if (speedMetersPerSecond > 0) 1000.0 / speedMetersPerSecond else null,
+                )
+            }
+        }
+
+        for (record in oxygenSaturationRecords) {
+            putNullableNumber(sampleAt(record.time), "oxygenSaturationPercent", record.percentage.value)
+        }
+
+        val samples = JSONArray()
+        samplesByTime.toSortedMap().values.take(MAX_WORKOUT_SAMPLES).forEach { sample -> samples.put(sample) }
+        return samples
+    }
+
+    private fun buildSourceWorkoutId(record: ExerciseSessionRecord): String {
+        val metadataId = record.metadata.id
+        if (metadataId.isNotBlank()) {
+            return metadataId
+        }
+
+        return listOf(
+            record.metadata.dataOrigin.packageName,
+            record.exerciseType.toString(),
+            record.startTime.toString(),
+            record.endTime.toString(),
+        ).joinToString(":")
     }
 
     private suspend fun <T : Record> readAllRecords(
@@ -472,6 +705,18 @@ class HealthConnectPlugin : Plugin() {
         return max(0.0, Duration.between(start, end).toMillis().toDouble() / MILLIS_PER_MINUTE)
     }
 
+    private fun overlaps(recordStart: Instant, recordEnd: Instant, rangeStart: Instant, rangeEnd: Instant): Boolean {
+        return recordEnd > rangeStart && recordStart < rangeEnd
+    }
+
+    private fun clampInstant(value: Instant, start: Instant, end: Instant): Instant {
+        return when {
+            value < start -> start
+            value > end -> end
+            else -> value
+        }
+    }
+
     private fun average(values: List<Double>) = if (values.isEmpty()) null else values.sum() / values.size
 
     private fun minInstant(left: Instant?, right: Instant?) = when {
@@ -543,6 +788,7 @@ class HealthConnectPlugin : Plugin() {
         private const val MIN_REASONABLE_HEART_RATE = 25.0
         private const val MAX_REASONABLE_HEART_RATE = 240.0
         private const val MIN_RESTING_ESTIMATE_SAMPLES = 3
+        private const val MAX_WORKOUT_SAMPLES = 2500
         private val XIAOMI_HEALTH_SOURCE_PACKAGES = listOf(
             MI_FITNESS_PACKAGE,
             XIAOMI_HEALTH_PACKAGE,
@@ -551,7 +797,7 @@ class HealthConnectPlugin : Plugin() {
         private val xiaomiHealthDataOrigins = XIAOMI_HEALTH_SOURCE_PACKAGES.map { packageName ->
             DataOrigin(packageName)
         }.toSet()
-        private val permissions = setOf(
+        private val requiredPermissions = setOf(
             HealthPermission.getReadPermission(SleepSessionRecord::class),
             HealthPermission.getReadPermission(HeartRateRecord::class),
             HealthPermission.getReadPermission(RestingHeartRateRecord::class),
@@ -560,5 +806,17 @@ class HealthConnectPlugin : Plugin() {
             HealthPermission.getReadPermission(TotalCaloriesBurnedRecord::class),
             HealthPermission.getReadPermission(ActiveCaloriesBurnedRecord::class),
         )
+        private val requiredWorkoutPermissions = setOf(
+            HealthPermission.getReadPermission(HeartRateRecord::class),
+            HealthPermission.getReadPermission(ExerciseSessionRecord::class),
+            HealthPermission.getReadPermission(DistanceRecord::class),
+            HealthPermission.getReadPermission(TotalCaloriesBurnedRecord::class),
+            HealthPermission.getReadPermission(ActiveCaloriesBurnedRecord::class),
+        )
+        private val optionalWorkoutPermissions = setOf(
+            HealthPermission.getReadPermission(SpeedRecord::class),
+            HealthPermission.getReadPermission(OxygenSaturationRecord::class),
+        )
+        private val permissions = requiredPermissions + optionalWorkoutPermissions
     }
 }

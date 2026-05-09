@@ -157,6 +157,86 @@ export interface DeviceHealthDailySummaryResponse {
   summary: DeviceHealthDailySummary;
 }
 
+export interface DeviceWorkoutSamplePayload {
+  sampleTime: string;
+  heartRateBpm: number | null;
+  distanceMeters: number | null;
+  speedMetersPerSecond: number | null;
+  paceSecondsPerKm: number | null;
+  oxygenSaturationPercent: number | null;
+  rawPayload?: Record<string, unknown> | null;
+}
+
+export interface DeviceWorkoutPayload {
+  entryDate: string;
+  provider: DeviceHealthProvider;
+  sourceDevice: string | null;
+  sourceWorkoutId: string;
+  workoutType: string;
+  startTime: string;
+  endTime: string;
+  durationMinutes: number | null;
+  distanceMeters: number | null;
+  activeCalories: number | null;
+  averageHeartRateBpm: number | null;
+  maxHeartRateBpm: number | null;
+  minHeartRateBpm: number | null;
+  samples: DeviceWorkoutSamplePayload[];
+  rawPayload?: Record<string, unknown> | null;
+  syncedAt?: string | null;
+}
+
+export interface DeviceWorkoutSample extends DeviceWorkoutSamplePayload {
+  id: string;
+  deviceWorkoutId: string;
+  createdAt: string;
+}
+
+export interface DeviceWorkout extends Omit<DeviceWorkoutPayload, "samples"> {
+  id: string;
+  athleteId: string;
+  sampleCount: number;
+  samples: DeviceWorkoutSample[];
+  createdAt: string;
+  updatedAt: string;
+  syncedAt: string;
+}
+
+export interface DeviceWorkoutLink {
+  id: string;
+  athleteId: string;
+  assignedPlanId: string;
+  assignedBlockId: string;
+  assignedExerciseId: string | null;
+  deviceWorkoutId: string;
+  linkedByUserId: string;
+  linkedAt: string;
+  createdAt: string;
+  workout: DeviceWorkout;
+}
+
+export interface DeviceWorkoutsSyncPayload {
+  entryDate: string;
+  provider: DeviceHealthProvider;
+  workouts: DeviceWorkoutPayload[];
+}
+
+export interface DeviceWorkoutsResponse {
+  workouts: DeviceWorkout[];
+  links?: DeviceWorkoutLink[];
+}
+
+export interface DeviceWorkoutLinkPayload {
+  assignedPlanId: string;
+  assignedBlockId: string;
+  assignedExerciseId?: string | null;
+  deviceWorkoutId: string;
+}
+
+export interface DeviceWorkoutLinkResponse {
+  link: DeviceWorkoutLink;
+}
+
 export interface CoachAthleteSummary {
   athleteId: string;
   userId: string;
@@ -791,6 +871,23 @@ export interface CoachDayAiPayload {
       restingBpm: number | null;
     } | null;
     missing: string[];
+    linkedWorkouts?: Array<{
+      averageHeartRateBpm: number | null;
+      distanceMeters: number | null;
+      durationMinutes: number | null;
+      hasDistance: boolean;
+      hasGraph: boolean;
+      hasHeartRate: boolean;
+      hasSpO2: boolean;
+      maxHeartRateBpm: number | null;
+      planBlockId: string;
+      planBlockName: string;
+      sourceDevice: string | null;
+      startTime: string;
+      endTime: string;
+      workoutId: string;
+      workoutType: string;
+    }>;
     sleep: {
       awakeMinutes: number | null;
       deepMinutes: number | null;
