@@ -481,8 +481,63 @@ class HealthConnectPlugin : Plugin() {
         }
 
         val samples = JSONArray()
-        samplesByTime.toSortedMap().values.take(MAX_WORKOUT_SAMPLES).forEach { sample -> samples.put(sample) }
+        downsampleWorkoutSamples(samplesByTime.toSortedMap().values.toList()).forEach { sample -> samples.put(sample) }
         return samples
+    }
+
+    private fun downsampleWorkoutSamples(samples: List<JSObject>): List<JSObject> {
+        if (samples.size <= MAX_WORKOUT_SAMPLES) {
+            return samples
+        }
+
+        val selectedIndexes = sortedSetOf(0, samples.lastIndex)
+        val bucketCount = max(1, (MAX_WORKOUT_SAMPLES - 2) / 2)
+
+        for (bucketIndex in 0 until bucketCount) {
+            val start = (bucketIndex * samples.size) / bucketCount
+            val end = minOf(samples.size, ((bucketIndex + 1) * samples.size) / bucketCount)
+            if (start >= end) {
+                continue
+            }
+
+            var minHeartRateIndex: Int? = null
+            var maxHeartRateIndex: Int? = null
+
+            for (index in start until end) {
+                val heartRate = getNullableDouble(samples[index], "heartRateBpm") ?: continue
+                val minIndex = minHeartRateIndex
+                val maxIndex = maxHeartRateIndex
+                if (minIndex == null || heartRate < (getNullableDouble(samples[minIndex], "heartRateBpm") ?: heartRate)) {
+                    minHeartRateIndex = index
+                }
+                if (maxIndex == null || heartRate > (getNullableDouble(samples[maxIndex], "heartRateBpm") ?: heartRate)) {
+                    maxHeartRateIndex = index
+                }
+            }
+
+            if (minHeartRateIndex == null || maxHeartRateIndex == null) {
+                selectedIndexes.add(start)
+                selectedIndexes.add(end - 1)
+            } else {
+                selectedIndexes.add(minHeartRateIndex)
+                selectedIndexes.add(maxHeartRateIndex)
+            }
+        }
+
+        return selectedIndexes.take(MAX_WORKOUT_SAMPLES).map { index -> samples[index] }
+    }
+
+    private fun getNullableDouble(sample: JSObject, key: String): Double? {
+        val value = sample.opt(key)
+        if (value == null || value == JSONObject.NULL) {
+            return null
+        }
+
+        return when (value) {
+            is Number -> value.toDouble()
+            is String -> value.toDoubleOrNull()
+            else -> null
+        }
     }
 
     private fun buildSourceWorkoutId(record: ExerciseSessionRecord): String {
