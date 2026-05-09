@@ -475,11 +475,17 @@ export function bootstrapMobileApp(root: HTMLElement) {
 
     const athleteId = state.selectedAthleteId;
     const assignedPlanId = select.dataset.deviceWorkoutPlanId ?? "";
-    const assignedBlockId = select.dataset.deviceWorkoutBlockId ?? "";
-    const linkId = select.dataset.deviceWorkoutLinkId ?? "";
+    const assignedBlockIds = (select.dataset.deviceWorkoutBlockIds ?? select.dataset.deviceWorkoutBlockId ?? "")
+      .split(",")
+      .map((id) => id.trim())
+      .filter(Boolean);
+    const linkIds = (select.dataset.deviceWorkoutLinkIds ?? select.dataset.deviceWorkoutLinkId ?? "")
+      .split(",")
+      .map((id) => id.trim())
+      .filter(Boolean);
     const deviceWorkoutId = select.value;
 
-    if (!athleteId || !assignedPlanId || !assignedBlockId) {
+    if (!athleteId || !assignedPlanId || assignedBlockIds.length === 0) {
       update({ error: "Не выбран спортсмен или блок плана" });
       return;
     }
@@ -493,11 +499,12 @@ export function bootstrapMobileApp(root: HTMLElement) {
 
     try {
       if (!deviceWorkoutId) {
-        if (linkId) {
-          await client().unlinkDeviceWorkout(athleteId, linkId);
+        if (linkIds.length > 0) {
+          await Promise.all(linkIds.map((linkId) => client().unlinkDeviceWorkout(athleteId, linkId)));
+          const removedLinkIds = new Set(linkIds);
           const snapshot = {
             ...state.data,
-            deviceWorkoutLinks: state.data.deviceWorkoutLinks.filter((link) => link.id !== linkId),
+            deviceWorkoutLinks: state.data.deviceWorkoutLinks.filter((link) => !removedLinkIds.has(link.id)),
             savedAt: new Date().toISOString(),
           };
           saveSnapshot(snapshot);
@@ -509,19 +516,29 @@ export function bootstrapMobileApp(root: HTMLElement) {
         return;
       }
 
-      const response = await client().linkDeviceWorkout(athleteId, {
-        assignedBlockId,
-        assignedPlanId,
-        deviceWorkoutId,
-      });
+      await Promise.all(linkIds.map((linkId) => client().unlinkDeviceWorkout(athleteId, linkId)));
+      const responses = await Promise.all(assignedBlockIds.map((assignedBlockId) =>
+        client().linkDeviceWorkout(athleteId, {
+          assignedBlockId,
+          assignedPlanId,
+          deviceWorkoutId,
+        })
+      ));
+      const removedLinkIds = new Set(linkIds);
       const snapshot = {
         ...state.data,
-        deviceWorkoutLinks: upsertDeviceWorkoutLinks(state.data.deviceWorkoutLinks, [response.link]),
-        deviceWorkouts: upsertDeviceWorkouts(state.data.deviceWorkouts, [response.link.workout]),
+        deviceWorkoutLinks: upsertDeviceWorkoutLinks(
+          state.data.deviceWorkoutLinks.filter((link) => !removedLinkIds.has(link.id)),
+          responses.map((response) => response.link),
+        ),
+        deviceWorkouts: upsertDeviceWorkouts(
+          state.data.deviceWorkouts,
+          responses.map((response) => response.link.workout),
+        ),
         savedAt: new Date().toISOString(),
       };
       saveSnapshot(snapshot);
-      update({ data: snapshot, isBusy: false, message: "Тренировка устройства связана с блоком плана." });
+      update({ data: snapshot, isBusy: false, message: "Тренировка устройства связана со сессией плана." });
     } catch (error) {
       update({
         error: error instanceof Error ? error.message : "Не удалось сохранить связь с тренировкой устройства.",
@@ -1378,6 +1395,13 @@ function renderCoachDayExerciseChecklist(dayData: CoachDayCleanSummary) {
 
 function renderCoachDeviceWorkoutPanel(dayData: CoachDayCleanSummary, isBusy: boolean) {
   const workouts = dayData.deviceWorkouts;
+  const sessionGroups = getCoachDeviceWorkoutSessionGroups(dayData.blocks);
+  const linkedSessionCount = sessionGroups.filter((group) =>
+    getDeviceWorkoutLinkGroupForBlocks(
+      dayData.deviceWorkoutLinks,
+      group.blocks.map((block) => block.assignedBlockId),
+    ).isFullyLinked
+  ).length;
 
   return `
     <section class="coach-day-exercise-card">
@@ -1387,7 +1411,7 @@ function renderCoachDeviceWorkoutPanel(dayData: CoachDayCleanSummary, isBusy: bo
           <h3>${workouts.length ? `${workouts.length} тренировок пришло` : "Нет тренировок устройства"}</h3>
         </div>
         <div class="device-health-actions">
-          <strong>${dayData.deviceWorkoutLinks.length}/${dayData.blocks.length || 0}</strong>
+          <strong>${linkedSessionCount}/${sessionGroups.length || 0}</strong>
           <button class="secondary-action" data-refresh type="button" ${isBusy ? "disabled" : ""}>
             Обновить
           </button>
@@ -1397,25 +1421,38 @@ function renderCoachDeviceWorkoutPanel(dayData: CoachDayCleanSummary, isBusy: bo
         ? `<p class="muted-copy">Выбор станет активным после того, как спортсмен синхронизирует детальные тренировки Mi Fitness / Health Connect за эту дату.</p>`
         : ""}
       <div class="coach-day-exercise-list">
-        ${dayData.blocks.map((block) => {
-          const link = getDeviceWorkoutLinkForBlock(dayData.deviceWorkoutLinks, block.assignedBlockId);
-          const linkedWorkout = link?.workout ?? null;
+        ${sessionGroups.map((group) => {
+          const assignedBlockIds = group.blocks.map((block) => block.assignedBlockId);
+          const linkGroup = getDeviceWorkoutLinkGroupForBlocks(dayData.deviceWorkoutLinks, assignedBlockIds);
+          const linkedWorkout = linkGroup.linkedWorkout;
+          const status = linkedWorkout && linkGroup.isFullyLinked
+            ? "completed"
+            : linkGroup.isPartiallyLinked || workouts.length
+              ? "partial"
+              : "missed";
+          const statusLabel = linkedWorkout && linkGroup.isFullyLinked
+            ? "связано с устройством"
+            : linkGroup.isPartiallyLinked || linkGroup.hasMixedWorkouts
+              ? "частично связано"
+              : workouts.length
+                ? "не связано"
+                : "нет данных устройства";
 
           return `
-            <article class="is-${linkedWorkout ? "completed" : workouts.length ? "partial" : "missed"}">
-              <span>${linkedWorkout ? "связано с устройством" : workouts.length ? "не связано" : "нет данных устройства"}</span>
-              <strong>${escapeHtml(block.name)}</strong>
-              <p>${escapeHtml(block.sessionName)} · ${escapeHtml(block.target || "-")}</p>
+            <article class="is-${status}">
+              <span>${escapeHtml(statusLabel)}</span>
+              <strong>${escapeHtml(group.sessionName)}</strong>
+              <p>${escapeHtml(group.blocks.map((block) => block.name).join(" · "))}</p>
               <select
                 data-device-workout-link
-                data-device-workout-plan-id="${escapeHtml(block.assignedPlanId)}"
-                data-device-workout-block-id="${escapeHtml(block.assignedBlockId)}"
-                data-device-workout-link-id="${escapeHtml(link?.id ?? "")}"
+                data-device-workout-plan-id="${escapeHtml(group.assignedPlanId)}"
+                data-device-workout-block-ids="${escapeHtml(assignedBlockIds.join(","))}"
+                data-device-workout-link-ids="${escapeHtml(linkGroup.links.map((link) => link.id).join(","))}"
                 ${isBusy || workouts.length === 0 ? "disabled" : ""}
               >
                 <option value="">Выбрать тренировку устройства</option>
                 ${workouts.map((workout) => `
-                  <option value="${escapeHtml(workout.id)}" ${linkedWorkout?.id === workout.id ? "selected" : ""}>
+                  <option value="${escapeHtml(workout.id)}" ${!linkGroup.hasMixedWorkouts && linkedWorkout?.id === workout.id ? "selected" : ""}>
                     ${escapeHtml(formatDeviceWorkoutOptionLabel(workout))}
                   </option>
                 `).join("")}
@@ -4773,11 +4810,57 @@ function getDeviceWorkoutLinksForDate(
     .sort((left, right) => left.workout.startTime.localeCompare(right.workout.startTime));
 }
 
-function getDeviceWorkoutLinkForBlock(
+function getDeviceWorkoutLinkGroupForBlocks(
   links: DeviceWorkoutLink[],
-  assignedBlockId: string,
+  assignedBlockIds: string[],
 ) {
-  return links.find((link) => link.assignedBlockId === assignedBlockId) ?? null;
+  const assignedBlockIdSet = new Set(assignedBlockIds);
+  const groupLinks = links.filter((link) => assignedBlockIdSet.has(link.assignedBlockId));
+  const workoutIds = Array.from(new Set(groupLinks.map((link) => link.deviceWorkoutId)));
+  const commonWorkoutId = workoutIds.length === 1 ? workoutIds[0] : null;
+  const linkedWorkout = commonWorkoutId
+    ? groupLinks.find((link) => link.deviceWorkoutId === commonWorkoutId)?.workout ?? null
+    : null;
+  const linkedBlockIds = new Set(
+    groupLinks
+      .filter((link) => !commonWorkoutId || link.deviceWorkoutId === commonWorkoutId)
+      .map((link) => link.assignedBlockId),
+  );
+
+  return {
+    hasMixedWorkouts: workoutIds.length > 1,
+    isFullyLinked: Boolean(commonWorkoutId) &&
+      assignedBlockIds.length > 0 &&
+      linkedBlockIds.size === assignedBlockIdSet.size,
+    isPartiallyLinked: groupLinks.length > 0 &&
+      (!commonWorkoutId || linkedBlockIds.size < assignedBlockIdSet.size),
+    linkedWorkout,
+    links: groupLinks,
+  };
+}
+
+function getCoachDeviceWorkoutSessionGroups(blocks: CoachDayBlockCleanSummary[]) {
+  const groups = new Map<string, {
+    assignedPlanId: string;
+    blocks: CoachDayBlockCleanSummary[];
+    sessionName: string;
+  }>();
+
+  for (const block of blocks) {
+    const key = `${block.assignedPlanId}:${block.sessionName}`;
+    const group = groups.get(key);
+    if (group) {
+      group.blocks.push(block);
+    } else {
+      groups.set(key, {
+        assignedPlanId: block.assignedPlanId,
+        blocks: [block],
+        sessionName: block.sessionName,
+      });
+    }
+  }
+
+  return Array.from(groups.values());
 }
 
 function compareDeviceHealthSummaries(

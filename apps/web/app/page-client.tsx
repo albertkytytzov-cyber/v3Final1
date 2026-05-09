@@ -52,7 +52,6 @@ import {
   type DeviceHealthDailySummary,
   type DeviceWorkout,
   type DeviceWorkoutLink,
-  type DeviceWorkoutLinkPayload,
   type DeviceWorkoutLinkResponse,
   type DeviceWorkoutsResponse,
   type PlanTemplateRecommendation,
@@ -752,11 +751,33 @@ function getDeviceWorkoutLinksForDay(
     .sort((left, right) => left.workout.startTime.localeCompare(right.workout.startTime));
 }
 
-function getDeviceWorkoutLinkForBlock(
+function getDeviceWorkoutLinkGroupForBlocks(
   links: DeviceWorkoutLink[],
-  assignedBlockId: string,
+  assignedBlockIds: string[],
 ) {
-  return links.find((link) => link.assignedBlockId === assignedBlockId) ?? null;
+  const assignedBlockIdSet = new Set(assignedBlockIds);
+  const groupLinks = links.filter((link) => assignedBlockIdSet.has(link.assignedBlockId));
+  const workoutIds = Array.from(new Set(groupLinks.map((link) => link.deviceWorkoutId)));
+  const commonWorkoutId = workoutIds.length === 1 ? workoutIds[0] : null;
+  const linkedWorkout = commonWorkoutId
+    ? groupLinks.find((link) => link.deviceWorkoutId === commonWorkoutId)?.workout ?? null
+    : null;
+  const linkedBlockIds = new Set(
+    groupLinks
+      .filter((link) => !commonWorkoutId || link.deviceWorkoutId === commonWorkoutId)
+      .map((link) => link.assignedBlockId),
+  );
+
+  return {
+    hasMixedWorkouts: workoutIds.length > 1,
+    isFullyLinked: Boolean(commonWorkoutId) &&
+      assignedBlockIds.length > 0 &&
+      linkedBlockIds.size === assignedBlockIdSet.size,
+    isPartiallyLinked: groupLinks.length > 0 &&
+      (!commonWorkoutId || linkedBlockIds.size < assignedBlockIdSet.size),
+    linkedWorkout,
+    links: groupLinks,
+  };
 }
 
 function compareDeviceHealthSummaries(
@@ -7419,8 +7440,18 @@ export function PageClient({
     }
   }
 
-  async function handleLinkDeviceWorkout(payload: DeviceWorkoutLinkPayload) {
+  async function handleSetDeviceWorkoutForBlocks(input: {
+    assignedBlockIds: string[];
+    assignedPlanId: string;
+    deviceWorkoutId: string;
+    existingLinks: DeviceWorkoutLink[];
+  }) {
     if (!selectedAthleteId) {
+      return;
+    }
+
+    const assignedBlockIds = Array.from(new Set(input.assignedBlockIds.filter(Boolean)));
+    if (!assignedBlockIds.length) {
       return;
     }
 
@@ -7428,49 +7459,63 @@ export function PageClient({
     setErrorMessage("");
 
     try {
-      const response = await apiRequest<DeviceWorkoutLinkResponse>(
-        `/coach/athletes/${encodeURIComponent(selectedAthleteId)}/device-workout-links`,
-        {
-          method: "POST",
-          body: JSON.stringify(payload),
-        },
+      const linksToRemove = input.existingLinks.filter((link) =>
+        !input.deviceWorkoutId || link.deviceWorkoutId !== input.deviceWorkoutId
       );
-      setCoachDeviceWorkoutLinks((current) => upsertDeviceWorkoutLink(current, response.link));
-      setCoachDeviceWorkouts((current) => upsertDeviceWorkout(current, response.link.workout));
+
+      await Promise.all(
+        linksToRemove.map((link) =>
+          apiRequest<{ ok: boolean }>(
+            `/coach/athletes/${encodeURIComponent(selectedAthleteId)}/device-workout-links/${encodeURIComponent(link.id)}`,
+            { method: "DELETE" },
+          )
+        ),
+      );
+
+      const linkedResponses = input.deviceWorkoutId
+        ? await Promise.all(
+            assignedBlockIds.map((assignedBlockId) =>
+              apiRequest<DeviceWorkoutLinkResponse>(
+                `/coach/athletes/${encodeURIComponent(selectedAthleteId)}/device-workout-links`,
+                {
+                  method: "POST",
+                  body: JSON.stringify({
+                    assignedBlockId,
+                    assignedPlanId: input.assignedPlanId,
+                    deviceWorkoutId: input.deviceWorkoutId,
+                  }),
+                },
+              )
+            ),
+          )
+        : [];
+
+      setCoachDeviceWorkoutLinks((current) => {
+        const removedIds = new Set(linksToRemove.map((link) => link.id));
+        let nextLinks = current.filter((link) => !removedIds.has(link.id));
+        for (const response of linkedResponses) {
+          nextLinks = upsertDeviceWorkoutLink(nextLinks, response.link);
+        }
+        return nextLinks;
+      });
+      setCoachDeviceWorkouts((current) =>
+        linkedResponses.reduce(
+          (items, response) => upsertDeviceWorkout(items, response.link.workout),
+          current,
+        )
+      );
       setStatusMessage(
-        copyFor(language, {
-          en: "Device workout linked to the plan block.",
-          ru: "Тренировка устройства связана с блоком плана.",
-          bg: "Тренировката от устройство е свързана с блока от плана.",
-        }),
-      );
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : String(error));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function handleUnlinkDeviceWorkout(linkId: string) {
-    if (!selectedAthleteId) {
-      return;
-    }
-
-    setBusy(true);
-    setErrorMessage("");
-
-    try {
-      await apiRequest<{ ok: boolean }>(
-        `/coach/athletes/${encodeURIComponent(selectedAthleteId)}/device-workout-links/${encodeURIComponent(linkId)}`,
-        { method: "DELETE" },
-      );
-      setCoachDeviceWorkoutLinks((current) => current.filter((link) => link.id !== linkId));
-      setStatusMessage(
-        copyFor(language, {
-          en: "Device workout link removed.",
-          ru: "Связь с тренировкой устройства удалена.",
-          bg: "Връзката с тренировката от устройство е премахната.",
-        }),
+        input.deviceWorkoutId
+          ? copyFor(language, {
+              en: "Device workout linked to the plan session.",
+              ru: "Тренировка устройства связана со сессией плана.",
+              bg: "Тренировката от устройство е свързана със сесията от плана.",
+            })
+          : copyFor(language, {
+              en: "Device workout link removed.",
+              ru: "Связь с тренировкой устройства удалена.",
+              bg: "Връзката с тренировката от устройство е премахната.",
+            }),
       );
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : String(error));
@@ -14597,55 +14642,67 @@ export function PageClient({
                             </p>
                           ) : null}
                           <div className="device-workout-block-list">
-                            {coachExecutionReview.sessions.flatMap((session) =>
-                              session.blocks.map((block) => {
-                                const link = getDeviceWorkoutLinkForBlock(
-                                  selectedCoachDeviceWorkoutLinks,
-                                  block.id,
-                                );
-                                const linkedWorkout = link?.workout ?? null;
+                            {coachExecutionReview.sessions.map((session) => {
+                              const assignedBlockIds = session.blocks.map((block) => block.id);
+                              const linkGroup = getDeviceWorkoutLinkGroupForBlocks(
+                                selectedCoachDeviceWorkoutLinks,
+                                assignedBlockIds,
+                              );
+                              const linkedWorkout = linkGroup.linkedWorkout;
+                              const statusClass = linkedWorkout && linkGroup.isFullyLinked
+                                ? "complete"
+                                : linkGroup.isPartiallyLinked || selectedCoachDeviceWorkouts.length
+                                  ? "partial"
+                                  : "pending";
+                              const statusLabel = linkedWorkout && linkGroup.isFullyLinked
+                                ? copyFor(language, {
+                                    en: "linked to device",
+                                    ru: "связано с устройством",
+                                    bg: "свързано с устройство",
+                                  })
+                                : linkGroup.isPartiallyLinked || linkGroup.hasMixedWorkouts
+                                  ? copyFor(language, {
+                                      en: "partly linked",
+                                      ru: "частично связано",
+                                      bg: "частично свързано",
+                                    })
+                                  : selectedCoachDeviceWorkouts.length
+                                    ? copyFor(language, {
+                                        en: "not linked",
+                                        ru: "не связано",
+                                        bg: "не е свързано",
+                                      })
+                                    : copyFor(language, {
+                                        en: "no device data",
+                                        ru: "нет данных устройства",
+                                        bg: "няма данни от устройство",
+                                      });
 
-                                return (
-                                  <article className="device-workout-block-card" key={block.id}>
-                                    <div>
-                                      <strong>{block.name}</strong>
-                                      <span>{session.name}</span>
-                                    </div>
-                                    <span className={`status-chip ${linkedWorkout ? "complete" : selectedCoachDeviceWorkouts.length ? "partial" : "pending"}`}>
-                                      {linkedWorkout
-                                        ? copyFor(language, {
-                                            en: "linked to device",
-                                            ru: "связано с устройством",
-                                            bg: "свързано с устройство",
-                                          })
-                                        : selectedCoachDeviceWorkouts.length
-                                          ? copyFor(language, {
-                                              en: "not linked",
-                                              ru: "не связано",
-                                              bg: "не е свързано",
-                                            })
-                                          : copyFor(language, {
-                                              en: "no device data",
-                                              ru: "нет данных устройства",
-                                              bg: "няма данни от устройство",
-                                            })}
+                              return (
+                                <article className="device-workout-block-card" key={session.id}>
+                                  <div>
+                                    <strong>{session.name}</strong>
+                                    <span>
+                                      {copyFor(language, {
+                                        en: "Plan blocks",
+                                        ru: "Блоки плана",
+                                        bg: "Блокове от плана",
+                                      })}: {session.blocks.map((block) => block.name).join(" · ")}
                                     </span>
+                                  </div>
+                                  <span className={`status-chip ${statusClass}`}>
+                                    {statusLabel}
+                                  </span>
                                     <select
                                       disabled={busy || selectedCoachDeviceWorkouts.length === 0}
-                                      value={linkedWorkout?.id ?? ""}
+                                      value={linkGroup.hasMixedWorkouts ? "" : linkedWorkout?.id ?? ""}
                                       onChange={(event) => {
                                         const deviceWorkoutId = event.currentTarget.value;
-                                        if (!deviceWorkoutId) {
-                                          if (link) {
-                                            void handleUnlinkDeviceWorkout(link.id);
-                                          }
-                                          return;
-                                        }
-
-                                        void handleLinkDeviceWorkout({
-                                          assignedBlockId: block.id,
+                                        void handleSetDeviceWorkoutForBlocks({
+                                          assignedBlockIds,
                                           assignedPlanId: coachExecutionReview.assignedPlanId,
                                           deviceWorkoutId,
+                                          existingLinks: linkGroup.links,
                                         });
                                       }}
                                     >
@@ -14673,9 +14730,8 @@ export function PageClient({
                                       </div>
                                     ) : null}
                                   </article>
-                                );
-                              }),
-                            )}
+                              );
+                            })}
                           </div>
                         </div>
                       </section>
