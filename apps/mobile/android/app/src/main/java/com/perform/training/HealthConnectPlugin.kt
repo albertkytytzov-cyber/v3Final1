@@ -45,10 +45,11 @@ class HealthConnectPlugin : Plugin() {
     @PluginMethod
     fun isAvailable(call: PluginCall) {
         val sdkStatus = HealthConnectClient.getSdkStatus(context, HEALTH_CONNECT_PACKAGE)
-        val hasMiFitness = isPackageInstalled(MI_FITNESS_PACKAGE)
+        val installedKnownSources = installedKnownHealthSourcePackages()
         val response = JSObject()
         response.put("available", sdkStatus == HealthConnectClient.SDK_AVAILABLE)
-        response.put("hasMiFitness", hasMiFitness)
+        response.put("hasMiFitness", installedKnownSources.contains(MI_FITNESS_PACKAGE))
+        response.put("hasKnownHealthSource", installedKnownSources.isNotEmpty())
         response.put("sdkStatus", sdkStatus)
         response.put(
             "reason",
@@ -158,20 +159,28 @@ class HealthConnectPlugin : Plugin() {
         dayRange: DayRange,
     ): JSObject {
         val range = TimeRangeFilter.between(dayRange.start, dayRange.end)
-        val sleepRecords = readAllRecords(client, SleepSessionRecord::class, range)
+        val sleepRange = TimeRangeFilter.between(dayRange.sleepLookupStart, dayRange.end)
+        val sleepRecords = filterSleepRecordsForDay(
+            readAllRecords(client, SleepSessionRecord::class, sleepRange),
+            dayRange,
+        )
         val restingHeartRateRecords = readAllRecords(client, RestingHeartRateRecord::class, range)
         val heartRateRecords = readAllRecords(client, HeartRateRecord::class, range)
         val exerciseRecords = readAllRecords(client, ExerciseSessionRecord::class, range)
         val distanceRecords = readAllRecords(client, DistanceRecord::class, range)
         val totalCaloriesRecords = readAllRecords(client, TotalCaloriesBurnedRecord::class, range)
         val activeCaloriesRecords = readAllRecords(client, ActiveCaloriesBurnedRecord::class, range)
-        val allSleepRecords = readAllRecords(client, SleepSessionRecord::class, range, emptySet())
+        val allSleepRecords = filterSleepRecordsForDay(
+            readAllRecords(client, SleepSessionRecord::class, sleepRange, emptySet()),
+            dayRange,
+        )
         val allRestingHeartRateRecords = readAllRecords(client, RestingHeartRateRecord::class, range, emptySet())
         val allHeartRateRecords = readAllRecords(client, HeartRateRecord::class, range, emptySet())
         val allExerciseRecords = readAllRecords(client, ExerciseSessionRecord::class, range, emptySet())
         val allDistanceRecords = readAllRecords(client, DistanceRecord::class, range, emptySet())
         val allTotalCaloriesRecords = readAllRecords(client, TotalCaloriesBurnedRecord::class, range, emptySet())
         val allActiveCaloriesRecords = readAllRecords(client, ActiveCaloriesBurnedRecord::class, range, emptySet())
+        val installedKnownSources = installedKnownHealthSourcePackages()
 
         val result = JSObject()
         val rawPayload = JSObject()
@@ -180,9 +189,9 @@ class HealthConnectPlugin : Plugin() {
         result.put("provider", PROVIDER)
         result.put(
             "sourceDevice",
-            if (isPackageInstalled(MI_FITNESS_PACKAGE)) "Mi Fitness / Health Connect" else "Health Connect",
+            if (installedKnownSources.isNotEmpty()) "Xiaomi / Health Connect" else "Health Connect",
         )
-        putNullable(result, "sleep", buildSleepSummary(sleepRecords, dayRange))
+        putNullable(result, "sleep", buildSleepSummary(sleepRecords))
         putNullable(result, "heartRate", buildHeartRateSummary(restingHeartRateRecords, heartRateRecords))
         putNullable(
             result,
@@ -191,8 +200,23 @@ class HealthConnectPlugin : Plugin() {
         )
         result.put("syncedAt", Instant.now().toString())
 
-        rawPayload.put("dataOrigin", MI_FITNESS_PACKAGE)
-        rawPayload.put("hasMiFitness", isPackageInstalled(MI_FITNESS_PACKAGE))
+        rawPayload.put(
+            "dataOrigin",
+            recordOrigins(
+                sleepRecords +
+                    restingHeartRateRecords +
+                    heartRateRecords +
+                    exerciseRecords +
+                    distanceRecords +
+                    totalCaloriesRecords +
+                    activeCaloriesRecords,
+            ).ifBlank { XIAOMI_HEALTH_SOURCE_PACKAGES.joinToString(", ") },
+        )
+        rawPayload.put("hasMiFitness", installedKnownSources.contains(MI_FITNESS_PACKAGE))
+        rawPayload.put("hasKnownHealthSource", installedKnownSources.isNotEmpty())
+        rawPayload.put("knownHealthSourcesInstalled", installedKnownSources.joinToString(", "))
+        rawPayload.put("sleepLookupStart", dayRange.sleepLookupStart.toString())
+        rawPayload.put("sleepLookupEnd", dayRange.end.toString())
         rawPayload.put("sleepRecordCount", sleepRecords.size)
         rawPayload.put("restingHeartRateRecordCount", restingHeartRateRecords.size)
         rawPayload.put("heartRateRecordCount", heartRateRecords.size)
@@ -232,7 +256,7 @@ class HealthConnectPlugin : Plugin() {
         client: HealthConnectClient,
         recordType: KClass<T>,
         range: TimeRangeFilter,
-        dataOriginFilter: Set<DataOrigin> = setOf(miFitnessOrigin),
+        dataOriginFilter: Set<DataOrigin> = xiaomiHealthDataOrigins,
     ): List<T> {
         val records = mutableListOf<T>()
         var pageToken: String? = null
@@ -253,6 +277,12 @@ class HealthConnectPlugin : Plugin() {
         return records
     }
 
+    private fun filterSleepRecordsForDay(records: List<SleepSessionRecord>, dayRange: DayRange): List<SleepSessionRecord> {
+        return records.filter { record ->
+            record.endTime > dayRange.start && record.endTime <= dayRange.end
+        }
+    }
+
     private fun recordOrigins(records: List<Record>): String {
         return records
             .map { record -> record.metadata.dataOrigin.packageName }
@@ -262,7 +292,7 @@ class HealthConnectPlugin : Plugin() {
             .joinToString(", ")
     }
 
-    private fun buildSleepSummary(records: List<SleepSessionRecord>, dayRange: DayRange): JSObject? {
+    private fun buildSleepSummary(records: List<SleepSessionRecord>): JSObject? {
         if (records.isEmpty()) {
             return null
         }
@@ -277,12 +307,12 @@ class HealthConnectPlugin : Plugin() {
         var endTime: Instant? = null
 
         for (record in records) {
-            totalMinutes += minutesBetween(record.startTime, record.endTime, dayRange)
+            totalMinutes += minutesBetween(record.startTime, record.endTime)
             startTime = minInstant(startTime, record.startTime)
             endTime = maxInstant(endTime, record.endTime)
 
             for (stage in record.stages) {
-                val minutes = minutesBetween(stage.startTime, stage.endTime, dayRange)
+                val minutes = minutesBetween(stage.startTime, stage.endTime)
                 when (stage.stage) {
                     SleepSessionRecord.STAGE_TYPE_LIGHT -> lightMinutes += minutes
                     SleepSessionRecord.STAGE_TYPE_DEEP -> deepMinutes += minutes
@@ -368,14 +398,11 @@ class HealthConnectPlugin : Plugin() {
         val zoneId = ZoneId.systemDefault()
         val start = localDate.atStartOfDay(zoneId).toInstant()
         val end = localDate.plusDays(1).atStartOfDay(zoneId).toInstant()
-        return DayRange(entryDate, start, end)
+        return DayRange(entryDate, start, end, start.minus(Duration.ofHours(SLEEP_LOOKUP_HOURS_BEFORE_DAY)))
     }
 
-    private fun minutesBetween(start: Instant, end: Instant, dayRange: DayRange): Double {
-        val clampedStart = maxInstant(dayRange.start, start) ?: start
-        val clampedEnd = minInstant(dayRange.end, end) ?: end
-
-        return max(0.0, Duration.between(clampedStart, clampedEnd).toMillis().toDouble() / MILLIS_PER_MINUTE)
+    private fun minutesBetween(start: Instant, end: Instant): Double {
+        return max(0.0, Duration.between(start, end).toMillis().toDouble() / MILLIS_PER_MINUTE)
     }
 
     private fun average(values: List<Double>) = if (values.isEmpty()) null else values.sum() / values.size
@@ -403,6 +430,10 @@ class HealthConnectPlugin : Plugin() {
         }
     }
 
+    private fun installedKnownHealthSourcePackages(): List<String> {
+        return XIAOMI_HEALTH_SOURCE_PACKAGES.filter { packageName -> isPackageInstalled(packageName) }
+    }
+
     private fun putNullable(objectValue: JSObject, key: String, value: Any?) {
         objectValue.put(key, value ?: JSONObject.NULL)
     }
@@ -417,14 +448,25 @@ class HealthConnectPlugin : Plugin() {
         val entryDate: String,
         val start: Instant,
         val end: Instant,
+        val sleepLookupStart: Instant,
     )
 
     companion object {
         private const val HEALTH_CONNECT_PACKAGE = "com.google.android.apps.healthdata"
         private const val MI_FITNESS_PACKAGE = "com.xiaomi.wearable"
+        private const val XIAOMI_HEALTH_PACKAGE = "com.mi.health"
+        private const val ZEPP_LIFE_PACKAGE = "com.xiaomi.hm.health"
         private const val PROVIDER = "health-connect"
         private const val MILLIS_PER_MINUTE = 60000.0
-        private val miFitnessOrigin = DataOrigin(MI_FITNESS_PACKAGE)
+        private const val SLEEP_LOOKUP_HOURS_BEFORE_DAY = 18L
+        private val XIAOMI_HEALTH_SOURCE_PACKAGES = listOf(
+            MI_FITNESS_PACKAGE,
+            XIAOMI_HEALTH_PACKAGE,
+            ZEPP_LIFE_PACKAGE,
+        )
+        private val xiaomiHealthDataOrigins = XIAOMI_HEALTH_SOURCE_PACKAGES.map { packageName ->
+            DataOrigin(packageName)
+        }.toSet()
         private val permissions = setOf(
             HealthPermission.getReadPermission(SleepSessionRecord::class),
             HealthPermission.getReadPermission(HeartRateRecord::class),

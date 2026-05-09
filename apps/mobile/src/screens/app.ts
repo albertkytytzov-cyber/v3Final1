@@ -407,14 +407,14 @@ export function bootstrapMobileApp(root: HTMLElement) {
       return;
     }
 
-    update({ error: null, isBusy: true, message: "Читаю данные Mi Fitness через Health Connect..." });
+    update({ error: null, isBusy: true, message: "Читаю данные из Health Connect..." });
 
     let payload: DeviceHealthDailySummaryPayload;
     try {
       payload = await readMiFitnessHealthConnectDailySummary(entryDate);
     } catch (error) {
       update({
-        error: error instanceof Error ? error.message : "Mi Fitness через Health Connect недоступен.",
+        error: error instanceof Error ? error.message : "Health Connect недоступен.",
         isBusy: false,
         message: null,
       });
@@ -1538,7 +1538,7 @@ function renderDeviceHealthCard(state: MobileAppState, athleteId: string, date: 
     <section class="device-health-card">
       <div class="device-health-head">
         <div>
-          <span>Huawei Health / Mi Fitness</span>
+          <span>Huawei Health / Health Connect</span>
           <h3>Данные устройства</h3>
           <p>${escapeHtml(formatDate(date))} · ${escapeHtml(syncLabel)}</p>
         </div>
@@ -1548,7 +1548,7 @@ function renderDeviceHealthCard(state: MobileAppState, athleteId: string, date: 
               Huawei
             </button>
             <button class="secondary-action" data-health-connect-sync data-health-connect-date="${escapeHtml(date)}" type="button" ${state.isBusy ? "disabled" : ""}>
-              Mi Fitness
+              Health Connect
             </button>
           </div>
         ` : ""}
@@ -1609,8 +1609,8 @@ function renderHealthConnectDiagnostics(summary: DeviceHealthDailySummary | null
       value: readDeviceHealthRawText(rawPayload, "dataOrigin") || "Health Connect",
     },
     {
-      label: "Mi Fitness",
-      value: readDeviceHealthRawBoolean(rawPayload, "hasMiFitness") === false ? "не найден" : "найден",
+      label: "Xiaomi / Zepp",
+      value: readDeviceHealthRawBoolean(rawPayload, "hasKnownHealthSource") === false ? "не найден" : "найден",
     },
     {
       label: "Сон",
@@ -1650,11 +1650,11 @@ function renderHealthConnectDiagnostics(summary: DeviceHealthDailySummary | null
   const allSleepCount = readDeviceHealthRawOptionalCount(rawPayload, "allSleepRecordCount");
   const allRestingHrCount = readDeviceHealthRawOptionalCount(rawPayload, "allRestingHeartRateRecordCount");
   const guidance = sleepCount === 0 && (allSleepCount ?? 0) > 0
-    ? "Сон есть в Health Connect, но источник не Mi Fitness. Проверьте, какое приложение записало сон."
+    ? "Сон есть в Health Connect, но источник не Xiaomi/Zepp. Проверьте, какое приложение записало сон."
     : restingHrCount === 0 && (allRestingHrCount ?? 0) > 0
-      ? "Пульс покоя есть в Health Connect, но источник не Mi Fitness. Проверьте источник записи пульса покоя."
+      ? "Пульс покоя есть в Health Connect, но источник не Xiaomi/Zepp. Проверьте источник записи пульса покоя."
       : sleepCount === 0 || restingHrCount === 0
-        ? "Если разрешения включены, но счётчик Mi Fitness 0, значит Mi Fitness не передал этот тип данных в Health Connect за выбранный день."
+        ? "Если разрешения включены, но счётчик Xiaomi/Zepp 0, значит приложение-источник не передало этот тип данных в Health Connect за выбранный день."
     : "Health Connect отдал ключевые записи для разбора дня.";
 
   return `
@@ -1662,7 +1662,7 @@ function renderHealthConnectDiagnostics(summary: DeviceHealthDailySummary | null
       <div class="summary-inline-head">
         <div>
           <span>Диагностика Health Connect</span>
-          <h3>Что реально отдал Mi Fitness</h3>
+          <h3>Что реально отдал Health Connect</h3>
         </div>
       </div>
       <div class="device-health-diagnostics-grid">
@@ -1725,8 +1725,8 @@ function formatHealthConnectDiagnosticCount(
   const allSourcesCount = readDeviceHealthRawOptionalCount(rawPayload, allSourcesKey);
 
   return allSourcesCount === null
-    ? `${miFitnessCount} Mi Fitness`
-    : `${miFitnessCount} Mi Fitness / ${allSourcesCount} всего`;
+    ? `${miFitnessCount} Xiaomi/Zepp`
+    : `${miFitnessCount} Xiaomi/Zepp / ${allSourcesCount} всего`;
 }
 
 function getDeviceHealthStatus(summary: DeviceHealthDailySummary | null) {

@@ -6,7 +6,12 @@ import type {
 } from "../types/models.js";
 
 interface HealthConnectPlugin {
-  isAvailable?: () => Promise<{ available?: boolean; hasMiFitness?: boolean; reason?: string }>;
+  isAvailable?: () => Promise<{
+    available?: boolean;
+    hasKnownHealthSource?: boolean;
+    hasMiFitness?: boolean;
+    reason?: string;
+  }>;
   requestAuthorization?: () => Promise<{ granted?: boolean; reason?: string }>;
   readDailySummary?: (input: { entryDate: string }) => Promise<Partial<DeviceHealthDailySummaryPayload>>;
 }
@@ -51,7 +56,7 @@ export async function readMiFitnessHealthConnectDailySummary(
   return {
     entryDate,
     provider: "health-connect",
-    sourceDevice: normalizeNullableString(summary.sourceDevice) ?? "Mi Fitness / Health Connect",
+    sourceDevice: normalizeNullableString(summary.sourceDevice) ?? "Health Connect",
     sleep: normalizeSleepSummary(summary.sleep),
     heartRate: normalizeHeartRateSummary(summary.heartRate),
     workout: normalizeWorkoutSummary(summary.workout),
