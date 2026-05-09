@@ -165,6 +165,13 @@ class HealthConnectPlugin : Plugin() {
         val distanceRecords = readAllRecords(client, DistanceRecord::class, range)
         val totalCaloriesRecords = readAllRecords(client, TotalCaloriesBurnedRecord::class, range)
         val activeCaloriesRecords = readAllRecords(client, ActiveCaloriesBurnedRecord::class, range)
+        val allSleepRecords = readAllRecords(client, SleepSessionRecord::class, range, emptySet())
+        val allRestingHeartRateRecords = readAllRecords(client, RestingHeartRateRecord::class, range, emptySet())
+        val allHeartRateRecords = readAllRecords(client, HeartRateRecord::class, range, emptySet())
+        val allExerciseRecords = readAllRecords(client, ExerciseSessionRecord::class, range, emptySet())
+        val allDistanceRecords = readAllRecords(client, DistanceRecord::class, range, emptySet())
+        val allTotalCaloriesRecords = readAllRecords(client, TotalCaloriesBurnedRecord::class, range, emptySet())
+        val allActiveCaloriesRecords = readAllRecords(client, ActiveCaloriesBurnedRecord::class, range, emptySet())
 
         val result = JSObject()
         val rawPayload = JSObject()
@@ -193,6 +200,29 @@ class HealthConnectPlugin : Plugin() {
         rawPayload.put("distanceRecordCount", distanceRecords.size)
         rawPayload.put("totalCaloriesRecordCount", totalCaloriesRecords.size)
         rawPayload.put("activeCaloriesRecordCount", activeCaloriesRecords.size)
+        rawPayload.put("allSleepRecordCount", allSleepRecords.size)
+        rawPayload.put("allRestingHeartRateRecordCount", allRestingHeartRateRecords.size)
+        rawPayload.put("allHeartRateRecordCount", allHeartRateRecords.size)
+        rawPayload.put("allExerciseRecordCount", allExerciseRecords.size)
+        rawPayload.put("allDistanceRecordCount", allDistanceRecords.size)
+        rawPayload.put("allTotalCaloriesRecordCount", allTotalCaloriesRecords.size)
+        rawPayload.put("allActiveCaloriesRecordCount", allActiveCaloriesRecords.size)
+        rawPayload.put("sleepDataOrigins", recordOrigins(allSleepRecords))
+        rawPayload.put("restingHeartRateDataOrigins", recordOrigins(allRestingHeartRateRecords))
+        rawPayload.put("heartRateDataOrigins", recordOrigins(allHeartRateRecords))
+        rawPayload.put("exerciseDataOrigins", recordOrigins(allExerciseRecords))
+        rawPayload.put(
+            "allDataOrigins",
+            recordOrigins(
+                allSleepRecords +
+                    allRestingHeartRateRecords +
+                    allHeartRateRecords +
+                    allExerciseRecords +
+                    allDistanceRecords +
+                    allTotalCaloriesRecords +
+                    allActiveCaloriesRecords,
+            ),
+        )
         result.put("rawPayload", rawPayload)
 
         return result
@@ -202,6 +232,7 @@ class HealthConnectPlugin : Plugin() {
         client: HealthConnectClient,
         recordType: KClass<T>,
         range: TimeRangeFilter,
+        dataOriginFilter: Set<DataOrigin> = setOf(miFitnessOrigin),
     ): List<T> {
         val records = mutableListOf<T>()
         var pageToken: String? = null
@@ -211,7 +242,7 @@ class HealthConnectPlugin : Plugin() {
                 ReadRecordsRequest(
                     recordType = recordType,
                     timeRangeFilter = range,
-                    dataOriginFilter = setOf(miFitnessOrigin),
+                    dataOriginFilter = dataOriginFilter,
                     pageToken = pageToken,
                 ),
             )
@@ -220,6 +251,15 @@ class HealthConnectPlugin : Plugin() {
         } while (!pageToken.isNullOrBlank())
 
         return records
+    }
+
+    private fun recordOrigins(records: List<Record>): String {
+        return records
+            .map { record -> record.metadata.dataOrigin.packageName }
+            .filter { packageName -> packageName.isNotBlank() }
+            .distinct()
+            .sorted()
+            .joinToString(", ")
     }
 
     private fun buildSleepSummary(records: List<SleepSessionRecord>, dayRange: DayRange): JSObject? {

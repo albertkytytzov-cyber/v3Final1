@@ -1614,33 +1614,47 @@ function renderHealthConnectDiagnostics(summary: DeviceHealthDailySummary | null
     },
     {
       label: "Сон",
-      value: `${readDeviceHealthRawCount(rawPayload, "sleepRecordCount")} записей`,
+      value: formatHealthConnectDiagnosticCount(rawPayload, "sleepRecordCount", "allSleepRecordCount"),
     },
     {
       label: "Пульс покоя",
-      value: `${readDeviceHealthRawCount(rawPayload, "restingHeartRateRecordCount")} записей`,
+      value: formatHealthConnectDiagnosticCount(
+        rawPayload,
+        "restingHeartRateRecordCount",
+        "allRestingHeartRateRecordCount",
+      ),
     },
     {
       label: "Пульс",
-      value: `${readDeviceHealthRawCount(rawPayload, "heartRateRecordCount")} записей`,
+      value: formatHealthConnectDiagnosticCount(rawPayload, "heartRateRecordCount", "allHeartRateRecordCount"),
     },
     {
       label: "Тренировки",
-      value: `${readDeviceHealthRawCount(rawPayload, "exerciseRecordCount")} записей`,
+      value: formatHealthConnectDiagnosticCount(rawPayload, "exerciseRecordCount", "allExerciseRecordCount"),
     },
     {
       label: "Дистанция",
-      value: `${readDeviceHealthRawCount(rawPayload, "distanceRecordCount")} записей`,
+      value: formatHealthConnectDiagnosticCount(rawPayload, "distanceRecordCount", "allDistanceRecordCount"),
     },
     {
       label: "Калории",
-      value: `${readDeviceHealthRawCount(rawPayload, "activeCaloriesRecordCount")} активных / ${readDeviceHealthRawCount(rawPayload, "totalCaloriesRecordCount")} всего`,
+      value: `${formatHealthConnectDiagnosticCount(rawPayload, "activeCaloriesRecordCount", "allActiveCaloriesRecordCount")} активных`,
+    },
+    {
+      label: "Все источники",
+      value: readDeviceHealthRawText(rawPayload, "allDataOrigins") || "появятся после новой синхронизации",
     },
   ];
   const sleepCount = readDeviceHealthRawCount(rawPayload, "sleepRecordCount");
   const restingHrCount = readDeviceHealthRawCount(rawPayload, "restingHeartRateRecordCount");
-  const guidance = sleepCount === 0 || restingHrCount === 0
-    ? "Если разрешения включены, но счётчик 0, значит Mi Fitness не передал этот тип данных в Health Connect за выбранный день."
+  const allSleepCount = readDeviceHealthRawOptionalCount(rawPayload, "allSleepRecordCount");
+  const allRestingHrCount = readDeviceHealthRawOptionalCount(rawPayload, "allRestingHeartRateRecordCount");
+  const guidance = sleepCount === 0 && (allSleepCount ?? 0) > 0
+    ? "Сон есть в Health Connect, но источник не Mi Fitness. Проверьте, какое приложение записало сон."
+    : restingHrCount === 0 && (allRestingHrCount ?? 0) > 0
+      ? "Пульс покоя есть в Health Connect, но источник не Mi Fitness. Проверьте источник записи пульса покоя."
+      : sleepCount === 0 || restingHrCount === 0
+        ? "Если разрешения включены, но счётчик Mi Fitness 0, значит Mi Fitness не передал этот тип данных в Health Connect за выбранный день."
     : "Health Connect отдал ключевые записи для разбора дня.";
 
   return `
@@ -1692,6 +1706,27 @@ function readDeviceHealthRawCount(rawPayload: Record<string, unknown>, key: stri
   const value = rawPayload[key];
   const numericValue = Number(value ?? 0);
   return Number.isFinite(numericValue) ? Math.max(0, Math.trunc(numericValue)) : 0;
+}
+
+function readDeviceHealthRawOptionalCount(rawPayload: Record<string, unknown>, key: string) {
+  if (!(key in rawPayload)) {
+    return null;
+  }
+
+  return readDeviceHealthRawCount(rawPayload, key);
+}
+
+function formatHealthConnectDiagnosticCount(
+  rawPayload: Record<string, unknown>,
+  miFitnessKey: string,
+  allSourcesKey: string,
+) {
+  const miFitnessCount = readDeviceHealthRawCount(rawPayload, miFitnessKey);
+  const allSourcesCount = readDeviceHealthRawOptionalCount(rawPayload, allSourcesKey);
+
+  return allSourcesCount === null
+    ? `${miFitnessCount} Mi Fitness`
+    : `${miFitnessCount} Mi Fitness / ${allSourcesCount} всего`;
 }
 
 function getDeviceHealthStatus(summary: DeviceHealthDailySummary | null) {
