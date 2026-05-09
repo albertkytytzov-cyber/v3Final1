@@ -3425,9 +3425,7 @@ function renderExecutionDateFilter(
 function isUnifiedPlanSession(session: MobileAssignedPlanSession) {
   const normalizedName = session.name.replace(/\s+/g, " ").trim().toLowerCase();
 
-  return session.blocks.length > 1 &&
-    normalizedName.includes("единая сессия") &&
-    session.blocks.every((block) => (block.exercises?.length ?? 0) === 0);
+  return session.blocks.length > 1 && normalizedName.includes("единая сессия");
 }
 
 function countPlanDisplayUnits(plan: AssignedPlanSummary) {
