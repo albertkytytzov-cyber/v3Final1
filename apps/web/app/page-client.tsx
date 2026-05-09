@@ -907,9 +907,30 @@ function formatDeviceWorkoutValue(summary: DeviceHealthDailySummary | null) {
   return summary?.workout ? String(summary.workout.count) : "-";
 }
 
+function formatDeviceWorkoutTypeLabel(workout: DeviceWorkout, language: Language) {
+  const type = workout.workoutType.trim().toLowerCase();
+  const knownTypes: Record<string, Record<Language, string>> = {
+    cycling: { en: "Cycling", ru: "Велотренировка", bg: "Колоездене" },
+    hiking: { en: "Hike", ru: "Поход", bg: "Преход" },
+    running: { en: "Run", ru: "Бег", bg: "Бягане" },
+    walking: { en: "Walk", ru: "Ходьба", bg: "Ходене" },
+    workout: { en: "Device workout", ru: "Тренировка с устройства", bg: "Тренировка от устройство" },
+  };
+
+  if (!type || /^exercise-\d+$/i.test(type)) {
+    return copyFor(language, {
+      en: "Device workout",
+      ru: "Тренировка с устройства",
+      bg: "Тренировка от устройство",
+    });
+  }
+
+  return knownTypes[type]?.[language] ?? workout.workoutType;
+}
+
 function formatDeviceWorkoutTitle(workout: DeviceWorkout, language: Language) {
   const time = formatDeviceWorkoutTimeRange(workout, language);
-  return `${workout.workoutType || "workout"}${time ? ` · ${time}` : ""}`;
+  return `${formatDeviceWorkoutTypeLabel(workout, language)}${time ? ` · ${time}` : ""}`;
 }
 
 function formatDeviceWorkoutTimeRange(workout: DeviceWorkout, language: Language) {
@@ -918,14 +939,68 @@ function formatDeviceWorkoutTimeRange(workout: DeviceWorkout, language: Language
   return `${formatter.format(new Date(workout.startTime))}-${formatter.format(new Date(workout.endTime))}`;
 }
 
+function formatDeviceDistance(meters: number, language: Language) {
+  const value = (meters / 1000).toLocaleString(
+    language === "en" ? "en-US" : language === "bg" ? "bg-BG" : "ru-RU",
+    { maximumFractionDigits: 2, minimumFractionDigits: 2 },
+  );
+  return `${value} ${copyFor(language, { en: "km", ru: "км", bg: "км" })}`;
+}
+
 function formatDeviceWorkoutSummary(workout: DeviceWorkout, language: Language) {
   return [
     workout.durationMinutes !== null ? formatDeviceDuration(workout.durationMinutes, language) : null,
-    workout.distanceMeters !== null ? `${(workout.distanceMeters / 1000).toFixed(2)} km` : null,
-    workout.averageHeartRateBpm !== null ? `HR ${Math.round(workout.averageHeartRateBpm)}` : null,
-    workout.maxHeartRateBpm !== null ? `max ${Math.round(workout.maxHeartRateBpm)}` : null,
-    workout.activeCalories !== null ? `${Math.round(workout.activeCalories)} kcal` : null,
+    workout.distanceMeters !== null ? formatDeviceDistance(workout.distanceMeters, language) : null,
+    workout.averageHeartRateBpm !== null
+      ? `${copyFor(language, { en: "avg HR", ru: "ср. пульс", bg: "ср. пулс" })} ${Math.round(workout.averageHeartRateBpm)}`
+      : null,
+    workout.maxHeartRateBpm !== null
+      ? `${copyFor(language, { en: "max", ru: "макс", bg: "макс" })} ${Math.round(workout.maxHeartRateBpm)}`
+      : null,
+    workout.activeCalories !== null ? `${Math.round(workout.activeCalories)} ${copyFor(language, { en: "kcal", ru: "ккал", bg: "ккал" })}` : null,
   ].filter(Boolean).join(" · ");
+}
+
+function formatDeviceWorkoutOptionLabel(workout: DeviceWorkout, language: Language) {
+  return `${formatDeviceWorkoutTimeRange(workout, language)} · ${formatDeviceWorkoutSummary(workout, language) || formatDeviceWorkoutTypeLabel(workout, language)}`;
+}
+
+function buildDeviceWorkoutMetrics(workout: DeviceWorkout, language: Language) {
+  return [
+    {
+      label: copyFor(language, { en: "Duration", ru: "Длительность", bg: "Продължителност" }),
+      value: workout.durationMinutes !== null ? formatDeviceDuration(workout.durationMinutes, language) : "-",
+    },
+    {
+      label: copyFor(language, { en: "Distance", ru: "Дистанция", bg: "Дистанция" }),
+      value: workout.distanceMeters !== null ? formatDeviceDistance(workout.distanceMeters, language) : "-",
+    },
+    {
+      label: copyFor(language, { en: "Avg HR", ru: "Средний пульс", bg: "Среден пулс" }),
+      value: workout.averageHeartRateBpm !== null ? Math.round(workout.averageHeartRateBpm).toString() : "-",
+    },
+    {
+      label: copyFor(language, { en: "Max HR", ru: "Макс. пульс", bg: "Макс. пулс" }),
+      value: workout.maxHeartRateBpm !== null ? Math.round(workout.maxHeartRateBpm).toString() : "-",
+    },
+    {
+      label: copyFor(language, { en: "Calories", ru: "Калории", bg: "Калории" }),
+      value: workout.activeCalories !== null ? Math.round(workout.activeCalories).toString() : "-",
+    },
+    {
+      label: copyFor(language, { en: "Graph points", ru: "Точки графика", bg: "Точки на графиката" }),
+      value: workout.sampleCount.toString(),
+    },
+  ];
+}
+
+function limitDeviceWorkoutSamples<T>(samples: T[], maxCount = 180) {
+  if (samples.length <= maxCount) {
+    return samples;
+  }
+
+  const step = (samples.length - 1) / (maxCount - 1);
+  return Array.from({ length: maxCount }, (_, index) => samples[Math.round(index * step)]);
 }
 
 function hasDeviceWorkoutGraph(workout: DeviceWorkout) {
@@ -944,9 +1019,9 @@ function DeviceWorkoutMiniGraph({
   language: Language;
   workout: DeviceWorkout;
 }) {
-  const heartRateSamples = workout.samples.filter((sample) => sample.heartRateBpm !== null);
+  const allHeartRateSamples = workout.samples.filter((sample) => sample.heartRateBpm !== null);
 
-  if (!hasDeviceWorkoutGraph(workout) || heartRateSamples.length < 2) {
+  if (!hasDeviceWorkoutGraph(workout) || allHeartRateSamples.length < 2) {
     return (
       <p className="device-workout-empty">
         {copyFor(language, {
@@ -958,6 +1033,7 @@ function DeviceWorkoutMiniGraph({
     );
   }
 
+  const heartRateSamples = limitDeviceWorkoutSamples(allHeartRateSamples);
   const values = heartRateSamples.map((sample) => sample.heartRateBpm ?? 0);
   const min = Math.min(...values);
   const max = Math.max(...values);
@@ -975,13 +1051,35 @@ function DeviceWorkoutMiniGraph({
   return (
     <div className="device-workout-graph">
       <svg aria-hidden="true" viewBox="0 0 100 48" preserveAspectRatio="none">
-        <polyline points={points} />
+        <polyline fill="none" points={points} />
       </svg>
       <small>
-        HR {Math.round(min)}-{Math.round(max)}
-        {hasSpeed ? " · pace/speed" : ""}
+        {copyFor(language, { en: "HR", ru: "Пульс", bg: "Пулс" })} {Math.round(min)}-{Math.round(max)}
+        {hasSpeed ? ` · ${copyFor(language, { en: "pace/speed", ru: "темп/скорость", bg: "темпо/скорост" })}` : ""}
         {hasSpo2 ? " · SpO2" : ""}
+        {allHeartRateSamples.length > heartRateSamples.length
+          ? ` · ${copyFor(language, { en: "shown compactly", ru: "показано компактно", bg: "показано компактно" })}`
+          : ""}
       </small>
+    </div>
+  );
+}
+
+function DeviceWorkoutMetricGrid({
+  language,
+  workout,
+}: {
+  language: Language;
+  workout: DeviceWorkout;
+}) {
+  return (
+    <div className="device-workout-metric-grid">
+      {buildDeviceWorkoutMetrics(workout, language).map((metric) => (
+        <span className="device-workout-metric" key={metric.label}>
+          <small>{metric.label}</small>
+          <strong>{metric.value}</strong>
+        </span>
+      ))}
     </div>
   );
 }
@@ -14086,13 +14184,14 @@ export function PageClient({
                                       </option>
                                       {selectedCoachDeviceWorkouts.map((workout) => (
                                         <option key={workout.id} value={workout.id}>
-                                          {formatDeviceWorkoutTitle(workout, language)}
+                                          {formatDeviceWorkoutOptionLabel(workout, language)}
                                         </option>
                                       ))}
                                     </select>
                                     {linkedWorkout ? (
                                       <div className="device-workout-linked-summary">
-                                        <p>{formatDeviceWorkoutSummary(linkedWorkout, language) || linkedWorkout.sourceDevice}</p>
+                                        <strong>{formatDeviceWorkoutTitle(linkedWorkout, language)}</strong>
+                                        <DeviceWorkoutMetricGrid language={language} workout={linkedWorkout} />
                                         <small>
                                           {linkedWorkout.sourceDevice ?? "Health Connect"} · {formatDeviceWorkoutTimeRange(linkedWorkout, language)}
                                         </small>

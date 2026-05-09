@@ -1416,14 +1416,17 @@ function renderCoachDeviceWorkoutPanel(dayData: CoachDayCleanSummary, isBusy: bo
                 <option value="">Выбрать тренировку устройства</option>
                 ${workouts.map((workout) => `
                   <option value="${escapeHtml(workout.id)}" ${linkedWorkout?.id === workout.id ? "selected" : ""}>
-                    ${escapeHtml(formatDeviceWorkoutTitle(workout))}
+                    ${escapeHtml(formatDeviceWorkoutOptionLabel(workout))}
                   </option>
                 `).join("")}
               </select>
               ${linkedWorkout ? `
-                <p>${escapeHtml(formatDeviceWorkoutSummary(linkedWorkout) || linkedWorkout.sourceDevice || "Health Connect")}</p>
-                <small>${escapeHtml(linkedWorkout.sourceDevice ?? "Health Connect")} · ${escapeHtml(formatTimeRange(linkedWorkout.startTime, linkedWorkout.endTime))}</small>
-                ${renderDeviceWorkoutGraph(linkedWorkout)}
+                <div class="device-workout-summary-card">
+                  <strong>${escapeHtml(formatDeviceWorkoutTitle(linkedWorkout))}</strong>
+                  ${renderDeviceWorkoutMetrics(linkedWorkout)}
+                  <small>${escapeHtml(linkedWorkout.sourceDevice ?? "Health Connect")} · ${escapeHtml(formatTimeRange(linkedWorkout.startTime, linkedWorkout.endTime))}</small>
+                  ${renderDeviceWorkoutGraph(linkedWorkout)}
+                </div>
               ` : ""}
             </article>
           `;
@@ -2117,8 +2120,25 @@ function formatDeviceHealthWorkoutDetail(summary: DeviceHealthDailySummary | nul
   return parts.length ? parts.join(" · ") : "внешних тренировок нет";
 }
 
+function formatDeviceWorkoutTypeLabel(workout: DeviceWorkout) {
+  const type = workout.workoutType.trim().toLowerCase();
+  const labels: Record<string, string> = {
+    cycling: "Велотренировка",
+    hiking: "Поход",
+    running: "Бег",
+    walking: "Ходьба",
+    workout: "Тренировка с устройства",
+  };
+
+  if (!type || /^exercise-\d+$/i.test(type)) {
+    return "Тренировка с устройства";
+  }
+
+  return labels[type] ?? workout.workoutType;
+}
+
 function formatDeviceWorkoutTitle(workout: DeviceWorkout) {
-  return `${workout.workoutType || "тренировка"} · ${formatTimeRange(workout.startTime, workout.endTime)}`;
+  return `${formatDeviceWorkoutTypeLabel(workout)} · ${formatTimeRange(workout.startTime, workout.endTime)}`;
 }
 
 function formatDeviceWorkoutSummary(workout: DeviceWorkout) {
@@ -2131,6 +2151,41 @@ function formatDeviceWorkoutSummary(workout: DeviceWorkout) {
   ].filter((item): item is string => Boolean(item)).join(" · ");
 }
 
+function formatDeviceWorkoutOptionLabel(workout: DeviceWorkout) {
+  return `${formatTimeRange(workout.startTime, workout.endTime)} · ${formatDeviceWorkoutSummary(workout) || formatDeviceWorkoutTypeLabel(workout)}`;
+}
+
+function renderDeviceWorkoutMetrics(workout: DeviceWorkout) {
+  const metrics = [
+    { label: "Длительность", value: workout.durationMinutes !== null ? formatDurationHours(workout.durationMinutes) : "-" },
+    { label: "Дистанция", value: workout.distanceMeters !== null ? formatDistanceMeters(workout.distanceMeters) : "-" },
+    { label: "Средний пульс", value: workout.averageHeartRateBpm !== null ? formatLoadValue(workout.averageHeartRateBpm) : "-" },
+    { label: "Макс. пульс", value: workout.maxHeartRateBpm !== null ? formatLoadValue(workout.maxHeartRateBpm) : "-" },
+    { label: "Калории", value: workout.activeCalories !== null ? String(Math.round(workout.activeCalories)) : "-" },
+    { label: "Точки графика", value: String(workout.sampleCount) },
+  ];
+
+  return `
+    <div class="device-workout-metric-grid">
+      ${metrics.map((metric) => `
+        <span class="device-workout-metric">
+          <small>${escapeHtml(metric.label)}</small>
+          <strong>${escapeHtml(metric.value)}</strong>
+        </span>
+      `).join("")}
+    </div>
+  `;
+}
+
+function limitDeviceWorkoutSamples<T>(samples: T[], maxCount = 180) {
+  if (samples.length <= maxCount) {
+    return samples;
+  }
+
+  const step = (samples.length - 1) / (maxCount - 1);
+  return Array.from({ length: maxCount }, (_, index) => samples[Math.round(index * step)]);
+}
+
 function hasDeviceWorkoutGraph(workout: DeviceWorkout) {
   return workout.samples.some((sample) =>
     sample.heartRateBpm !== null ||
@@ -2141,12 +2196,13 @@ function hasDeviceWorkoutGraph(workout: DeviceWorkout) {
 }
 
 function renderDeviceWorkoutGraph(workout: DeviceWorkout) {
-  const heartRateSamples = workout.samples.filter((sample) => sample.heartRateBpm !== null);
+  const allHeartRateSamples = workout.samples.filter((sample) => sample.heartRateBpm !== null);
 
-  if (!hasDeviceWorkoutGraph(workout) || heartRateSamples.length < 2) {
+  if (!hasDeviceWorkoutGraph(workout) || allHeartRateSamples.length < 2) {
     return `<small>Устройство передало только итоговые данные, график недоступен.</small>`;
   }
 
+  const heartRateSamples = limitDeviceWorkoutSamples(allHeartRateSamples);
   const values = heartRateSamples.map((sample) => sample.heartRateBpm ?? 0);
   const min = Math.min(...values);
   const max = Math.max(...values);
@@ -2162,9 +2218,9 @@ function renderDeviceWorkoutGraph(workout: DeviceWorkout) {
   return `
     <div class="device-workout-graph">
       <svg aria-hidden="true" viewBox="0 0 100 48" preserveAspectRatio="none">
-        <polyline points="${escapeHtml(points)}"></polyline>
+        <polyline fill="none" points="${escapeHtml(points)}"></polyline>
       </svg>
-      <small>HR ${Math.round(min)}-${Math.round(max)}${hasSpeed ? " · темп/скорость" : ""}${hasSpo2 ? " · SpO2" : ""}</small>
+      <small>Пульс ${Math.round(min)}-${Math.round(max)}${hasSpeed ? " · темп/скорость" : ""}${hasSpo2 ? " · SpO2" : ""}${allHeartRateSamples.length > heartRateSamples.length ? " · показано компактно" : ""}</small>
     </div>
   `;
 }
