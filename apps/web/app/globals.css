@@ -4817,6 +4817,101 @@ select {
   min-width: 0;
 }
 
+.planning-template-import-audit-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+
+.planning-template-import-audit-grid article {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(15, 118, 110, 0.18);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.planning-template-import-audit-grid article.has-warning {
+  border-color: rgba(180, 83, 9, 0.22);
+  background: rgba(255, 247, 237, 0.9);
+}
+
+.planning-template-import-audit-grid span,
+.planning-template-import-review-head small,
+.planning-template-import-skipped small,
+.planning-template-import-skipped em,
+.planning-template-import-day-preview-head small,
+.planning-template-import-day-preview-head span {
+  color: var(--muted-strong);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.planning-template-import-audit-grid span {
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.planning-template-import-audit-grid strong {
+  min-width: 0;
+  color: var(--text);
+  font-size: 1rem;
+  overflow-wrap: anywhere;
+}
+
+.planning-template-import-review {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.75fr) minmax(0, 1.25fr);
+  gap: 12px;
+  min-width: 0;
+}
+
+.planning-template-import-review-list,
+.planning-template-import-day-preview {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.planning-template-import-review-head,
+.planning-template-import-day-preview-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.planning-template-import-review-head > *,
+.planning-template-import-day-preview-head > * {
+  min-width: 0;
+}
+
+.planning-template-import-day-preview-head strong,
+.planning-template-import-review-head strong,
+.planning-template-import-session-preview > strong {
+  display: block;
+  min-width: 0;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.planning-template-import-review .planning-template-import-days {
+  grid-template-columns: minmax(0, 1fr);
+  max-height: 390px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
 .planning-template-import-days {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
@@ -4867,6 +4962,88 @@ select {
   padding: 8px 10px;
   border-radius: 12px;
   border: 1px dashed rgba(148, 163, 184, 0.34);
+}
+
+.planning-template-import-skipped {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid rgba(180, 83, 9, 0.18);
+  border-radius: 12px;
+  background: rgba(255, 247, 237, 0.82);
+}
+
+.planning-template-import-skipped article {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 8px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.planning-template-import-skipped span {
+  color: #9a3412;
+  font-weight: 850;
+  overflow-wrap: anywhere;
+}
+
+.planning-template-import-skipped em {
+  font-style: normal;
+  overflow-wrap: anywhere;
+}
+
+.planning-template-import-session-preview {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.planning-template-import-session-preview > strong {
+  color: #b45309;
+  text-transform: uppercase;
+}
+
+.planning-template-import-session-table {
+  display: grid;
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.planning-template-import-session-table > div {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.8fr) minmax(150px, 1fr) minmax(160px, 1.2fr);
+  min-width: 520px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+}
+
+.planning-template-import-session-table > div:first-child {
+  border-bottom: 2px solid #c9792b;
+}
+
+.planning-template-import-session-table span {
+  min-width: 0;
+  padding: 8px 9px;
+  color: var(--text);
+  font-size: 0.84rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.planning-template-import-session-table > div:first-child span {
+  font-weight: 900;
+}
+
+.planning-template-import-day-note {
+  margin: 0;
+  padding: 10px 12px;
+  border-left: 4px solid #31a6d8;
+  border-radius: 12px;
+  background: rgba(240, 253, 250, 0.82);
+  color: var(--text);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 
 .planning-template-import-actions {
@@ -5612,6 +5789,20 @@ select {
 }
 
 @media (max-width: 720px) {
+  .planning-template-import-audit-grid,
+  .planning-template-import-review {
+    grid-template-columns: 1fr;
+  }
+
+  .planning-template-import-review .planning-template-import-days {
+    max-height: none;
+  }
+
+  .planning-template-import-review-head,
+  .planning-template-import-day-preview-head {
+    display: grid;
+  }
+
   .planning-template-delete-bar,
   .planning-assigned-delete-bar {
     grid-template-columns: 1fr;
