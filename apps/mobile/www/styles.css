@@ -2229,6 +2229,12 @@ button {
   font-size: 0.78rem;
 }
 
+.device-workout-heart-rate-layout {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
 .device-workout-chart {
   display: grid;
   grid-template-columns: 46px minmax(0, 1fr);
@@ -2259,9 +2265,9 @@ button {
 
 .device-workout-chart-plot svg {
   width: 100%;
-  height: 112px;
+  height: 144px;
   border-radius: 11px;
-  background: linear-gradient(180deg, rgba(15, 23, 42, 0.05), rgba(15, 118, 110, 0.06));
+  background: #f8fafc;
 }
 
 .device-workout-chart-plot .grid {
@@ -2296,6 +2302,26 @@ button {
   vector-effect: non-scaling-stroke;
 }
 
+.device-workout-chart-plot .hr-zone-strip.z1 {
+  fill: #cbd5e1;
+}
+
+.device-workout-chart-plot .hr-zone-strip.z2 {
+  fill: #38bdf8;
+}
+
+.device-workout-chart-plot .hr-zone-strip.z3 {
+  fill: #84cc16;
+}
+
+.device-workout-chart-plot .hr-zone-strip.z4 {
+  fill: #facc15;
+}
+
+.device-workout-chart-plot .hr-zone-strip.z5 {
+  fill: #e11d48;
+}
+
 .device-workout-axis-x {
   grid-area: axis-x;
   display: grid;
@@ -2318,6 +2344,107 @@ button {
   color: var(--muted);
   font-size: 0.66rem;
   line-height: 1.35;
+}
+
+.device-workout-zone-panel {
+  display: grid;
+  gap: 9px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 12px;
+  background: rgba(248, 250, 252, 0.9);
+}
+
+.device-workout-zone-panel > strong {
+  color: var(--text);
+  font-size: 0.84rem;
+}
+
+.device-workout-zone-list {
+  display: grid;
+  gap: 5px;
+}
+
+.device-workout-zone-row {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) 58px;
+  gap: 5px;
+  align-items: center;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+
+.device-workout-zone-row .zone-number {
+  display: grid;
+  place-items: center;
+  height: 22px;
+  border-radius: 6px;
+  color: #fff;
+  font-weight: 900;
+}
+
+.device-workout-zone-row.z1 .zone-number,
+.device-workout-zone-row.z1 .zone-bar i {
+  background: #94a3b8;
+}
+
+.device-workout-zone-row.z2 .zone-number,
+.device-workout-zone-row.z2 .zone-bar i {
+  background: #38bdf8;
+}
+
+.device-workout-zone-row.z3 .zone-number,
+.device-workout-zone-row.z3 .zone-bar i {
+  background: #84cc16;
+}
+
+.device-workout-zone-row.z4 .zone-number,
+.device-workout-zone-row.z4 .zone-bar i {
+  background: #facc15;
+}
+
+.device-workout-zone-row.z5 .zone-number,
+.device-workout-zone-row.z5 .zone-bar i {
+  background: #e11d48;
+}
+
+.device-workout-zone-row .zone-bar {
+  position: relative;
+  display: block;
+  min-width: 0;
+  height: 22px;
+  overflow: hidden;
+  border-radius: 6px;
+  background: rgba(203, 213, 225, 0.58);
+}
+
+.device-workout-zone-row .zone-bar i {
+  position: absolute;
+  inset: 0 auto 0 0;
+}
+
+.device-workout-zone-row .zone-bar b {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  height: 100%;
+  padding-left: 7px;
+  color: #0f172a;
+  font-size: 0.66rem;
+  font-weight: 850;
+}
+
+.device-workout-zone-row .zone-time {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.device-workout-series.heartRate .device-workout-chart-plot polyline {
+  stroke: #e11d48;
 }
 
 .device-workout-series.pace .device-workout-chart-plot polyline,

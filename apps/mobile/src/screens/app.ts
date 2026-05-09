@@ -2222,6 +2222,15 @@ interface DeviceWorkoutGraphSeries {
   valueLabel: (value: number) => string;
 }
 
+interface DeviceWorkoutHeartRateZone {
+  color: string;
+  durationMs: number;
+  lower: number;
+  percent: number;
+  upper: number;
+  zone: number;
+}
+
 function formatPaceSeconds(value: number) {
   const rounded = Math.max(0, Math.round(value));
   const minutes = Math.floor(rounded / 60);
@@ -2314,15 +2323,89 @@ function clampDeviceWorkoutGraphX(value: number) {
   return Math.max(0, Math.min(100, value));
 }
 
+function getEstimatedHeartRateMax(maxWorkoutHeartRate: number) {
+  return Math.max(180, Math.round(maxWorkoutHeartRate / 0.9));
+}
+
+function getDeviceWorkoutHeartRateZone(value: number, estimatedMax: number) {
+  const ratio = value / estimatedMax;
+  if (ratio >= 0.9) {
+    return 5;
+  }
+  if (ratio >= 0.8) {
+    return 4;
+  }
+  if (ratio >= 0.7) {
+    return 3;
+  }
+  if (ratio >= 0.6) {
+    return 2;
+  }
+  return 1;
+}
+
+function formatDeviceWorkoutDurationMs(value: number) {
+  const totalSeconds = Math.max(0, Math.round(value / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return [hours, minutes, seconds].map((item) => item.toString().padStart(2, "0")).join(":");
+}
+
+function buildDeviceWorkoutHeartRateZones(series: DeviceWorkoutGraphSeries, estimatedMax: number): DeviceWorkoutHeartRateZone[] {
+  const zoneColors: Record<number, string> = {
+    1: "#cbd5e1",
+    2: "#38bdf8",
+    3: "#84cc16",
+    4: "#facc15",
+    5: "#e11d48",
+  };
+  const durations = new Map<number, number>([
+    [1, 0],
+    [2, 0],
+    [3, 0],
+    [4, 0],
+    [5, 0],
+  ]);
+
+  for (let index = 0; index < series.samples.length - 1; index += 1) {
+    const start = getDeviceWorkoutGraphTime(series.samples[index].sampleTime);
+    const end = getDeviceWorkoutGraphTime(series.samples[index + 1].sampleTime);
+    if (start === null || end === null || end <= start) {
+      continue;
+    }
+    const zone = getDeviceWorkoutHeartRateZone(series.samples[index].value, estimatedMax);
+    durations.set(zone, (durations.get(zone) ?? 0) + end - start);
+  }
+
+  const total = [...durations.values()].reduce((sum, value) => sum + value, 0);
+
+  return [5, 4, 3, 2, 1].map((zone) => {
+    const lower = zone === 1 ? 0 : Math.round(estimatedMax * (0.5 + (zone - 1) * 0.1));
+    const upper = zone === 5 ? estimatedMax : Math.round(estimatedMax * (0.5 + zone * 0.1));
+    const durationMs = durations.get(zone) ?? 0;
+    return {
+      color: zoneColors[zone],
+      durationMs,
+      lower,
+      percent: total > 0 ? (durationMs / total) * 100 : 0,
+      upper,
+      zone,
+    };
+  });
+}
+
 function renderDeviceWorkoutSeriesGraph(series: DeviceWorkoutGraphSeries, workout: DeviceWorkout) {
   const shownSamples = limitDeviceWorkoutSamples(series.samples);
   const values = series.samples.map((sample) => sample.value);
   const min = Math.min(...values);
   const max = Math.max(...values);
   const average = values.reduce((total, value) => total + value, 0) / values.length;
+  const isHeartRate = series.key === "heartRate";
+  const estimatedHeartRateMax = isHeartRate ? getEstimatedHeartRateMax(max) : null;
   const rawRange = Math.max(1, max - min);
-  const lower = min - rawRange * 0.08;
-  const upper = max + rawRange * 0.08;
+  const lower = isHeartRate && estimatedHeartRateMax !== null ? Math.min(min, estimatedHeartRateMax * 0.5) : min - rawRange * 0.08;
+  const upper = isHeartRate && estimatedHeartRateMax !== null ? Math.max(max, estimatedHeartRateMax) : max + rawRange * 0.08;
   const range = Math.max(1, upper - lower);
   const sampleStartTime = getDeviceWorkoutGraphTime(series.samples[0]?.sampleTime ?? "");
   const sampleEndTime = getDeviceWorkoutGraphTime(series.samples[series.samples.length - 1]?.sampleTime ?? "");
@@ -2365,7 +2448,26 @@ function renderDeviceWorkoutSeriesGraph(series: DeviceWorkoutGraphSeries, workou
     const y = valueToY(sample.value);
     return `${x.toFixed(2)},${y.toFixed(2)}`;
   }).join(" ");
-  const axisLabels = [max, average, min].map((value) => series.valueLabel(value));
+  const heartRateZones =
+    isHeartRate && estimatedHeartRateMax !== null
+      ? buildDeviceWorkoutHeartRateZones(series, estimatedHeartRateMax)
+      : [];
+  const heartRateGridValues =
+    estimatedHeartRateMax !== null
+      ? [
+          estimatedHeartRateMax,
+          estimatedHeartRateMax * 0.9,
+          estimatedHeartRateMax * 0.8,
+          estimatedHeartRateMax * 0.7,
+          estimatedHeartRateMax * 0.6,
+          estimatedHeartRateMax * 0.5,
+          lower,
+        ].filter((value, index, values) => index === 0 || Math.round(value) !== Math.round(values[index - 1]))
+      : [];
+  const axisLabels = isHeartRate
+    ? heartRateGridValues.map((value) => String(Math.round(value)))
+    : [max, average, min].map((value) => series.valueLabel(value));
+  const gridValues = isHeartRate ? heartRateGridValues : [upper, average, lower];
   const coverageStartX =
     axis !== null && sampleStartTime !== null
       ? clampDeviceWorkoutGraphX(((sampleStartTime - axis.start) / axis.duration) * 100)
@@ -2393,7 +2495,7 @@ function renderDeviceWorkoutSeriesGraph(series: DeviceWorkoutGraphSeries, workou
       ? `Вся тренировка: ${formatDeviceWorkoutGraphTime(axis.start)}-${formatDeviceWorkoutGraphTime(axis.end)} · точки графика: ${formatDeviceWorkoutGraphTime(sampleStartTime)}-${formatDeviceWorkoutGraphTime(sampleEndTime)}${dataCoveragePercent !== null ? ` · ${Math.round(dataCoveragePercent)}%` : ""}`
       : "";
 
-  return `
+  const graph = `
     <div class="device-workout-series ${escapeHtml(series.key)}">
       <div class="device-workout-series-caption">
         <strong>${escapeHtml(series.label)}</strong>
@@ -2405,9 +2507,12 @@ function renderDeviceWorkoutSeriesGraph(series: DeviceWorkoutGraphSeries, workou
         </div>
         <div class="device-workout-chart-plot">
           <svg aria-label="${escapeHtml(series.label)}" role="img" viewBox="0 0 100 100" preserveAspectRatio="none">
-            <line class="grid" x1="0" x2="100" y1="8" y2="8"></line>
-            <line class="grid" x1="0" x2="100" y1="50" y2="50"></line>
-            <line class="grid" x1="0" x2="100" y1="92" y2="92"></line>
+            ${isHeartRate ? heartRateZones.map((zone) => {
+              const zoneTop = valueToY(zone.upper);
+              const zoneBottom = valueToY(zone.zone === 1 ? lower : zone.lower);
+              return `<rect class="hr-zone-strip z${zone.zone}" height="${Math.max(0, zoneBottom - zoneTop).toFixed(2)}" width="1.6" x="0" y="${zoneTop.toFixed(2)}"></rect>`;
+            }).join("") : ""}
+            ${gridValues.map((value) => `<line class="grid" x1="0" x2="100" y1="${valueToY(value).toFixed(2)}" y2="${valueToY(value).toFixed(2)}"></line>`).join("")}
             <line class="average" x1="0" x2="100" y1="${averageY.toFixed(2)}" y2="${averageY.toFixed(2)}"></line>
             ${coverageStartX !== null && coverageEndX !== null ? `<line class="coverage" x1="${coverageStartX.toFixed(2)}" x2="${coverageEndX.toFixed(2)}" y1="97" y2="97"></line>` : ""}
             <polyline fill="none" points="${escapeHtml(points)}"></polyline>
@@ -2418,6 +2523,31 @@ function renderDeviceWorkoutSeriesGraph(series: DeviceWorkoutGraphSeries, workou
           : ""}
       </div>
       ${coverageNote ? `<small class="device-workout-coverage-note">${escapeHtml(coverageNote)}</small>` : ""}
+    </div>
+  `;
+
+  if (!isHeartRate) {
+    return graph;
+  }
+
+  return `
+    <div class="device-workout-heart-rate-layout">
+      ${graph}
+      <div class="device-workout-zone-panel">
+        <strong>Зоны ЧСС</strong>
+        <div class="device-workout-zone-list">
+          ${heartRateZones.map((zone) => `
+            <div class="device-workout-zone-row z${zone.zone}">
+              <span class="zone-number">${zone.zone}</span>
+              <span class="zone-bar">
+                <i style="width: ${zone.percent > 0 ? `${Math.max(2, zone.percent).toFixed(1)}%` : "0%"}"></i>
+                <b>${Math.round(zone.percent)}%</b>
+              </span>
+              <span class="zone-time">${escapeHtml(formatDeviceWorkoutDurationMs(zone.durationMs))}</span>
+            </div>
+          `).join("")}
+        </div>
+      </div>
     </div>
   `;
 }
