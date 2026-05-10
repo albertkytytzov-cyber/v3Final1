@@ -4954,6 +4954,21 @@ select {
   min-width: 0;
 }
 
+.planning-template-import-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 10px;
+  align-items: end;
+  min-width: 0;
+}
+
+.planning-template-import-controls > small {
+  grid-column: 1 / -1;
+  color: var(--muted-strong);
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
 .planning-template-import-preview {
   grid-column: 1 / -1;
   display: grid;

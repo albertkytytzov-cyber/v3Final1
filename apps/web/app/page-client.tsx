@@ -9032,9 +9032,9 @@ export function PageClient({
       }));
       setStatusMessage(
         copyFor(language, {
-          en: `File imported: ${draft.days.length} training day(s). Click "Add to library" to save the template.`,
-          ru: `Файл импортирован: ${draft.days.length} тренировочных дн. Нажмите «Добавить в библиотеку», чтобы сохранить шаблон.`,
-          bg: `Файлът е импортиран: ${draft.days.length} тренировъчни дни. Натиснете „Добави в библиотеката“, за да запазите шаблона.`,
+          en: `File imported: ${draft.days.length} training day(s). Click "Save template" to add it to the library.`,
+          ru: `Файл импортирован: ${draft.days.length} тренировочных дн. Нажмите «Сохранить шаблон», чтобы добавить его в библиотеку.`,
+          bg: `Файлът е импортиран: ${draft.days.length} тренировъчни дни. Натиснете „Запази шаблон“, за да го добавите в библиотеката.`,
         }),
       );
     } catch (error) {
@@ -19083,23 +19083,52 @@ export function PageClient({
                     })}
                   </p>
                 </div>
-                <label className="field planning-template-import-file">
-                  <span>
-                    {copyFor(language, {
-                      en: "Plan file",
-                      ru: "Файл плана",
-                      bg: "Файл на плана",
-                    })}
-                  </span>
-                  <input
-                    accept=".html,text/html"
-                    onChange={handlePlanFileImport}
-                    onClick={(event) => {
-                      event.currentTarget.value = "";
-                    }}
-                    type="file"
-                  />
-                </label>
+                <div className="planning-template-import-controls">
+                  <label className="field planning-template-import-file">
+                    <span>
+                      {copyFor(language, {
+                        en: "Plan file",
+                        ru: "Файл плана",
+                        bg: "Файл на плана",
+                      })}
+                    </span>
+                    <input
+                      accept=".html,text/html"
+                      onChange={handlePlanFileImport}
+                      onClick={(event) => {
+                        event.currentTarget.value = "";
+                      }}
+                      type="file"
+                    />
+                  </label>
+                  <button
+                    className="primary-button"
+                    disabled={busy || !importedPlanDraft}
+                    onClick={() => void handleSaveCurrentPlanTemplate()}
+                    type="button"
+                  >
+                    {busy
+                      ? ui("syncingNow")
+                      : copyFor(language, {
+                          en: "Save template",
+                          ru: "Сохранить шаблон",
+                          bg: "Запази шаблон",
+                        })}
+                  </button>
+                  <small>
+                    {importedPlanDraft
+                      ? copyFor(language, {
+                          en: "The imported file is ready to be saved to the template library.",
+                          ru: "Импортированный файл готов к сохранению в библиотеку шаблонов.",
+                          bg: "Импортираният файл е готов за запис в библиотеката с шаблони.",
+                        })
+                      : copyFor(language, {
+                          en: "Select an HTML plan first, then save it as a template.",
+                          ru: "Сначала выберите HTML-план, затем сохраните его как шаблон.",
+                          bg: "Първо изберете HTML план, след това го запазете като шаблон.",
+                        })}
+                  </small>
+                </div>
                 {importedPlanDraft ? (
                   <div className="planning-template-import-preview">
                     <div className="summary-topline">
@@ -19365,20 +19394,6 @@ export function PageClient({
                           ))}
                         </select>
                       </label>
-                      <button
-                        className="primary-button"
-                        disabled={busy || !importedPlanDraft}
-                        onClick={() => void handleSaveCurrentPlanTemplate()}
-                        type="button"
-                      >
-                        {busy
-                          ? ui("syncingNow")
-                          : copyFor(language, {
-                              en: "Add to library",
-                              ru: "Добавить в библиотеку",
-                              bg: "Добави в библиотеката",
-                            })}
-                      </button>
                       <button
                         className="secondary-button"
                         disabled={busy || !importedPlanDraft || (!selectedAthleteId && !assignedPlanForm.athleteId)}
