@@ -214,8 +214,123 @@ type SingleBlockSession<TBlock extends { name: string; displayOrder?: number }> 
   blocks: TBlock[];
 };
 
+type NormalizablePlanBlock = {
+  name: string;
+  rowKind?: PlanBlockInput["rowKind"];
+  notes?: string;
+  blockType?: PlanBlockInput["blockType"];
+  displayOrder?: number;
+  exercises?: Array<{
+    name: string;
+    notes?: string;
+  }>;
+};
+
+function isDescriptionPlanRow(block: Pick<NormalizablePlanBlock, "rowKind" | "name">) {
+  const rowKind = block.rowKind ?? "exercise";
+  const normalizedName = block.name.toLowerCase();
+  return ["instruction", "control", "note"].includes(rowKind) ||
+    /^(?:маршрут|дистанц|спуск|подъ[её]м|пульс|чсс|hr|rpe|темп|зона|контроль)/u.test(normalizedName);
+}
+
+function isRecoveryPlanRow(block: Pick<NormalizablePlanBlock, "rowKind" | "name">) {
+  return (block.rowKind ?? "exercise") === "recovery" ||
+    /^(?:после|замин|мобил|растяж|восстанов|прогул)/u.test(block.name.toLowerCase());
+}
+
+function isDeviceWorkoutPlanRow(block: Pick<NormalizablePlanBlock, "rowKind" | "name">) {
+  return (block.rowKind ?? "exercise") === "workout" ||
+    /кросс|поход|бег|пано|кругов|трениров|спринт|ускор|отрез|интервал/u.test(block.name.toLowerCase());
+}
+
+function getWorkoutNameFromSession(sessionName: string) {
+  const normalized = sessionName.replace(/\s+/g, " ").trim();
+  const parts = normalized.split(/\s*[—–-]\s*/u).map((part) => part.trim()).filter(Boolean);
+  return parts
+    .slice()
+    .reverse()
+    .find((part) => /кросс|поход|бег|пано|кругов|трениров|спринт|ускор|отрез|интервал/u.test(part.toLowerCase())) ??
+    normalized;
+}
+
+function formatPlanDescriptionLine(block: NormalizablePlanBlock) {
+  const notes = (block.notes ?? "").replace(/\s+/g, " ").trim();
+  return notes ? `${block.name}: ${notes}` : block.name;
+}
+
+function mergePlanNotes(...values: Array<string | null | undefined>) {
+  return values
+    .flatMap((value) => (value ?? "").split(/\s*;\s*/u))
+    .map((value) => value.replace(/\s+/g, " ").trim())
+    .filter(Boolean)
+    .filter((value, index, items) => items.indexOf(value) === index)
+    .join("; ");
+}
+
+function normalizeDeviceWorkoutDescriptionSession<
+  TBlock extends NormalizablePlanBlock,
+  TSession extends SingleBlockSession<TBlock>,
+>(session: TSession): TSession {
+  const descriptionBlocks = session.blocks.filter(isDescriptionPlanRow);
+  const recoveryBlocks = session.blocks.filter(isRecoveryPlanRow);
+  const workoutBlocks = session.blocks.filter((block) =>
+    isDeviceWorkoutPlanRow(block) && !isDescriptionPlanRow(block) && !isRecoveryPlanRow(block)
+  );
+  const otherBlocks = session.blocks.filter(
+    (block) =>
+      !isDescriptionPlanRow(block) &&
+      !isRecoveryPlanRow(block) &&
+      !workoutBlocks.includes(block),
+  );
+
+  if (descriptionBlocks.length === 0) {
+    return workoutBlocks.length > 0
+      ? { ...session, deviceLinkMode: "block" } as TSession
+      : session;
+  }
+
+  const workoutName = getWorkoutNameFromSession(session.name);
+  if (
+    workoutBlocks.length === 0 &&
+    !/кросс|поход|бег|пано|кругов|трениров|спринт|ускор|отрез|интервал/u.test(
+      workoutName.toLowerCase(),
+    )
+  ) {
+    return session;
+  }
+
+  const description = descriptionBlocks.map(formatPlanDescriptionLine).join("; ");
+  const sourceWorkout = workoutBlocks[0] ?? descriptionBlocks[0];
+  const workoutBlock = {
+    ...sourceWorkout,
+    name: workoutBlocks[0]?.name ?? workoutName,
+    rowKind: "workout",
+    notes: mergePlanNotes(sourceWorkout.notes, description),
+    exercises: (sourceWorkout.exercises ?? []).map((exercise, exerciseIndex) =>
+      exerciseIndex === 0
+        ? {
+            ...exercise,
+            name: workoutBlocks[0]?.name ?? workoutName,
+            notes: mergePlanNotes(exercise.notes, description),
+          }
+        : exercise,
+    ),
+    displayOrder: 0,
+  } as TBlock;
+  const extraWorkouts = workoutBlocks.slice(1);
+  const nextBlocks = [workoutBlock, ...extraWorkouts, ...otherBlocks, ...recoveryBlocks]
+    .map((block, index) => ({ ...block, displayOrder: index })) as TBlock[];
+
+  return {
+    ...session,
+    executionMode: nextBlocks.length > 1 ? "by_blocks" : session.executionMode ?? "whole_session",
+    deviceLinkMode: "block",
+    blocks: nextBlocks,
+  } as TSession;
+}
+
 function normalizeSingleBlockSessions<
-  TBlock extends { name: string; displayOrder?: number },
+  TBlock extends NormalizablePlanBlock,
   TSession extends SingleBlockSession<TBlock>,
 >(sessions: TSession[]): TSession[] {
   if (sessions.length < 2 || sessions.some((session) => session.blocks.length !== 1)) {
@@ -247,7 +362,14 @@ function normalizeSingleBlockSessions<
     })),
   } as TSession;
 
-  return [mergedSession];
+  return [normalizeDeviceWorkoutDescriptionSession(mergedSession)];
+}
+
+function normalizePlanDeviceWorkoutSessions<
+  TBlock extends NormalizablePlanBlock,
+  TSession extends SingleBlockSession<TBlock>,
+>(sessions: TSession[]): TSession[] {
+  return normalizeSingleBlockSessions(sessions).map(normalizeDeviceWorkoutDescriptionSession);
 }
 
 function buildPlanTemplateStructureMap(rows: PlanTemplateRow[]) {
@@ -410,7 +532,7 @@ function buildPlanTemplateStructureMap(rows: PlanTemplateRow[]) {
     template.days?.sort((left, right) => (left.orderIndex ?? 0) - (right.orderIndex ?? 0));
     for (const day of template.days ?? []) {
       day.sessions.sort((left, right) => (left.orderIndex ?? 0) - (right.orderIndex ?? 0));
-      day.sessions = normalizeSingleBlockSessions(day.sessions);
+      day.sessions = normalizePlanDeviceWorkoutSessions(day.sessions);
     }
   }
 
@@ -418,7 +540,7 @@ function buildPlanTemplateStructureMap(rows: PlanTemplateRow[]) {
     structure.days.sort((left, right) => left.displayOrder - right.displayOrder);
     for (const day of structure.days) {
       day.sessions.sort((left, right) => left.displayOrder - right.displayOrder);
-      day.sessions = normalizeSingleBlockSessions(day.sessions);
+      day.sessions = normalizePlanDeviceWorkoutSessions(day.sessions);
     }
   }
 
@@ -537,7 +659,7 @@ function mapAssignedPlans(rows: AssignedPlanRow[]): AssignedPlanSummary[] {
 
   for (const assigned of grouped.values()) {
     assigned.day.sessions.sort((left, right) => left.orderIndex - right.orderIndex);
-    assigned.day.sessions = normalizeSingleBlockSessions(assigned.day.sessions);
+    assigned.day.sessions = normalizePlanDeviceWorkoutSessions(assigned.day.sessions);
   }
 
   return Array.from(grouped.values());

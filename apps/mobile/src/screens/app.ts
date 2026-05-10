@@ -1431,11 +1431,11 @@ function renderCoachDayExerciseChecklist(dayData: CoachDayCleanSummary) {
 
 function renderCoachDeviceWorkoutPanel(dayData: CoachDayCleanSummary, isBusy: boolean) {
   const workouts = dayData.deviceWorkouts;
-  const sessionGroups = getCoachDeviceWorkoutSessionGroups(dayData.blocks);
-  const linkedSessionCount = sessionGroups.filter((group) =>
+  const linkGroups = getCoachDeviceWorkoutLinkGroups(dayData.blocks);
+  const linkedSessionCount = linkGroups.filter((group) =>
     getDeviceWorkoutLinkGroupForBlocks(
       dayData.deviceWorkoutLinks,
-      group.blocks.map((block) => block.assignedBlockId),
+      group.assignedBlockIds,
     ).isFullyLinked
   ).length;
 
@@ -1447,7 +1447,7 @@ function renderCoachDeviceWorkoutPanel(dayData: CoachDayCleanSummary, isBusy: bo
           <h3>${workouts.length ? `${workouts.length} тренировок пришло` : "Нет тренировок устройства"}</h3>
         </div>
         <div class="device-health-actions">
-          <strong>${linkedSessionCount}/${sessionGroups.length || 0}</strong>
+          <strong>${linkedSessionCount}/${linkGroups.length || 0}</strong>
           <button class="secondary-action" data-refresh type="button" ${isBusy ? "disabled" : ""}>
             Обновить
           </button>
@@ -1457,8 +1457,8 @@ function renderCoachDeviceWorkoutPanel(dayData: CoachDayCleanSummary, isBusy: bo
         ? `<p class="muted-copy">Выбор станет активным после того, как спортсмен синхронизирует детальные тренировки Mi Fitness / Health Connect за эту дату.</p>`
         : ""}
       <div class="coach-day-exercise-list">
-        ${sessionGroups.map((group) => {
-          const assignedBlockIds = group.blocks.map((block) => block.assignedBlockId);
+        ${linkGroups.map((group) => {
+          const assignedBlockIds = group.assignedBlockIds;
           const linkGroup = getDeviceWorkoutLinkGroupForBlocks(dayData.deviceWorkoutLinks, assignedBlockIds);
           const linkedWorkout = linkGroup.linkedWorkout;
           const status = linkedWorkout && linkGroup.isFullyLinked
@@ -1477,8 +1477,8 @@ function renderCoachDeviceWorkoutPanel(dayData: CoachDayCleanSummary, isBusy: bo
           return `
             <article class="is-${status}">
               <span>${escapeHtml(statusLabel)}</span>
-              <strong>${escapeHtml(group.sessionName)}</strong>
-              <p>${escapeHtml(group.blocks.map((block) => block.name).join(" · "))}</p>
+              <strong>${escapeHtml(group.label)}</strong>
+              <p>${escapeHtml(group.description)}</p>
               <select
                 data-device-workout-link
                 data-device-workout-plan-id="${escapeHtml(group.assignedPlanId)}"
@@ -3243,6 +3243,7 @@ function renderReadinessHistory(entries: ReadinessEntry[]) {
 interface ExecutionBlockItem {
   plan: AssignedPlanSummary;
   sessionName: string;
+  sessionDeviceLinkMode?: MobileAssignedPlanSession["deviceLinkMode"];
   block: AssignedPlanBlock;
 }
 
@@ -3312,7 +3313,9 @@ interface CoachDayBlockCleanSummary {
   assignedBlockId: string;
   planName: string;
   sessionName: string;
+  sessionDeviceLinkMode?: MobileAssignedPlanSession["deviceLinkMode"];
   name: string;
+  rowKind?: AssignedPlanBlock["rowKind"];
   target: string;
   notes: string;
   status: ExecutionDayStatus;
@@ -4541,6 +4544,8 @@ function getCoachDayCleanSummary(
         notes: item.block.notes,
         plannedLoad: roundLoad(plannedLoad),
         planName: item.plan.templateName,
+        rowKind: item.block.rowKind,
+        sessionDeviceLinkMode: item.sessionDeviceLinkMode,
         sessionName: item.sessionName,
         status,
         statusLabel: getExecutionDayStatusLabel(status),
@@ -5095,28 +5100,72 @@ function getDeviceWorkoutLinkGroupForBlocks(
   };
 }
 
-function getCoachDeviceWorkoutSessionGroups(blocks: CoachDayBlockCleanSummary[]) {
-  const groups = new Map<string, {
+function isMobileDeviceWorkoutLinkableBlock(block: Pick<CoachDayBlockCleanSummary, "rowKind">) {
+  return (block.rowKind ?? "exercise") === "workout";
+}
+
+function isMobileLoadBearingPlanBlock(block: Pick<CoachDayBlockCleanSummary, "rowKind">) {
+  return !["instruction", "control", "note"].includes(block.rowKind ?? "exercise");
+}
+
+function getCoachDeviceWorkoutLinkGroups(blocks: CoachDayBlockCleanSummary[]) {
+  const sessionGroups = new Map<string, {
     assignedPlanId: string;
     blocks: CoachDayBlockCleanSummary[];
+    deviceLinkMode?: MobileAssignedPlanSession["deviceLinkMode"];
     sessionName: string;
   }>();
 
   for (const block of blocks) {
     const key = `${block.assignedPlanId}:${block.sessionName}`;
-    const group = groups.get(key);
+    const group = sessionGroups.get(key);
     if (group) {
       group.blocks.push(block);
     } else {
-      groups.set(key, {
+      sessionGroups.set(key, {
         assignedPlanId: block.assignedPlanId,
         blocks: [block],
+        deviceLinkMode: block.sessionDeviceLinkMode,
         sessionName: block.sessionName,
       });
     }
   }
 
-  return Array.from(groups.values());
+  return Array.from(sessionGroups.values()).flatMap((group) => {
+    if (group.deviceLinkMode === "none") {
+      return [];
+    }
+
+    if (group.deviceLinkMode === "block") {
+      return group.blocks
+        .filter(isMobileDeviceWorkoutLinkableBlock)
+        .map((block) => ({
+          assignedBlockIds: [block.assignedBlockId],
+          assignedPlanId: group.assignedPlanId,
+          blocks: [block],
+          description: group.sessionName,
+          id: `${group.assignedPlanId}:${block.assignedBlockId}`,
+          label: block.name,
+        }));
+    }
+
+    const linkableBlocks = group.blocks.filter(isMobileDeviceWorkoutLinkableBlock);
+    const fallbackBlocks = group.blocks.filter(isMobileLoadBearingPlanBlock);
+    const targetBlocks = linkableBlocks.length ? linkableBlocks : fallbackBlocks;
+
+    return targetBlocks.length
+      ? [
+          {
+            assignedBlockIds: targetBlocks.map((block) => block.assignedBlockId),
+            assignedPlanId: group.assignedPlanId,
+            blocks: group.blocks,
+            description: group.blocks.map((block) => block.name).join(" · "),
+            id: `${group.assignedPlanId}:${group.sessionName}`,
+            label: group.sessionName,
+          },
+        ]
+      : [];
+  });
 }
 
 function compareDeviceHealthSummaries(
@@ -5368,6 +5417,7 @@ function getExecutionBlockItems(plans: AssignedPlanSummary[]): ExecutionBlockIte
       session.blocks.map((block) => ({
         block,
         plan,
+        sessionDeviceLinkMode: session.deviceLinkMode,
         sessionName: session.name,
       })),
     ),

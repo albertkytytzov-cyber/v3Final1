@@ -786,6 +786,53 @@ function getDeviceWorkoutLinkGroupForBlocks(
   };
 }
 
+function isDeviceWorkoutLinkableBlock(
+  block: Pick<AssignedPlanSummary["day"]["sessions"][number]["blocks"][number], "rowKind">,
+) {
+  return (block.rowKind ?? "exercise") === "workout";
+}
+
+function isLoadBearingPlanBlock(
+  block: Pick<AssignedPlanSummary["day"]["sessions"][number]["blocks"][number], "rowKind">,
+) {
+  return !["instruction", "control", "note"].includes(block.rowKind ?? "exercise");
+}
+
+function getDeviceWorkoutLinkTargetsForSession(
+  session: ExecutionReviewPlan["sessions"][number],
+) {
+  if (session.deviceLinkMode === "none") {
+    return [];
+  }
+
+  if (session.deviceLinkMode === "block") {
+    return session.blocks
+      .filter(isDeviceWorkoutLinkableBlock)
+      .map((block) => ({
+        id: `${session.id}:${block.id}`,
+        label: block.name,
+        description: session.name,
+        assignedBlockIds: [block.id],
+      }));
+  }
+
+  const linkableBlocks = session.blocks.filter(isDeviceWorkoutLinkableBlock);
+  const fallbackBlocks = session.blocks.filter(isLoadBearingPlanBlock);
+  const assignedBlockIds = (linkableBlocks.length ? linkableBlocks : fallbackBlocks)
+    .map((block) => block.id);
+
+  return assignedBlockIds.length
+    ? [
+        {
+          id: session.id,
+          label: session.name,
+          description: session.blocks.map((block) => block.name).join(" · "),
+          assignedBlockIds,
+        },
+      ]
+    : [];
+}
+
 function compareDeviceHealthSummaries(
   left: DeviceHealthDailySummary,
   right: DeviceHealthDailySummary,
@@ -2656,24 +2703,25 @@ function inferImportedRowKind(name: string, volume: string, control: string): Pl
     return "note";
   }
 
-  if (/маршрут|кросс|поход|бег|пано|кругов|трениров/u.test(normalized)) {
-    return "workout";
-  }
-
-  if (/пульс|чсс|\bhr\b|rpe|темп|зона/u.test(normalized)) {
-    return "control";
-  }
-
-  if (/после|замин|мобил|растяж|восстанов|прогул/u.test(normalizedName)) {
+  if (/^(?:после|замин|мобил|растяж|восстанов|прогул)/u.test(normalizedName)) {
     return "recovery";
   }
 
+  if (/^(?:пульс|чсс|hr|rpe|темп|зона|контроль)/u.test(normalizedName)) {
+    return "control";
+  }
+
   if (
-    /маршрут|дистанц|спуск|подъ[её]м|экип|питани|дыхани|без спешки|не бежать/u.test(
+    /^(?:маршрут|дистанц|спуск|подъ[её]м|экип|питани|дыхани)/u.test(normalizedName) ||
+    /без спешки|не бежать/u.test(
       normalized,
     )
   ) {
     return "instruction";
+  }
+
+  if (/кросс|поход|бег|пано|кругов|трениров|спринт|ускор|отрез|интервал/u.test(normalizedName)) {
+    return "workout";
   }
 
   return "exercise";
@@ -2791,11 +2839,150 @@ function parseImportedPlanTableBlocks(table: HTMLTableElement, startOrderIndex: 
   return blocks;
 }
 
+function isImportedDescriptionRow(block: Pick<PlanTemplatePayload["blocks"][number], "rowKind">) {
+  return ["instruction", "control", "note"].includes(block.rowKind ?? "exercise");
+}
+
+function isImportedRecoveryRow(block: Pick<PlanTemplatePayload["blocks"][number], "rowKind">) {
+  return (block.rowKind ?? "exercise") === "recovery";
+}
+
+function isImportedDeviceWorkoutRow(block: Pick<PlanTemplatePayload["blocks"][number], "rowKind">) {
+  return (block.rowKind ?? "exercise") === "workout";
+}
+
+function getImportedWorkoutNameFromSession(sessionName: string) {
+  const normalized = normalizeImportedPlanText(sessionName);
+  const parts = normalized.split(/\s*[—–-]\s*/u).map(normalizeImportedPlanText).filter(Boolean);
+  const candidate = parts
+    .slice()
+    .reverse()
+    .find((part) => /кросс|поход|бег|пано|кругов|трениров|спринт|ускор|отрез|интервал/u.test(part.toLowerCase()));
+
+  return candidate ?? normalized;
+}
+
+function formatImportedDescriptionLine(block: PlanTemplatePayload["blocks"][number]) {
+  const details = normalizeImportedPlanText(block.notes ?? "");
+  return details ? `${block.name}: ${details}` : block.name;
+}
+
+function mergeImportedNotes(...values: Array<string | null | undefined>) {
+  return values
+    .flatMap((value) => normalizeImportedPlanText(value ?? "").split(/\s*;\s*/u))
+    .map(normalizeImportedPlanText)
+    .filter(Boolean)
+    .filter((value, index, items) => items.indexOf(value) === index)
+    .join("; ");
+}
+
+function createImportedDeviceWorkoutBlock(
+  workoutName: string,
+  descriptionBlocks: PlanTemplatePayload["blocks"],
+  displayOrder: number,
+): PlanTemplatePayload["blocks"][number] {
+  const description = descriptionBlocks.map(formatImportedDescriptionLine).join("; ");
+  const blockType = inferImportedBlockType(`${workoutName} ${description}`);
+  const targetDurationMinutes = extractImportedDurationMinutes(description);
+  const targetRpe = extractImportedRpe(description);
+
+  return {
+    name: workoutName,
+    rowKind: "workout",
+    blockType,
+    blockPriority: 1,
+    isMandatory: true,
+    removePriorityYellow: 5,
+    removePriorityRed: 4,
+    reductionPercentYellow: 30,
+    reductionPercentRed: 55,
+    targetDurationMinutes,
+    targetRpe,
+    targetSets: null,
+    targetReps: null,
+    notes: description,
+    exercises: [
+      {
+        name: workoutName,
+        targetSets: null,
+        targetReps: null,
+        targetWeightKg: null,
+        targetDurationMinutes,
+        targetRpe,
+        notes: description,
+        displayOrder,
+      },
+    ],
+  };
+}
+
+function normalizeImportedDeviceWorkoutSession(
+  session: PlanTemplateSessionInput,
+): PlanTemplateSessionInput {
+  const descriptionBlocks = session.blocks.filter(isImportedDescriptionRow);
+  const recoveryBlocks = session.blocks.filter(isImportedRecoveryRow);
+  const workoutBlocks = session.blocks.filter(isImportedDeviceWorkoutRow);
+  const otherBlocks = session.blocks.filter(
+    (block) =>
+      !isImportedDescriptionRow(block) &&
+      !isImportedRecoveryRow(block) &&
+      !isImportedDeviceWorkoutRow(block),
+  );
+
+  if (descriptionBlocks.length === 0) {
+    return workoutBlocks.length > 0
+      ? { ...session, deviceLinkMode: "block" }
+      : session;
+  }
+
+  const workoutName = getImportedWorkoutNameFromSession(session.name);
+  const mergedDescription = descriptionBlocks.map(formatImportedDescriptionLine).join("; ");
+
+  if (workoutBlocks.length > 0) {
+    const [primaryWorkout, ...extraWorkouts] = workoutBlocks;
+    const updatedPrimaryWorkout = {
+      ...primaryWorkout,
+      notes: mergeImportedNotes(primaryWorkout.notes, mergedDescription),
+      exercises: (primaryWorkout.exercises ?? []).map((exercise, exerciseIndex) =>
+        exerciseIndex === 0
+          ? {
+              ...exercise,
+              notes: mergeImportedNotes(exercise.notes, mergedDescription),
+            }
+          : exercise,
+      ),
+    };
+
+    return {
+      ...session,
+      executionMode: recoveryBlocks.length || otherBlocks.length ? "by_blocks" : session.executionMode ?? "whole_session",
+      deviceLinkMode: "block",
+      blocks: [updatedPrimaryWorkout, ...extraWorkouts, ...otherBlocks, ...recoveryBlocks]
+        .map((block, blockIndex) => ({ ...block, displayOrder: blockIndex })),
+    };
+  }
+
+  if (!/кросс|поход|бег|пано|кругов|трениров|спринт|ускор|отрез|интервал/u.test(workoutName.toLowerCase())) {
+    return session;
+  }
+
+  return {
+    ...session,
+    executionMode: recoveryBlocks.length || otherBlocks.length ? "by_blocks" : "whole_session",
+    deviceLinkMode: "block",
+    blocks: [
+      createImportedDeviceWorkoutBlock(workoutName, descriptionBlocks, 0),
+      ...otherBlocks,
+      ...recoveryBlocks,
+    ].map((block, blockIndex) => ({ ...block, displayOrder: blockIndex })),
+  };
+}
+
 function normalizeImportedPlanSessions(
   sessions: PlanTemplateSessionInput[],
 ): PlanTemplateSessionInput[] {
   if (sessions.length < 2 || sessions.some((session) => session.blocks.length !== 1)) {
-    return sessions;
+    return sessions.map(normalizeImportedDeviceWorkoutSession);
   }
 
   const commonBlockName = sessions[0]?.blocks[0]?.name ?? "";
@@ -2804,23 +2991,23 @@ function normalizeImportedPlanSessions(
   const sessionNamesAreRows = sessions.some((session) => session.name !== commonBlockName);
 
   if (!hasSameBlockName || !sessionNamesAreRows) {
-    return sessions;
+    return sessions.map(normalizeImportedDeviceWorkoutSession);
   }
 
-  return [
-    {
-      name: commonBlockName,
-      notes: sessions.map((session) => session.notes).filter(Boolean).join(" / "),
-      orderIndex: 0,
-      executionMode: "whole_session",
-      deviceLinkMode: "session",
-      blocks: sessions.map((session, index) => ({
-        ...session.blocks[0],
-        name: session.name || session.blocks[0].name,
-        displayOrder: index,
-      })),
-    },
-  ];
+  const mergedSession: PlanTemplateSessionInput = {
+    name: commonBlockName,
+    notes: sessions.map((session) => session.notes).filter(Boolean).join(" / "),
+    orderIndex: 0,
+    executionMode: "whole_session",
+    deviceLinkMode: "session",
+    blocks: sessions.map((session, index) => ({
+      ...session.blocks[0],
+      name: session.name || session.blocks[0].name,
+      displayOrder: index,
+    })),
+  };
+
+  return [normalizeImportedDeviceWorkoutSession(mergedSession)];
 }
 
 function parseImportedPlanHtml(
@@ -14761,8 +14948,8 @@ export function PageClient({
                             </p>
                           ) : null}
                           <div className="device-workout-block-list">
-                            {coachExecutionReview.sessions.map((session) => {
-                              const assignedBlockIds = session.blocks.map((block) => block.id);
+                            {coachExecutionReview.sessions.flatMap(getDeviceWorkoutLinkTargetsForSession).map((target) => {
+                              const assignedBlockIds = target.assignedBlockIds;
                               const linkGroup = getDeviceWorkoutLinkGroupForBlocks(
                                 selectedCoachDeviceWorkoutLinks,
                                 assignedBlockIds,
@@ -14798,15 +14985,15 @@ export function PageClient({
                                       });
 
                               return (
-                                <article className="device-workout-block-card" key={session.id}>
+                                <article className="device-workout-block-card" key={target.id}>
                                   <div>
-                                    <strong>{session.name}</strong>
+                                    <strong>{target.label}</strong>
                                     <span>
                                       {copyFor(language, {
-                                        en: "Plan blocks",
-                                        ru: "Блоки плана",
-                                        bg: "Блокове от плана",
-                                      })}: {session.blocks.map((block) => block.name).join(" · ")}
+                                        en: "Plan",
+                                        ru: "План",
+                                        bg: "План",
+                                      })}: {target.description}
                                     </span>
                                   </div>
                                   <span className={`status-chip ${statusClass}`}>
