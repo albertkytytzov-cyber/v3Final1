@@ -149,6 +149,34 @@ export interface MobileAppState {
   queue: PendingSyncAction[];
   coachAiDiagnostic: CoachAiReviewDiagnosticResponse | null;
   coachAiStatus: CoachAiReviewStatus | null;
+  directWatchDiagnostic: {
+    devices: Array<{
+      id: string;
+      isLikelyWatch?: boolean;
+      name?: string | null;
+      rssi?: number | null;
+    }>;
+    inspectedDeviceId: string | null;
+    inspection: {
+      deviceId: string;
+      deviceName?: string | null;
+      hasBatteryService?: boolean;
+      hasDeviceInfoService?: boolean;
+      hasHeartRateService?: boolean;
+      inspectedAt?: string | null;
+      serviceCount?: number;
+      services?: Array<{
+        uuid: string;
+        name?: string | null;
+        characteristics?: Array<{
+          uuid: string;
+          name?: string | null;
+          properties?: string[];
+        }>;
+      }>;
+    } | null;
+    scannedAt: string | null;
+  };
   aiReviewByDay: Record<string, CoachDayAiReview>;
   selectedScreen: MobileScreen;
   selectedAthleteId: string | null;

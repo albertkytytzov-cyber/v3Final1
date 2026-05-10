@@ -9,6 +9,10 @@ import {
   readMiFitnessHealthConnectDailySummary,
   readMiFitnessHealthConnectDeviceWorkouts,
 } from "../integrations/health-connect.js";
+import {
+  inspectDirectWatchDevice,
+  scanDirectWatchDevices,
+} from "../integrations/direct-watch.js";
 import { readHuaweiHealthDailySummary } from "../integrations/huawei-health.js";
 import {
   clearSession,
@@ -74,6 +78,12 @@ export function bootstrapMobileApp(root: HTMLElement) {
     queue: loadQueue(),
     coachAiDiagnostic: null,
     coachAiStatus: null,
+    directWatchDiagnostic: {
+      devices: [],
+      inspectedDeviceId: null,
+      inspection: null,
+      scannedAt: null,
+    },
     aiReviewByDay: buildCoachAiReviewByDay(initialData.coachAiReviews),
     selectedScreen: "dashboard",
     selectedAthleteId: loadSelectedAthleteId(),
@@ -433,6 +443,78 @@ export function bootstrapMobileApp(root: HTMLElement) {
     await submitDeviceHealthPayload(payload);
     if (workoutsPayload && workoutsPayload.workouts.length > 0) {
       await submitDeviceWorkoutsPayload(workoutsPayload);
+    }
+  };
+
+  const scanDirectWatch = async () => {
+    if (state.session.user?.role !== "athlete") {
+      update({
+        error: "Прямое подключение часов выполняет спортсмен в своём Android-приложении.",
+        isBusy: false,
+        message: null,
+      });
+      return;
+    }
+
+    update({ error: null, isBusy: true, message: "Ищу часы рядом с телефоном..." });
+
+    try {
+      const result = await scanDirectWatchDevices();
+      update({
+        directWatchDiagnostic: {
+          devices: result.devices.filter((device) => Boolean(device.id)),
+          inspectedDeviceId: null,
+          inspection: null,
+          scannedAt: result.scannedAt ?? new Date().toISOString(),
+        },
+        error: null,
+        isBusy: false,
+        message: result.devices.length
+          ? "Поиск часов завершён. Выберите Redmi Watch 5 для проверки сервисов."
+          : "Часы не найдены. Держите Redmi Watch 5 рядом, включите Bluetooth и повторите поиск.",
+      });
+    } catch (error) {
+      update({
+        error: error instanceof Error ? error.message : "Не удалось выполнить поиск часов.",
+        isBusy: false,
+        message: null,
+      });
+    }
+  };
+
+  const inspectDirectWatch = async (deviceId: string) => {
+    if (!deviceId) {
+      update({ error: "Выберите часы для проверки." });
+      return;
+    }
+
+    update({ error: null, isBusy: true, message: "Подключаюсь к часам и читаю BLE-сервисы..." });
+
+    try {
+      const inspection = await inspectDirectWatchDevice(deviceId);
+      update({
+        directWatchDiagnostic: {
+          ...state.directWatchDiagnostic,
+          inspectedDeviceId: deviceId,
+          inspection,
+        },
+        error: null,
+        isBusy: false,
+        message: inspection.hasHeartRateService
+          ? "Часы отдают стандартный сервис пульса. Следующий шаг — чтение живого пульса во время тренировки."
+          : "Часы подключились, но стандартный сервис пульса не найден. Данные могут быть закрыты протоколом Xiaomi.",
+      });
+    } catch (error) {
+      update({
+        directWatchDiagnostic: {
+          ...state.directWatchDiagnostic,
+          inspectedDeviceId: deviceId,
+          inspection: null,
+        },
+        error: error instanceof Error ? error.message : "Не удалось проверить сервисы часов.",
+        isBusy: false,
+        message: null,
+      });
     }
   };
 
@@ -1033,6 +1115,18 @@ export function bootstrapMobileApp(root: HTMLElement) {
     root.querySelectorAll<HTMLButtonElement>("[data-health-connect-sync]").forEach((button) => {
       button.addEventListener("click", () => {
         void syncMiFitnessHealthConnect(button.dataset.healthConnectDate ?? todayValue());
+      });
+    });
+
+    root.querySelectorAll<HTMLButtonElement>("[data-direct-watch-scan]").forEach((button) => {
+      button.addEventListener("click", () => {
+        void scanDirectWatch();
+      });
+    });
+
+    root.querySelectorAll<HTMLButtonElement>("[data-direct-watch-inspect]").forEach((button) => {
+      button.addEventListener("click", () => {
+        void inspectDirectWatch(button.dataset.directWatchInspect ?? "");
       });
     });
 
@@ -1825,6 +1919,7 @@ function renderDeviceHealthCard(state: MobileAppState, athleteId: string, date: 
         </article>
       </div>
       ${renderHealthConnectDiagnostics(summary)}
+      ${canSync ? renderDirectWatchDiagnostics(state) : ""}
       ${workouts.length ? `
         <div class="device-health-signal-list">
           ${workouts.map((workout) => `
@@ -1840,6 +1935,132 @@ function renderDeviceHealthCard(state: MobileAppState, athleteId: string, date: 
       </p>
     </section>
   `;
+}
+
+function renderDirectWatchDiagnostics(state: MobileAppState) {
+  const diagnostic = state.directWatchDiagnostic;
+  const devices = diagnostic.devices
+    .slice()
+    .sort((left, right) =>
+      Number(Boolean(right.isLikelyWatch)) - Number(Boolean(left.isLikelyWatch)) ||
+      (right.rssi ?? -999) - (left.rssi ?? -999),
+    )
+    .slice(0, 8);
+  const inspection = diagnostic.inspection;
+  const services = inspection?.services ?? [];
+  const knownServices = services
+    .filter((service) => service.name && service.name !== "Unknown")
+    .map((service) => service.name as string);
+
+  return `
+    <div class="device-health-diagnostics direct-watch-diagnostics">
+      <div class="summary-inline-head">
+        <div>
+          <span>Прямое подключение часов</span>
+          <h3>Redmi Watch 5 через Bluetooth</h3>
+        </div>
+        <button class="secondary-action" data-direct-watch-scan type="button" ${state.isBusy ? "disabled" : ""}>
+          Найти часы
+        </button>
+      </div>
+      <p>
+        Этот блок проверяет, какие данные часы отдают напрямую телефону. Пока это диагностика: поиск часов и проверка BLE-сервисов, без записи тренировки.
+      </p>
+      ${diagnostic.scannedAt ? `<p class="muted-copy">Последний поиск: ${escapeHtml(formatDateTime(diagnostic.scannedAt))}</p>` : ""}
+      ${devices.length ? `
+        <div class="direct-watch-device-list">
+          ${devices.map((device) => `
+            <article>
+              <div>
+                <strong>${escapeHtml(device.name || "Bluetooth-устройство")}</strong>
+                <span>${escapeHtml(device.isLikelyWatch ? "похоже на часы" : "устройство рядом")} · ${escapeHtml(formatDirectWatchSignal(device.rssi))}</span>
+              </div>
+              <button
+                class="secondary-action"
+                data-direct-watch-inspect="${escapeHtml(device.id)}"
+                type="button"
+                ${state.isBusy ? "disabled" : ""}
+              >
+                Проверить
+              </button>
+            </article>
+          `).join("")}
+        </div>
+      ` : `
+        <div class="device-health-status is-missing">
+          <strong>Часы ещё не найдены</strong>
+          <span>Нажмите “Найти часы”, держите Redmi Watch 5 рядом и включите Bluetooth.</span>
+        </div>
+      `}
+      ${inspection ? `
+        <div class="direct-watch-inspection">
+          <div class="device-health-status ${inspection.hasHeartRateService ? "is-connected" : "is-missing"}">
+            <strong>${escapeHtml(inspection.hasHeartRateService ? "Пульс доступен по стандартному BLE" : "Стандартный пульс не найден")}</strong>
+            <span>${escapeHtml(formatDirectWatchInspectionSummary(inspection))}</span>
+          </div>
+          <div class="device-health-diagnostics-grid">
+            <article>
+              <span>Устройство</span>
+              <strong>${escapeHtml(inspection.deviceName || "Redmi Watch 5")}</strong>
+            </article>
+            <article>
+              <span>Сервисов</span>
+              <strong>${escapeHtml(String(inspection.serviceCount ?? services.length))}</strong>
+            </article>
+            <article>
+              <span>Пульс</span>
+              <strong>${escapeHtml(inspection.hasHeartRateService ? "есть" : "нет")}</strong>
+            </article>
+            <article>
+              <span>Известные сервисы</span>
+              <strong>${escapeHtml(knownServices.length ? knownServices.join(", ") : "не найдены")}</strong>
+            </article>
+          </div>
+          ${services.length ? `
+            <details class="direct-watch-services">
+              <summary>Показать BLE-сервисы</summary>
+              <ul>
+                ${services.slice(0, 12).map((service) => `
+                  <li>
+                    <strong>${escapeHtml(service.name || "Unknown")}</strong>
+                    <span>${escapeHtml(service.uuid)}</span>
+                  </li>
+                `).join("")}
+              </ul>
+            </details>
+          ` : ""}
+        </div>
+      ` : ""}
+    </div>
+  `;
+}
+
+function formatDirectWatchSignal(rssi: number | null | undefined) {
+  if (typeof rssi !== "number" || !Number.isFinite(rssi)) {
+    return "сигнал неизвестен";
+  }
+
+  if (rssi >= -60) {
+    return `сильный сигнал ${rssi} dBm`;
+  }
+
+  if (rssi >= -75) {
+    return `средний сигнал ${rssi} dBm`;
+  }
+
+  return `слабый сигнал ${rssi} dBm`;
+}
+
+function formatDirectWatchInspectionSummary(
+  inspection: NonNullable<MobileAppState["directWatchDiagnostic"]["inspection"]>,
+) {
+  const parts = [
+    inspection.hasHeartRateService ? "сервис пульса есть" : "сервиса пульса нет",
+    inspection.hasBatteryService ? "батарея есть" : null,
+    inspection.hasDeviceInfoService ? "информация об устройстве есть" : null,
+  ].filter((part): part is string => Boolean(part));
+
+  return parts.join(", ");
 }
 
 function renderHealthConnectDiagnostics(summary: DeviceHealthDailySummary | null) {

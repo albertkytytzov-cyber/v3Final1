@@ -2689,6 +2689,96 @@ button {
   font-weight: 740;
 }
 
+.direct-watch-diagnostics {
+  border-color: rgba(34, 197, 94, 0.24);
+  background: rgba(240, 253, 244, 0.82);
+}
+
+.direct-watch-device-list {
+  display: grid;
+  gap: 8px;
+}
+
+.direct-watch-device-list article {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid rgba(22, 163, 74, 0.18);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.direct-watch-device-list strong,
+.direct-watch-device-list span {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.direct-watch-device-list strong {
+  color: var(--text);
+  font-size: 0.9rem;
+  font-weight: 950;
+}
+
+.direct-watch-device-list span {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 760;
+}
+
+.direct-watch-inspection {
+  display: grid;
+  gap: 10px;
+}
+
+.direct-watch-services {
+  padding: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.direct-watch-services summary {
+  cursor: pointer;
+  color: var(--accent-dark);
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+
+.direct-watch-services ul {
+  display: grid;
+  gap: 7px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.direct-watch-services li {
+  display: grid;
+  gap: 2px;
+}
+
+.direct-watch-services li strong,
+.direct-watch-services li span {
+  overflow-wrap: anywhere;
+}
+
+.direct-watch-services li strong {
+  color: var(--text);
+  font-size: 0.8rem;
+  font-weight: 900;
+}
+
+.direct-watch-services li span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 720;
+}
+
 .today-indicators-head {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

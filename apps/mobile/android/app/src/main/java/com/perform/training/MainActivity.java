@@ -8,6 +8,7 @@ public class MainActivity extends BridgeActivity {
     protected void onCreate(Bundle savedInstanceState) {
         registerPlugin(HuaweiHealthPlugin.class);
         registerPlugin(HealthConnectPlugin.class);
+        registerPlugin(DirectWatchPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }
