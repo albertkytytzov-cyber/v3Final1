@@ -6386,6 +6386,10 @@ export function PageClient({
   const [importedPlanDraft, setImportedPlanDraft] = useState<ImportedPlanDraft | null>(null);
   const [savedImportedPlanTemplate, setSavedImportedPlanTemplate] =
     useState<PlanTemplateSummary | null>(null);
+  const [templateImportNotice, setTemplateImportNotice] = useState<{
+    tone: "info" | "success" | "error";
+    text: string;
+  } | null>(null);
   const [isTemplateDraftActive, setIsTemplateDraftActive] = useState(false);
   const [selectedTemplateDayIndex, setSelectedTemplateDayIndex] = useState(0);
   const [selectedTemplateAssignMode, setSelectedTemplateAssignMode] =
@@ -8447,6 +8451,7 @@ export function PageClient({
     if (options.clearImportedDraft ?? true) {
       setImportedPlanDraft(null);
       setSavedImportedPlanTemplate(null);
+      setTemplateImportNotice(null);
     }
     setIsTemplateDraftActive(false);
     return response.template;
@@ -8456,6 +8461,7 @@ export function PageClient({
     setPlanForm(createLocalizedDefaultPlanTemplate(language));
     setImportedPlanDraft(null);
     setSavedImportedPlanTemplate(null);
+    setTemplateImportNotice(null);
     setIsTemplateDraftActive(true);
     setSelectedTemplateDayIndex(0);
     setSelectedTemplateAssignMode("full");
@@ -8525,6 +8531,7 @@ export function PageClient({
 
     if (importedPlanDraft) {
       setSavedImportedPlanTemplate(null);
+      setTemplateImportNotice(null);
       setImportedPlanDraft((current) =>
         current ? syncImportedDraftTemplate(current, nextTemplate) : current,
       );
@@ -8737,11 +8744,27 @@ export function PageClient({
 
   async function handleSaveImportedPlanTemplate() {
     if (!importedPlanDraft) {
+      setTemplateImportNotice({
+        tone: "error",
+        text: copyFor(language, {
+          en: "Select a valid HTML plan first. If you already selected a file, it was not recognized as a training plan.",
+          ru: "Сначала выберите корректный HTML-план. Если файл уже выбран, он не распознан как тренировочный план.",
+          bg: "Първо изберете валиден HTML план. Ако файлът вече е избран, той не е разпознат като тренировъчен план.",
+        }),
+      });
       return;
     }
 
     setBusy(true);
     setErrorMessage("");
+    setTemplateImportNotice({
+      tone: "info",
+      text: copyFor(language, {
+        en: "Saving imported template...",
+        ru: "Сохраняю импортированный шаблон...",
+        bg: "Записвам импортирания шаблон...",
+      }),
+    });
 
     try {
       const savedTemplate = await createPlanTemplateFromDraft(importedPlanDraft.template, {
@@ -8749,6 +8772,14 @@ export function PageClient({
       });
 
       setSavedImportedPlanTemplate(savedTemplate);
+      setTemplateImportNotice({
+        tone: "success",
+        text: copyFor(language, {
+          en: `Saved to the template library: ${savedTemplate.name}.`,
+          ru: `Сохранено в библиотеку шаблонов: ${savedTemplate.name}.`,
+          bg: `Записано в библиотеката с шаблони: ${savedTemplate.name}.`,
+        }),
+      });
       setStatusMessage(
         copyFor(language, {
           en: `Template saved to library: ${savedTemplate.name}.`,
@@ -8757,8 +8788,13 @@ export function PageClient({
         }),
       );
     } catch (error) {
+      const message = error instanceof Error ? error.message : ui("templateRequestFailed");
+      setTemplateImportNotice({
+        tone: "error",
+        text: message,
+      });
       setErrorMessage(
-        error instanceof Error ? error.message : ui("templateRequestFailed"),
+        message,
       );
     } finally {
       setBusy(false);
@@ -9051,6 +9087,14 @@ export function PageClient({
     }
 
     setErrorMessage("");
+    setTemplateImportNotice({
+      tone: "info",
+      text: copyFor(language, {
+        en: "Reading plan file...",
+        ru: "Читаю файл плана...",
+        bg: "Чета файла на плана...",
+      }),
+    });
 
     try {
       const text = await file.text();
@@ -9078,19 +9122,32 @@ export function PageClient({
           bg: `Файлът е импортиран: ${draft.days.length} тренировъчни дни. Натиснете „Запази шаблон“, за да го добавите в библиотеката.`,
         }),
       );
+      setTemplateImportNotice({
+        tone: "success",
+        text: copyFor(language, {
+          en: `File recognized: ${draft.days.length} training day(s). You can save it as a template.`,
+          ru: `Файл распознан: ${draft.days.length} тренировочных дн. Можно сохранять как шаблон.`,
+          bg: `Файлът е разпознат: ${draft.days.length} тренировъчни дни. Може да го запазите като шаблон.`,
+        }),
+      });
     } catch (error) {
-      setImportedPlanDraft(null);
-      setSavedImportedPlanTemplate(null);
-      setIsTemplateDraftActive(false);
-      setErrorMessage(
+      const message =
         error instanceof Error
           ? error.message
           : copyFor(language, {
               en: "Plan import failed.",
               ru: "Не удалось импортировать план.",
               bg: "Планът не можа да бъде импортиран.",
-            }),
-      );
+            });
+
+      setImportedPlanDraft(null);
+      setSavedImportedPlanTemplate(null);
+      setIsTemplateDraftActive(false);
+      setTemplateImportNotice({
+        tone: "error",
+        text: message,
+      });
+      setErrorMessage(message);
     }
   }
 
@@ -19137,7 +19194,7 @@ export function PageClient({
                       })}
                     </span>
                     <input
-                      accept=".html,text/html"
+                      accept=".html,.htm,text/html"
                       onChange={handlePlanFileImport}
                       onClick={(event) => {
                         event.currentTarget.value = "";
@@ -19147,7 +19204,7 @@ export function PageClient({
                   </label>
                   <button
                     className="primary-button"
-                    disabled={busy || !importedPlanDraft || Boolean(savedImportedPlanTemplate)}
+                    disabled={busy || Boolean(savedImportedPlanTemplate)}
                     onClick={() => void handleSaveImportedPlanTemplate()}
                     type="button"
                   >
@@ -19184,6 +19241,11 @@ export function PageClient({
                           bg: "Първо изберете HTML план, след това го запазете като шаблон.",
                         })}
                   </small>
+                  {templateImportNotice ? (
+                    <p className={`planning-template-import-status is-${templateImportNotice.tone}`}>
+                      {templateImportNotice.text}
+                    </p>
+                  ) : null}
                 </div>
                 {importedPlanDraft ? (
                   <div className="planning-template-import-preview">
@@ -20640,6 +20702,7 @@ export function PageClient({
                           setPlanForm(templateSummaryToPayload(template, language));
                           setImportedPlanDraft(null);
                           setSavedImportedPlanTemplate(null);
+                          setTemplateImportNotice(null);
                           setIsTemplateDraftActive(false);
                           setSelectedTemplateDayIndex(0);
                           setSelectedTemplateAssignDayIndexes([]);

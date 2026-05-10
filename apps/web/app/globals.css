@@ -4969,6 +4969,30 @@ select {
   line-height: 1.35;
 }
 
+.planning-template-import-status {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 9px 11px;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--muted-strong);
+  font-size: 0.86rem;
+  line-height: 1.35;
+}
+
+.planning-template-import-status.is-success {
+  border-color: rgba(15, 118, 110, 0.22);
+  background: rgba(240, 253, 250, 0.88);
+  color: var(--accent-strong);
+}
+
+.planning-template-import-status.is-error {
+  border-color: rgba(180, 62, 45, 0.25);
+  background: rgba(254, 242, 242, 0.9);
+  color: var(--danger);
+}
+
 .planning-template-import-preview {
   grid-column: 1 / -1;
   display: grid;
