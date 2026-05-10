@@ -2701,9 +2701,9 @@ button {
 
 .direct-watch-device-list article {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   gap: 10px;
-  align-items: center;
+  align-items: start;
   min-width: 0;
   padding: 10px;
   border: 1px solid rgba(22, 163, 74, 0.18);
@@ -2715,7 +2715,7 @@ button {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  justify-content: flex-end;
+  justify-content: flex-start;
 }
 
 .direct-watch-device-list strong,

@@ -147,6 +147,7 @@ class DirectWatchPlugin : Plugin() {
 
         mainHandler.postDelayed({
             finishScan {
+                recordBondedDevices(adapter)
                 val response = JSObject()
                 response.put("devices", JSArray(devicesByAddress.values.map { it.toJson() }))
                 response.put("scannedAt", java.time.Instant.now().toString())
@@ -426,6 +427,42 @@ class DirectWatchPlugin : Plugin() {
         )
     }
 
+    private fun recordBondedDevices(adapter: BluetoothAdapter) {
+        val bondedDevices = try {
+            adapter.bondedDevices
+        } catch (_: SecurityException) {
+            emptySet<BluetoothDevice>()
+        }
+
+        for (device in bondedDevices) {
+            val address = device.address ?: continue
+            val name = scanResultNameFallback(device)
+            val previous = devicesByAddress[address]
+            val isLikelyWatch = isLikelyWatchName(name) || previous?.isLikelyWatch == true
+            if (!isLikelyWatch && previous == null) {
+                continue
+            }
+
+            val bondState = safeBondState(device)
+            val deviceType = safeDeviceType(device)
+            devicesByAddress[address] = ScannedWatchDevice(
+                id = address,
+                name = name ?: previous?.name,
+                rssi = previous?.rssi,
+                isLikelyWatch = isLikelyWatch,
+                bondState = bondState,
+                bondStateLabel = bondStateLabel(bondState),
+                deviceType = deviceType,
+                deviceTypeLabel = deviceTypeLabel(deviceType),
+                isConnectable = previous?.isConnectable,
+                serviceUuids = safeDeviceUuids(device).ifEmpty { previous?.serviceUuids.orEmpty() },
+                manufacturerData = previous?.manufacturerData ?: JSArray(),
+                serviceData = previous?.serviceData ?: JSArray(),
+                txPowerLevel = previous?.txPowerLevel,
+            )
+        }
+    }
+
     private fun scanResultName(result: ScanResult, device: BluetoothDevice): String? {
         result.scanRecord?.deviceName?.takeIf { it.isNotBlank() }?.let { return it }
         return try {
@@ -617,6 +654,14 @@ class DirectWatchPlugin : Plugin() {
         }
     }
 
+    private fun safeDeviceUuids(device: BluetoothDevice): List<String> {
+        return try {
+            device.uuids?.map { it.uuid.toString() }.orEmpty()
+        } catch (_: SecurityException) {
+            emptyList()
+        }
+    }
+
     private fun bondStateLabel(state: Int): String {
         return when (state) {
             BluetoothDevice.BOND_BONDED -> "bonded"
@@ -638,7 +683,7 @@ class DirectWatchPlugin : Plugin() {
     private data class ScannedWatchDevice(
         val id: String,
         val name: String?,
-        val rssi: Int,
+        val rssi: Int?,
         val isLikelyWatch: Boolean,
         val bondState: Int,
         val bondStateLabel: String,
