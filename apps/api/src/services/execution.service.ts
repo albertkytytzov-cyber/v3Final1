@@ -1,4 +1,5 @@
 import {
+  estimateTrainingActualLoad,
   estimateTrainingBlockLoad,
   type ExecutionExerciseResult,
   type ExecutionResult,
@@ -296,51 +297,6 @@ function resolveCompletionStatus(input: {
   return "missed";
 }
 
-function hasExerciseExecutionValue(exercise: NonNullable<ExecutionResultInput["exercises"]>[number]) {
-  return (
-    exercise.completed ||
-    exercise.setsCompleted !== null ||
-    exercise.repsCompleted !== null ||
-    exercise.durationMinutes !== null ||
-    exercise.rpe !== null
-  );
-}
-
-function estimateActualLoad(input: {
-  plannedLoad: number;
-  completed: boolean;
-  actualDurationMinutes: number | null;
-  actualRpe: number | null;
-  assignedExerciseCount: number;
-  exercises?: ExecutionResultInput["exercises"];
-}) {
-  if (input.actualDurationMinutes !== null && input.actualRpe !== null) {
-    return Number((input.actualDurationMinutes * input.actualRpe).toFixed(2));
-  }
-
-  if (input.completed) {
-    return input.plannedLoad;
-  }
-
-  const exercises = input.exercises ?? [];
-
-  if (!exercises.length || input.plannedLoad <= 0) {
-    return 0;
-  }
-
-  const assignedExerciseCount = input.assignedExerciseCount || exercises.length;
-  const completedExercises = new Set(
-    exercises
-      .filter(hasExerciseExecutionValue)
-      .map((exercise) => exercise.assignedExerciseId),
-  ).size;
-  const completionRatio = Math.min(completedExercises, assignedExerciseCount) / assignedExerciseCount;
-
-  return completedExercises
-    ? Number((input.plannedLoad * completionRatio).toFixed(2))
-    : 0;
-}
-
 export async function listExecutionResultsForAthlete(
   athleteId: string,
   assignedPlanId?: string,
@@ -633,13 +589,13 @@ export async function submitExecutionResult(
           name: "",
         })),
     });
-    const actualLoad = estimateActualLoad({
-      plannedLoad,
-      completed: summary.completed,
-      actualDurationMinutes,
-      actualRpe,
+    const actualLoad = estimateTrainingActualLoad({
       assignedExerciseCount,
+      completed: summary.completed,
+      durationMinutes: actualDurationMinutes,
       exercises: input.result.exercises,
+      plannedLoad,
+      rpe: actualRpe,
     });
 
     await pool.query(

@@ -77,6 +77,7 @@ import {
   type ReadinessSubmissionPayload,
   type DeleteCompetitionsPayload,
   type DeleteCompetitionsResponse,
+  estimateTrainingActualLoad,
   estimateTrainingBlockLoad,
   estimateTrainingBlocksLoad,
   type UwwEventSyncFilters,
@@ -1738,21 +1739,22 @@ function getCoachAiBlockActualLoad(block: ReviewBlock, plannedLoad: number) {
     return roundCoachAiLoad(block.actualResult.actualLoad);
   }
 
-  if (!block.actualResult) {
-    return 0;
-  }
-
-  if (block.actualResult.durationMinutes !== null && block.actualResult.rpe !== null) {
-    return roundCoachAiLoad(block.actualResult.durationMinutes * block.actualResult.rpe);
-  }
-
-  const exercises = block.exercises ?? [];
-  if (exercises.length > 0) {
-    const completed = exercises.filter((exercise) => exercise.actualResult?.completed === true).length;
-    return roundCoachAiLoad(plannedLoad * (completed / exercises.length));
-  }
-
-  return block.actualResult.completed ? plannedLoad : 0;
+  return estimateTrainingActualLoad({
+    assignedExerciseCount: block.exercises?.length ?? 0,
+    completed: block.actualResult?.completed ?? false,
+    durationMinutes: block.actualResult?.durationMinutes ?? null,
+    exercises: (block.exercises ?? []).map((exercise) => ({
+      assignedExerciseId: exercise.id,
+      completed: exercise.actualResult?.completed ?? false,
+      durationMinutes: exercise.actualResult?.durationMinutes ?? null,
+      repsCompleted: exercise.actualResult?.repsCompleted ?? null,
+      rpe: exercise.actualResult?.rpe ?? null,
+      setsCompleted: exercise.actualResult?.setsCompleted ?? null,
+      weightKg: exercise.actualResult?.weightKg ?? null,
+    })),
+    plannedLoad,
+    rpe: block.actualResult?.rpe ?? null,
+  });
 }
 
 function buildCoachDayAiPayloadFromReview(input: {
@@ -11646,6 +11648,51 @@ export function PageClient({
         ru: "тренировки устройства не пришли",
         bg: "тренировки от устройство не са дошли",
       });
+  const selectedCoachLoadDelta = roundCoachAiLoad(selectedCoachActualLoad - selectedCoachPlannedLoad);
+  const selectedCoachLoadExplanation = coachExecutionReview
+    ? [
+        `${copyFor(language, { en: "Planned", ru: "Плановая", bg: "Планово" })}: ${formatCoachDayLoadValue(selectedCoachPlannedLoad)} ${copyFor(language, {
+          en: "from assigned plan blocks",
+          ru: "из назначенных блоков плана",
+          bg: "от назначените блокове",
+        })}.`,
+        `${copyFor(language, { en: "Actual", ru: "Фактическая", bg: "Реално" })}: ${formatCoachDayLoadValue(selectedCoachActualLoad)} ${hasReviewExecutionMarks(coachExecutionReview)
+          ? copyFor(language, {
+              en: "from saved execution marks",
+              ru: "из сохранённых отметок выполнения",
+              bg: "от запазените отметки за изпълнение",
+            })
+          : copyFor(language, {
+              en: "because execution has not been marked",
+              ru: "потому что выполнение ещё не отмечено",
+              bg: "защото изпълнението още не е отбелязано",
+            })}.`,
+        `${copyFor(language, { en: "Device", ru: "Устройство", bg: "Устройство" })}: ${selectedCoachDeviceLinkTargets.length
+          ? `${selectedCoachFullyLinkedDeviceTargets}/${selectedCoachDeviceLinkTargets.length} ${copyFor(language, {
+              en: "plan targets linked",
+              ru: "плановых целей связано",
+              bg: "планови цели са свързани",
+            })}`
+          : copyFor(language, {
+              en: "no linkable workout target in the plan",
+              ru: "в плане нет цели для привязки тренировки",
+              bg: "няма цел за свързване на тренировка",
+            })}.`,
+        `${copyFor(language, { en: "Difference", ru: "Расхождение", bg: "Разлика" })}: ${formatCoachDayLoadValue(selectedCoachLoadDelta)} ${selectedCoachLoadDelta === 0
+          ? copyFor(language, { en: "load points", ru: "единиц нагрузки", bg: "точки натоварване" })
+          : selectedCoachLoadDelta > 0
+            ? copyFor(language, {
+                en: "above the plan; check duration/RPE or extra work",
+                ru: "выше плана; проверьте длительность/RPE или дополнительную работу",
+                bg: "над плана; проверете продължителност/RPE или допълнителна работа",
+              })
+            : copyFor(language, {
+                en: "below the plan; some tasks were not completed or not marked",
+                ru: "ниже плана; часть задач не выполнена или не отмечена",
+                bg: "под плана; част от задачите не са изпълнени или отбелязани",
+              })}.`,
+      ]
+    : [];
   const selectedCoachAiSummary = latestCoachAiReview
     ? `${formatCoachAiReviewSource(latestCoachAiReview.source, language)} · ${latestCoachAiReview.observation}`
     : copyFor(language, {
@@ -14977,6 +15024,20 @@ export function PageClient({
                               </strong>
                               <small>{selectedCoachAiSummary}</small>
                             </article>
+                          </div>
+                          <div className="coach-day-load-explanation">
+                            <strong>
+                              {copyFor(language, {
+                                en: "How load was calculated",
+                                ru: "Как посчитана нагрузка",
+                                bg: "Как е изчислено натоварването",
+                              })}
+                            </strong>
+                            <ul>
+                              {selectedCoachLoadExplanation.map((item) => (
+                                <li key={item}>{item}</li>
+                              ))}
+                            </ul>
                           </div>
                         </div>
                         <div className="coach-day-status-grid">

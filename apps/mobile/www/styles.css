@@ -2208,6 +2208,29 @@ button {
   background: rgba(255, 255, 255, 0.72);
 }
 
+.coach-day-load-explanation {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid rgba(15, 118, 110, 0.14);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.64);
+}
+
+.coach-day-load-explanation strong {
+  color: var(--text);
+  line-height: 1.25;
+}
+
+.coach-day-load-explanation ul {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding-left: 18px;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
 .coach-day-quality-card.is-complete {
   border-color: rgba(15, 118, 110, 0.24);
   background: #ecfdf5;

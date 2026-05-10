@@ -504,6 +504,73 @@ export function estimateTrainingBlocksLoad(blocks: TrainingLoadBlockInput[]) {
   );
 }
 
+export type TrainingActualExerciseInput = {
+  assignedExerciseId?: string | null;
+  completed?: boolean | null;
+  setsCompleted?: number | null;
+  repsCompleted?: number | null;
+  weightKg?: number | null;
+  durationMinutes?: number | null;
+  rpe?: number | null;
+  notes?: string | null;
+};
+
+export interface TrainingActualLoadInput {
+  plannedLoad: number;
+  completed?: boolean | null;
+  durationMinutes?: number | null;
+  rpe?: number | null;
+  assignedExerciseCount?: number | null;
+  exercises?: TrainingActualExerciseInput[] | null;
+}
+
+export function roundTrainingLoad(value: number, digits = 1) {
+  return Number.isFinite(value) ? Number(value.toFixed(digits)) : 0;
+}
+
+export function hasTrainingExerciseActualValue(exercise: TrainingActualExerciseInput) {
+  return Boolean(
+    exercise.completed ||
+      (exercise.setsCompleted !== null && exercise.setsCompleted !== undefined) ||
+      (exercise.repsCompleted !== null && exercise.repsCompleted !== undefined) ||
+      (exercise.durationMinutes !== null && exercise.durationMinutes !== undefined) ||
+      (exercise.rpe !== null && exercise.rpe !== undefined),
+  );
+}
+
+export function estimateTrainingActualLoad(input: TrainingActualLoadInput) {
+  const plannedLoad = roundTrainingLoad(input.plannedLoad);
+
+  if (input.durationMinutes !== null && input.durationMinutes !== undefined &&
+    input.rpe !== null && input.rpe !== undefined
+  ) {
+    return roundTrainingLoad(input.durationMinutes * input.rpe);
+  }
+
+  if (input.completed) {
+    return plannedLoad;
+  }
+
+  const exercises = input.exercises ?? [];
+
+  if (!exercises.length || plannedLoad <= 0) {
+    return 0;
+  }
+
+  const assignedExerciseCount = Math.max(1, input.assignedExerciseCount ?? exercises.length);
+  const completedExerciseCount = new Set(
+    exercises
+      .filter(hasTrainingExerciseActualValue)
+      .map((exercise, index) => exercise.assignedExerciseId ?? `exercise-${index}`),
+  ).size;
+
+  return completedExerciseCount
+    ? roundTrainingLoad(
+        plannedLoad * (Math.min(completedExerciseCount, assignedExerciseCount) / assignedExerciseCount),
+      )
+    : 0;
+}
+
 export interface PlanSessionInput {
   id?: string;
   name: string;

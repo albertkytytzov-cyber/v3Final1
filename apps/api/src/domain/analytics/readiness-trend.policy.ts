@@ -1,4 +1,5 @@
 import {
+  estimateTrainingActualLoad,
   estimateTrainingBlockLoad,
   type AnalyticsOverview,
   type CompletionTrendPoint,
@@ -105,18 +106,17 @@ export function estimateActualBlockLoad(
   block: ExecutionBlock,
   plannedLoad: number,
 ) {
-  if (block.durationMinutes !== null && block.rpe !== null) {
-    return Number((block.durationMinutes * block.rpe).toFixed(1));
-  }
-
-  if (block.executedExerciseCount > 0 && block.assignedExerciseCount > 0 && plannedLoad > 0) {
-    const completionRatio =
-      Math.min(block.executedExerciseCount, block.assignedExerciseCount) / block.assignedExerciseCount;
-
-    return Number((plannedLoad * completionRatio).toFixed(1));
-  }
-
-  return block.completed ? plannedLoad : 0;
+  return estimateTrainingActualLoad({
+    assignedExerciseCount: block.assignedExerciseCount,
+    completed: block.completed ?? false,
+    durationMinutes: block.durationMinutes,
+    exercises: Array.from({ length: block.executedExerciseCount }, (_, index) => ({
+      assignedExerciseId: `${block.blockId}:${index}`,
+      completed: true,
+    })),
+    plannedLoad,
+    rpe: block.rpe,
+  });
 }
 
 export function buildDailyExecutionStats(blocks: ExecutionBlock[]): DailyExecutionStats {

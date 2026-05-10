@@ -26,6 +26,10 @@ import {
   saveSnapshot,
 } from "../storage/local-store.js";
 import { createPendingAction, enqueueAction, flushSyncQueue } from "../sync/sync-queue.js";
+import {
+  estimateTrainingActualLoad,
+  estimateTrainingBlockLoad,
+} from "@training-platform/shared";
 import type {
   AssignedBlockExercise,
   AssignedPlanBlock,
@@ -58,18 +62,6 @@ import type {
 
 const runtimeConfig = readRuntimeConfig();
 const SHOW_DIRECT_WATCH_DIAGNOSTICS = false;
-const mobileLoadBlockProfiles: Record<AssignedPlanBlock["blockType"], { durationMinutes: number; rpe: number }> = {
-  CNS_high: { durationMinutes: 24, rpe: 8 },
-  activation: { durationMinutes: 14, rpe: 4 },
-  conditioning: { durationMinutes: 32, rpe: 6.5 },
-  metabolic: { durationMinutes: 26, rpe: 8.5 },
-  mobility: { durationMinutes: 18, rpe: 2.5 },
-  recovery: { durationMinutes: 20, rpe: 2.5 },
-  speed: { durationMinutes: 22, rpe: 7.5 },
-  strength: { durationMinutes: 30, rpe: 7 },
-  technical: { durationMinutes: 35, rpe: 5 },
-};
-const defaultMobileLoadProfile = { durationMinutes: 20, rpe: 5 };
 type MobileAssignedPlanSession = AssignedPlanSummary["day"]["sessions"][number];
 
 export function bootstrapMobileApp(root: HTMLElement) {
@@ -1501,6 +1493,17 @@ function renderCoachDayStatusCard(dayData: CoachDayCleanSummary, aiReview: Coach
   const deviceFact = dayData.deviceWorkouts.length
     ? `${dayData.deviceWorkouts.length} тренировок · ${linkedSessionCount}/${linkGroups.length || 0} связано`
     : "тренировки устройства не пришли";
+  const loadDelta = roundLoad(summary.actualLoad - summary.plannedLoad);
+  const loadExplanation = [
+    `Плановая: ${formatLoadValue(summary.plannedLoad)} из назначенных блоков плана.`,
+    `Фактическая: ${formatLoadValue(summary.actualLoad)} ${dayData.hasExecutionMarks ? "из сохранённых отметок выполнения" : "потому что выполнение ещё не отмечено"}.`,
+    `Устройство: ${linkGroups.length ? `${linkedSessionCount}/${linkGroups.length} плановых целей связано` : "в плане нет цели для привязки тренировки"}.`,
+    `Расхождение: ${formatLoadValue(loadDelta)} ${loadDelta === 0
+      ? "единиц нагрузки"
+      : loadDelta > 0
+        ? "выше плана; проверьте длительность/RPE или дополнительную работу"
+        : "ниже плана; часть задач не выполнена или не отмечена"}.`,
+  ];
   const recoverySummary = deviceHealth
     ? [
         `сон ${formatDeviceHealthSleepValue(deviceHealth)}`,
@@ -1552,6 +1555,12 @@ function renderCoachDayStatusCard(dayData: CoachDayCleanSummary, aiReview: Coach
             <strong>${dayData.latestDiaryEntry ? "комментарий есть" : "нет комментария"}</strong>
             <small>${escapeHtml(aiSummary)}</small>
           </article>
+        </div>
+        <div class="coach-day-load-explanation">
+          <strong>Как посчитана нагрузка</strong>
+          <ul>
+            ${loadExplanation.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
+          </ul>
         </div>
       </div>
       <div class="coach-day-status-grid">
@@ -5702,34 +5711,7 @@ function getDeviceHealthSummaryScore(summary: DeviceHealthDailySummary) {
 }
 
 function estimateAssignedBlockLoad(block: AssignedPlanBlock) {
-  const profile = mobileLoadBlockProfiles[block.blockType] ?? defaultMobileLoadProfile;
-  const priorityFactor = getMobileLoadPriorityFactor(block.blockPriority);
-  const fallbackDurationMinutes = profile.durationMinutes * priorityFactor;
-  const fallbackRpe = profile.rpe * priorityFactor;
-  const durationMinutes = normalizeMobileLoadNumber(block.targetDurationMinutes, 240);
-  const rpe = normalizeMobileLoadNumber(block.targetRpe, 10);
-
-  if (durationMinutes !== null && rpe !== null) {
-    return roundLoad(durationMinutes * rpe);
-  }
-
-  const exerciseLoads = (block.exercises ?? [])
-    .map((exercise) => estimateAssignedExerciseLoad(exercise, fallbackRpe))
-    .filter((value): value is number => value !== null);
-
-  if (exerciseLoads.length) {
-    return roundLoad(exerciseLoads.reduce((sum, value) => sum + value, 0));
-  }
-
-  if (durationMinutes !== null) {
-    return roundLoad(durationMinutes * (rpe ?? fallbackRpe));
-  }
-
-  if (rpe !== null) {
-    return roundLoad(fallbackDurationMinutes * rpe);
-  }
-
-  return roundLoad(fallbackDurationMinutes * profile.rpe);
+  return estimateTrainingBlockLoad(block);
 }
 
 function getExecutionBlockPlannedLoad(
@@ -5751,58 +5733,31 @@ function getExecutionBlockActualLoad(
     : estimateExecutionActualLoad(block, result, plannedLoad);
 }
 
-function estimateAssignedExerciseLoad(exercise: AssignedBlockExercise, fallbackRpe: number) {
-  const durationMinutes = normalizeMobileLoadNumber(exercise.targetDurationMinutes, 240);
-  const rpe = normalizeMobileLoadNumber(exercise.targetRpe, 10);
-
-  if (durationMinutes === null) {
-    return null;
-  }
-
-  return durationMinutes * (rpe ?? fallbackRpe);
-}
-
-function normalizeMobileLoadNumber(value: number | null | undefined, maxValue: number) {
-  if (value === null || value === undefined || !Number.isFinite(value)) {
-    return null;
-  }
-
-  return value > 0 && value <= maxValue ? value : null;
-}
-
-function getMobileLoadPriorityFactor(blockPriority: number | null | undefined) {
-  const priority = Number.isFinite(blockPriority ?? NaN)
-    ? Math.min(Math.max(Number(blockPriority), 1), 5)
-    : 1;
-
-  return 0.7 + priority * 0.1;
-}
-
 function estimateExecutionActualLoad(
   block: AssignedPlanBlock,
   result: ExecutionResult | null,
   plannedLoad: number,
 ) {
-  if (!result) {
-    return 0;
-  }
+  return estimateTrainingActualLoad({
+    assignedExerciseCount: block.exercises?.length ?? 0,
+    completed: result?.completed ?? false,
+    durationMinutes: result?.durationMinutes ?? null,
+    exercises: (block.exercises ?? []).map((exercise) => {
+      const exerciseResult = result ? getExerciseResult(result, exercise.id) : null;
 
-  if (result.durationMinutes !== null && result.rpe !== null) {
-    return roundLoad(result.durationMinutes * result.rpe);
-  }
-
-  const exercises = block.exercises ?? [];
-
-  if (exercises.length > 0 && result.exerciseResults?.length) {
-    const completedExerciseCount = exercises.filter((exercise) =>
-      getExerciseResult(result, exercise.id)?.completed === true
-    ).length;
-    const completionRatio = Math.min(completedExerciseCount, exercises.length) / exercises.length;
-
-    return roundLoad(plannedLoad * completionRatio);
-  }
-
-  return result.completed ? plannedLoad : 0;
+      return {
+        assignedExerciseId: exercise.id,
+        completed: exerciseResult?.completed ?? false,
+        durationMinutes: exerciseResult?.durationMinutes ?? null,
+        repsCompleted: exerciseResult?.repsCompleted ?? null,
+        rpe: exerciseResult?.rpe ?? null,
+        setsCompleted: exerciseResult?.setsCompleted ?? null,
+        weightKg: exerciseResult?.weightKg ?? null,
+      };
+    }),
+    plannedLoad,
+    rpe: result?.rpe ?? null,
+  });
 }
 
 function getExecutionBlockStatus(
