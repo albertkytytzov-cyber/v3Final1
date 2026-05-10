@@ -5559,7 +5559,7 @@ function isMobileDeviceWorkoutLinkableBlock(block: Pick<CoachDayBlockCleanSummar
 }
 
 function isMobileLoadBearingPlanBlock(block: Pick<CoachDayBlockCleanSummary, "rowKind">) {
-  return !["instruction", "control", "note"].includes(block.rowKind ?? "exercise");
+  return !["instruction", "control", "note", "recovery"].includes(block.rowKind ?? "exercise");
 }
 
 function getCoachDeviceWorkoutLinkGroups(blocks: CoachDayBlockCleanSummary[]) {

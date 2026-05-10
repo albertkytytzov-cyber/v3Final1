@@ -795,7 +795,7 @@ function isDeviceWorkoutLinkableBlock(
 function isLoadBearingPlanBlock(
   block: Pick<AssignedPlanSummary["day"]["sessions"][number]["blocks"][number], "rowKind">,
 ) {
-  return !["instruction", "control", "note"].includes(block.rowKind ?? "exercise");
+  return !["instruction", "control", "note", "recovery"].includes(block.rowKind ?? "exercise");
 }
 
 function getDeviceWorkoutLinkTargetsForSession(

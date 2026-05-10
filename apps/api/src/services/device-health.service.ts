@@ -849,12 +849,14 @@ async function assertDeviceWorkoutLinkTarget(
 ) {
   const result = await pool.query<{
     plan_day_date: string;
+    row_kind: string | null;
     workout_date: string;
     exercise_matches: boolean;
   }>(
     `
       SELECT
         assigned_plan_days.day_date::text AS plan_day_date,
+        assigned_day_blocks.row_kind,
         device_workouts.entry_date::text AS workout_date,
         ($3::uuid IS NULL OR assigned_block_exercises.id IS NOT NULL) AS exercise_matches
       FROM assigned_plans
@@ -887,6 +889,10 @@ async function assertDeviceWorkoutLinkTarget(
   const target = result.rows[0];
   if (!target) {
     throw new Error("Selected plan block or device workout was not found");
+  }
+
+  if (["instruction", "control", "note", "recovery"].includes(target.row_kind ?? "exercise")) {
+    throw new Error("Device workout can only be linked to training plan blocks");
   }
 
   if (!target.exercise_matches) {
