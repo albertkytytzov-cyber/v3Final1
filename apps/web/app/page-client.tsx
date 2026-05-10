@@ -9049,8 +9049,6 @@ export function PageClient({
               bg: "Планът не можа да бъде импортиран.",
             }),
       );
-    } finally {
-      event.target.value = "";
     }
   }
 
@@ -19093,7 +19091,14 @@ export function PageClient({
                       bg: "Файл на плана",
                     })}
                   </span>
-                  <input accept=".html,text/html" onChange={handlePlanFileImport} type="file" />
+                  <input
+                    accept=".html,text/html"
+                    onChange={handlePlanFileImport}
+                    onClick={(event) => {
+                      event.currentTarget.value = "";
+                    }}
+                    type="file"
+                  />
                 </label>
                 {importedPlanDraft ? (
                   <div className="planning-template-import-preview">
