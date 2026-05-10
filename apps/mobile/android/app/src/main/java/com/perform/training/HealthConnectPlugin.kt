@@ -228,10 +228,7 @@ class HealthConnectPlugin : Plugin() {
 
         result.put("entryDate", dayRange.entryDate)
         result.put("provider", PROVIDER)
-        result.put(
-            "sourceDevice",
-            if (installedKnownSources.isNotEmpty()) "Xiaomi / Health Connect" else "Health Connect",
-        )
+        result.put("sourceDevice", healthSourceDeviceLabel(installedKnownSources))
         val heartRateSummary = buildHeartRateSummary(
             restingHeartRateRecords,
             heartRateRecords,
@@ -258,9 +255,10 @@ class HealthConnectPlugin : Plugin() {
                     distanceRecords +
                     totalCaloriesRecords +
                     activeCaloriesRecords,
-            ).ifBlank { XIAOMI_HEALTH_SOURCE_PACKAGES.joinToString(", ") },
+            ).ifBlank { SUPPORTED_HEALTH_SOURCE_PACKAGES.joinToString(", ") },
         )
         rawPayload.put("hasMiFitness", installedKnownSources.contains(MI_FITNESS_PACKAGE))
+        rawPayload.put("hasNotify", installedKnownSources.any { packageName -> NOTIFY_HEALTH_SOURCE_PACKAGES.contains(packageName) })
         rawPayload.put("hasKnownHealthSource", installedKnownSources.isNotEmpty())
         rawPayload.put("knownHealthSourcesInstalled", installedKnownSources.joinToString(", "))
         rawPayload.put("sleepLookupStart", dayRange.sleepLookupStart.toString())
@@ -388,10 +386,7 @@ class HealthConnectPlugin : Plugin() {
         val workout = JSObject()
         workout.put("entryDate", dayRange.entryDate)
         workout.put("provider", PROVIDER)
-        workout.put(
-            "sourceDevice",
-            if (installedKnownSources.isNotEmpty()) "Xiaomi / Health Connect" else "Health Connect",
-        )
+        workout.put("sourceDevice", healthSourceDeviceLabel(installedKnownSources))
         workout.put(
             "sourceWorkoutId",
             buildSourceWorkoutId(exerciseRecord),
@@ -558,7 +553,7 @@ class HealthConnectPlugin : Plugin() {
         client: HealthConnectClient,
         recordType: KClass<T>,
         range: TimeRangeFilter,
-        dataOriginFilter: Set<DataOrigin> = xiaomiHealthDataOrigins,
+        dataOriginFilter: Set<DataOrigin> = supportedHealthDataOrigins,
     ): List<T> {
         val records = mutableListOf<T>()
         var pageToken: String? = null
@@ -798,7 +793,19 @@ class HealthConnectPlugin : Plugin() {
     }
 
     private fun installedKnownHealthSourcePackages(): List<String> {
-        return XIAOMI_HEALTH_SOURCE_PACKAGES.filter { packageName -> isPackageInstalled(packageName) }
+        return SUPPORTED_HEALTH_SOURCE_PACKAGES.filter { packageName -> isPackageInstalled(packageName) }
+    }
+
+    private fun healthSourceDeviceLabel(installedKnownSources: List<String>): String {
+        val labels = mutableListOf<String>()
+        if (installedKnownSources.any { packageName -> XIAOMI_HEALTH_SOURCE_PACKAGES.contains(packageName) }) {
+            labels.add("Xiaomi")
+        }
+        if (installedKnownSources.any { packageName -> NOTIFY_HEALTH_SOURCE_PACKAGES.contains(packageName) }) {
+            labels.add("Notify")
+        }
+
+        return if (labels.isEmpty()) "Health Connect" else "${labels.distinct().joinToString(" / ")} / Health Connect"
     }
 
     private fun putNullable(objectValue: JSObject, key: String, value: Any?) {
@@ -837,6 +844,9 @@ class HealthConnectPlugin : Plugin() {
         private const val MI_FITNESS_PACKAGE = "com.xiaomi.wearable"
         private const val XIAOMI_HEALTH_PACKAGE = "com.mi.health"
         private const val ZEPP_LIFE_PACKAGE = "com.xiaomi.hm.health"
+        private const val NOTIFY_XIAOMI_PACKAGE = "com.mc.xiaomi"
+        private const val NOTIFY_MI_BAND_PACKAGE = "com.mc.miband"
+        private const val SIMPLE_HEALTH_PACKAGE = "com.mc.simplehealth"
         private const val PROVIDER = "health-connect"
         private const val MILLIS_PER_MINUTE = 60000.0
         private const val SLEEP_LOOKUP_HOURS_BEFORE_DAY = 18L
@@ -849,7 +859,13 @@ class HealthConnectPlugin : Plugin() {
             XIAOMI_HEALTH_PACKAGE,
             ZEPP_LIFE_PACKAGE,
         )
-        private val xiaomiHealthDataOrigins = XIAOMI_HEALTH_SOURCE_PACKAGES.map { packageName ->
+        private val NOTIFY_HEALTH_SOURCE_PACKAGES = listOf(
+            NOTIFY_XIAOMI_PACKAGE,
+            NOTIFY_MI_BAND_PACKAGE,
+            SIMPLE_HEALTH_PACKAGE,
+        )
+        private val SUPPORTED_HEALTH_SOURCE_PACKAGES = XIAOMI_HEALTH_SOURCE_PACKAGES + NOTIFY_HEALTH_SOURCE_PACKAGES
+        private val supportedHealthDataOrigins = SUPPORTED_HEALTH_SOURCE_PACKAGES.map { packageName ->
             DataOrigin(packageName)
         }.toSet()
         private val requiredPermissions = setOf(

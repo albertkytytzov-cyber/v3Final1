@@ -2235,7 +2235,7 @@ function renderHealthConnectDiagnostics(summary: DeviceHealthDailySummary | null
       value: readDeviceHealthRawText(rawPayload, "dataOrigin") || "Health Connect",
     },
     {
-      label: "Xiaomi / Zepp",
+      label: "Xiaomi / Notify",
       value: readDeviceHealthRawBoolean(rawPayload, "hasKnownHealthSource") === false ? "не найден" : "найден",
     },
     {
@@ -2281,13 +2281,13 @@ function renderHealthConnectDiagnostics(summary: DeviceHealthDailySummary | null
   const allRestingHrCount = readDeviceHealthRawOptionalCount(rawPayload, "allRestingHeartRateRecordCount");
   const restingHrSource = readDeviceHealthRawText(rawPayload, "restingHeartRateSource");
   const guidance = sleepCount === 0 && (allSleepCount ?? 0) > 0
-    ? "Сон есть в Health Connect, но источник не Xiaomi/Zepp. Проверьте, какое приложение записало сон."
+    ? "Сон есть в Health Connect, но источник не входит в поддерживаемые источники Xiaomi/Notify. Проверьте, какое приложение записало сон."
     : restingHrCount === 0 && (allRestingHrCount ?? 0) > 0
-      ? "Пульс покоя есть в Health Connect, но источник не Xiaomi/Zepp. Проверьте источник записи пульса покоя."
+      ? "Пульс покоя есть в Health Connect, но источник не входит в поддерживаемые источники Xiaomi/Notify. Проверьте источник записи пульса покоя."
       : restingHrCount === 0 && isEstimatedRestingHrSource(restingHrSource)
         ? "Отдельного пульса покоя нет, поэтому PERFORM рассчитал средний пульс только по замерам внутри интервала сна. Для аналитики это помечено как оценка."
       : sleepCount === 0 || restingHrCount === 0
-        ? "Если разрешения включены, но счётчик Xiaomi/Zepp 0, значит приложение-источник не передало этот тип данных в Health Connect за выбранный день."
+        ? "Если разрешения включены, но счётчик Xiaomi/Notify 0, значит приложение-источник не передало этот тип данных в Health Connect за выбранный день."
     : "Health Connect отдал ключевые записи для разбора дня.";
 
   return `
@@ -2368,8 +2368,8 @@ function formatHealthConnectDiagnosticCount(
   const allSourcesCount = readDeviceHealthRawOptionalCount(rawPayload, allSourcesKey);
 
   return allSourcesCount === null
-    ? `${miFitnessCount} Xiaomi/Zepp`
-    : `${miFitnessCount} Xiaomi/Zepp / ${allSourcesCount} всего`;
+    ? `${miFitnessCount} Xiaomi/Notify`
+    : `${miFitnessCount} Xiaomi/Notify / ${allSourcesCount} всего`;
 }
 
 function formatHealthConnectRestingHrEstimate(rawPayload: Record<string, unknown>) {
