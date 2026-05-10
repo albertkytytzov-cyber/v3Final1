@@ -8444,6 +8444,28 @@ export function PageClient({
     return response.template;
   }
 
+  function startNewPlanTemplateDraft() {
+    setPlanForm(createLocalizedDefaultPlanTemplate(language));
+    setImportedPlanDraft(null);
+    setIsTemplateDraftActive(true);
+    setSelectedTemplateDayIndex(0);
+    setSelectedTemplateAssignMode("full");
+    setSelectedTemplateAssignDayIndexes([]);
+    setAssignedPlanForm((current) => ({
+      ...current,
+      templateId: "",
+      dayLabel: localizedDayOneLabel(language),
+      notes: localizedAssignedPlanNotes(language),
+    }));
+    setStatusMessage(
+      copyFor(language, {
+        en: "New template draft is open. Fill it in and save it to the library.",
+        ru: "Открыт черновик нового шаблона. Заполните его и сохраните в библиотеку.",
+        bg: "Отворена е чернова на нов шаблон. Попълнете я и я запазете в библиотеката.",
+      }),
+    );
+  }
+
   function getCurrentTemplatePayload() {
     if (importedPlanDraft) {
       return importedPlanDraft.template;
@@ -8676,7 +8698,7 @@ export function PageClient({
     setErrorMessage("");
 
     try {
-      await createPlanTemplateFromDraft(planForm);
+      await createPlanTemplateFromDraft(getCurrentTemplatePayload());
       setStatusMessage(ui("templateCreated"));
     } catch (error) {
       setErrorMessage(
@@ -19035,13 +19057,7 @@ export function PageClient({
                 </div>
                 <button
                   className="secondary-button"
-                  onClick={() => {
-                    setPlanForm(createLocalizedDefaultPlanTemplate(language));
-                    setImportedPlanDraft(null);
-                    setIsTemplateDraftActive(true);
-                    setSelectedTemplateDayIndex(0);
-                    setSelectedTemplateAssignDayIndexes([]);
-                  }}
+                  onClick={startNewPlanTemplateDraft}
                   type="button"
                 >
                   {copyFor(language, {
@@ -20428,7 +20444,21 @@ export function PageClient({
                     })}
                   </p>
                 </div>
-                <span>{planTemplates.length}</span>
+                <div className="planning-template-library-actions">
+                  <span>{planTemplates.length}</span>
+                  <button
+                    className="secondary-button"
+                    disabled={busy}
+                    onClick={startNewPlanTemplateDraft}
+                    type="button"
+                  >
+                    {copyFor(language, {
+                      en: "Add template",
+                      ru: "Добавить шаблон",
+                      bg: "Добави шаблон",
+                    })}
+                  </button>
+                </div>
               </div>
               {planTemplates.length === 0 ? (
                 <p className="placeholder-copy">
