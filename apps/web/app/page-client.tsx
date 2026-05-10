@@ -866,6 +866,19 @@ function hasDeviceSleepData(summary: DeviceHealthDailySummary | null) {
   );
 }
 
+function hasDeviceOxygenData(summary: DeviceHealthDailySummary | null) {
+  return Boolean(
+    summary?.oxygenSaturation &&
+      (
+        summary.oxygenSaturation.sampleCount > 0 ||
+        summary.oxygenSaturation.latestPercent !== null ||
+        summary.oxygenSaturation.averagePercent !== null ||
+        summary.oxygenSaturation.minPercent !== null ||
+        summary.oxygenSaturation.maxPercent !== null
+      ),
+  );
+}
+
 function hasReviewExecutionMarks(review: ExecutionReviewPlan | null) {
   return Boolean(
     review?.sessions.some((session) =>
@@ -947,6 +960,31 @@ function formatDeviceRestingHrDetail(summary: DeviceHealthDailySummary | null, l
   return summary.heartRate.averageBpm
     ? `${copyFor(language, { en: "avg", ru: "средний", bg: "среден" })} ${summary.heartRate.averageBpm}`
     : copyFor(language, { en: "not synced", ru: "не синхронизирован", bg: "не е синхронизиран" });
+}
+
+function formatDeviceOxygenValue(summary: DeviceHealthDailySummary | null) {
+  const oxygenSaturation = summary?.oxygenSaturation;
+  const value = oxygenSaturation?.latestPercent ?? oxygenSaturation?.averagePercent;
+
+  return value !== null && value !== undefined ? `${formatCoachDayLoadValue(value)}%` : "-";
+}
+
+function formatDeviceOxygenDetail(summary: DeviceHealthDailySummary | null, language: Language) {
+  const oxygenSaturation = summary?.oxygenSaturation;
+
+  if (!oxygenSaturation || oxygenSaturation.sampleCount <= 0) {
+    return copyFor(language, { en: "not synced", ru: "не синхронизирован", bg: "не е синхронизиран" });
+  }
+
+  return [
+    oxygenSaturation.averagePercent !== null
+      ? `${copyFor(language, { en: "avg", ru: "средний", bg: "среден" })} ${formatCoachDayLoadValue(oxygenSaturation.averagePercent)}%`
+      : null,
+    oxygenSaturation.minPercent !== null && oxygenSaturation.maxPercent !== null
+      ? `${formatCoachDayLoadValue(oxygenSaturation.minPercent)}-${formatCoachDayLoadValue(oxygenSaturation.maxPercent)}%`
+      : null,
+    `${oxygenSaturation.sampleCount} ${copyFor(language, { en: "samples", ru: "зам.", bg: "изм." })}`,
+  ].filter((item): item is string => Boolean(item)).join(" · ");
 }
 
 function readDeviceRawText(rawPayload: Record<string, unknown> | null | undefined, key: string) {
@@ -1570,6 +1608,7 @@ function buildCoachDayDataQuality(input: {
   const hasRestingHr =
     input.deviceHealthSummary?.heartRate?.restingBpm !== null &&
     input.deviceHealthSummary?.heartRate?.restingBpm !== undefined;
+  const hasOxygenSaturation = hasDeviceOxygenData(input.deviceHealthSummary);
   const hasDeviceWorkout = Boolean(input.deviceHealthSummary?.workout);
   const signals = [
     {
@@ -1641,6 +1680,16 @@ function buildCoachDayDataQuality(input: {
       key: "restingHr",
       label: copyFor(input.language, { en: "resting HR", ru: "пульс покоя", bg: "пулс в покой" }),
       present: hasRestingHr,
+    },
+    {
+      action: copyFor(input.language, {
+        en: "Check SpO2 access in the health app and sync again.",
+        ru: "Проверьте доступ приложения здоровья к SpO2 и повторите синхронизацию.",
+        bg: "Проверете достъпа до SpO2 и синхронизирайте отново.",
+      }),
+      key: "oxygenSaturation",
+      label: "SpO2",
+      present: hasOxygenSaturation,
     },
     {
       action: copyFor(input.language, {
@@ -1816,9 +1865,19 @@ function buildCoachDayAiPayloadFromReview(input: {
             [
               copyFor(input.language, { en: "sleep", ru: "сон", bg: "сън" }),
               copyFor(input.language, { en: "resting HR", ru: "пульс покоя", bg: "пулс в покой" }),
+              "SpO2",
               copyFor(input.language, { en: "device workouts", ru: "тренировки с устройства", bg: "тренировки от устройство" }),
             ].includes(item)
           ),
+          oxygenSaturation: input.deviceHealthSummary?.oxygenSaturation
+            ? {
+                averagePercent: input.deviceHealthSummary.oxygenSaturation.averagePercent,
+                latestPercent: input.deviceHealthSummary.oxygenSaturation.latestPercent,
+                maxPercent: input.deviceHealthSummary.oxygenSaturation.maxPercent,
+                minPercent: input.deviceHealthSummary.oxygenSaturation.minPercent,
+                sampleCount: input.deviceHealthSummary.oxygenSaturation.sampleCount,
+              }
+            : null,
           linkedWorkouts,
           sleep: input.deviceHealthSummary?.sleep
             ? {
@@ -14841,6 +14900,11 @@ export function PageClient({
                               detail: formatDeviceRestingHrDetail(selectedCoachDeviceHealthSummary, language),
                             },
                             {
+                              label: "SpO2",
+                              value: formatDeviceOxygenValue(selectedCoachDeviceHealthSummary),
+                              detail: formatDeviceOxygenDetail(selectedCoachDeviceHealthSummary, language),
+                            },
+                            {
                               label: copyFor(language, { en: "Device workouts", ru: "Тренировки устройства", bg: "Тренировки от устройство" }),
                               value: formatDeviceWorkoutValue(selectedCoachDeviceHealthSummary),
                               detail: selectedCoachDeviceHealthSummary?.workout?.totalDurationMinutes
@@ -15587,6 +15651,7 @@ export function PageClient({
                         </span>
                         <span>{formatDeviceSleepValue(row.deviceHealthSummary, language)}</span>
                         <span>{formatDeviceRestingHrValue(row.deviceHealthSummary)}</span>
+                        <span>{formatDeviceOxygenValue(row.deviceHealthSummary)}</span>
                         <span>{row.dataQuality.statusLabel}</span>
                         <p>{row.aiReview?.riskNotes[0] ?? row.aiReview?.observation ?? "-"}</p>
                         <button

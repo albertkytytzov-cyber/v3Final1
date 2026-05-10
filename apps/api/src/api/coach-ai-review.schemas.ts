@@ -174,6 +174,9 @@ function readDeviceHealth(value: unknown): CoachDayAiPayload["deviceHealth"] {
   const sleep = device.sleep === null || device.sleep === undefined
     ? null
     : readRecord(device.sleep, "deviceHealth.sleep");
+  const oxygenSaturation = device.oxygenSaturation === null || device.oxygenSaturation === undefined
+    ? null
+    : readRecord(device.oxygenSaturation, "deviceHealth.oxygenSaturation");
   const workout = device.workout === null || device.workout === undefined
     ? null
     : readRecord(device.workout, "deviceHealth.workout");
@@ -191,6 +194,27 @@ function readDeviceHealth(value: unknown): CoachDayAiPayload["deviceHealth"] {
     missing: readArray(device.missing ?? [], "deviceHealth.missing").map((item) =>
       readString(item, "deviceHealth.missing[]")
     ),
+    oxygenSaturation: oxygenSaturation
+      ? {
+        averagePercent: readNullableNumber(
+          oxygenSaturation.averagePercent,
+          "deviceHealth.oxygenSaturation.averagePercent",
+        ),
+        latestPercent: readNullableNumber(
+          oxygenSaturation.latestPercent,
+          "deviceHealth.oxygenSaturation.latestPercent",
+        ),
+        maxPercent: readNullableNumber(
+          oxygenSaturation.maxPercent,
+          "deviceHealth.oxygenSaturation.maxPercent",
+        ),
+        minPercent: readNullableNumber(
+          oxygenSaturation.minPercent,
+          "deviceHealth.oxygenSaturation.minPercent",
+        ),
+        sampleCount: readCount(oxygenSaturation.sampleCount, "deviceHealth.oxygenSaturation.sampleCount"),
+      }
+      : null,
     sleep: sleep
       ? {
         awakeMinutes: readNullableNumber(sleep.awakeMinutes, "deviceHealth.sleep.awakeMinutes"),

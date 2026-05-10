@@ -1,6 +1,7 @@
 import type {
   DeviceHealthDailySummaryPayload,
   DeviceHealthHeartRateSummary,
+  DeviceHealthOxygenSaturationSummary,
   DeviceHealthProvider,
   DeviceHealthSleepSummary,
   DeviceHealthWorkoutSummary,
@@ -54,6 +55,9 @@ export function parseDeviceHealthSummaryBody(body: unknown): DeviceHealthDailySu
     heartRate: payload.heartRate === null || payload.heartRate === undefined
       ? null
       : readHeartRateSummary(payload.heartRate),
+    oxygenSaturation: payload.oxygenSaturation === null || payload.oxygenSaturation === undefined
+      ? null
+      : readOxygenSaturationSummary(payload.oxygenSaturation),
     workout: payload.workout === null || payload.workout === undefined
       ? null
       : readWorkoutSummary(payload.workout),
@@ -122,6 +126,18 @@ function readHeartRateSummary(value: unknown): DeviceHealthHeartRateSummary {
     maxBpm: readNullableNumber(heartRate.maxBpm, "heartRate.maxBpm"),
     minBpm: readNullableNumber(heartRate.minBpm, "heartRate.minBpm"),
     restingBpm: readNullableNumber(heartRate.restingBpm, "heartRate.restingBpm"),
+  };
+}
+
+function readOxygenSaturationSummary(value: unknown): DeviceHealthOxygenSaturationSummary {
+  const oxygenSaturation = readRecord(value, "oxygenSaturation");
+
+  return {
+    averagePercent: readNullableNumber(oxygenSaturation.averagePercent, "oxygenSaturation.averagePercent"),
+    latestPercent: readNullableNumber(oxygenSaturation.latestPercent, "oxygenSaturation.latestPercent"),
+    maxPercent: readNullableNumber(oxygenSaturation.maxPercent, "oxygenSaturation.maxPercent"),
+    minPercent: readNullableNumber(oxygenSaturation.minPercent, "oxygenSaturation.minPercent"),
+    sampleCount: readCount(oxygenSaturation.sampleCount, "oxygenSaturation.sampleCount"),
   };
 }
 

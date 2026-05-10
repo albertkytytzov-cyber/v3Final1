@@ -442,6 +442,11 @@ export async function ensureSchema() {
       min_hr NUMERIC(5, 1),
       max_hr NUMERIC(5, 1),
       hrv_rmssd_ms NUMERIC(7, 2),
+      oxygen_saturation_avg_percent NUMERIC(5, 2),
+      oxygen_saturation_min_percent NUMERIC(5, 2),
+      oxygen_saturation_max_percent NUMERIC(5, 2),
+      oxygen_saturation_latest_percent NUMERIC(5, 2),
+      oxygen_saturation_sample_count INTEGER NOT NULL DEFAULT 0,
       workout_count INTEGER NOT NULL DEFAULT 0,
       workout_duration_minutes NUMERIC(7, 2),
       workout_distance_meters NUMERIC(10, 2),
@@ -861,6 +866,15 @@ export async function ensureSchema() {
   await ensureColumn("device_health_daily_summaries", "min_hr", "NUMERIC(5, 1)");
   await ensureColumn("device_health_daily_summaries", "max_hr", "NUMERIC(5, 1)");
   await ensureColumn("device_health_daily_summaries", "hrv_rmssd_ms", "NUMERIC(7, 2)");
+  await ensureColumn("device_health_daily_summaries", "oxygen_saturation_avg_percent", "NUMERIC(5, 2)");
+  await ensureColumn("device_health_daily_summaries", "oxygen_saturation_min_percent", "NUMERIC(5, 2)");
+  await ensureColumn("device_health_daily_summaries", "oxygen_saturation_max_percent", "NUMERIC(5, 2)");
+  await ensureColumn("device_health_daily_summaries", "oxygen_saturation_latest_percent", "NUMERIC(5, 2)");
+  await ensureColumn(
+    "device_health_daily_summaries",
+    "oxygen_saturation_sample_count",
+    "INTEGER NOT NULL DEFAULT 0",
+  );
   await ensureColumn("device_health_daily_summaries", "workout_count", "INTEGER NOT NULL DEFAULT 0");
   await ensureColumn(
     "device_health_daily_summaries",

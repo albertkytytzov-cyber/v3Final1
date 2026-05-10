@@ -208,6 +208,15 @@ function buildModelSafePayload(payload: CoachDayAiPayload) {
         missing: (payload.deviceHealth.missing ?? [])
           .slice(0, 8)
           .map((item) => toLimitedString(item, maxShortStringLength)),
+        oxygenSaturation: payload.deviceHealth.oxygenSaturation
+          ? {
+            averagePercent: payload.deviceHealth.oxygenSaturation.averagePercent,
+            latestPercent: payload.deviceHealth.oxygenSaturation.latestPercent,
+            maxPercent: payload.deviceHealth.oxygenSaturation.maxPercent,
+            minPercent: payload.deviceHealth.oxygenSaturation.minPercent,
+            sampleCount: payload.deviceHealth.oxygenSaturation.sampleCount,
+          }
+          : null,
         linkedWorkouts: (payload.deviceHealth.linkedWorkouts ?? [])
           .slice(0, 8)
           .map((workout) => ({

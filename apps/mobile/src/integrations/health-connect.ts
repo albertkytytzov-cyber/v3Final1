@@ -1,6 +1,7 @@
 import type {
   DeviceHealthDailySummaryPayload,
   DeviceHealthHeartRateSummary,
+  DeviceHealthOxygenSaturationSummary,
   DeviceHealthSleepSummary,
   DeviceHealthWorkoutSummary,
   DeviceWorkoutPayload,
@@ -63,6 +64,7 @@ export async function readMiFitnessHealthConnectDailySummary(
     sourceDevice: normalizeNullableString(summary.sourceDevice) ?? "Health Connect",
     sleep: normalizeSleepSummary(summary.sleep),
     heartRate: normalizeHeartRateSummary(summary.heartRate),
+    oxygenSaturation: normalizeOxygenSaturationSummary(summary.oxygenSaturation),
     workout: normalizeWorkoutSummary(summary.workout),
     rawPayload: isPlainRecord(summary.rawPayload) ? summary.rawPayload : null,
     syncedAt: new Date().toISOString(),
@@ -204,6 +206,20 @@ function normalizeHeartRateSummary(value: unknown): DeviceHealthHeartRateSummary
     maxBpm: normalizeNumber(value.maxBpm),
     minBpm: normalizeNumber(value.minBpm),
     restingBpm: normalizeNumber(value.restingBpm),
+  };
+}
+
+function normalizeOxygenSaturationSummary(value: unknown): DeviceHealthOxygenSaturationSummary | null {
+  if (!isPlainRecord(value)) {
+    return null;
+  }
+
+  return {
+    averagePercent: normalizeNumber(value.averagePercent),
+    latestPercent: normalizeNumber(value.latestPercent),
+    maxPercent: normalizeNumber(value.maxPercent),
+    minPercent: normalizeNumber(value.minPercent),
+    sampleCount: Math.max(0, Math.trunc(normalizeNumber(value.sampleCount) ?? 0)),
   };
 }
 

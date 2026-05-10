@@ -54,6 +54,7 @@ export async function readHuaweiHealthDailySummary(
     sourceDevice: normalizeNullableString(summary.sourceDevice),
     sleep: normalizeSleepSummary(summary.sleep),
     heartRate: normalizeHeartRateSummary(summary.heartRate),
+    oxygenSaturation: null,
     workout: normalizeWorkoutSummary(summary.workout),
     rawPayload: isPlainRecord(summary.rawPayload) ? summary.rawPayload : null,
     syncedAt: new Date().toISOString(),

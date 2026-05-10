@@ -1,6 +1,7 @@
 import type {
   DeviceHealthDailySummary,
   DeviceHealthDailySummaryPayload,
+  DeviceHealthOxygenSaturationSummary,
   DeviceHealthProvider,
   DeviceWorkout,
   DeviceWorkoutLink,
@@ -31,6 +32,11 @@ interface DeviceHealthDailySummaryRow {
   min_hr: string | null;
   max_hr: string | null;
   hrv_rmssd_ms: string | null;
+  oxygen_saturation_avg_percent: string | null;
+  oxygen_saturation_min_percent: string | null;
+  oxygen_saturation_max_percent: string | null;
+  oxygen_saturation_latest_percent: string | null;
+  oxygen_saturation_sample_count: number;
   workout_count: number;
   workout_duration_minutes: string | null;
   workout_distance_meters: string | null;
@@ -105,6 +111,26 @@ function hasText(value: string | null | undefined) {
   return typeof value === "string" && value.trim().length > 0;
 }
 
+function mapDeviceOxygenSaturationSummary(
+  row: DeviceHealthDailySummaryRow,
+): DeviceHealthOxygenSaturationSummary | null {
+  const summary = {
+    averagePercent: toNullableNumber(row.oxygen_saturation_avg_percent),
+    latestPercent: toNullableNumber(row.oxygen_saturation_latest_percent),
+    maxPercent: toNullableNumber(row.oxygen_saturation_max_percent),
+    minPercent: toNullableNumber(row.oxygen_saturation_min_percent),
+    sampleCount: row.oxygen_saturation_sample_count,
+  };
+
+  return summary.sampleCount > 0 ||
+    summary.averagePercent !== null ||
+    summary.latestPercent !== null ||
+    summary.maxPercent !== null ||
+    summary.minPercent !== null
+    ? summary
+    : null;
+}
+
 function hasMeaningfulSleepPayload(payload: DeviceHealthDailySummaryPayload) {
   const sleep = payload.sleep;
 
@@ -129,6 +155,18 @@ function hasMeaningfulHeartRatePayload(payload: DeviceHealthDailySummaryPayload)
     hasPositiveNumber(heartRate.minBpm) ||
     hasPositiveNumber(heartRate.maxBpm) ||
     hasPositiveNumber(heartRate.hrvRmssdMs)
+  ));
+}
+
+function hasMeaningfulOxygenSaturationPayload(payload: DeviceHealthDailySummaryPayload) {
+  const oxygenSaturation = payload.oxygenSaturation;
+
+  return Boolean(oxygenSaturation && (
+    oxygenSaturation.sampleCount > 0 ||
+    hasPositiveNumber(oxygenSaturation.averagePercent) ||
+    hasPositiveNumber(oxygenSaturation.latestPercent) ||
+    hasPositiveNumber(oxygenSaturation.minPercent) ||
+    hasPositiveNumber(oxygenSaturation.maxPercent)
   ));
 }
 
@@ -164,6 +202,7 @@ function mapDeviceHealthDailySummary(
       minBpm: toNullableNumber(row.min_hr),
       restingBpm: toNullableNumber(row.resting_hr),
     },
+    oxygenSaturation: mapDeviceOxygenSaturationSummary(row),
     sleep: {
       awakeMinutes: toNullableNumber(row.awake_minutes),
       deepMinutes: toNullableNumber(row.deep_sleep_minutes),
@@ -272,6 +311,11 @@ export async function listDeviceHealthDailySummariesForAthlete(
         min_hr::text,
         max_hr::text,
         hrv_rmssd_ms::text,
+        oxygen_saturation_avg_percent::text,
+        oxygen_saturation_min_percent::text,
+        oxygen_saturation_max_percent::text,
+        oxygen_saturation_latest_percent::text,
+        oxygen_saturation_sample_count,
         workout_count,
         workout_duration_minutes::text,
         workout_distance_meters::text,
@@ -300,6 +344,7 @@ export async function upsertDeviceHealthDailySummary(input: {
   const syncedAt = input.payload.syncedAt ?? new Date().toISOString();
   const hasSleepPayload = hasMeaningfulSleepPayload(input.payload);
   const hasHeartRatePayload = hasMeaningfulHeartRatePayload(input.payload);
+  const hasOxygenSaturationPayload = hasMeaningfulOxygenSaturationPayload(input.payload);
   const hasWorkoutPayload = hasMeaningfulWorkoutPayload(input.payload);
   const result = await pool.query<DeviceHealthDailySummaryRow>(
     `
@@ -321,6 +366,11 @@ export async function upsertDeviceHealthDailySummary(input: {
         min_hr,
         max_hr,
         hrv_rmssd_ms,
+        oxygen_saturation_avg_percent,
+        oxygen_saturation_min_percent,
+        oxygen_saturation_max_percent,
+        oxygen_saturation_latest_percent,
+        oxygen_saturation_sample_count,
         workout_count,
         workout_duration_minutes,
         workout_distance_meters,
@@ -355,36 +405,47 @@ export async function upsertDeviceHealthDailySummary(input: {
         $21,
         $22,
         $23,
-        $24::jsonb,
-        $25::timestamptz,
+        $24,
+        $25,
+        $26,
+        $27,
+        $28,
+        $29::jsonb,
+        $30::timestamptz,
         NOW()
       )
       ON CONFLICT (athlete_id, provider, entry_date)
       DO UPDATE SET
         source_device = EXCLUDED.source_device,
-        sleep_start_time = CASE WHEN $26 THEN EXCLUDED.sleep_start_time ELSE device_health_daily_summaries.sleep_start_time END,
-        sleep_end_time = CASE WHEN $26 THEN EXCLUDED.sleep_end_time ELSE device_health_daily_summaries.sleep_end_time END,
-        sleep_duration_minutes = CASE WHEN $26 THEN EXCLUDED.sleep_duration_minutes ELSE device_health_daily_summaries.sleep_duration_minutes END,
-        deep_sleep_minutes = CASE WHEN $26 THEN EXCLUDED.deep_sleep_minutes ELSE device_health_daily_summaries.deep_sleep_minutes END,
-        light_sleep_minutes = CASE WHEN $26 THEN EXCLUDED.light_sleep_minutes ELSE device_health_daily_summaries.light_sleep_minutes END,
-        rem_sleep_minutes = CASE WHEN $26 THEN EXCLUDED.rem_sleep_minutes ELSE device_health_daily_summaries.rem_sleep_minutes END,
-        awake_minutes = CASE WHEN $26 THEN EXCLUDED.awake_minutes ELSE device_health_daily_summaries.awake_minutes END,
-        sleep_score = CASE WHEN $26 THEN EXCLUDED.sleep_score ELSE device_health_daily_summaries.sleep_score END,
-        resting_hr = CASE WHEN $27 THEN EXCLUDED.resting_hr ELSE device_health_daily_summaries.resting_hr END,
-        average_hr = CASE WHEN $27 THEN EXCLUDED.average_hr ELSE device_health_daily_summaries.average_hr END,
-        min_hr = CASE WHEN $27 THEN EXCLUDED.min_hr ELSE device_health_daily_summaries.min_hr END,
-        max_hr = CASE WHEN $27 THEN EXCLUDED.max_hr ELSE device_health_daily_summaries.max_hr END,
-        hrv_rmssd_ms = CASE WHEN $27 THEN EXCLUDED.hrv_rmssd_ms ELSE device_health_daily_summaries.hrv_rmssd_ms END,
-        workout_count = CASE WHEN $28 THEN EXCLUDED.workout_count ELSE device_health_daily_summaries.workout_count END,
-        workout_duration_minutes = CASE WHEN $28 THEN EXCLUDED.workout_duration_minutes ELSE device_health_daily_summaries.workout_duration_minutes END,
-        workout_distance_meters = CASE WHEN $28 THEN EXCLUDED.workout_distance_meters ELSE device_health_daily_summaries.workout_distance_meters END,
-        workout_active_calories = CASE WHEN $28 THEN EXCLUDED.workout_active_calories ELSE device_health_daily_summaries.workout_active_calories END,
-        workout_average_hr = CASE WHEN $28 THEN EXCLUDED.workout_average_hr ELSE device_health_daily_summaries.workout_average_hr END,
-        workout_max_hr = CASE WHEN $28 THEN EXCLUDED.workout_max_hr ELSE device_health_daily_summaries.workout_max_hr END,
+        sleep_start_time = CASE WHEN $31 THEN EXCLUDED.sleep_start_time ELSE device_health_daily_summaries.sleep_start_time END,
+        sleep_end_time = CASE WHEN $31 THEN EXCLUDED.sleep_end_time ELSE device_health_daily_summaries.sleep_end_time END,
+        sleep_duration_minutes = CASE WHEN $31 THEN EXCLUDED.sleep_duration_minutes ELSE device_health_daily_summaries.sleep_duration_minutes END,
+        deep_sleep_minutes = CASE WHEN $31 THEN EXCLUDED.deep_sleep_minutes ELSE device_health_daily_summaries.deep_sleep_minutes END,
+        light_sleep_minutes = CASE WHEN $31 THEN EXCLUDED.light_sleep_minutes ELSE device_health_daily_summaries.light_sleep_minutes END,
+        rem_sleep_minutes = CASE WHEN $31 THEN EXCLUDED.rem_sleep_minutes ELSE device_health_daily_summaries.rem_sleep_minutes END,
+        awake_minutes = CASE WHEN $31 THEN EXCLUDED.awake_minutes ELSE device_health_daily_summaries.awake_minutes END,
+        sleep_score = CASE WHEN $31 THEN EXCLUDED.sleep_score ELSE device_health_daily_summaries.sleep_score END,
+        resting_hr = CASE WHEN $32 THEN EXCLUDED.resting_hr ELSE device_health_daily_summaries.resting_hr END,
+        average_hr = CASE WHEN $32 THEN EXCLUDED.average_hr ELSE device_health_daily_summaries.average_hr END,
+        min_hr = CASE WHEN $32 THEN EXCLUDED.min_hr ELSE device_health_daily_summaries.min_hr END,
+        max_hr = CASE WHEN $32 THEN EXCLUDED.max_hr ELSE device_health_daily_summaries.max_hr END,
+        hrv_rmssd_ms = CASE WHEN $32 THEN EXCLUDED.hrv_rmssd_ms ELSE device_health_daily_summaries.hrv_rmssd_ms END,
+        oxygen_saturation_avg_percent = CASE WHEN $33 THEN EXCLUDED.oxygen_saturation_avg_percent ELSE device_health_daily_summaries.oxygen_saturation_avg_percent END,
+        oxygen_saturation_min_percent = CASE WHEN $33 THEN EXCLUDED.oxygen_saturation_min_percent ELSE device_health_daily_summaries.oxygen_saturation_min_percent END,
+        oxygen_saturation_max_percent = CASE WHEN $33 THEN EXCLUDED.oxygen_saturation_max_percent ELSE device_health_daily_summaries.oxygen_saturation_max_percent END,
+        oxygen_saturation_latest_percent = CASE WHEN $33 THEN EXCLUDED.oxygen_saturation_latest_percent ELSE device_health_daily_summaries.oxygen_saturation_latest_percent END,
+        oxygen_saturation_sample_count = CASE WHEN $33 THEN EXCLUDED.oxygen_saturation_sample_count ELSE device_health_daily_summaries.oxygen_saturation_sample_count END,
+        workout_count = CASE WHEN $34 THEN EXCLUDED.workout_count ELSE device_health_daily_summaries.workout_count END,
+        workout_duration_minutes = CASE WHEN $34 THEN EXCLUDED.workout_duration_minutes ELSE device_health_daily_summaries.workout_duration_minutes END,
+        workout_distance_meters = CASE WHEN $34 THEN EXCLUDED.workout_distance_meters ELSE device_health_daily_summaries.workout_distance_meters END,
+        workout_active_calories = CASE WHEN $34 THEN EXCLUDED.workout_active_calories ELSE device_health_daily_summaries.workout_active_calories END,
+        workout_average_hr = CASE WHEN $34 THEN EXCLUDED.workout_average_hr ELSE device_health_daily_summaries.workout_average_hr END,
+        workout_max_hr = CASE WHEN $34 THEN EXCLUDED.workout_max_hr ELSE device_health_daily_summaries.workout_max_hr END,
         raw_payload_json = jsonb_strip_nulls(EXCLUDED.raw_payload_json || jsonb_build_object(
-          'preservedExistingSleep', CASE WHEN $26 THEN NULL ELSE TRUE END,
-          'preservedExistingHeartRate', CASE WHEN $27 THEN NULL ELSE TRUE END,
-          'preservedExistingWorkout', CASE WHEN $28 THEN NULL ELSE TRUE END
+          'preservedExistingSleep', CASE WHEN $31 THEN NULL ELSE TRUE END,
+          'preservedExistingHeartRate', CASE WHEN $32 THEN NULL ELSE TRUE END,
+          'preservedExistingOxygenSaturation', CASE WHEN $33 THEN NULL ELSE TRUE END,
+          'preservedExistingWorkout', CASE WHEN $34 THEN NULL ELSE TRUE END
         )),
         synced_at = EXCLUDED.synced_at,
         updated_at = NOW()
@@ -407,6 +468,11 @@ export async function upsertDeviceHealthDailySummary(input: {
         min_hr::text,
         max_hr::text,
         hrv_rmssd_ms::text,
+        oxygen_saturation_avg_percent::text,
+        oxygen_saturation_min_percent::text,
+        oxygen_saturation_max_percent::text,
+        oxygen_saturation_latest_percent::text,
+        oxygen_saturation_sample_count,
         workout_count,
         workout_duration_minutes::text,
         workout_distance_meters::text,
@@ -436,6 +502,11 @@ export async function upsertDeviceHealthDailySummary(input: {
       input.payload.heartRate?.minBpm ?? null,
       input.payload.heartRate?.maxBpm ?? null,
       input.payload.heartRate?.hrvRmssdMs ?? null,
+      input.payload.oxygenSaturation?.averagePercent ?? null,
+      input.payload.oxygenSaturation?.minPercent ?? null,
+      input.payload.oxygenSaturation?.maxPercent ?? null,
+      input.payload.oxygenSaturation?.latestPercent ?? null,
+      input.payload.oxygenSaturation?.sampleCount ?? 0,
       input.payload.workout?.count ?? 0,
       input.payload.workout?.totalDurationMinutes ?? null,
       input.payload.workout?.totalDistanceMeters ?? null,
@@ -446,6 +517,7 @@ export async function upsertDeviceHealthDailySummary(input: {
       syncedAt,
       hasSleepPayload,
       hasHeartRatePayload,
+      hasOxygenSaturationPayload,
       hasWorkoutPayload,
     ],
   );

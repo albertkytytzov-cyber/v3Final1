@@ -120,6 +120,13 @@ function buildDiagnosticCoachDayPayload(entryDate: string): CoachDayAiPayload {
         restingBpm: 54,
       },
       missing: [],
+      oxygenSaturation: {
+        averagePercent: 97,
+        latestPercent: 97,
+        maxPercent: 99,
+        minPercent: 95,
+        sampleCount: 12,
+      },
       sleep: {
         awakeMinutes: 24,
         deepMinutes: 92,
@@ -424,6 +431,11 @@ function buildDeviceHealthObservation(payload: CoachDayAiPayload) {
     device.heartRate?.restingBpm !== null && device.heartRate?.restingBpm !== undefined
       ? `пульс покоя ${formatLoadValue(device.heartRate.restingBpm)}`
       : null,
+    device.oxygenSaturation?.latestPercent !== null && device.oxygenSaturation?.latestPercent !== undefined
+      ? `SpO2 ${formatLoadValue(device.oxygenSaturation.latestPercent)}%`
+      : device.oxygenSaturation?.averagePercent !== null && device.oxygenSaturation?.averagePercent !== undefined
+        ? `SpO2 средний ${formatLoadValue(device.oxygenSaturation.averagePercent)}%`
+        : null,
     device.workout ? `тренировки устройства: ${device.workout.count}` : null,
   ].filter((item): item is string => Boolean(item));
 

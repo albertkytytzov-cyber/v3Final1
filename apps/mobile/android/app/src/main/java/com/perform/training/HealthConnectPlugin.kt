@@ -148,7 +148,7 @@ class HealthConnectPlugin : Plugin() {
                 }
 
                 val summary = withContext(Dispatchers.IO) {
-                    readMiFitnessDailySummary(client, dayRange)
+                    readMiFitnessDailySummary(client, dayRange, granted)
                 }
                 call.resolve(summary)
             } catch (error: Exception) {
@@ -197,6 +197,7 @@ class HealthConnectPlugin : Plugin() {
     private suspend fun readMiFitnessDailySummary(
         client: HealthConnectClient,
         dayRange: DayRange,
+        grantedPermissions: Set<String>,
     ): JSObject {
         val range = TimeRangeFilter.between(dayRange.start, dayRange.end)
         val sleepRange = TimeRangeFilter.between(dayRange.sleepLookupStart, dayRange.end)
@@ -211,6 +212,11 @@ class HealthConnectPlugin : Plugin() {
         val distanceRecords = readAllRecords(client, DistanceRecord::class, range)
         val totalCaloriesRecords = readAllRecords(client, TotalCaloriesBurnedRecord::class, range)
         val activeCaloriesRecords = readAllRecords(client, ActiveCaloriesBurnedRecord::class, range)
+        val oxygenSaturationRecords = if (grantedPermissions.contains(HealthPermission.getReadPermission(OxygenSaturationRecord::class))) {
+            readAllRecords(client, OxygenSaturationRecord::class, range)
+        } else {
+            emptyList()
+        }
         val allSleepRecords = filterSleepRecordsForDay(
             readAllRecords(client, SleepSessionRecord::class, sleepRange, emptySet()),
             dayRange,
@@ -221,6 +227,11 @@ class HealthConnectPlugin : Plugin() {
         val allDistanceRecords = readAllRecords(client, DistanceRecord::class, range, emptySet())
         val allTotalCaloriesRecords = readAllRecords(client, TotalCaloriesBurnedRecord::class, range, emptySet())
         val allActiveCaloriesRecords = readAllRecords(client, ActiveCaloriesBurnedRecord::class, range, emptySet())
+        val allOxygenSaturationRecords = if (grantedPermissions.contains(HealthPermission.getReadPermission(OxygenSaturationRecord::class))) {
+            readAllRecords(client, OxygenSaturationRecord::class, range, emptySet())
+        } else {
+            emptyList()
+        }
         val installedKnownSources = installedKnownHealthSourcePackages()
         val supportedRecords = sleepRecords +
             restingHeartRateRecords +
@@ -228,7 +239,8 @@ class HealthConnectPlugin : Plugin() {
             exerciseRecords +
             distanceRecords +
             totalCaloriesRecords +
-            activeCaloriesRecords
+            activeCaloriesRecords +
+            oxygenSaturationRecords
         val knownSourcePackages = (installedKnownSources + recordOriginPackages(supportedRecords)).distinct()
 
         val result = JSObject()
@@ -246,6 +258,7 @@ class HealthConnectPlugin : Plugin() {
 
         putNullable(result, "sleep", buildSleepSummary(sleepRecords))
         putNullable(result, "heartRate", heartRateSummary.summary)
+        putNullable(result, "oxygenSaturation", buildOxygenSaturationSummary(oxygenSaturationRecords))
         putNullable(
             result,
             "workout",
@@ -277,6 +290,7 @@ class HealthConnectPlugin : Plugin() {
         rawPayload.put("distanceRecordCount", distanceRecords.size)
         rawPayload.put("totalCaloriesRecordCount", totalCaloriesRecords.size)
         rawPayload.put("activeCaloriesRecordCount", activeCaloriesRecords.size)
+        rawPayload.put("oxygenSaturationRecordCount", oxygenSaturationRecords.size)
         rawPayload.put("allSleepRecordCount", allSleepRecords.size)
         rawPayload.put("allRestingHeartRateRecordCount", allRestingHeartRateRecords.size)
         rawPayload.put("allHeartRateRecordCount", allHeartRateRecords.size)
@@ -284,10 +298,12 @@ class HealthConnectPlugin : Plugin() {
         rawPayload.put("allDistanceRecordCount", allDistanceRecords.size)
         rawPayload.put("allTotalCaloriesRecordCount", allTotalCaloriesRecords.size)
         rawPayload.put("allActiveCaloriesRecordCount", allActiveCaloriesRecords.size)
+        rawPayload.put("allOxygenSaturationRecordCount", allOxygenSaturationRecords.size)
         rawPayload.put("sleepDataOrigins", recordOrigins(allSleepRecords))
         rawPayload.put("restingHeartRateDataOrigins", recordOrigins(allRestingHeartRateRecords))
         rawPayload.put("heartRateDataOrigins", recordOrigins(allHeartRateRecords))
         rawPayload.put("exerciseDataOrigins", recordOrigins(allExerciseRecords))
+        rawPayload.put("oxygenSaturationDataOrigins", recordOrigins(allOxygenSaturationRecords))
         rawPayload.put(
             "allDataOrigins",
             recordOrigins(
@@ -297,7 +313,8 @@ class HealthConnectPlugin : Plugin() {
                     allExerciseRecords +
                     allDistanceRecords +
                     allTotalCaloriesRecords +
-                    allActiveCaloriesRecords,
+                    allActiveCaloriesRecords +
+                    allOxygenSaturationRecords,
             ),
         )
         result.put("rawPayload", rawPayload)
@@ -749,6 +766,24 @@ class HealthConnectPlugin : Plugin() {
         putNullableNumber(workout, "maxHeartRateBpm", values.maxOrNull())
 
         return workout
+    }
+
+    private fun buildOxygenSaturationSummary(records: List<OxygenSaturationRecord>): JSObject? {
+        if (records.isEmpty()) {
+            return null
+        }
+
+        val values = records.map { record -> record.percentage.value }
+        val latest = records.maxByOrNull { record -> record.time }?.percentage?.value
+        val oxygenSaturation = JSObject()
+
+        putNullableNumber(oxygenSaturation, "averagePercent", average(values))
+        putNullableNumber(oxygenSaturation, "latestPercent", latest)
+        putNullableNumber(oxygenSaturation, "minPercent", values.minOrNull())
+        putNullableNumber(oxygenSaturation, "maxPercent", values.maxOrNull())
+        oxygenSaturation.put("sampleCount", records.size)
+
+        return oxygenSaturation
     }
 
     private fun parseDayRange(entryDate: String): DayRange {

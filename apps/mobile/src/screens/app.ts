@@ -1951,6 +1951,11 @@ function renderDeviceHealthCard(state: MobileAppState, athleteId: string, date: 
           formatDeviceHealthHeartRateDetail(summary),
         )}
         ${renderTodayIndicator(
+          "SpO2",
+          formatDeviceHealthOxygenValue(summary),
+          formatDeviceHealthOxygenDetail(summary),
+        )}
+        ${renderTodayIndicator(
           "Тренировки",
           formatDeviceHealthWorkoutValue(summary),
           formatDeviceHealthWorkoutDetail(summary),
@@ -2259,6 +2264,14 @@ function renderHealthConnectDiagnostics(summary: DeviceHealthDailySummary | null
       value: formatHealthConnectDiagnosticCount(rawPayload, "heartRateRecordCount", "allHeartRateRecordCount"),
     },
     {
+      label: "SpO2",
+      value: formatHealthConnectDiagnosticCount(
+        rawPayload,
+        "oxygenSaturationRecordCount",
+        "allOxygenSaturationRecordCount",
+      ),
+    },
+    {
       label: "Тренировки",
       value: formatHealthConnectDiagnosticCount(rawPayload, "exerciseRecordCount", "allExerciseRecordCount"),
     },
@@ -2424,6 +2437,12 @@ function getDeviceHealthStatus(summary: DeviceHealthDailySummary | null) {
     missing.push("пульс покоя");
   }
 
+  if (hasDeviceOxygenSaturationData(summary)) {
+    present.push("SpO2");
+  } else {
+    missing.push("SpO2");
+  }
+
   if (summary.workout) {
     present.push(summary.workout.count > 0 ? "тренировки с устройства" : "тренировки: 0");
   } else {
@@ -2450,6 +2469,19 @@ function hasDeviceSleepData(summary: DeviceHealthDailySummary | null) {
         summary.sleep.deepMinutes !== null ||
         summary.sleep.lightMinutes !== null ||
         summary.sleep.remMinutes !== null
+      ),
+  );
+}
+
+function hasDeviceOxygenSaturationData(summary: DeviceHealthDailySummary | null) {
+  return Boolean(
+    summary?.oxygenSaturation &&
+      (
+        summary.oxygenSaturation.sampleCount > 0 ||
+        summary.oxygenSaturation.latestPercent !== null ||
+        summary.oxygenSaturation.averagePercent !== null ||
+        summary.oxygenSaturation.minPercent !== null ||
+        summary.oxygenSaturation.maxPercent !== null
       ),
   );
 }
@@ -2543,6 +2575,31 @@ function formatDeviceHealthHeartRateDetail(summary: DeviceHealthDailySummary | n
   ].filter((item): item is string => Boolean(item));
 
   return parts.length ? parts.join(" · ") : "нет пульса покоя";
+}
+
+function formatDeviceHealthOxygenValue(summary: DeviceHealthDailySummary | null) {
+  const oxygenSaturation = summary?.oxygenSaturation;
+  const value = oxygenSaturation?.latestPercent ?? oxygenSaturation?.averagePercent;
+
+  return value !== null && value !== undefined ? `${formatLoadValue(value)}%` : "-";
+}
+
+function formatDeviceHealthOxygenDetail(summary: DeviceHealthDailySummary | null) {
+  const oxygenSaturation = summary?.oxygenSaturation;
+
+  if (!oxygenSaturation || oxygenSaturation.sampleCount <= 0) {
+    return "нет данных";
+  }
+
+  const parts = [
+    oxygenSaturation.averagePercent !== null ? `средний ${formatLoadValue(oxygenSaturation.averagePercent)}%` : null,
+    oxygenSaturation.minPercent !== null && oxygenSaturation.maxPercent !== null
+      ? `${formatLoadValue(oxygenSaturation.minPercent)}-${formatLoadValue(oxygenSaturation.maxPercent)}%`
+      : null,
+    `${oxygenSaturation.sampleCount} зам.`,
+  ].filter((item): item is string => Boolean(item));
+
+  return parts.join(" · ");
 }
 
 function formatDeviceHealthRawTimeRange(rawPayload: Record<string, unknown>) {
@@ -5090,6 +5147,7 @@ function buildCoachDayDataQuality(dayData: CoachDayCleanSummary): NonNullable<Co
   const hasDeviceSync = Boolean(device);
   const hasSleep = hasDeviceSleepData(device);
   const hasRestingHr = device?.heartRate?.restingBpm !== null && device?.heartRate?.restingBpm !== undefined;
+  const hasOxygenSaturation = hasDeviceOxygenSaturationData(device);
   const hasDeviceWorkout = Boolean(device?.workout) || dayData.deviceWorkouts.length > 0;
   const signals = [
     {
@@ -5133,6 +5191,12 @@ function buildCoachDayDataQuality(dayData: CoachDayCleanSummary): NonNullable<Co
       key: "restingHr",
       label: "пульс покоя",
       present: hasRestingHr,
+    },
+    {
+      action: "Проверьте доступ приложения здоровья к SpO2 и повторите синхронизацию.",
+      key: "oxygenSaturation",
+      label: "SpO2",
+      present: hasOxygenSaturation,
     },
     {
       action: "Проверьте, пришли ли тренировки с устройства за выбранный день.",
@@ -5215,6 +5279,15 @@ function buildCoachDayAiDeviceHealth(dayData: CoachDayCleanSummary): CoachDayAiP
       : null,
     linkedWorkouts,
     missing: status.missing,
+    oxygenSaturation: summary?.oxygenSaturation
+      ? {
+        averagePercent: summary.oxygenSaturation.averagePercent,
+        latestPercent: summary.oxygenSaturation.latestPercent,
+        maxPercent: summary.oxygenSaturation.maxPercent,
+        minPercent: summary.oxygenSaturation.minPercent,
+        sampleCount: summary.oxygenSaturation.sampleCount,
+      }
+      : null,
     sleep: summary?.sleep
       ? {
         awakeMinutes: summary.sleep.awakeMinutes,

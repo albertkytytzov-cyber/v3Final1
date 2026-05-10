@@ -605,6 +605,13 @@ const previewDeviceHealthSummaries: DeviceHealthDailySummary[] = [
       minBpm: 49,
       restingBpm: 54,
     },
+    oxygenSaturation: {
+      averagePercent: 97.6,
+      latestPercent: 98,
+      maxPercent: 98,
+      minPercent: 97,
+      sampleCount: 5,
+    },
     workout: {
       activeCalories: 280,
       averageHeartRateBpm: 124,

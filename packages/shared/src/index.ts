@@ -121,6 +121,14 @@ export interface DeviceHealthHeartRateSummary {
   restingBpm: number | null;
 }
 
+export interface DeviceHealthOxygenSaturationSummary {
+  averagePercent: number | null;
+  latestPercent: number | null;
+  maxPercent: number | null;
+  minPercent: number | null;
+  sampleCount: number;
+}
+
 export interface DeviceHealthWorkoutSummary {
   activeCalories: number | null;
   averageHeartRateBpm: number | null;
@@ -136,6 +144,7 @@ export interface DeviceHealthDailySummaryPayload {
   sourceDevice: string | null;
   sleep: DeviceHealthSleepSummary | null;
   heartRate: DeviceHealthHeartRateSummary | null;
+  oxygenSaturation: DeviceHealthOxygenSaturationSummary | null;
   workout: DeviceHealthWorkoutSummary | null;
   rawPayload?: Record<string, unknown> | null;
   syncedAt?: string | null;
@@ -902,6 +911,13 @@ export interface CoachDayAiPayload {
       restingBpm: number | null;
     } | null;
     missing: string[];
+    oxygenSaturation: {
+      averagePercent: number | null;
+      latestPercent: number | null;
+      maxPercent: number | null;
+      minPercent: number | null;
+      sampleCount: number;
+    } | null;
     linkedWorkouts?: Array<{
       averageHeartRateBpm: number | null;
       distanceMeters: number | null;
