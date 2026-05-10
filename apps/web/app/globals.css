@@ -3373,6 +3373,15 @@ select {
   line-height: 1.55;
 }
 
+.coach-ai-stale-warning {
+  padding: 10px 12px;
+  border: 1px solid rgba(245, 158, 11, 0.26);
+  border-radius: 12px;
+  background: rgba(255, 251, 235, 0.86);
+  color: #92400e;
+  font-weight: 800;
+}
+
 .coach-ai-day-review-result {
   display: grid;
   gap: 10px;

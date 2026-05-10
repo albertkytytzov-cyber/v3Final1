@@ -94,6 +94,7 @@ function buildDiagnosticCoachDayPayload(entryDate: string): CoachDayAiPayload {
         "комментарий тренера",
         "сон",
         "пульс покоя",
+        "SpO2",
         "тренировки с устройства",
       ],
       missing: [],
@@ -105,12 +106,14 @@ function buildDiagnosticCoachDayPayload(entryDate: string): CoachDayAiPayload {
         { action: null, key: "deviceSync", label: "синхронизация устройства", present: true },
         { action: null, key: "sleep", label: "сон", present: true },
         { action: null, key: "restingHr", label: "пульс покоя", present: true },
+        { action: null, key: "oxygenSaturation", label: "SpO2", present: true },
         { action: null, key: "deviceWorkout", label: "тренировки с устройства", present: true },
       ],
       status: "complete",
       statusLabel: "Данных достаточно",
     },
     date: entryDate,
+    limitations: [],
     deviceHealth: {
       heartRate: {
         averageBpm: 68,
@@ -127,6 +130,27 @@ function buildDiagnosticCoachDayPayload(entryDate: string): CoachDayAiPayload {
         minPercent: 95,
         sampleCount: 12,
       },
+      linkedWorkouts: [
+        {
+          averageHeartRateBpm: 126,
+          distanceMeters: 5200,
+          durationMinutes: 48,
+          endTime: new Date(Date.now() + 48 * 60 * 1000).toISOString(),
+          hasDistance: true,
+          hasGraph: true,
+          hasHeartRate: true,
+          hasSpO2: false,
+          linkedToPlan: true,
+          linkStatusLabel: "связано с блоком плана",
+          maxHeartRateBpm: 148,
+          planBlockId: "diagnostic-block",
+          planBlockName: "Техника",
+          sourceDevice: "Huawei Health",
+          startTime: new Date().toISOString(),
+          workoutId: "diagnostic-workout",
+          workoutType: "training",
+        },
+      ],
       sleep: {
         awakeMinutes: 24,
         deepMinutes: 92,
@@ -166,6 +190,12 @@ function buildDiagnosticCoachDayPayload(entryDate: string): CoachDayAiPayload {
     load: {
       actual: 78,
       delta: -22,
+      explanation: [
+        "Плановая: 100 из назначенных блоков плана.",
+        "Фактическая: 78 из сохранённых отметок выполнения.",
+        "Устройство: 1/1 плановых целей связано.",
+        "Расхождение: -22 ниже плана; часть задач не выполнена или не отмечена.",
+      ],
       planned: 100,
     },
     plan: {
@@ -343,8 +373,13 @@ function buildObservation(payload: CoachDayAiPayload) {
     : `${payload.execution.blocks.completed}/${payload.execution.blocks.total} блоков`;
 
   const deviceLabel = buildDeviceHealthObservation(payload);
+  const deltaLabel = payload.load.delta === 0
+    ? "расхождения с планом нет"
+    : payload.load.delta > 0
+      ? `выше плана на ${formatLoadValue(payload.load.delta)}`
+      : `ниже плана на ${formatLoadValue(Math.abs(payload.load.delta))}`;
 
-  return `День отмечен как «${payload.execution.statusLabel.toLowerCase()}»: выполнено ${exerciseLabel}, нагрузка ${formatLoadValue(payload.load.actual)} из ${formatLoadValue(payload.load.planned)}.${deviceLabel ? ` ${deviceLabel}` : ""}`;
+  return `День отмечен как «${payload.execution.statusLabel.toLowerCase()}»: выполнено ${exerciseLabel}, нагрузка ${formatLoadValue(payload.load.actual)} из ${formatLoadValue(payload.load.planned)}, ${deltaLabel}.${deviceLabel ? ` ${deviceLabel}` : ""}`;
 }
 
 function buildRiskNotes(payload: CoachDayAiPayload) {
@@ -424,6 +459,10 @@ function buildDeviceHealthObservation(payload: CoachDayAiPayload) {
     return "Данные устройства за этот день не синхронизированы.";
   }
 
+  const linkedWorkouts = device.linkedWorkouts ?? [];
+  const linkedWorkoutNames = linkedWorkouts
+    .map((workout) => workout.planBlockName)
+    .filter(Boolean);
   const parts = [
     device.sleep?.durationMinutes !== null && device.sleep?.durationMinutes !== undefined
       ? `сон ${formatDurationMinutes(device.sleep.durationMinutes)}`
@@ -437,6 +476,11 @@ function buildDeviceHealthObservation(payload: CoachDayAiPayload) {
         ? `SpO2 средний ${formatLoadValue(device.oxygenSaturation.averagePercent)}%`
         : null,
     device.workout ? `тренировки устройства: ${device.workout.count}` : null,
+    linkedWorkouts.length
+      ? `связано с планом: ${linkedWorkoutNames.length ? linkedWorkoutNames.join(", ") : `${linkedWorkouts.length} блок(а)`}`
+      : device.workout && device.workout.count > 0
+        ? "тренировка устройства пока не связана с блоком плана"
+        : null,
   ].filter((item): item is string => Boolean(item));
 
   return parts.length ? `По устройству: ${parts.join(", ")}.` : "Данные устройства пришли неполностью.";
@@ -450,8 +494,16 @@ function addDataQualityRiskNotes(risks: string[], payload: CoachDayAiPayload) {
     return;
   }
 
+  const limitation = dataQuality.missing.length > 0
+    ? `Вывод ограничен, потому что не хватает ${dataQuality.missing.slice(0, 5).join(", ")}.`
+    : payload.limitations[0] ?? null;
+
+  if (limitation) {
+    risks.push(limitation);
+  }
+
   if (dataQuality.status === "partial") {
-    risks.push(`Вывод ограничен: не хватает ${dataQuality.missing.slice(0, 4).join(", ")}.`);
+    risks.push("Данные частичные: не делайте уверенный вывод только по общей нагрузке.");
   } else if (dataQuality.status === "insufficient") {
     risks.push(`Данных мало для анализа: не хватает ${dataQuality.missing.slice(0, 5).join(", ")}.`);
   }
@@ -480,6 +532,18 @@ function addDeviceHealthRiskNotes(risks: string[], payload: CoachDayAiPayload) {
 
   if ((device.missing?.length ?? 0) > 0) {
     risks.push(`Данные устройства неполные: не хватает ${device.missing.join(", ")}.`);
+  }
+
+  const linkedWorkouts = device.linkedWorkouts ?? [];
+
+  if (linkedWorkouts.length > 0) {
+    const linkedNames = linkedWorkouts
+      .map((workout) => workout.planBlockName)
+      .filter(Boolean)
+      .slice(0, 3);
+    risks.push(`Факт с устройства учитывается по привязке к плану: ${linkedNames.length ? linkedNames.join(", ") : "блок плана"}.`);
+  } else if (device.workout && device.workout.count > 0) {
+    risks.push("Тренировка с устройства пришла, но не связана с блоком плана: сравнение плана и факта по устройству ограничено.");
   }
 
   if (isDeviceSleepLow(payload)) {

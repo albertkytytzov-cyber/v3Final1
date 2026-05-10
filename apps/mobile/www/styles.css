@@ -1767,6 +1767,18 @@ button {
   gap: 8px;
 }
 
+.coach-ai-stale-warning {
+  margin: 0;
+  padding: 9px 10px;
+  border: 1px solid rgba(245, 158, 11, 0.26);
+  border-radius: 12px;
+  background: #fff7e6;
+  color: #92400e;
+  font-size: 0.82rem;
+  font-weight: 840;
+  line-height: 1.35;
+}
+
 .coach-ai-review-status {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

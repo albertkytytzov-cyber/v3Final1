@@ -3391,6 +3391,12 @@ function renderCoachAiReviewCard(
   diagnostic: CoachAiReviewDiagnosticResponse | null,
   isBusy: boolean,
 ) {
+  const currentPayloadFingerprint = getCoachDayAiPayloadFingerprint(buildCoachDayAiPayload(dayData));
+  const isReviewStale = Boolean(
+    review && getCoachDayAiPayloadFingerprint(review.dayPayload) !== currentPayloadFingerprint,
+  );
+  const actionLabel = review ? "Обновить ИИ-разбор" : "Сформировать ИИ-разбор";
+
   return `
     <section class="coach-ai-review-card">
       <div class="coach-ai-review-head">
@@ -3400,10 +3406,13 @@ function renderCoachAiReviewCard(
           <p>Онлайн отправляется только карточка дня без email/userId. План и дневник не меняются.</p>
         </div>
         <button class="secondary-action" data-ai-athlete-id="${escapeHtml(dayData.athleteId)}" data-ai-date="${escapeHtml(dayData.date)}" data-generate-coach-ai-review type="button" ${isBusy ? "disabled" : ""}>
-          ${isBusy ? "Формируется..." : "Сформировать рекомендацию"}
+          ${isBusy ? "Формируется..." : actionLabel}
         </button>
       </div>
       ${renderCoachAiReviewStatus(status, diagnostic, isBusy)}
+      ${isReviewStale
+        ? `<p class="coach-ai-stale-warning">Данные дня изменились после последнего разбора. Обновите ИИ-разбор перед решением.</p>`
+        : ""}
       ${review
         ? `
           <div class="coach-ai-review-result">
@@ -5109,6 +5118,27 @@ function getCoachAiReviewsForDay(
     .sort(sortCoachAiReviewsNewestFirst);
 }
 
+function getCoachDayAiPayloadFingerprint(payload: CoachDayAiPayload) {
+  return JSON.stringify(sortJsonForFingerprint(payload));
+}
+
+function sortJsonForFingerprint(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(sortJsonForFingerprint);
+  }
+
+  if (value && typeof value === "object") {
+    return Object.keys(value)
+      .sort()
+      .reduce<Record<string, unknown>>((result, key) => {
+        result[key] = sortJsonForFingerprint((value as Record<string, unknown>)[key]);
+        return result;
+      }, {});
+  }
+
+  return value;
+}
+
 function sortCoachAiReviewsNewestFirst(left: CoachDayAiReview, right: CoachDayAiReview) {
   return right.generatedAt.localeCompare(left.generatedAt);
 }
@@ -5148,6 +5178,11 @@ function buildOfflineCoachDayAiReview(dayData: CoachDayCleanSummary): CoachDayAi
 function buildCoachDayAiPayload(dayData: CoachDayCleanSummary): CoachDayAiPayload {
   const summary = dayData.summary;
   const readiness = dayData.readinessEntry;
+  const dataQuality = buildCoachDayDataQuality(dayData);
+  const deviceLinkGroups = getCoachDeviceWorkoutLinkGroups(dayData.blocks);
+  const fullyLinkedDeviceTargets = deviceLinkGroups.filter((group) =>
+    getDeviceWorkoutLinkGroupForBlocks(dayData.deviceWorkoutLinks, group.assignedBlockIds).isFullyLinked
+  ).length;
 
   return {
     athlete: {
@@ -5157,9 +5192,10 @@ function buildCoachDayAiPayload(dayData: CoachDayCleanSummary): CoachDayAiPayloa
       weightClass: dayData.athlete?.weightClass || null,
     },
     coachComment: dayData.latestDiaryEntry ? dayData.coachNote : null,
-    dataQuality: buildCoachDayDataQuality(dayData),
+    dataQuality,
     date: dayData.date,
     deviceHealth: buildCoachDayAiDeviceHealth(dayData),
+    limitations: buildCoachDayAiLimitations(dataQuality),
     execution: {
       blocks: {
         completed: summary.completedBlockCount,
@@ -5179,6 +5215,13 @@ function buildCoachDayAiPayload(dayData: CoachDayCleanSummary): CoachDayAiPayloa
     load: {
       actual: summary.actualLoad,
       delta: roundLoad(summary.actualLoad - summary.plannedLoad),
+      explanation: buildCoachDayAiLoadExplanation({
+        actualLoad: summary.actualLoad,
+        fullyLinkedDeviceTargets,
+        hasExecutionMarks: dayData.hasExecutionMarks,
+        linkableDeviceTargets: deviceLinkGroups.length,
+        plannedLoad: summary.plannedLoad,
+      }),
       planned: summary.plannedLoad,
     },
     plan: {
@@ -5208,6 +5251,33 @@ function buildCoachDayAiPayload(dayData: CoachDayCleanSummary): CoachDayAiPayloa
       }
       : null,
   };
+}
+
+function buildCoachDayAiLimitations(dataQuality: NonNullable<CoachDayAiPayload["dataQuality"]>) {
+  if (dataQuality.missing.length === 0) {
+    return [];
+  }
+
+  return [`Вывод ограничен, потому что не хватает ${dataQuality.missing.slice(0, 6).join(", ")}.`];
+}
+
+function buildCoachDayAiLoadExplanation(input: {
+  actualLoad: number;
+  fullyLinkedDeviceTargets: number;
+  hasExecutionMarks: boolean;
+  linkableDeviceTargets: number;
+  plannedLoad: number;
+}) {
+  const delta = roundLoad(input.actualLoad - input.plannedLoad);
+
+  return [
+    `Плановая: ${formatLoadValue(input.plannedLoad)} из назначенных блоков плана.`,
+    `Фактическая: ${formatLoadValue(input.actualLoad)} ${input.hasExecutionMarks ? "из сохранённых отметок выполнения" : "потому что выполнение ещё не отмечено"}.`,
+    input.linkableDeviceTargets > 0
+      ? `Устройство: ${input.fullyLinkedDeviceTargets}/${input.linkableDeviceTargets} плановых целей связано.`
+      : "Устройство: в плане нет цели для привязки тренировки.",
+    `Расхождение: ${formatLoadValue(delta)} ${delta === 0 ? "единиц нагрузки" : delta > 0 ? "выше плана; проверьте длительность/RPE или дополнительную работу" : "ниже плана; часть задач не выполнена или не отмечена"}.`,
+  ];
 }
 
 function buildCoachDayDataQuality(dayData: CoachDayCleanSummary): NonNullable<CoachDayAiPayload["dataQuality"]> {
@@ -5317,6 +5387,8 @@ function buildCoachDayAiDeviceHealth(dayData: CoachDayCleanSummary): CoachDayAiP
       hasHeartRate: link.workout.averageHeartRateBpm !== null ||
         link.workout.samples.some((sample) => sample.heartRateBpm !== null),
       hasSpO2: link.workout.samples.some((sample) => sample.oxygenSaturationPercent !== null),
+      linkedToPlan: true,
+      linkStatusLabel: "связано с блоком плана",
       maxHeartRateBpm: link.workout.maxHeartRateBpm,
       planBlockId: link.assignedBlockId,
       planBlockName: block?.name ?? "",
@@ -5454,8 +5526,12 @@ function buildOfflineCoachAiTomorrowActions(dayData: CoachDayCleanSummary) {
 function addOfflineCoachAiDataQualityRisks(risks: string[], dayData: CoachDayCleanSummary) {
   const dataQuality = buildCoachDayDataQuality(dayData);
 
+  if (dataQuality.missing.length > 0) {
+    risks.push(`Вывод ограничен, потому что не хватает ${dataQuality.missing.slice(0, 5).join(", ")}.`);
+  }
+
   if (dataQuality.status === "partial") {
-    risks.push(`Вывод ограничен: не хватает ${dataQuality.missing.slice(0, 4).join(", ")}.`);
+    risks.push("Данные частичные: не делайте уверенный вывод только по общей нагрузке.");
   } else if (dataQuality.status === "insufficient") {
     risks.push(`Данных мало для анализа: не хватает ${dataQuality.missing.slice(0, 5).join(", ")}.`);
   }

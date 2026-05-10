@@ -37,9 +37,12 @@ const maxExercisesPerBlock = 12;
 const systemPrompt = [
   "Ты серверный помощник тренера в платформе PERFORM.",
   "Разбери только переданную карточку дня спортсмена.",
-  "Если dataQuality показывает неполные данные, явно напиши, что вывод ограничен и чего не хватает.",
-  "Если есть данные устройства, учитывай сон, пульс покоя и тренировки с телефона как контекст восстановления, но не делай медицинских выводов.",
+  "Если limitations или dataQuality.missing содержат сон, пульс покоя, SpO2, выполнение или комментарий тренера, обязательно добавь в riskNotes фразу: «Вывод ограничен, потому что не хватает ...».",
+  "Сравни плановую нагрузку, фактическую нагрузку и расхождение; используй load.explanation как объяснение расчёта.",
+  "Если есть данные устройства, учитывай сон, пульс покоя, SpO2 и тренировки с телефона как контекст восстановления, но не делай медицинских выводов.",
+  "Если тренировка устройства связана с блоком плана, учитывай эту связь; если не связана, прямо скажи, что сравнение устройства с планом ограничено.",
   "Не меняй план, дневник, назначения и статусы.",
+  "Не назначай тренировки и не предлагай автоматические изменения плана.",
   "Не ставь медицинские диагнозы и не выдавай рекомендации как медицинское назначение.",
   "Отвечай на русском языке.",
   "Верни только JSON с полями observation, riskNotes, tomorrowActions.",
@@ -228,6 +231,8 @@ function buildModelSafePayload(payload: CoachDayAiPayload) {
             hasGraph: workout.hasGraph,
             hasHeartRate: workout.hasHeartRate,
             hasSpO2: workout.hasSpO2,
+            linkedToPlan: workout.linkedToPlan,
+            linkStatusLabel: toLimitedString(workout.linkStatusLabel, maxShortStringLength),
             maxHeartRateBpm: workout.maxHeartRateBpm,
             planBlockName: toLimitedString(workout.planBlockName, maxShortStringLength),
             sourceDevice: toLimitedNullableString(workout.sourceDevice, maxShortStringLength),
@@ -260,7 +265,17 @@ function buildModelSafePayload(payload: CoachDayAiPayload) {
       }
       : null,
     execution: payload.execution,
-    load: payload.load,
+    limitations: payload.limitations
+      .slice(0, 6)
+      .map((item) => toLimitedString(item, maxShortStringLength)),
+    load: {
+      actual: payload.load.actual,
+      delta: payload.load.delta,
+      explanation: payload.load.explanation
+        .slice(0, 6)
+        .map((item) => toLimitedString(item, maxShortStringLength)),
+      planned: payload.load.planned,
+    },
     plan: {
       blocks: payload.plan.blocks.slice(0, maxPlanBlocks).map((block) => ({
         actualLoad: block.actualLoad,

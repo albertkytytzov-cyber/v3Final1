@@ -69,6 +69,9 @@ function readDayPayload(value: unknown): CoachDayAiPayload {
     dataQuality,
     date: readEntryDate(payload.date),
     deviceHealth,
+    limitations: readArray(payload.limitations ?? [], "limitations").map((item) =>
+      readString(item, "limitations[]")
+    ),
     execution: {
       blocks: {
         completed: readCount(blockCounts.completed, "execution.blocks.completed"),
@@ -88,6 +91,9 @@ function readDayPayload(value: unknown): CoachDayAiPayload {
     load: {
       actual: readNumber(load.actual, "load.actual"),
       delta: readNumber(load.delta, "load.delta"),
+      explanation: readArray(load.explanation ?? [], "load.explanation").map((item) =>
+        readString(item, "load.explanation[]")
+      ),
       planned: readNumber(load.planned, "load.planned"),
     },
     plan: {
@@ -191,6 +197,9 @@ function readDeviceHealth(value: unknown): CoachDayAiPayload["deviceHealth"] {
         restingBpm: readNullableNumber(heartRate.restingBpm, "deviceHealth.heartRate.restingBpm"),
       }
       : null,
+    linkedWorkouts: readArray(device.linkedWorkouts ?? [], "deviceHealth.linkedWorkouts").map(
+      readLinkedWorkout,
+    ),
     missing: readArray(device.missing ?? [], "deviceHealth.missing").map((item) =>
       readString(item, "deviceHealth.missing[]")
     ),
@@ -240,6 +249,49 @@ function readDeviceHealth(value: unknown): CoachDayAiPayload["deviceHealth"] {
         totalDurationMinutes: readNullableNumber(workout.totalDurationMinutes, "deviceHealth.workout.totalDurationMinutes"),
       }
       : null,
+  };
+}
+
+function readLinkedWorkout(value: unknown) {
+  const workout = readRecord(value, "deviceHealth.linkedWorkouts[]");
+  const startTime = readString(workout.startTime, "deviceHealth.linkedWorkouts[].startTime");
+
+  return {
+    averageHeartRateBpm: readNullableNumber(
+      workout.averageHeartRateBpm,
+      "deviceHealth.linkedWorkouts[].averageHeartRateBpm",
+    ),
+    distanceMeters: readNullableNumber(
+      workout.distanceMeters,
+      "deviceHealth.linkedWorkouts[].distanceMeters",
+    ),
+    durationMinutes: readNullableNumber(
+      workout.durationMinutes,
+      "deviceHealth.linkedWorkouts[].durationMinutes",
+    ),
+    endTime: typeof workout.endTime === "string"
+      ? readString(workout.endTime, "deviceHealth.linkedWorkouts[].endTime")
+      : startTime,
+    hasDistance: readBoolean(workout.hasDistance, "deviceHealth.linkedWorkouts[].hasDistance"),
+    hasGraph: readBoolean(workout.hasGraph, "deviceHealth.linkedWorkouts[].hasGraph"),
+    hasHeartRate: readBoolean(workout.hasHeartRate, "deviceHealth.linkedWorkouts[].hasHeartRate"),
+    hasSpO2: readBoolean(workout.hasSpO2, "deviceHealth.linkedWorkouts[].hasSpO2"),
+    linkedToPlan: typeof workout.linkedToPlan === "boolean"
+      ? readBoolean(workout.linkedToPlan, "deviceHealth.linkedWorkouts[].linkedToPlan")
+      : true,
+    linkStatusLabel: typeof workout.linkStatusLabel === "string"
+      ? readString(workout.linkStatusLabel, "deviceHealth.linkedWorkouts[].linkStatusLabel")
+      : "связано с блоком плана",
+    maxHeartRateBpm: readNullableNumber(
+      workout.maxHeartRateBpm,
+      "deviceHealth.linkedWorkouts[].maxHeartRateBpm",
+    ),
+    planBlockId: readString(workout.planBlockId, "deviceHealth.linkedWorkouts[].planBlockId"),
+    planBlockName: readString(workout.planBlockName, "deviceHealth.linkedWorkouts[].planBlockName"),
+    sourceDevice: readNullableString(workout.sourceDevice, "deviceHealth.linkedWorkouts[].sourceDevice"),
+    startTime,
+    workoutId: readString(workout.workoutId, "deviceHealth.linkedWorkouts[].workoutId"),
+    workoutType: readString(workout.workoutType, "deviceHealth.linkedWorkouts[].workoutType"),
   };
 }
 

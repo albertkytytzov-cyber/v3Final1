@@ -969,6 +969,7 @@ export interface CoachDayAiPayload {
   coachComment: string | null;
   dataQuality: CoachDayDataQuality | null;
   date: string;
+  limitations: string[];
   deviceHealth: {
     heartRate: {
       averageBpm: number | null;
@@ -993,6 +994,8 @@ export interface CoachDayAiPayload {
       hasGraph: boolean;
       hasHeartRate: boolean;
       hasSpO2: boolean;
+      linkedToPlan: boolean;
+      linkStatusLabel: string;
       maxHeartRateBpm: number | null;
       planBlockId: string;
       planBlockName: string;
@@ -1041,6 +1044,7 @@ export interface CoachDayAiPayload {
   load: {
     actual: number;
     delta: number;
+    explanation: string[];
     planned: number;
   };
   plan: {
