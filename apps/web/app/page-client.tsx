@@ -2593,6 +2593,46 @@ function getImportedDirectSessions(card: HTMLElement) {
     : Array.from(card.querySelectorAll<HTMLElement>(".session"));
 }
 
+function getImportedPlanCards(document: Document) {
+  const directCards = Array.from(
+    document.querySelectorAll<HTMLElement>(".card, section.day, article.day, .plan-day, [data-plan-day]"),
+  );
+
+  if (directCards.length) {
+    return directCards.filter((card, index) => directCards.indexOf(card) === index);
+  }
+
+  const sections = Array.from(document.querySelectorAll<HTMLElement>("section, article"));
+
+  return sections.filter((section) => {
+    const title = getImportedCardTitle(section);
+
+    return isImportedDayTitle(title, parseImportedPlanDate(title, new Date().getFullYear()));
+  });
+}
+
+function getImportedCardTitle(card: HTMLElement) {
+  const titleElement = card.querySelector<HTMLElement>(".head .title, h2, h3, h4, .title");
+
+  if (!titleElement) {
+    return "";
+  }
+
+  const titleClone = titleElement.cloneNode(true) as HTMLElement;
+
+  titleClone.querySelectorAll(".tag, .badge, small").forEach((element) => element.remove());
+
+  return normalizeImportedPlanText(titleClone.textContent ?? "");
+}
+
+function getImportedCardType(card: HTMLElement) {
+  return normalizeImportedPlanText(
+    card.querySelector(".head .type")?.textContent ??
+      card.querySelector(".tag")?.textContent ??
+      "",
+  );
+}
+
 function getImportedNoteTexts(container: HTMLElement) {
   const notes = Array.from(container.querySelectorAll(".note, .ok, .warn, .info"))
     .map((note) => normalizeImportedPlanText(note.textContent ?? ""))
@@ -2602,9 +2642,7 @@ function getImportedNoteTexts(container: HTMLElement) {
 }
 
 function summarizeSkippedImportedCard(card: HTMLElement, fallbackLabel: string) {
-  const explicitLabel = normalizeImportedPlanText(
-    card.querySelector(".head .title")?.textContent ?? "",
-  );
+  const explicitLabel = getImportedCardTitle(card);
   const details = Array.from(card.querySelectorAll("td:first-child"))
     .map((cell) => normalizeImportedPlanText(cell.textContent ?? ""))
     .filter(Boolean)
@@ -2991,9 +3029,82 @@ function createImportedPlanBlock(
   };
 }
 
+function isEmptyImportedTableValue(value: string) {
+  return !value || /^[-–—]+$/u.test(value);
+}
+
+function getImportedTableHeaders(table: HTMLTableElement) {
+  const headerRow = Array.from(table.querySelectorAll("tr")).find(
+    (row) => row.querySelectorAll("th").length > 0,
+  );
+
+  return headerRow
+    ? Array.from(headerRow.querySelectorAll("th")).map((cell) =>
+        normalizeImportedPlanText(cell.textContent ?? ""),
+      )
+    : [];
+}
+
+function findImportedTableColumn(
+  headers: string[],
+  patterns: RegExp[],
+  fallbackIndex: number,
+) {
+  const index = headers.findIndex((header) =>
+    patterns.some((pattern) => pattern.test(header.toLowerCase())),
+  );
+
+  return index >= 0 ? index : fallbackIndex;
+}
+
+function getImportedTableColumnIndexes(headers: string[], firstDataCellCount: number) {
+  const orderIndex = findImportedTableColumn(
+    headers,
+    [/^(?:#|№|n|no\.?|порядок|номер)$/iu],
+    -1,
+  );
+  const exerciseIndex = findImportedTableColumn(
+    headers,
+    [/(?:упр|упражн|exercise|работа|work)/iu],
+    -1,
+  );
+  const blockIndex = findImportedTableColumn(headers, [/(?:блок|block)/iu], -1);
+  const nameIndex = exerciseIndex >= 0 ? exerciseIndex : blockIndex >= 0 ? blockIndex : orderIndex === 0 ? 1 : 0;
+  const volumeIndex = findImportedTableColumn(
+    headers,
+    [/(?:подход|повтор|дозиров|объ[её]м|обьем|время|длитель|sets|reps|volume|duration)/iu],
+    nameIndex === 0 ? 1 : 0,
+  );
+
+  return {
+    nameIndex: nameIndex >= 0 && nameIndex < firstDataCellCount ? nameIndex : 0,
+    orderIndex,
+    volumeIndex:
+      volumeIndex >= 0 && volumeIndex < firstDataCellCount && volumeIndex !== nameIndex
+        ? volumeIndex
+        : -1,
+  };
+}
+
+function formatImportedControlCell(header: string, value: string) {
+  const normalizedHeader = header.toLowerCase();
+
+  if (isEmptyImportedTableValue(value)) {
+    return "";
+  }
+
+  if (!header || /(?:контроль|примеч|коммент|note|comment|control)/iu.test(normalizedHeader)) {
+    return value;
+  }
+
+  return `${header}: ${value}`;
+}
+
 function parseImportedPlanTableBlocks(table: HTMLTableElement, startOrderIndex: number) {
   const blocks: PlanTemplatePayload["blocks"] = [];
   const rows = Array.from(table.querySelectorAll("tr"));
+  const headers = getImportedTableHeaders(table);
+  let indexes: ReturnType<typeof getImportedTableColumnIndexes> | null = null;
 
   rows.forEach((row) => {
     if (row.querySelector("th") && !row.querySelector("td")) {
@@ -3003,7 +3114,27 @@ function parseImportedPlanTableBlocks(table: HTMLTableElement, startOrderIndex: 
     const cells = Array.from(row.querySelectorAll("td")).map((cell) =>
       normalizeImportedPlanText(cell.textContent ?? ""),
     );
-    const [name, volume, ...controlCells] = cells;
+
+    if (!cells.length) {
+      return;
+    }
+
+    if (!indexes) {
+      indexes = getImportedTableColumnIndexes(headers, cells.length);
+    }
+
+    const name = cells[indexes.nameIndex] ?? "";
+    const volume = indexes.volumeIndex >= 0 ? cells[indexes.volumeIndex] ?? "" : "";
+    const controlCells = cells
+      .map((cell, cellIndex) => ({ cell, cellIndex }))
+      .filter(
+        ({ cellIndex }) =>
+          cellIndex !== indexes!.nameIndex &&
+          cellIndex !== indexes!.volumeIndex &&
+          cellIndex !== indexes!.orderIndex,
+      )
+      .map(({ cell, cellIndex }) => formatImportedControlCell(headers[cellIndex] ?? "", cell))
+      .filter(Boolean);
 
     if (!name) {
       return;
@@ -3020,6 +3151,66 @@ function parseImportedPlanTableBlocks(table: HTMLTableElement, startOrderIndex: 
   });
 
   return blocks;
+}
+
+function parseImportedPlanListBlocks(list: HTMLElement, startOrderIndex: number) {
+  return Array.from(list.children)
+    .filter((item): item is HTMLElement => item instanceof HTMLElement && item.tagName === "LI")
+    .map((item) => normalizeImportedPlanText(item.textContent ?? ""))
+    .filter(Boolean)
+    .map((item, itemIndex) => createImportedPlanBlock(item, "", "", startOrderIndex + itemIndex));
+}
+
+function getImportedSectionHeadingText(element: HTMLElement, fallbackName: string) {
+  let sibling = element.previousElementSibling;
+
+  while (sibling) {
+    if (sibling instanceof HTMLElement && /^H[2-6]$/u.test(sibling.tagName)) {
+      const headingClone = sibling.cloneNode(true) as HTMLElement;
+
+      headingClone.querySelectorAll(".tag, .badge, small").forEach((child) => child.remove());
+
+      const headingText = normalizeImportedPlanText(headingClone.textContent ?? "");
+
+      if (headingText) {
+        return headingText;
+      }
+    }
+
+    sibling = sibling.previousElementSibling;
+  }
+
+  return fallbackName;
+}
+
+function parseImportedPlanStructuredSessions(
+  card: HTMLElement,
+  fallbackSessionName: string,
+): PlanTemplateSessionInput[] {
+  const sessionSources = Array.from(card.children).filter(
+    (element): element is HTMLElement =>
+      element instanceof HTMLElement &&
+      (element.tagName === "TABLE" || element.tagName === "OL" || element.tagName === "UL"),
+  );
+
+  return sessionSources
+    .map((source, sourceIndex) => {
+      const sessionName = getImportedSectionHeadingText(source, fallbackSessionName);
+      const blocks =
+        source.tagName === "TABLE"
+          ? parseImportedPlanTableBlocks(source as HTMLTableElement, sourceIndex * 100)
+          : parseImportedPlanListBlocks(source, sourceIndex * 100);
+
+      return {
+        name: sessionName,
+        notes: getImportedNoteTexts(source).join(" / "),
+        orderIndex: sourceIndex,
+        executionMode: "whole_session",
+        deviceLinkMode: "session",
+        blocks,
+      } satisfies PlanTemplateSessionInput;
+    })
+    .filter((session) => session.blocks.length > 0);
 }
 
 function isImportedDescriptionRow(block: Pick<PlanTemplatePayload["blocks"][number], "rowKind">) {
@@ -3211,22 +3402,15 @@ function parseImportedPlanHtml(
       bg: `Импортирано от файла ${sourceFileName}`,
     });
   const fallbackYear = parseImportedPlanYear(title, sourceFileName, description);
-  const cards = Array.from(document.querySelectorAll<HTMLElement>(".card"));
+  const cards = getImportedPlanCards(document);
   const firstParsedDate = cards
-    .map((card) =>
-      parseImportedPlanDate(
-        normalizeImportedPlanText(card.querySelector(".head .title")?.textContent ?? ""),
-        fallbackYear,
-      ),
-    )
+    .map((card) => parseImportedPlanDate(getImportedCardTitle(card), fallbackYear))
     .find((date): date is string => Boolean(date));
   const days: ImportedPlanDayDraft[] = [];
   const skippedItems: ImportedPlanSkippedItem[] = [];
 
   cards.forEach((card, cardIndex) => {
-    const explicitLabel = normalizeImportedPlanText(
-      card.querySelector(".head .title")?.textContent ?? "",
-    );
+    const explicitLabel = getImportedCardTitle(card);
     const dayDate = parseImportedPlanDate(explicitLabel, fallbackYear);
     const fallbackLabel = copyFor(language, {
       en: `Day ${cardIndex + 1}`,
@@ -3253,36 +3437,46 @@ function parseImportedPlanHtml(
 
     const rawLabel =
       explicitLabel || fallbackLabel;
-    const dayType = normalizeImportedPlanText(card.querySelector(".head .type")?.textContent ?? "");
+    const dayType = getImportedCardType(card);
     const dayNotes = [dayType, ...getImportedNoteTexts(card)]
       .filter(Boolean)
       .filter((note, noteIndex, notes) => notes.indexOf(note) === noteIndex)
       .join(" / ");
-    const parsedSessions: PlanTemplateSessionInput[] = getImportedDirectSessions(card)
-      .map((session, sessionIndex) => {
-        const sessionName =
-          normalizeImportedPlanText(session.querySelector(".stime")?.textContent ?? "") ||
-          dayType ||
-          copyFor(language, {
-            en: `Session ${sessionIndex + 1}`,
-            ru: `Сессия ${sessionIndex + 1}`,
-            bg: `Сесия ${sessionIndex + 1}`,
-          });
-        const tableBlocks = Array.from(session.querySelectorAll<HTMLTableElement>("table")).flatMap(
-          (table, tableIndex) => parseImportedPlanTableBlocks(table, tableIndex * 100),
-        );
-        const blocks = tableBlocks;
+    const fallbackSessionName =
+      dayType ||
+      copyFor(language, {
+        en: "Unified session",
+        ru: "Единая сессия",
+        bg: "Единна сесия",
+      });
+    const directSessions = getImportedDirectSessions(card);
+    const parsedSessions: PlanTemplateSessionInput[] = directSessions.length
+      ? directSessions
+          .map((session, sessionIndex) => {
+            const sessionName =
+              normalizeImportedPlanText(session.querySelector(".stime")?.textContent ?? "") ||
+              fallbackSessionName ||
+              copyFor(language, {
+                en: `Session ${sessionIndex + 1}`,
+                ru: `Сессия ${sessionIndex + 1}`,
+                bg: `Сесия ${sessionIndex + 1}`,
+              });
+            const tableBlocks = Array.from(session.querySelectorAll<HTMLTableElement>("table")).flatMap(
+              (table, tableIndex) => parseImportedPlanTableBlocks(table, tableIndex * 100),
+            );
+            const blocks = tableBlocks;
 
-        return {
-          name: sessionName,
-          notes: getImportedNoteTexts(session).join(" / "),
-          orderIndex: sessionIndex,
-          executionMode: "whole_session",
-          deviceLinkMode: "session",
-          blocks,
-        } satisfies PlanTemplateSessionInput;
-      })
-      .filter((session) => session.blocks.length > 0);
+            return {
+              name: sessionName,
+              notes: getImportedNoteTexts(session).join(" / "),
+              orderIndex: sessionIndex,
+              executionMode: "whole_session",
+              deviceLinkMode: "session",
+              blocks,
+            } satisfies PlanTemplateSessionInput;
+          })
+          .filter((session) => session.blocks.length > 0)
+      : parseImportedPlanStructuredSessions(card, fallbackSessionName);
     const sessions = normalizeImportedPlanSessions(parsedSessions);
 
     if (sessions.length === 0) {
