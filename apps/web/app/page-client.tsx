@@ -6383,6 +6383,10 @@ export function PageClient({
   const [selectedPlanTemplateIds, setSelectedPlanTemplateIds] = useState<string[]>([]);
   const [planForm, setPlanForm] =
     useState<PlanTemplatePayload>(() => createLocalizedDefaultPlanTemplate(language));
+  const [selectedImportedPlanFile, setSelectedImportedPlanFile] = useState<{
+    name: string;
+    text: string;
+  } | null>(null);
   const [importedPlanDraft, setImportedPlanDraft] = useState<ImportedPlanDraft | null>(null);
   const [savedImportedPlanTemplate, setSavedImportedPlanTemplate] =
     useState<PlanTemplateSummary | null>(null);
@@ -8449,6 +8453,7 @@ export function PageClient({
     setSelectedTemplateDayIndex(0);
     setSelectedTemplateAssignDayIndexes([]);
     if (options.clearImportedDraft ?? true) {
+      setSelectedImportedPlanFile(null);
       setImportedPlanDraft(null);
       setSavedImportedPlanTemplate(null);
       setTemplateImportNotice(null);
@@ -8459,6 +8464,7 @@ export function PageClient({
 
   function startNewPlanTemplateDraft() {
     setPlanForm(createLocalizedDefaultPlanTemplate(language));
+    setSelectedImportedPlanFile(null);
     setImportedPlanDraft(null);
     setSavedImportedPlanTemplate(null);
     setTemplateImportNotice(null);
@@ -8742,8 +8748,71 @@ export function PageClient({
     }
   }
 
+  function applyImportedPlanDraft(draft: ImportedPlanDraft) {
+    const firstDay = draft.days[0];
+
+    setImportedPlanDraft(draft);
+    setSavedImportedPlanTemplate(null);
+    setPlanForm(draft.template);
+    setIsTemplateDraftActive(true);
+    setSelectedTemplateDayIndex(0);
+    setSelectedTemplateAssignMode("full");
+    setSelectedTemplateAssignDayIndexes([]);
+    setAssignedPlanForm((current) => ({
+      ...current,
+      templateId: "",
+      startDate: draft.startDate,
+      dayLabel: firstDay?.label ?? localizedDayOneLabel(language),
+      notes: "",
+    }));
+    setStatusMessage(
+      copyFor(language, {
+        en: `File imported: ${draft.days.length} training day(s). Click "Save template" to add it to the library.`,
+        ru: `Файл импортирован: ${draft.days.length} тренировочных дн. Нажмите «Сохранить шаблон», чтобы добавить его в библиотеку.`,
+        bg: `Файлът е импортиран: ${draft.days.length} тренировъчни дни. Натиснете „Запази шаблон“, за да го добавите в библиотеката.`,
+      }),
+    );
+    setTemplateImportNotice({
+      tone: "success",
+      text: copyFor(language, {
+        en: `File recognized: ${draft.days.length} training day(s). You can save it as a template.`,
+        ru: `Файл распознан: ${draft.days.length} тренировочных дн. Можно сохранять как шаблон.`,
+        bg: `Файлът е разпознат: ${draft.days.length} тренировъчни дни. Може да го запазите като шаблон.`,
+      }),
+    });
+  }
+
   async function handleSaveImportedPlanTemplate() {
-    if (!importedPlanDraft) {
+    let draft = importedPlanDraft;
+
+    if (!draft && selectedImportedPlanFile) {
+      try {
+        draft = parseImportedPlanHtml(
+          selectedImportedPlanFile.text,
+          selectedImportedPlanFile.name,
+          language,
+        );
+        applyImportedPlanDraft(draft);
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : copyFor(language, {
+                en: "Plan import failed.",
+                ru: "Не удалось импортировать план.",
+                bg: "Планът не можа да бъде импортиран.",
+              });
+
+        setTemplateImportNotice({
+          tone: "error",
+          text: message,
+        });
+        setErrorMessage(message);
+        return;
+      }
+    }
+
+    if (!draft) {
       setTemplateImportNotice({
         tone: "error",
         text: copyFor(language, {
@@ -8767,7 +8836,7 @@ export function PageClient({
     });
 
     try {
-      const savedTemplate = await createPlanTemplateFromDraft(importedPlanDraft.template, {
+      const savedTemplate = await createPlanTemplateFromDraft(draft.template, {
         clearImportedDraft: false,
       });
 
@@ -9098,38 +9167,10 @@ export function PageClient({
 
     try {
       const text = await file.text();
+      setSelectedImportedPlanFile({ name: file.name, text });
       const draft = parseImportedPlanHtml(text, file.name, language);
-      const firstDay = draft.days[0];
 
-      setImportedPlanDraft(draft);
-      setSavedImportedPlanTemplate(null);
-      setPlanForm(draft.template);
-      setIsTemplateDraftActive(true);
-      setSelectedTemplateDayIndex(0);
-      setSelectedTemplateAssignMode("full");
-      setSelectedTemplateAssignDayIndexes([]);
-      setAssignedPlanForm((current) => ({
-        ...current,
-        templateId: "",
-        startDate: draft.startDate,
-        dayLabel: firstDay.label,
-        notes: "",
-      }));
-      setStatusMessage(
-        copyFor(language, {
-          en: `File imported: ${draft.days.length} training day(s). Click "Save template" to add it to the library.`,
-          ru: `Файл импортирован: ${draft.days.length} тренировочных дн. Нажмите «Сохранить шаблон», чтобы добавить его в библиотеку.`,
-          bg: `Файлът е импортиран: ${draft.days.length} тренировъчни дни. Натиснете „Запази шаблон“, за да го добавите в библиотеката.`,
-        }),
-      );
-      setTemplateImportNotice({
-        tone: "success",
-        text: copyFor(language, {
-          en: `File recognized: ${draft.days.length} training day(s). You can save it as a template.`,
-          ru: `Файл распознан: ${draft.days.length} тренировочных дн. Можно сохранять как шаблон.`,
-          bg: `Файлът е разпознат: ${draft.days.length} тренировъчни дни. Може да го запазите като шаблон.`,
-        }),
-      });
+      applyImportedPlanDraft(draft);
     } catch (error) {
       const message =
         error instanceof Error
@@ -19234,6 +19275,12 @@ export function PageClient({
                           en: "The imported file is ready to be saved to the template library.",
                           ru: "Импортированный файл готов к сохранению в библиотеку шаблонов.",
                           bg: "Импортираният файл е готов за запис в библиотеката с шаблони.",
+                        })
+                      : selectedImportedPlanFile
+                      ? copyFor(language, {
+                          en: "The file is selected. Click save to try recognizing it again.",
+                          ru: "Файл выбран. Нажмите сохранить, чтобы повторить распознавание.",
+                          bg: "Файлът е избран. Натиснете запис, за да опитате разпознаване отново.",
                         })
                       : copyFor(language, {
                           en: "Select an HTML plan first, then save it as a template.",
