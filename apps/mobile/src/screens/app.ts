@@ -1485,6 +1485,35 @@ function renderCoachDayStatusCard(dayData: CoachDayCleanSummary, aiReview: Coach
   const summary = dayData.summary;
   const readiness = dayData.readinessEntry;
   const deviceHealth = dayData.deviceHealthSummary;
+  const dataQuality = buildCoachDayDataQuality(dayData);
+  const completionRate = summary.exerciseCount > 0
+    ? Math.round(((summary.completedExerciseCount + summary.partialExerciseCount * 0.5) / summary.exerciseCount) * 100)
+    : summary.blockCount > 0
+      ? Math.round(((summary.completedBlockCount + summary.partialBlockCount * 0.5) / summary.blockCount) * 100)
+      : 0;
+  const linkGroups = getCoachDeviceWorkoutLinkGroups(dayData.blocks);
+  const linkedSessionCount = linkGroups.filter((group) =>
+    getDeviceWorkoutLinkGroupForBlocks(
+      dayData.deviceWorkoutLinks,
+      group.assignedBlockIds,
+    ).isFullyLinked
+  ).length;
+  const deviceFact = dayData.deviceWorkouts.length
+    ? `${dayData.deviceWorkouts.length} тренировок · ${linkedSessionCount}/${linkGroups.length || 0} связано`
+    : "тренировки устройства не пришли";
+  const recoverySummary = deviceHealth
+    ? [
+        `сон ${formatDeviceHealthSleepValue(deviceHealth)}`,
+        `пульс покоя ${formatDeviceHealthRestingHrValue(deviceHealth)}`,
+        `SpO2 ${formatDeviceHealthOxygenValue(deviceHealth)}`,
+      ].join(" · ")
+    : "данные восстановления с устройства не пришли";
+  const aiSummary = aiReview
+    ? `${formatCoachDayAiReviewSource(aiReview.source)} · ${aiReview.observation}`
+    : "ИИ-разбор не сформирован";
+  const primaryAction = dataQuality.actions[0] ??
+    aiReview?.tomorrowActions[0] ??
+    "День можно разбирать по текущим данным.";
 
   return `
     <section class="coach-day-status-card">
@@ -1496,6 +1525,35 @@ function renderCoachDayStatusCard(dayData: CoachDayCleanSummary, aiReview: Coach
         </div>
         <strong>${readiness ? readiness.score : "-"}</strong>
       </div>
+      <div class="coach-day-status-brief is-${dataQuality.status}">
+        <div class="coach-day-status-brief-main">
+          <span>Рабочая сводка тренера</span>
+          <strong>${escapeHtml(summary.statusLabel)}</strong>
+          <p>${escapeHtml(primaryAction)}</p>
+        </div>
+        <div class="coach-day-status-brief-grid">
+          <article>
+            <span>План / факт</span>
+            <strong>${escapeHtml(formatLoadValue(summary.actualLoad))} / ${escapeHtml(formatLoadValue(summary.plannedLoad))}</strong>
+            <small>${completionRate}% выполнения</small>
+          </article>
+          <article>
+            <span>Восстановление</span>
+            <strong>${readiness ? `готовность ${readiness.score}` : "готовность не отправлена"}</strong>
+            <small>${escapeHtml(recoverySummary)}</small>
+          </article>
+          <article>
+            <span>Факт с устройства</span>
+            <strong>${escapeHtml(deviceFact)}</strong>
+            <small>${deviceHealth?.syncedAt ? `синхронизация: ${formatDateTime(deviceHealth.syncedAt)}` : "нет дневной синхронизации"}</small>
+          </article>
+          <article>
+            <span>ИИ и комментарий</span>
+            <strong>${dayData.latestDiaryEntry ? "комментарий есть" : "нет комментария"}</strong>
+            <small>${escapeHtml(aiSummary)}</small>
+          </article>
+        </div>
+      </div>
       <div class="coach-day-status-grid">
         ${renderCoachExecutionReviewMetric("Готовность", readiness ? String(readiness.score) : "-", readiness ? formatReadinessStatus(readiness.status) : "спортсмен не отправил")}
         ${renderCoachExecutionReviewMetric("Плановая нагрузка", formatLoadValue(summary.plannedLoad), formatCoachTodayPlanNames(summary))}
@@ -1503,6 +1561,7 @@ function renderCoachDayStatusCard(dayData: CoachDayCleanSummary, aiReview: Coach
         ${renderCoachExecutionReviewMetric("Выполнение", `${summary.completedExerciseCount}/${summary.exerciseCount || 0}`, formatCoachTodayExerciseBreakdown(summary))}
         ${renderCoachExecutionReviewMetric("Сон", formatDeviceHealthSleepValue(deviceHealth), formatDeviceHealthSleepDetail(deviceHealth))}
         ${renderCoachExecutionReviewMetric("Пульс покоя", formatDeviceHealthRestingHrValue(deviceHealth), formatDeviceHealthHeartRateDetail(deviceHealth))}
+        ${renderCoachExecutionReviewMetric("SpO2", formatDeviceHealthOxygenValue(deviceHealth), formatDeviceHealthOxygenDetail(deviceHealth))}
         ${renderCoachExecutionReviewMetric("Тренировки устройства", formatDeviceHealthWorkoutValue(deviceHealth), formatDeviceHealthWorkoutDetail(deviceHealth))}
         ${renderCoachExecutionReviewMetric("ИИ", formatCoachAiBriefValue(aiReview), formatCoachAiBriefDetail(aiReview))}
       </div>

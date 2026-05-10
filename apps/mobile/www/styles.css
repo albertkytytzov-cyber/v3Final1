@@ -2140,6 +2140,74 @@ button {
   gap: 8px;
 }
 
+.coach-day-status-brief {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(15, 118, 110, 0.18);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.74);
+}
+
+.coach-day-status-brief.is-complete {
+  border-color: rgba(15, 118, 110, 0.24);
+  background: #ecfdf5;
+}
+
+.coach-day-status-brief.is-partial {
+  border-color: rgba(201, 121, 43, 0.24);
+  background: #fff7ed;
+}
+
+.coach-day-status-brief.is-insufficient {
+  border-color: rgba(185, 28, 28, 0.22);
+  background: #fef2f2;
+}
+
+.coach-day-status-brief-main,
+.coach-day-status-brief-grid article {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.coach-day-status-brief-main span,
+.coach-day-status-brief-grid span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 850;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.coach-day-status-brief-main strong,
+.coach-day-status-brief-grid strong {
+  color: var(--text);
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.coach-day-status-brief-main p,
+.coach-day-status-brief-grid small {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.coach-day-status-brief-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.coach-day-status-brief-grid article {
+  padding: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
 .coach-day-quality-card.is-complete {
   border-color: rgba(15, 118, 110, 0.24);
   background: #ecfdf5;
@@ -3165,7 +3233,8 @@ button.timeline-card:active {
 
   .readiness-metrics,
   .readiness-flags,
-  .choice-group {
+  .choice-group,
+  .coach-day-status-brief-grid {
     grid-template-columns: 1fr;
   }
 
