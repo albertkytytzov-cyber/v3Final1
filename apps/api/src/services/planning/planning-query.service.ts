@@ -203,6 +203,53 @@ function buildPlanBlockInput(row: PlanTemplateRow): PlanBlockInput {
   };
 }
 
+type SingleBlockSession<TBlock extends { name: string; displayOrder?: number }> = {
+  id?: string;
+  name: string;
+  notes?: string;
+  orderIndex?: number;
+  displayOrder?: number;
+  executionMode?: PlanDayInput["sessions"][number]["executionMode"];
+  deviceLinkMode?: PlanDayInput["sessions"][number]["deviceLinkMode"];
+  blocks: TBlock[];
+};
+
+function normalizeSingleBlockSessions<
+  TBlock extends { name: string; displayOrder?: number },
+  TSession extends SingleBlockSession<TBlock>,
+>(sessions: TSession[]): TSession[] {
+  if (sessions.length < 2 || sessions.some((session) => session.blocks.length !== 1)) {
+    return sessions;
+  }
+
+  const commonBlockName = sessions[0]?.blocks[0]?.name ?? "";
+  const hasSameBlockName = Boolean(commonBlockName) &&
+    sessions.every((session) => session.blocks[0]?.name === commonBlockName);
+  const sessionNamesAreRows = sessions.some((session) => session.name !== commonBlockName);
+
+  if (!hasSameBlockName || !sessionNamesAreRows) {
+    return sessions;
+  }
+
+  const firstSession = sessions[0];
+  const mergedSession = {
+    ...firstSession,
+    name: commonBlockName,
+    notes: sessions.map((session) => session.notes).filter(Boolean).join(" / "),
+    orderIndex: firstSession.orderIndex ?? 0,
+    displayOrder: firstSession.displayOrder ?? 0,
+    executionMode: "whole_session",
+    deviceLinkMode: "session",
+    blocks: sessions.map((session, index) => ({
+      ...session.blocks[0],
+      name: session.name || session.blocks[0].name,
+      displayOrder: index,
+    })),
+  } as TSession;
+
+  return [mergedSession];
+}
+
 function buildPlanTemplateStructureMap(rows: PlanTemplateRow[]) {
   const templateSummaryMap = new Map<string, PlanTemplateSummary>();
   const structureMap = new Map<string, PlanTemplateStructureRecord>();
@@ -363,6 +410,15 @@ function buildPlanTemplateStructureMap(rows: PlanTemplateRow[]) {
     template.days?.sort((left, right) => (left.orderIndex ?? 0) - (right.orderIndex ?? 0));
     for (const day of template.days ?? []) {
       day.sessions.sort((left, right) => (left.orderIndex ?? 0) - (right.orderIndex ?? 0));
+      day.sessions = normalizeSingleBlockSessions(day.sessions);
+    }
+  }
+
+  for (const structure of structureMap.values()) {
+    structure.days.sort((left, right) => left.displayOrder - right.displayOrder);
+    for (const day of structure.days) {
+      day.sessions.sort((left, right) => left.displayOrder - right.displayOrder);
+      day.sessions = normalizeSingleBlockSessions(day.sessions);
     }
   }
 
@@ -477,6 +533,11 @@ function mapAssignedPlans(rows: AssignedPlanRow[]): AssignedPlanSummary[] {
       block.exercises ??= [];
       block.exercises.push(exercise);
     }
+  }
+
+  for (const assigned of grouped.values()) {
+    assigned.day.sessions.sort((left, right) => left.orderIndex - right.orderIndex);
+    assigned.day.sessions = normalizeSingleBlockSessions(assigned.day.sessions);
   }
 
   return Array.from(grouped.values());
