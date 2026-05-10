@@ -6575,6 +6575,7 @@ export function PageClient({
     previewState?.planTemplates ?? [],
   );
   const [selectedPlanTemplateIds, setSelectedPlanTemplateIds] = useState<string[]>([]);
+  const [templatePlanningTab, setTemplatePlanningTab] = useState<"library" | "editor" | "assign">("library");
   const [planForm, setPlanForm] =
     useState<PlanTemplatePayload>(() => createLocalizedDefaultPlanTemplate(language));
   const [selectedImportedPlanFile, setSelectedImportedPlanFile] = useState<{
@@ -16777,6 +16778,47 @@ export function PageClient({
                   : ""
               }`.trim()}
             >
+            {planningView === "templates" ? (
+              <div
+                aria-label={copyFor(language, {
+                  en: "Template sections",
+                  ru: "Разделы шаблонов",
+                  bg: "Раздели на шаблоните",
+                })}
+                className="planning-template-tabs"
+                role="tablist"
+              >
+                {(["library", "editor", "assign"] as const).map((tab) => (
+                  <button
+                    aria-selected={templatePlanningTab === tab}
+                    className={`planning-template-tab ${templatePlanningTab === tab ? "is-active" : ""}`}
+                    key={tab}
+                    onClick={() => setTemplatePlanningTab(tab)}
+                    role="tab"
+                    type="button"
+                  >
+                    {tab === "library"
+                      ? copyFor(language, {
+                          en: "Template library",
+                          ru: "Библиотека шаблонов",
+                          bg: "Библиотека с шаблони",
+                        })
+                      : tab === "editor"
+                        ? copyFor(language, {
+                            en: "Template editor",
+                            ru: "Редактор шаблонов",
+                            bg: "Редактор на шаблони",
+                          })
+                        : copyFor(language, {
+                            en: "Assign selected",
+                            ru: "Назначить выбранное",
+                            bg: "Назначи избраното",
+                          })}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+
             {planningView === "preparation" ? (
             <section className="preparation-plan-builder wide-card">
               <aside className="preparation-exercise-library">
@@ -19367,7 +19409,7 @@ export function PageClient({
             </form>
             ) : null}
 
-            {planningView === "templates" ? (
+            {planningView === "templates" && templatePlanningTab === "editor" ? (
             <form
               className="auth-form wide-form planning-main-form planning-template-builder"
               onSubmit={handlePlanTemplateSubmit}
@@ -20818,7 +20860,7 @@ export function PageClient({
             </form>
             ) : null}
 
-            {planningView === "templates" ? (
+            {planningView === "templates" && templatePlanningTab === "library" ? (
             <div className="entry-summary planning-side-card planning-template-list">
               <div className="planning-template-library-head">
                 <div>
@@ -20947,6 +20989,7 @@ export function PageClient({
                           setIsTemplateDraftActive(false);
                           setSelectedTemplateDayIndex(0);
                           setSelectedTemplateAssignDayIndexes([]);
+                          setTemplatePlanningTab("editor");
                         }}
                         type="button"
                       >
@@ -21065,7 +21108,7 @@ export function PageClient({
             </div>
             ) : null}
 
-            {planningView === "templates" ? (
+            {planningView === "templates" && templatePlanningTab === "assign" ? (
             <aside className="entry-summary planning-inspector-form planning-template-assign">
               <div className="planning-template-assign-head">
                 <h3>
