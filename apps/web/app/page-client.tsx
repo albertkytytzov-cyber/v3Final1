@@ -615,6 +615,17 @@ function getCoachDayAiPayloadFingerprint(payload: CoachDayAiPayload) {
   return JSON.stringify(sortJsonForFingerprint(payload));
 }
 
+function isCoachAiReviewStaleByTimestamps(
+  review: CoachDayAiReview | null,
+  timestamps: Array<string | null | undefined>,
+) {
+  if (!review) {
+    return false;
+  }
+
+  return timestamps.some((timestamp) => Boolean(timestamp && timestamp > review.generatedAt));
+}
+
 function sortJsonForFingerprint(value: unknown): unknown {
   if (Array.isArray(value)) {
     return value.map(sortJsonForFingerprint);
@@ -6353,6 +6364,9 @@ export function PageClient({
   const [selectedAthleteId, setSelectedAthleteId] = useState<string>(
     previewState?.selectedAthleteId ?? "",
   );
+  const [coachTeamDayDateFilter, setCoachTeamDayDateFilter] = useState(
+    previewState?.coachExecutionReview?.dayDate ?? getDateInputValue(),
+  );
   const [athleteProfileForm, setAthleteProfileForm] =
     useState<CoachAthleteProfilePayload>(emptyAthleteProfileForm);
   const [isAthleteProfileEditorOpen, setIsAthleteProfileEditorOpen] = useState(false);
@@ -7896,6 +7910,11 @@ export function PageClient({
   async function handleCoachReviewDayChange(assignedPlanId: string) {
     if (!selectedAthleteId || !assignedPlanId) {
       return;
+    }
+
+    const selectedAssignedPlan = assignedPlans.find((plan) => plan.id === assignedPlanId);
+    if (selectedAssignedPlan) {
+      setCoachTeamDayDateFilter(selectedAssignedPlan.day.dayDate);
     }
 
     setBusy(true);
@@ -11801,7 +11820,7 @@ export function PageClient({
       ru: "День можно разбирать по текущим данным.",
       bg: "Денят може да се анализира с текущите данни.",
     });
-  const coachTeamDayDate = coachExecutionReview?.dayDate ?? getDateInputValue();
+  const coachTeamDayDate = coachTeamDayDateFilter || coachExecutionReview?.dayDate || getDateInputValue();
   const coachTeamDayRows = coachAthletes.map((athlete) => {
     const plansForDay = assignedPlans.filter(
       (plan) => plan.athleteId === athlete.athleteId && plan.day.dayDate === coachTeamDayDate,
@@ -11820,10 +11839,21 @@ export function PageClient({
       athlete.athleteId,
       coachTeamDayDate,
     );
+    const deviceWorkoutLinksForDay = getDeviceWorkoutLinksForDay(
+      coachDeviceWorkoutLinks,
+      athlete.athleteId,
+      coachTeamDayDate,
+    );
     const planIds = new Set(plansForDay.map((plan) => plan.id));
     const dayResults = executionResults.filter(
       (result) => result.athleteId === athlete.athleteId && planIds.has(result.assignedPlanId),
     );
+    const plannedBlocks = plansForDay.reduce(
+      (total, plan) =>
+        total + plan.day.sessions.reduce((sessionTotal, session) => sessionTotal + session.blocks.length, 0),
+      0,
+    );
+    const completedBlocks = dayResults.filter((result) => result.completed).length;
     const plannedLoad = roundCoachAiLoad(
       plansForDay.reduce(
         (total, plan) =>
@@ -11859,20 +11889,39 @@ export function PageClient({
       athlete.athleteId,
       coachTeamDayDate,
     )[0] ?? null;
+    const latestDiaryEntry =
+      coachDiaryEntries.find(
+        (entry) =>
+          entry.athleteId === athlete.athleteId &&
+          entry.entryDate === coachTeamDayDate,
+      ) ?? null;
+    const aiReviewStale = isCoachAiReviewStaleByTimestamps(aiReview, [
+      readinessEntry?.createdAt,
+      deviceHealthSummary?.syncedAt,
+      ...deviceWorkoutsForDay.map((workout) => workout.syncedAt),
+      ...deviceWorkoutLinksForDay.map((link) => link.linkedAt),
+      ...dayResults.map((result) => result.updatedAt),
+      latestDiaryEntry?.updatedAt,
+    ]);
 
     return {
       actualLoad,
       aiReview,
+      aiReviewStale,
       athlete,
       dataQuality,
       deviceHealthSummary,
+      deviceWorkoutLinksForDay,
+      deviceWorkoutsForDay,
       plannedLoad,
       readinessEntry,
       statusLabel: plansForDay.length === 0
         ? copyFor(language, { en: "No plan", ru: "Нет плана", bg: "Няма план" })
         : dayResults.length === 0
           ? copyFor(language, { en: "No execution", ru: "Нет отметок", bg: "Няма изпълнение" })
-          : copyFor(language, { en: "Execution exists", ru: "Есть выполнение", bg: "Има изпълнение" }),
+          : plannedBlocks > 0 && completedBlocks >= plannedBlocks
+            ? copyFor(language, { en: "Completed", ru: "Выполнено", bg: "Изпълнено" })
+            : copyFor(language, { en: "Partial", ru: "Частично", bg: "Частично" }),
     };
   });
   const athleteChangedToday = adaptedPlan
@@ -15924,9 +15973,28 @@ export function PageClient({
                         bg: "Панел на отбора",
                       })}
                     </strong>
-                    <span>{coachTeamDayDate}</span>
+                    <label className="coach-team-day-date-control">
+                      <span>{copyFor(language, { en: "Date", ru: "Дата", bg: "Дата" })}</span>
+                      <input
+                        type="date"
+                        value={coachTeamDayDate}
+                        onChange={(event) => setCoachTeamDayDateFilter(event.target.value)}
+                      />
+                    </label>
                   </div>
                   <div className="coach-team-day-table">
+                    <div className="coach-team-day-header" aria-hidden="true">
+                      <span>{copyFor(language, { en: "Athlete", ru: "Спортсмен", bg: "Спортист" })}</span>
+                      <span>{copyFor(language, { en: "Readiness", ru: "Готовн.", bg: "Готовн." })}</span>
+                      <span>{copyFor(language, { en: "Load", ru: "Нагрузка", bg: "Натовар." })}</span>
+                      <span>{copyFor(language, { en: "Sleep", ru: "Сон", bg: "Сън" })}</span>
+                      <span>{copyFor(language, { en: "Rest HR", ru: "Пульс", bg: "Пулс" })}</span>
+                      <span>SpO2</span>
+                      <span>{copyFor(language, { en: "Device", ru: "Устройство", bg: "Устройство" })}</span>
+                      <span>{copyFor(language, { en: "Data", ru: "Данные", bg: "Данни" })}</span>
+                      <span>{copyFor(language, { en: "AI", ru: "ИИ", bg: "AI" })}</span>
+                      <span />
+                    </div>
                     {coachTeamDayRows.map((row) => (
                       <article className={`coach-team-day-row ${row.dataQuality.status}`} key={row.athlete.athleteId}>
                         <div>
@@ -15940,13 +16008,35 @@ export function PageClient({
                         <span>{formatDeviceSleepValue(row.deviceHealthSummary, language)}</span>
                         <span>{formatDeviceRestingHrValue(row.deviceHealthSummary)}</span>
                         <span>{formatDeviceOxygenValue(row.deviceHealthSummary)}</span>
+                        <span>
+                          {row.deviceWorkoutsForDay.length
+                            ? `${row.deviceWorkoutLinksForDay.length}/${row.deviceWorkoutsForDay.length} ${copyFor(language, {
+                                en: "linked",
+                                ru: "связано",
+                                bg: "свързани",
+                              })}`
+                            : copyFor(language, { en: "No workout", ru: "Нет трен.", bg: "Няма трен." })}
+                        </span>
                         <span>{row.dataQuality.statusLabel}</span>
-                        <p>{row.aiReview?.riskNotes[0] ?? row.aiReview?.observation ?? "-"}</p>
+                        <p>
+                          {row.aiReviewStale
+                            ? copyFor(language, {
+                                en: "Review is stale: update AI review.",
+                                ru: "Разбор устарел: обновите ИИ-разбор.",
+                                bg: "Анализът е остарял: обновете AI анализа.",
+                              })
+                            : row.aiReview?.riskNotes[0] ?? row.aiReview?.observation ?? copyFor(language, {
+                                en: "No AI review",
+                                ru: "Нет ИИ-разбора",
+                                bg: "Няма AI анализ",
+                              })}
+                        </p>
                         <button
                           className="secondary-button"
                           disabled={busy}
                           onClick={() => {
                             setSelectedAthleteId(row.athlete.athleteId);
+                            setCoachTeamDayDateFilter(coachTeamDayDate);
                             const assignedPlanId = assignedPlans.find(
                               (plan) =>
                                 plan.athleteId === row.athlete.athleteId &&

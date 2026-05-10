@@ -1735,21 +1735,23 @@ function renderCoachTeamDayPanel(state: MobileAppState, selectedDayDate: string)
     const aiReview = state.aiReviewByDay[getCoachDayAiReviewKey(athlete.athleteId, selectedDayDate)] ??
       getCoachAiReviewsForDay(state.data.coachAiReviews, athlete.athleteId, selectedDayDate)[0] ??
       null;
+    const linkedWorkouts = dayData.deviceWorkoutLinks.length;
+    const deviceWorkouts = dayData.deviceWorkouts.length;
 
-    return { aiReview, athlete, dataQuality, dayData };
+    return { aiReview, athlete, dataQuality, dayData, deviceWorkouts, linkedWorkouts };
   });
 
   return `
     <section class="coach-team-day-panel">
       <div class="summary-inline-head">
         <div>
-          <span>Команда сегодня</span>
+          <span>Команда за день</span>
           <h3>${formatDate(selectedDayDate)}</h3>
         </div>
         <strong>${rows.length}</strong>
       </div>
       <div class="coach-team-day-list">
-        ${rows.map(({ aiReview, athlete, dataQuality, dayData }) => `
+        ${rows.map(({ aiReview, athlete, dataQuality, dayData, deviceWorkouts, linkedWorkouts }) => `
           <article class="coach-team-day-row is-${dataQuality.status}">
             <div>
               <strong>${escapeHtml(athlete.fullName)}</strong>
@@ -1760,8 +1762,10 @@ function renderCoachTeamDayPanel(state: MobileAppState, selectedDayDate: string)
               <span>${formatLoadValue(dayData.summary.actualLoad)} / ${formatLoadValue(dayData.summary.plannedLoad)}</span>
               <span>Сон ${formatDeviceHealthSleepValue(dayData.deviceHealthSummary)}</span>
               <span>Пульс ${formatDeviceHealthRestingHrValue(dayData.deviceHealthSummary)}</span>
+              <span>SpO2 ${formatDeviceHealthOxygenValue(dayData.deviceHealthSummary)}</span>
+              <span>Устр. ${deviceWorkouts ? `${linkedWorkouts}/${deviceWorkouts}` : "нет"}</span>
             </div>
-            <p>${escapeHtml(aiReview?.riskNotes[0] ?? formatCoachAiBriefDetail(aiReview))}</p>
+            <p>${escapeHtml(aiReview ? `${formatCoachDayAiReviewSource(aiReview.source)} · ${aiReview.riskNotes[0] ?? aiReview.observation}` : "ИИ-разбор не сформирован")}</p>
             <button data-athlete-card="${escapeHtml(athlete.athleteId)}" type="button">Открыть день</button>
           </article>
         `).join("")}
