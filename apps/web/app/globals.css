@@ -5013,8 +5013,8 @@ select {
 
 .planning-template-import-session-table > div {
   display: grid;
-  grid-template-columns: minmax(120px, 0.8fr) minmax(150px, 1fr) minmax(160px, 1.2fr);
-  min-width: 520px;
+  grid-template-columns: minmax(100px, 0.7fr) minmax(120px, 0.8fr) minmax(150px, 1fr) minmax(160px, 1.2fr);
+  min-width: 640px;
   border-bottom: 1px solid rgba(148, 163, 184, 0.16);
 }
 
@@ -5305,6 +5305,34 @@ select {
   line-height: 1.2;
 }
 
+.planning-template-session-controls {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(210px, 100%), 1fr));
+  gap: 8px;
+  width: min(100%, 560px);
+}
+
+.planning-template-session-controls label {
+  display: grid;
+  gap: 5px;
+  color: var(--muted-strong);
+  font-size: 0.72rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.planning-template-session-controls select {
+  min-height: 36px;
+  padding: 7px 9px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-weight: 750;
+  text-transform: none;
+}
+
 .planning-template-exercise-table {
   width: min(100%, 560px);
   border-collapse: collapse;
@@ -5337,28 +5365,35 @@ select {
 
 .planning-template-exercise-table th:nth-child(1),
 .planning-template-exercise-table td:nth-child(1) {
-  width: 40%;
+  width: 19%;
 }
 
 .planning-template-exercise-table th:nth-child(2),
 .planning-template-exercise-table td:nth-child(2) {
-  width: 25%;
+  width: 26%;
 }
 
 .planning-template-exercise-table th:nth-child(3),
 .planning-template-exercise-table td:nth-child(3) {
-  width: 27%;
+  width: 22%;
 }
 
 .planning-template-exercise-table th:nth-child(4),
 .planning-template-exercise-table td:nth-child(4) {
+  width: 25%;
+}
+
+.planning-template-exercise-table th:nth-child(5),
+.planning-template-exercise-table td:nth-child(5) {
   width: 8%;
 }
 
-.planning-template-exercise-table input {
+.planning-template-exercise-table input,
+.planning-template-exercise-table select {
   min-height: 36px;
   padding: 7px 8px;
   border-radius: 8px;
+  width: 100%;
 }
 
 .planning-template-exercise-action-cell {
@@ -5960,7 +5995,8 @@ select {
     padding-left: 8px;
   }
 
-  .planning-template-exercise-table input {
+  .planning-template-exercise-table input,
+  .planning-template-exercise-table select {
     min-height: 34px;
     padding: 6px 7px;
   }
@@ -6023,7 +6059,8 @@ select {
     line-height: 1;
   }
 
-  .planning-template-exercise-table td:nth-child(1) {
+  .planning-template-exercise-table td:nth-child(1),
+  .planning-template-exercise-table td:nth-child(2) {
     grid-column: 1 / -1;
   }
 
@@ -6046,6 +6083,22 @@ select {
 
   .planning-template-exercise-action-cell::before {
     display: none;
+  }
+
+  .planning-template-exercise-table td:nth-child(1)::before {
+    content: "Тип";
+  }
+
+  .planning-template-exercise-table td:nth-child(2)::before {
+    content: "Строка";
+  }
+
+  .planning-template-exercise-table td:nth-child(3)::before {
+    content: "Объём";
+  }
+
+  .planning-template-exercise-table td:nth-child(4)::before {
+    content: "Контроль";
   }
 }
 

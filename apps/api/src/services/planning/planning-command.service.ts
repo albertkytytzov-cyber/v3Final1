@@ -49,6 +49,7 @@ function defaultExerciseForBlock(block: PlanBlockInput): PlanExerciseInput {
 function normalizeBlock(block: PlanBlockInput): PlanBlockInput {
   return {
     ...block,
+    rowKind: block.rowKind ?? "exercise",
     replacementBlockId: block.replacementBlockId ?? null,
     exercises:
       block.exercises && block.exercises.length
@@ -70,6 +71,8 @@ function normalizeTemplateDays(payload: PlanTemplatePayload): PlanDayInput[] {
         ...session,
         notes: session.notes ?? "",
         orderIndex: session.orderIndex ?? sessionIndex,
+        executionMode: session.executionMode ?? "whole_session",
+        deviceLinkMode: session.deviceLinkMode ?? "session",
         blocks: session.blocks.map(normalizeBlock),
       })),
     }));
@@ -85,6 +88,8 @@ function normalizeTemplateDays(payload: PlanTemplatePayload): PlanDayInput[] {
           name: "Primary session",
           notes: "",
           orderIndex: 0,
+          executionMode: "whole_session",
+          deviceLinkMode: "session",
           blocks: payload.blocks.map(normalizeBlock),
         },
       ],
@@ -376,17 +381,31 @@ async function insertAssignedPlanFromTemplate(input: {
           notes: "",
           displayOrder: 0,
           blocks: templateBlocks,
+          executionMode: "whole_session",
+          deviceLinkMode: "session",
         },
       ];
 
   for (const [sessionIndex, session] of sessions.entries()) {
     const assignedSession = await pool.query<{ id: string }>(
       `
-        INSERT INTO assigned_day_sessions (assigned_day_id, name, display_order)
-        VALUES ($1, $2, $3)
+        INSERT INTO assigned_day_sessions (
+          assigned_day_id,
+          name,
+          execution_mode,
+          device_link_mode,
+          display_order
+        )
+        VALUES ($1, $2, $3, $4, $5)
         RETURNING id
       `,
-      [assignedDay.rows[0].id, session.name, session.displayOrder ?? sessionIndex],
+      [
+        assignedDay.rows[0].id,
+        session.name,
+        session.executionMode ?? "whole_session",
+        session.deviceLinkMode ?? "session",
+        session.displayOrder ?? sessionIndex,
+      ],
     );
 
     for (const block of session.blocks) {
@@ -396,6 +415,7 @@ async function insertAssignedPlanFromTemplate(input: {
             assigned_session_id,
             template_block_id,
             name,
+            row_kind,
             block_type,
             block_priority,
             is_mandatory,
@@ -411,13 +431,14 @@ async function insertAssignedPlanFromTemplate(input: {
             notes,
             display_order
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NULL, $11, $12, $13, $14, $15, $16)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NULL, $12, $13, $14, $15, $16, $17)
           RETURNING id
         `,
         [
           assignedSession.rows[0].id,
           block.id,
           block.name,
+          block.rowKind ?? "exercise",
           block.blockType,
           block.blockPriority,
           block.isMandatory,
@@ -515,14 +536,23 @@ async function insertTemplateHierarchy(input: {
     for (const [sessionIndex, session] of day.sessions.entries()) {
       const insertedSession = await pool.query<{ id: string }>(
         `
-          INSERT INTO plan_sessions (plan_day_id, name, notes, display_order)
-          VALUES ($1, $2, $3, $4)
+          INSERT INTO plan_sessions (
+            plan_day_id,
+            name,
+            notes,
+            execution_mode,
+            device_link_mode,
+            display_order
+          )
+          VALUES ($1, $2, $3, $4, $5, $6)
           RETURNING id
         `,
         [
           insertedDay.rows[0].id,
           session.name,
           session.notes ?? "",
+          session.executionMode ?? "whole_session",
+          session.deviceLinkMode ?? "session",
           session.orderIndex ?? sessionIndex,
         ],
       );
@@ -534,6 +564,7 @@ async function insertTemplateHierarchy(input: {
               plan_template_id,
               plan_session_id,
               name,
+              row_kind,
               block_type,
               block_priority,
               is_mandatory,
@@ -549,13 +580,14 @@ async function insertTemplateHierarchy(input: {
               notes,
               display_order
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NULL, $11, $12, $13, $14, $15, $16)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NULL, $12, $13, $14, $15, $16, $17)
             RETURNING id
           `,
           [
             input.templateId,
             insertedSession.rows[0].id,
             block.name,
+            block.rowKind ?? "exercise",
             block.blockType,
             block.blockPriority,
             block.isMandatory,

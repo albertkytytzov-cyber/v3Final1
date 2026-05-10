@@ -42,6 +42,10 @@ function hasExerciseActualData(result: ExecutionExerciseResult | undefined) {
   );
 }
 
+function isTrackablePlanRow(rowKind: AssignedPlanSummary["day"]["sessions"][number]["blocks"][number]["rowKind"]) {
+  return rowKind !== "instruction" && rowKind !== "control" && rowKind !== "note";
+}
+
 export function getExecutionReviewStatus(
   result: ExecutionResult | ExecutionExerciseResult | undefined,
 ): ExecutionReviewStatus {
@@ -143,17 +147,23 @@ export function buildExecutionReviewPlan(
     id: session.id,
     name: session.name,
     orderIndex: session.orderIndex,
+    executionMode: session.executionMode,
+    deviceLinkMode: session.deviceLinkMode,
     blocks: session.blocks.map((block) => {
-      plannedBlocks += 1;
+      const trackableRow = isTrackablePlanRow(block.rowKind);
       const actualResult = resultsByBlockId.get(block.id);
       const executionStatus = getExecutionReviewStatus(actualResult);
 
-      if (executionStatus === "completed") {
-        completedBlocks += 1;
-      } else if (executionStatus === "partial") {
-        partialBlocks += 1;
-      } else if (executionStatus === "missed") {
-        missedBlocks += 1;
+      if (trackableRow) {
+        plannedBlocks += 1;
+
+        if (executionStatus === "completed") {
+          completedBlocks += 1;
+        } else if (executionStatus === "partial") {
+          partialBlocks += 1;
+        } else if (executionStatus === "missed") {
+          missedBlocks += 1;
+        }
       }
 
       if (actualResult?.durationMinutes) {
@@ -177,17 +187,21 @@ export function buildExecutionReviewPlan(
           exerciseResultsById.get(exercise.id),
         );
 
-        plannedExercises += 1;
-
-        if (reviewedExercise.executionStatus === "completed") {
-          completedExercises += 1;
-        } else if (reviewedExercise.executionStatus === "partial") {
-          partialExercises += 1;
-        } else if (reviewedExercise.executionStatus === "missed") {
-          missedExercises += 1;
+        if (trackableRow) {
+          plannedExercises += 1;
         }
 
-        if (hasSignificantDeviation(reviewedExercise.deviations)) {
+        if (trackableRow) {
+          if (reviewedExercise.executionStatus === "completed") {
+            completedExercises += 1;
+          } else if (reviewedExercise.executionStatus === "partial") {
+            partialExercises += 1;
+          } else if (reviewedExercise.executionStatus === "missed") {
+            missedExercises += 1;
+          }
+        }
+
+        if (trackableRow && hasSignificantDeviation(reviewedExercise.deviations)) {
           deviationAlerts += 1;
         }
 
@@ -205,7 +219,7 @@ export function buildExecutionReviewPlan(
         actualRpe: actualResult?.rpe ?? null,
       });
 
-      if (hasSignificantDeviation(deviations)) {
+      if (trackableRow && hasSignificantDeviation(deviations)) {
         deviationAlerts += 1;
       }
 

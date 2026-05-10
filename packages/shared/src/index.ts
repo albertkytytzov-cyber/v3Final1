@@ -313,6 +313,7 @@ export interface CoachAttachAthleteResponse {
 
 export interface PlanBlockInput {
   name: string;
+  rowKind?: PlanBlockRowKind;
   blockType:
     | "technical"
     | "speed"
@@ -338,6 +339,18 @@ export interface PlanBlockInput {
   exercises?: PlanExerciseInput[];
 }
 
+export type PlanBlockRowKind =
+  | "workout"
+  | "exercise"
+  | "instruction"
+  | "control"
+  | "note"
+  | "recovery";
+
+export type PlanSessionExecutionMode = "whole_session" | "by_blocks";
+
+export type PlanDeviceLinkMode = "session" | "block" | "none";
+
 export interface PlanExerciseInput {
   id?: string;
   name: string;
@@ -362,7 +375,12 @@ export type TrainingLoadBlockInput = Pick<
   Partial<
     Pick<
       PlanBlockInput,
-      "blockType" | "blockPriority" | "targetSets" | "targetReps" | "exercises"
+      | "blockType"
+      | "blockPriority"
+      | "targetSets"
+      | "targetReps"
+      | "exercises"
+      | "rowKind"
     >
   >;
 
@@ -426,6 +444,14 @@ function estimateTrainingExerciseLoad(
 }
 
 export function estimateTrainingBlockLoad(block: TrainingLoadBlockInput) {
+  if (
+    block.rowKind === "instruction" ||
+    block.rowKind === "control" ||
+    block.rowKind === "note"
+  ) {
+    return 0;
+  }
+
   const profile = getTrainingLoadProfile(block.blockType);
   const priorityFactor = getTrainingLoadPriorityFactor(block.blockPriority);
   const fallbackDurationMinutes = profile.durationMinutes * priorityFactor;
@@ -474,6 +500,8 @@ export interface PlanSessionInput {
   name: string;
   notes: string;
   orderIndex?: number;
+  executionMode?: PlanSessionExecutionMode;
+  deviceLinkMode?: PlanDeviceLinkMode;
   blocks: PlanBlockInput[];
 }
 
@@ -524,6 +552,7 @@ export interface AssignedPlanBlock {
   id: string;
   templateBlockId?: string | null;
   name: string;
+  rowKind?: PlanBlockRowKind;
   blockType: PlanBlockInput["blockType"];
   blockPriority: number;
   isMandatory: boolean;
@@ -557,6 +586,8 @@ export interface AssignedPlanSession {
   id: string;
   name: string;
   orderIndex: number;
+  executionMode?: PlanSessionExecutionMode;
+  deviceLinkMode?: PlanDeviceLinkMode;
   blocks: AssignedPlanBlock[];
 }
 
@@ -1079,6 +1110,8 @@ export interface ExecutionReviewSession {
   id: string;
   name: string;
   orderIndex: number;
+  executionMode?: PlanSessionExecutionMode;
+  deviceLinkMode?: PlanDeviceLinkMode;
   blocks: ExecutionReviewBlock[];
 }
 
@@ -1737,6 +1770,26 @@ export const PLAN_BLOCK_TYPES: PlanBlockInput["blockType"][] = [
   "activation",
 ];
 
+export const PLAN_BLOCK_ROW_KINDS: PlanBlockRowKind[] = [
+  "workout",
+  "exercise",
+  "instruction",
+  "control",
+  "note",
+  "recovery",
+];
+
+export const PLAN_SESSION_EXECUTION_MODES: PlanSessionExecutionMode[] = [
+  "whole_session",
+  "by_blocks",
+];
+
+export const PLAN_DEVICE_LINK_MODES: PlanDeviceLinkMode[] = [
+  "session",
+  "block",
+  "none",
+];
+
 export const DEFAULT_PLAN_TEMPLATE: PlanTemplatePayload = {
   name: "Weekly speed-strength day",
   description: "Coach-authored template for a single key training day.",
@@ -1749,6 +1802,7 @@ export const DEFAULT_PLAN_TEMPLATE: PlanTemplatePayload = {
   blocks: [
     {
       name: "Sprint mechanics",
+      rowKind: "exercise",
       blockType: "technical",
       blockPriority: 5,
       isMandatory: true,
@@ -1764,6 +1818,7 @@ export const DEFAULT_PLAN_TEMPLATE: PlanTemplatePayload = {
     },
     {
       name: "Main acceleration set",
+      rowKind: "exercise",
       blockType: "speed",
       blockPriority: 5,
       isMandatory: true,
@@ -1779,6 +1834,7 @@ export const DEFAULT_PLAN_TEMPLATE: PlanTemplatePayload = {
     },
     {
       name: "Gym strength block",
+      rowKind: "exercise",
       blockType: "strength",
       blockPriority: 4,
       isMandatory: false,

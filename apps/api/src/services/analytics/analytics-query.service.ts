@@ -71,6 +71,7 @@ interface AnalyticsExecutionTrendRow {
   duration_minutes: string | null;
   rpe: string | null;
   result_notes: string | null;
+  row_kind: PlanBlockInput["rowKind"] | null;
   block_type: PlanBlockInput["blockType"];
   block_priority: number;
   target_duration_minutes: string | null;
@@ -655,6 +656,7 @@ export async function listAnalyticsExecutionRows(
         exercise_results.duration_minutes::text,
         exercise_results.rpe::text,
         exercise_results.notes AS result_notes,
+        assigned_day_blocks.row_kind,
         assigned_day_blocks.block_type,
         assigned_day_blocks.block_priority,
         assigned_day_blocks.target_duration_minutes::text,
@@ -705,6 +707,7 @@ export async function listAnalyticsExecutionRows(
       durationMinutes: row.duration_minutes !== null ? Number(row.duration_minutes) : null,
       rpe: row.rpe !== null ? Number(row.rpe) : null,
       resultNotes: row.result_notes ?? "",
+      rowKind: row.row_kind ?? "exercise",
       blockType: row.block_type,
       blockPriority: row.block_priority,
       targetDurationMinutes:

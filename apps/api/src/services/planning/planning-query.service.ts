@@ -29,9 +29,12 @@ interface PlanTemplateRow {
   session_id: string | null;
   session_name: string | null;
   session_notes: string | null;
+  session_execution_mode: PlanDayInput["sessions"][number]["executionMode"] | null;
+  session_device_link_mode: PlanDayInput["sessions"][number]["deviceLinkMode"] | null;
   session_order: number | null;
   block_id: string | null;
   block_name: string | null;
+  row_kind: PlanBlockInput["rowKind"] | null;
   block_type: PlanBlockInput["blockType"] | null;
   block_priority: number | null;
   is_mandatory: boolean | null;
@@ -74,10 +77,13 @@ interface AssignedPlanRow {
   day_notes: string;
   session_id: string | null;
   session_name: string | null;
+  session_execution_mode: AssignedPlanSummary["day"]["sessions"][number]["executionMode"] | null;
+  session_device_link_mode: AssignedPlanSummary["day"]["sessions"][number]["deviceLinkMode"] | null;
   session_order: number | null;
   block_id: string | null;
   template_block_id: string | null;
   block_name: string | null;
+  row_kind: PlanBlockInput["rowKind"] | null;
   block_type: PlanBlockInput["blockType"] | null;
   block_priority: number | null;
   is_mandatory: boolean | null;
@@ -112,6 +118,7 @@ export interface PlanTemplateExerciseRecord extends PlanExerciseInput {
 export interface PlanTemplateBlockRecord {
   id: string;
   name: string;
+  rowKind?: PlanBlockInput["rowKind"];
   blockType: PlanBlockInput["blockType"];
   blockPriority: number;
   isMandatory: boolean;
@@ -134,6 +141,8 @@ export interface PlanTemplateSessionRecord {
   name: string;
   notes: string;
   displayOrder: number;
+  executionMode?: PlanDayInput["sessions"][number]["executionMode"];
+  deviceLinkMode?: PlanDayInput["sessions"][number]["deviceLinkMode"];
   blocks: PlanTemplateBlockRecord[];
 }
 
@@ -176,6 +185,7 @@ function mapPlanExercise(row: PlanTemplateRow): PlanTemplateExerciseRecord | nul
 function buildPlanBlockInput(row: PlanTemplateRow): PlanBlockInput {
   return {
     name: row.block_name ?? "",
+    rowKind: row.row_kind ?? "exercise",
     blockType: row.block_type!,
     blockPriority: row.block_priority ?? 1,
     isMandatory: row.is_mandatory ?? false,
@@ -271,6 +281,8 @@ function buildPlanTemplateStructureMap(rows: PlanTemplateRow[]) {
         name: row.session_name,
         notes: row.session_notes ?? "",
         displayOrder: row.session_order ?? 0,
+        executionMode: row.session_execution_mode ?? "whole_session",
+        deviceLinkMode: row.session_device_link_mode ?? "session",
         blocks: [],
       };
       day.sessions.push(session);
@@ -282,6 +294,8 @@ function buildPlanTemplateStructureMap(rows: PlanTemplateRow[]) {
         name: row.session_name,
         notes: row.session_notes ?? "",
         orderIndex: row.session_order ?? 0,
+        executionMode: row.session_execution_mode ?? "whole_session",
+        deviceLinkMode: row.session_device_link_mode ?? "session",
         blocks: [],
       };
       templateSummary.days
@@ -419,6 +433,8 @@ function mapAssignedPlans(rows: AssignedPlanRow[]): AssignedPlanSummary[] {
         id: row.session_id,
         name: row.session_name,
         orderIndex: row.session_order ?? 0,
+        executionMode: row.session_execution_mode ?? "whole_session",
+        deviceLinkMode: row.session_device_link_mode ?? "session",
         blocks: [],
       };
       assigned.day.sessions.push(session);
@@ -436,6 +452,7 @@ function mapAssignedPlans(rows: AssignedPlanRow[]): AssignedPlanSummary[] {
         id: row.block_id,
         templateBlockId: row.template_block_id,
         name: row.block_name,
+        rowKind: row.row_kind ?? "exercise",
         blockType: row.block_type,
         blockPriority: row.block_priority ?? 1,
         isMandatory: row.is_mandatory ?? false,
@@ -487,9 +504,12 @@ async function loadPlanTemplateRows(whereSql: string, params: unknown[]) {
         plan_sessions.id AS session_id,
         plan_sessions.name AS session_name,
         plan_sessions.notes AS session_notes,
+        plan_sessions.execution_mode AS session_execution_mode,
+        plan_sessions.device_link_mode AS session_device_link_mode,
         plan_sessions.display_order AS session_order,
         plan_blocks.id AS block_id,
         plan_blocks.name AS block_name,
+        plan_blocks.row_kind,
         plan_blocks.block_type,
         plan_blocks.block_priority,
         plan_blocks.is_mandatory,
@@ -586,10 +606,13 @@ export async function loadAssignedPlans(
         assigned_plan_days.notes AS day_notes,
         assigned_day_sessions.id AS session_id,
         assigned_day_sessions.name AS session_name,
+        assigned_day_sessions.execution_mode AS session_execution_mode,
+        assigned_day_sessions.device_link_mode AS session_device_link_mode,
         assigned_day_sessions.display_order AS session_order,
         assigned_day_blocks.id AS block_id,
         assigned_day_blocks.template_block_id::text,
         assigned_day_blocks.name AS block_name,
+        assigned_day_blocks.row_kind,
         assigned_day_blocks.block_type,
         assigned_day_blocks.block_priority,
         assigned_day_blocks.is_mandatory,

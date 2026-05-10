@@ -3423,12 +3423,17 @@ function renderExecutionDateFilter(
 }
 
 function isSessionLevelPlanUnit(session: MobileAssignedPlanSession) {
+  if (session.executionMode) {
+    return session.executionMode === "whole_session";
+  }
+
   return session.blocks.length > 1;
 }
 
 function countPlanDisplayUnits(plan: AssignedPlanSummary) {
   return plan.day.sessions.reduce(
-    (total, session) => total + (session.blocks.length > 0 ? 1 : 0),
+    (total, session) =>
+      total + (isSessionLevelPlanUnit(session) ? 1 : session.blocks.length),
     0,
   );
 }

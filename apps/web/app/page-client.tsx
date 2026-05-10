@@ -57,7 +57,13 @@ import {
   type PlanTemplateRecommendation,
   type PlannerSuggestion,
   type PlannerWarning,
+  type PlanBlockRowKind,
+  PLAN_BLOCK_ROW_KINDS,
+  PLAN_DEVICE_LINK_MODES,
   type PlanExerciseInput,
+  type PlanDeviceLinkMode,
+  type PlanSessionExecutionMode,
+  PLAN_SESSION_EXECUTION_MODES,
   type TemplatePackRecommendation,
   type TemplatePackRecommendationResponse,
   type TemplatePackItem,
@@ -1996,6 +2002,46 @@ const BLOCK_TYPE_LABELS: Record<string, Record<Language, string>> = {
   activation: { en: "Activation", ru: "Активация", bg: "Активация" },
 };
 
+const PLAN_BLOCK_ROW_KIND_LABELS: Record<PlanBlockRowKind, Record<Language, string>> = {
+  workout: { en: "Workout", ru: "Тренировка", bg: "Тренировка" },
+  exercise: { en: "Exercise", ru: "Упражнение", bg: "Упражнение" },
+  instruction: { en: "Instruction", ru: "Инструкция", bg: "Инструкция" },
+  control: { en: "Control", ru: "Контроль", bg: "Контрол" },
+  note: { en: "Note", ru: "Заметка", bg: "Бележка" },
+  recovery: { en: "Recovery", ru: "Восстановление", bg: "Възстановяване" },
+};
+
+const PLAN_SESSION_EXECUTION_MODE_LABELS: Record<PlanSessionExecutionMode, Record<Language, string>> = {
+  whole_session: {
+    en: "Whole session",
+    ru: "Вся сессия целиком",
+    bg: "Цялата сесия",
+  },
+  by_blocks: {
+    en: "By rows",
+    ru: "По строкам",
+    bg: "По редове",
+  },
+};
+
+const PLAN_DEVICE_LINK_MODE_LABELS: Record<PlanDeviceLinkMode, Record<Language, string>> = {
+  session: {
+    en: "To session",
+    ru: "К сессии",
+    bg: "Към сесия",
+  },
+  block: {
+    en: "To row",
+    ru: "К строке",
+    bg: "Към ред",
+  },
+  none: {
+    en: "Disabled",
+    ru: "Не привязывать",
+    bg: "Без връзка",
+  },
+};
+
 const PLAN_BLOCK_TYPE_VALUES = [
   "technical",
   "speed",
@@ -2073,12 +2119,17 @@ function getTemplateExercisePreviewSessions(
   ];
 }
 
+function isTrackableTemplateRow(block: Pick<PlanTemplatePayload["blocks"][number], "rowKind">) {
+  return !["instruction", "control", "note"].includes(block.rowKind ?? "exercise");
+}
+
 function countTemplateExercises(template: Pick<PlanTemplateSummary, "blocks" | "days">) {
   return getTemplateExercisePreviewSessions(template).reduce(
     (total, session) =>
       total +
       session.blocks.reduce(
-        (sessionTotal, block) => sessionTotal + (block.exercises?.length ?? 0),
+        (sessionTotal, block) =>
+          sessionTotal + (isTrackableTemplateRow(block) ? (block.exercises?.length ?? 0) : 0),
         0,
       ),
     0,
@@ -2124,6 +2175,8 @@ function getTemplateStructureDays(
           }),
           notes: "",
           orderIndex: 0,
+          executionMode: "whole_session",
+          deviceLinkMode: "session",
           blocks: template.blocks,
         },
       ],
@@ -2165,7 +2218,8 @@ function countTemplateDayExercises(day: PlanTemplateDayInput) {
     (total, session) =>
       total +
       session.blocks.reduce(
-        (sessionTotal, block) => sessionTotal + (block.exercises?.length ?? 0),
+        (sessionTotal, block) =>
+          sessionTotal + (isTrackableTemplateRow(block) ? (block.exercises?.length ?? 0) : 0),
         0,
       ),
     0,
@@ -2594,6 +2648,37 @@ function inferImportedBlockType(value: string): PlanBlockType {
   return "metabolic";
 }
 
+function inferImportedRowKind(name: string, volume: string, control: string): PlanBlockRowKind {
+  const normalizedName = name.toLowerCase();
+  const normalized = `${name} ${volume} ${control}`.toLowerCase();
+
+  if (/замет|коммент|note/u.test(normalized)) {
+    return "note";
+  }
+
+  if (/маршрут|кросс|поход|бег|пано|кругов|трениров/u.test(normalized)) {
+    return "workout";
+  }
+
+  if (/пульс|чсс|\bhr\b|rpe|темп|зона/u.test(normalized)) {
+    return "control";
+  }
+
+  if (/после|замин|мобил|растяж|восстанов|прогул/u.test(normalizedName)) {
+    return "recovery";
+  }
+
+  if (
+    /маршрут|дистанц|спуск|подъ[её]м|экип|питани|дыхани|без спешки|не бежать/u.test(
+      normalized,
+    )
+  ) {
+    return "instruction";
+  }
+
+  return "exercise";
+}
+
 function createImportedPlanBlock(
   name: string,
   volume: string,
@@ -2602,6 +2687,7 @@ function createImportedPlanBlock(
 ): PlanTemplatePayload["blocks"][number] {
   const rawDetails = normalizeImportedPlanText(`${name} ${volume} ${control}`);
   const blockType = inferImportedBlockType(rawDetails);
+  const rowKind = inferImportedRowKind(name, volume, control);
   const detachedSetDurationUnit = inferDetachedImportedSetDurationUnit(volume, control);
   const normalizedVolume = normalizeImportedVolumeText(
     name,
@@ -2657,6 +2743,7 @@ function createImportedPlanBlock(
 
   return {
     name: name || "Импортированный блок",
+    rowKind,
     blockType,
     blockPriority: isMandatory ? 1 : 3,
     isMandatory,
@@ -2702,6 +2789,38 @@ function parseImportedPlanTableBlocks(table: HTMLTableElement, startOrderIndex: 
   });
 
   return blocks;
+}
+
+function normalizeImportedPlanSessions(
+  sessions: PlanTemplateSessionInput[],
+): PlanTemplateSessionInput[] {
+  if (sessions.length < 2 || sessions.some((session) => session.blocks.length !== 1)) {
+    return sessions;
+  }
+
+  const commonBlockName = sessions[0]?.blocks[0]?.name ?? "";
+  const hasSameBlockName = Boolean(commonBlockName) &&
+    sessions.every((session) => session.blocks[0]?.name === commonBlockName);
+  const sessionNamesAreRows = sessions.some((session) => session.name !== commonBlockName);
+
+  if (!hasSameBlockName || !sessionNamesAreRows) {
+    return sessions;
+  }
+
+  return [
+    {
+      name: commonBlockName,
+      notes: sessions.map((session) => session.notes).filter(Boolean).join(" / "),
+      orderIndex: 0,
+      executionMode: "whole_session",
+      deviceLinkMode: "session",
+      blocks: sessions.map((session, index) => ({
+        ...session.blocks[0],
+        name: session.name || session.blocks[0].name,
+        displayOrder: index,
+      })),
+    },
+  ];
 }
 
 function parseImportedPlanHtml(
@@ -2769,7 +2888,7 @@ function parseImportedPlanHtml(
       .filter(Boolean)
       .filter((note, noteIndex, notes) => notes.indexOf(note) === noteIndex)
       .join(" / ");
-    const sessions: PlanTemplateSessionInput[] = getImportedDirectSessions(card)
+    const parsedSessions: PlanTemplateSessionInput[] = getImportedDirectSessions(card)
       .map((session, sessionIndex) => {
         const sessionName =
           normalizeImportedPlanText(session.querySelector(".stime")?.textContent ?? "") ||
@@ -2788,10 +2907,13 @@ function parseImportedPlanHtml(
           name: sessionName,
           notes: getImportedNoteTexts(session).join(" / "),
           orderIndex: sessionIndex,
+          executionMode: "whole_session",
+          deviceLinkMode: "session",
           blocks,
-        };
+        } satisfies PlanTemplateSessionInput;
       })
       .filter((session) => session.blocks.length > 0);
+    const sessions = normalizeImportedPlanSessions(parsedSessions);
 
     if (sessions.length === 0) {
       return;
@@ -4946,6 +5068,8 @@ function templateSummaryToPayload(template: PlanTemplateSummary, language: Langu
         name: translateKnownTemplateText(session.name, language),
         notes: translateKnownTemplateText(session.notes, language),
         orderIndex: session.orderIndex ?? sessionIndex,
+        executionMode: session.executionMode ?? "whole_session",
+        deviceLinkMode: session.deviceLinkMode ?? "session",
         blocks: session.blocks.map((block) => ({
           ...block,
           name: translateKnownTemplateText(block.name, language),
@@ -8054,74 +8178,69 @@ export function PageClient({
     ];
   }
 
-  function rebuildTemplateExerciseBlock(
+  function getTemplateBlockPrimaryExercise(
     block: PlanTemplatePayload["blocks"][number],
-    exerciseIndex: number,
-    patch: Partial<{
-      name: string;
-      work: string;
-      control: string;
-    }>,
+    blockIndex: number,
   ) {
-    const exercises = getEditableBlockExercises(block, exerciseIndex);
-    const currentExercise = exercises[exerciseIndex] ?? exercises[0];
-    const nextName = patch.name ?? currentExercise.name;
-    const nextWork =
-      patch.work ??
-      formatExerciseWorkCell(currentExercise, language).replace(/^-$/u, "");
-    const nextControl =
-      patch.control ??
-      formatExerciseControlCell(currentExercise, language).replace(/^-$/u, "");
-    const parsedBlock = createImportedPlanBlock(
-      nextName,
-      nextWork,
-      nextControl,
-      currentExercise.displayOrder ?? exerciseIndex,
-    );
-    const parsedExercise = {
-      ...(parsedBlock.exercises?.[0] ?? currentExercise),
-      name: nextName,
-    };
-    const nextExercises = exercises.map((exercise, index) =>
-      index === exerciseIndex
-        ? {
-            ...parsedExercise,
-            displayOrder: exercise.displayOrder ?? index,
-          }
-        : exercise,
-    );
-
-    return exerciseIndex === 0
-      ? {
-          ...block,
-          ...parsedBlock,
-          name: nextName || parsedBlock.name,
-          exercises: nextExercises,
-        }
-      : {
-          ...block,
-          exercises: nextExercises,
-        };
+    return getEditableBlockExercises(block, blockIndex)[0];
   }
 
-  function updateTemplateExerciseRow(
+  function formatTemplateBlockWorkCell(
+    block: PlanTemplatePayload["blocks"][number],
+    blockIndex: number,
+  ) {
+    const exercise = getTemplateBlockPrimaryExercise(block, blockIndex);
+    return exercise ? formatExerciseWorkCell(exercise, language).replace(/^-$/u, "") : "";
+  }
+
+  function formatTemplateBlockControlCell(
+    block: PlanTemplatePayload["blocks"][number],
+    blockIndex: number,
+  ) {
+    const exercise = getTemplateBlockPrimaryExercise(block, blockIndex);
+    return exercise ? formatExerciseControlCell(exercise, language).replace(/^-$/u, "") : "";
+  }
+
+  function updateTemplateBlockRow(
     dayIndex: number,
     sessionIndex: number,
     blockIndex: number,
-    exerciseIndex: number,
     patch: Partial<{
       name: string;
       work: string;
       control: string;
+      rowKind: PlanBlockRowKind;
     }>,
   ) {
     updateTemplateSessionDraft(dayIndex, sessionIndex, (session) => ({
       ...session,
-      blocks: session.blocks.map((block, index) =>
-        index === blockIndex
-          ? rebuildTemplateExerciseBlock(block, exerciseIndex, patch)
-          : block,
-      ),
+      blocks: session.blocks.map((block, index) => {
+        if (index !== blockIndex) {
+          return block;
+        }
+
+        if (patch.rowKind && patch.name === undefined && patch.work === undefined && patch.control === undefined) {
+          return {
+            ...block,
+            rowKind: patch.rowKind,
+          };
+        }
+
+        const nextName = patch.name ?? block.name;
+        const parsedBlock = createImportedPlanBlock(
+          nextName,
+          patch.work ?? formatTemplateBlockWorkCell(block, blockIndex),
+          patch.control ?? formatTemplateBlockControlCell(block, blockIndex),
+          blockIndex,
+        );
+
+        return {
+          ...block,
+          ...parsedBlock,
+          name: nextName || parsedBlock.name,
+          rowKind: patch.rowKind ?? parsedBlock.rowKind ?? block.rowKind ?? "exercise",
+        };
+      }),
     }));
   }
 
@@ -18490,6 +18609,9 @@ export function PageClient({
                                 <div className="planning-template-import-session-table">
                                   <div>
                                     <span>
+                                      {copyFor(language, { en: "Type", ru: "Тип", bg: "Тип" })}
+                                    </span>
+                                    <span>
                                       {copyFor(language, { en: "Block", ru: "Блок", bg: "Блок" })}
                                     </span>
                                     <span>
@@ -18513,6 +18635,13 @@ export function PageClient({
 
                                     return (
                                       <div key={`${block.name}-${blockIndex}`}>
+                                        <span>
+                                          {localizedOptionLabel(
+                                            block.rowKind ?? "exercise",
+                                            language,
+                                            PLAN_BLOCK_ROW_KIND_LABELS,
+                                          )}
+                                        </span>
                                         <span>{block.name}</span>
                                         <span>{formatExerciseWorkCell(exercise, language)}</span>
                                         <span>{formatExerciseControlCell(exercise, language)}</span>
@@ -18796,11 +18925,82 @@ export function PageClient({
                                         )
                                       }
                                     />
+                                    <div className="planning-template-session-controls">
+                                      <label>
+                                        <span>
+                                          {copyFor(language, {
+                                            en: "Execution",
+                                            ru: "Выполнение",
+                                            bg: "Изпълнение",
+                                          })}
+                                        </span>
+                                        <select
+                                          value={session.executionMode ?? "whole_session"}
+                                          onChange={(event) =>
+                                            updateTemplateSessionDraft(
+                                              normalizedSelectedTemplateDayIndex,
+                                              sessionIndex,
+                                              (currentSession) => ({
+                                                ...currentSession,
+                                                executionMode:
+                                                  event.target.value as PlanSessionExecutionMode,
+                                              }),
+                                            )
+                                          }
+                                        >
+                                          {PLAN_SESSION_EXECUTION_MODES.map((mode) => (
+                                            <option key={mode} value={mode}>
+                                              {localizedOptionLabel(
+                                                mode,
+                                                language,
+                                                PLAN_SESSION_EXECUTION_MODE_LABELS,
+                                              )}
+                                            </option>
+                                          ))}
+                                        </select>
+                                      </label>
+                                      <label>
+                                        <span>
+                                          {copyFor(language, {
+                                            en: "Device",
+                                            ru: "Устройство",
+                                            bg: "Устройство",
+                                          })}
+                                        </span>
+                                        <select
+                                          value={session.deviceLinkMode ?? "session"}
+                                          onChange={(event) =>
+                                            updateTemplateSessionDraft(
+                                              normalizedSelectedTemplateDayIndex,
+                                              sessionIndex,
+                                              (currentSession) => ({
+                                                ...currentSession,
+                                                deviceLinkMode:
+                                                  event.target.value as PlanDeviceLinkMode,
+                                              }),
+                                            )
+                                          }
+                                        >
+                                          {PLAN_DEVICE_LINK_MODES.map((mode) => (
+                                            <option key={mode} value={mode}>
+                                              {localizedOptionLabel(
+                                                mode,
+                                                language,
+                                                PLAN_DEVICE_LINK_MODE_LABELS,
+                                              )}
+                                            </option>
+                                          ))}
+                                        </select>
+                                      </label>
+                                    </div>
                                     <table className="planning-template-exercise-table">
                                       <thead>
                                         <tr>
                                           <th>
-                                            {copyFor(language, { en: "Exercise", ru: "Упр.", bg: "Упр." })}
+                                            {copyFor(language, { en: "Type", ru: "Тип", bg: "Тип" })}
+                                          </th>
+                                          <th>
+                                            {copyFor(language, { en: "Row", ru: "Строка", bg: "Ред" })}
                                           </th>
                                           <th>
                                             {copyFor(language, { en: "Sets", ru: "Подходы", bg: "Серии" })}
@@ -18812,75 +19012,93 @@ export function PageClient({
                                         </tr>
                                       </thead>
                                       <tbody>
-                                        {session.blocks.flatMap((block, blockIndex) =>
-                                          getEditableBlockExercises(block, blockIndex).map((exercise, exerciseIndex) => (
-                                            <tr key={`${block.name}-${exercise.name}-${blockIndex}-${exerciseIndex}`}>
-                                              <td>
-                                                <input
-                                                  value={exercise.name}
-                                                  onChange={(event) =>
-                                                    updateTemplateExerciseRow(
-                                                      normalizedSelectedTemplateDayIndex,
-                                                      sessionIndex,
-                                                      blockIndex,
-                                                      exerciseIndex,
-                                                      { name: event.target.value },
-                                                    )
-                                                  }
-                                                />
-                                              </td>
-                                              <td>
-                                                <input
-                                                  value={formatExerciseWorkCell(exercise, language).replace(/^-$/u, "")}
-                                                  onChange={(event) =>
-                                                    updateTemplateExerciseRow(
-                                                      normalizedSelectedTemplateDayIndex,
-                                                      sessionIndex,
-                                                      blockIndex,
-                                                      exerciseIndex,
-                                                      { work: event.target.value },
-                                                    )
-                                                  }
-                                                />
-                                              </td>
-                                              <td>
-                                                <input
-                                                  value={formatExerciseControlCell(exercise, language).replace(/^-$/u, "")}
-                                                  onChange={(event) =>
-                                                    updateTemplateExerciseRow(
-                                                      normalizedSelectedTemplateDayIndex,
-                                                      sessionIndex,
-                                                      blockIndex,
-                                                      exerciseIndex,
-                                                      { control: event.target.value },
-                                                    )
-                                                  }
-                                                />
-                                              </td>
-                                              <td className="planning-template-exercise-action-cell">
-                                                <button
-                                                  aria-label={copyFor(language, {
-                                                    en: "Remove exercise",
-                                                    ru: "Удалить упражнение",
-                                                    bg: "Изтрий упражнение",
-                                                  })}
-                                                  className="planning-template-row-action"
-                                                  onClick={() =>
-                                                    removeTemplateExerciseRow(
-                                                      normalizedSelectedTemplateDayIndex,
-                                                      sessionIndex,
-                                                      blockIndex,
-                                                      exerciseIndex,
-                                                    )
-                                                  }
-                                                  type="button"
-                                                >
-                                                  ×
-                                                </button>
-                                              </td>
-                                            </tr>
-                                          )),
-                                        )}
+                                        {session.blocks.map((block, blockIndex) => (
+                                          <tr key={`${block.name}-${blockIndex}`}>
+                                            <td>
+                                              <select
+                                                value={block.rowKind ?? "exercise"}
+                                                onChange={(event) =>
+                                                  updateTemplateBlockRow(
+                                                    normalizedSelectedTemplateDayIndex,
+                                                    sessionIndex,
+                                                    blockIndex,
+                                                    { rowKind: event.target.value as PlanBlockRowKind },
+                                                  )
+                                                }
+                                              >
+                                                {PLAN_BLOCK_ROW_KINDS.map((kind) => (
+                                                  <option key={kind} value={kind}>
+                                                    {localizedOptionLabel(
+                                                      kind,
+                                                      language,
+                                                      PLAN_BLOCK_ROW_KIND_LABELS,
+                                                    )}
+                                                  </option>
+                                                ))}
+                                              </select>
+                                            </td>
+                                            <td>
+                                              <input
+                                                value={block.name}
+                                                onChange={(event) =>
+                                                  updateTemplateBlockRow(
+                                                    normalizedSelectedTemplateDayIndex,
+                                                    sessionIndex,
+                                                    blockIndex,
+                                                    { name: event.target.value },
+                                                  )
+                                                }
+                                              />
+                                            </td>
+                                            <td>
+                                              <input
+                                                value={formatTemplateBlockWorkCell(block, blockIndex)}
+                                                onChange={(event) =>
+                                                  updateTemplateBlockRow(
+                                                    normalizedSelectedTemplateDayIndex,
+                                                    sessionIndex,
+                                                    blockIndex,
+                                                    { work: event.target.value },
+                                                  )
+                                                }
+                                              />
+                                            </td>
+                                            <td>
+                                              <input
+                                                value={formatTemplateBlockControlCell(block, blockIndex)}
+                                                onChange={(event) =>
+                                                  updateTemplateBlockRow(
+                                                    normalizedSelectedTemplateDayIndex,
+                                                    sessionIndex,
+                                                    blockIndex,
+                                                    { control: event.target.value },
+                                                  )
+                                                }
+                                              />
+                                            </td>
+                                            <td className="planning-template-exercise-action-cell">
+                                              <button
+                                                aria-label={copyFor(language, {
+                                                  en: "Remove row",
+                                                  ru: "Удалить строку",
+                                                  bg: "Изтрий ред",
+                                                })}
+                                                className="planning-template-row-action"
+                                                onClick={() =>
+                                                  removeTemplateExerciseRow(
+                                                    normalizedSelectedTemplateDayIndex,
+                                                    sessionIndex,
+                                                    blockIndex,
+                                                    0,
+                                                  )
+                                                }
+                                                type="button"
+                                              >
+                                                ×
+                                              </button>
+                                            </td>
+                                          </tr>
+                                        ))}
                                       </tbody>
                                     </table>
                                     <button
@@ -18891,9 +19109,9 @@ export function PageClient({
                                       type="button"
                                     >
                                       {copyFor(language, {
-                                        en: "Add exercise",
-                                        ru: "Добавить упражнение",
-                                        bg: "Добави упражнение",
+                                        en: "Add row",
+                                        ru: "Добавить строку",
+                                        bg: "Добави ред",
                                       })}
                                     </button>
                                   </section>
@@ -19116,6 +19334,37 @@ export function PageClient({
                               }))
                             }
                           />
+                        </label>
+                        <label className="field">
+                          <span>
+                            {copyFor(language, {
+                              en: "Row type",
+                              ru: "Тип строки",
+                              bg: "Тип ред",
+                            })}
+                          </span>
+                          <select
+                            value={block.rowKind ?? "exercise"}
+                            onChange={(event) =>
+                              setPlanForm((current) => ({
+                                ...current,
+                                blocks: current.blocks.map((item, itemIndex) =>
+                                  itemIndex === index
+                                    ? {
+                                        ...item,
+                                        rowKind: event.target.value as PlanBlockRowKind,
+                                      }
+                                    : item,
+                                ),
+                              }))
+                            }
+                          >
+                            {PLAN_BLOCK_ROW_KINDS.map((kind) => (
+                              <option key={kind} value={kind}>
+                                {localizedOptionLabel(kind, language, PLAN_BLOCK_ROW_KIND_LABELS)}
+                              </option>
+                            ))}
+                          </select>
                         </label>
                         <label className="field">
                           <span>{t("blockType")}</span>

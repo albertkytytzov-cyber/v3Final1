@@ -78,8 +78,10 @@ export function estimatePlannedBlockLoad(
   blockPriority: number,
   targetDurationMinutes: number | null,
   targetRpe: number | null,
+  rowKind: PlanBlockInput["rowKind"] = "exercise",
 ) {
   return estimateTrainingBlockLoad({
+    rowKind,
     blockType,
     blockPriority,
     targetDurationMinutes,
@@ -133,6 +135,7 @@ export function buildDailyExecutionStats(blocks: ExecutionBlock[]): DailyExecuti
       block.blockPriority,
       block.targetDurationMinutes,
       block.targetRpe,
+      block.rowKind,
     );
     plannedLoad += blockPlannedLoad;
     actualLoad += estimateActualBlockLoad(block, blockPlannedLoad);

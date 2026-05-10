@@ -1,3 +1,8 @@
+import {
+  PLAN_BLOCK_ROW_KINDS,
+  PLAN_DEVICE_LINK_MODES,
+  PLAN_SESSION_EXECUTION_MODES,
+} from "@training-platform/shared";
 import type {
   AssignedPlanPayload,
   AutoAssignMicrocyclePayload,
@@ -16,11 +21,22 @@ function toNullableNumber(value: unknown) {
   return Number.isNaN(numberValue) ? null : numberValue;
 }
 
+function readEnumValue<T extends string>(
+  value: unknown,
+  allowedValues: readonly T[],
+  fallback: T,
+) {
+  return typeof value === "string" && allowedValues.includes(value as T)
+    ? (value as T)
+    : fallback;
+}
+
 function toBlockInput(value: unknown): PlanBlockInput {
   const block = (value ?? {}) as Partial<Record<keyof PlanBlockInput, unknown>>;
 
   return {
     name: typeof block.name === "string" ? block.name : "",
+    rowKind: readEnumValue(block.rowKind, PLAN_BLOCK_ROW_KINDS, "exercise"),
     blockType: (block.blockType ?? "") as PlanBlockInput["blockType"],
     blockPriority: Number(block.blockPriority ?? 1),
     isMandatory: Boolean(block.isMandatory),
@@ -65,6 +81,8 @@ function toDayInput(value: unknown): PlanDayInput {
           name?: unknown;
           notes?: unknown;
           orderIndex?: unknown;
+          executionMode?: unknown;
+          deviceLinkMode?: unknown;
           blocks?: unknown;
         };
 
@@ -73,6 +91,16 @@ function toDayInput(value: unknown): PlanDayInput {
           name: typeof sessionValue.name === "string" ? sessionValue.name : "",
           notes: typeof sessionValue.notes === "string" ? sessionValue.notes : "",
           orderIndex: Number(sessionValue.orderIndex ?? index),
+          executionMode: readEnumValue(
+            sessionValue.executionMode,
+            PLAN_SESSION_EXECUTION_MODES,
+            "whole_session",
+          ),
+          deviceLinkMode: readEnumValue(
+            sessionValue.deviceLinkMode,
+            PLAN_DEVICE_LINK_MODES,
+            "session",
+          ),
           blocks: Array.isArray(sessionValue.blocks)
             ? sessionValue.blocks.map(toBlockInput)
             : [],

@@ -250,6 +250,8 @@ export async function ensureSchema() {
       plan_day_id UUID NOT NULL REFERENCES plan_days(id) ON DELETE CASCADE,
       name TEXT NOT NULL,
       notes TEXT NOT NULL DEFAULT '',
+      execution_mode TEXT NOT NULL DEFAULT 'whole_session',
+      device_link_mode TEXT NOT NULL DEFAULT 'session',
       display_order INTEGER NOT NULL DEFAULT 0
     );
 
@@ -258,6 +260,7 @@ export async function ensureSchema() {
       plan_template_id UUID NOT NULL REFERENCES plan_templates(id) ON DELETE CASCADE,
       plan_session_id UUID REFERENCES plan_sessions(id) ON DELETE CASCADE,
       name TEXT NOT NULL,
+      row_kind TEXT NOT NULL DEFAULT 'exercise',
       block_type TEXT NOT NULL,
       block_priority INTEGER NOT NULL,
       is_mandatory BOOLEAN NOT NULL DEFAULT FALSE,
@@ -312,6 +315,8 @@ export async function ensureSchema() {
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       assigned_day_id UUID NOT NULL REFERENCES assigned_plan_days(id) ON DELETE CASCADE,
       name TEXT NOT NULL,
+      execution_mode TEXT NOT NULL DEFAULT 'whole_session',
+      device_link_mode TEXT NOT NULL DEFAULT 'session',
       display_order INTEGER NOT NULL DEFAULT 0
     );
 
@@ -320,6 +325,7 @@ export async function ensureSchema() {
       assigned_session_id UUID NOT NULL REFERENCES assigned_day_sessions(id) ON DELETE CASCADE,
       template_block_id UUID REFERENCES plan_blocks(id) ON DELETE SET NULL,
       name TEXT NOT NULL,
+      row_kind TEXT NOT NULL DEFAULT 'exercise',
       block_type TEXT NOT NULL,
       block_priority INTEGER NOT NULL,
       is_mandatory BOOLEAN NOT NULL DEFAULT FALSE,
@@ -1070,6 +1076,16 @@ export async function ensureSchema() {
     "TEXT NOT NULL DEFAULT ''",
   );
   await ensureColumn(
+    "plan_sessions",
+    "execution_mode",
+    "TEXT NOT NULL DEFAULT 'whole_session'",
+  );
+  await ensureColumn(
+    "plan_sessions",
+    "device_link_mode",
+    "TEXT NOT NULL DEFAULT 'session'",
+  );
+  await ensureColumn(
     "plan_blocks",
     "plan_session_id",
     "UUID REFERENCES plan_sessions(id) ON DELETE CASCADE",
@@ -1083,6 +1099,7 @@ export async function ensureSchema() {
   await ensureColumn("plan_blocks", "target_rpe", "NUMERIC(4, 1)");
   await ensureColumn("plan_blocks", "target_sets", "INTEGER");
   await ensureColumn("plan_blocks", "target_reps", "INTEGER");
+  await ensureColumn("plan_blocks", "row_kind", "TEXT NOT NULL DEFAULT 'exercise'");
   await ensureColumn(
     "assigned_day_blocks",
     "template_block_id",
@@ -1097,6 +1114,17 @@ export async function ensureSchema() {
   await ensureColumn("assigned_day_blocks", "target_rpe", "NUMERIC(4, 1)");
   await ensureColumn("assigned_day_blocks", "target_sets", "INTEGER");
   await ensureColumn("assigned_day_blocks", "target_reps", "INTEGER");
+  await ensureColumn(
+    "assigned_day_sessions",
+    "execution_mode",
+    "TEXT NOT NULL DEFAULT 'whole_session'",
+  );
+  await ensureColumn(
+    "assigned_day_sessions",
+    "device_link_mode",
+    "TEXT NOT NULL DEFAULT 'session'",
+  );
+  await ensureColumn("assigned_day_blocks", "row_kind", "TEXT NOT NULL DEFAULT 'exercise'");
   await ensureColumn(
     "block_exercises",
     "target_weight_kg",

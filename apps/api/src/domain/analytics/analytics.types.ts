@@ -36,6 +36,7 @@ export interface ExecutionBlock {
   durationMinutes: number | null;
   rpe: number | null;
   resultNotes: string;
+  rowKind?: PlanBlockInput["rowKind"];
   blockType: PlanBlockInput["blockType"];
   blockPriority: number;
   targetDurationMinutes: number | null;

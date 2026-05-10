@@ -41,6 +41,7 @@ interface ExecutionResultRow {
 
 interface BlockLoadContextRow {
   day_date: string;
+  row_kind: PlanBlockInput["rowKind"] | null;
   block_type: PlanBlockInput["blockType"];
   block_priority: number;
   target_duration_minutes: string | null;
@@ -581,6 +582,7 @@ export async function submitExecutionResult(
     `
       SELECT
         assigned_plan_days.day_date::text,
+        assigned_day_blocks.row_kind,
         assigned_day_blocks.block_type,
         assigned_day_blocks.block_priority,
         assigned_day_blocks.target_duration_minutes::text,
@@ -613,6 +615,7 @@ export async function submitExecutionResult(
     const actualRpe = summary.rpe ?? null;
     const plannedLoad = estimateTrainingBlockLoad({
       blockType: blockRow.block_type,
+      rowKind: blockRow.row_kind ?? "exercise",
       blockPriority: blockRow.block_priority,
       targetDurationMinutes: plannedDurationMinutes,
       targetRpe: plannedRpe,
