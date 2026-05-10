@@ -11,10 +11,19 @@ export interface DirectWatchPermissionResult {
 }
 
 export interface DirectWatchDevice {
+  bondState?: "bonded" | "bonding" | "not-bonded" | "unknown" | null;
+  bondStateCode?: number | null;
+  deviceType?: "classic" | "dual" | "le" | "unknown" | null;
+  deviceTypeCode?: number | null;
   id: string;
+  isConnectable?: boolean | null;
   name?: string | null;
   rssi?: number | null;
   isLikelyWatch?: boolean;
+  manufacturerData?: DirectWatchPayloadPreview[];
+  serviceData?: DirectWatchPayloadPreview[];
+  serviceUuids?: string[];
+  txPowerLevel?: number | null;
 }
 
 export interface DirectWatchCharacteristic {
@@ -30,14 +39,35 @@ export interface DirectWatchService {
 }
 
 export interface DirectWatchInspection {
+  bondState?: "bonded" | "bonding" | "not-bonded" | "unknown" | null;
+  bondStateCode?: number | null;
   deviceId: string;
   deviceName?: string | null;
+  deviceType?: "classic" | "dual" | "le" | "unknown" | null;
+  deviceTypeCode?: number | null;
   hasBatteryService?: boolean;
   hasDeviceInfoService?: boolean;
   hasHeartRateService?: boolean;
   inspectedAt?: string | null;
   serviceCount?: number;
   services?: DirectWatchService[];
+}
+
+export interface DirectWatchPairingResult {
+  bondState?: "bonded" | "bonding" | "not-bonded" | "unknown" | null;
+  bondStateCode?: number | null;
+  deviceId: string;
+  deviceName?: string | null;
+  pairedAt?: string | null;
+  pairingStarted?: boolean;
+  status?: "already-bonded" | "bonded" | "not-bonded" | "not-started" | "timeout" | string | null;
+}
+
+export interface DirectWatchPayloadPreview {
+  byteLength?: number | null;
+  companyId?: number | null;
+  previewHex?: string | null;
+  uuid?: string | null;
 }
 
 export interface DirectWatchScanResult {
@@ -48,6 +78,7 @@ export interface DirectWatchScanResult {
 interface DirectWatchPlugin {
   inspectDevice?: (input: { deviceId: string }) => Promise<DirectWatchInspection>;
   isAvailable?: () => Promise<DirectWatchAvailability>;
+  pairDevice?: (input: { deviceId: string }) => Promise<DirectWatchPairingResult>;
   requestAuthorization?: () => Promise<DirectWatchPermissionResult>;
   scanDevices?: (input?: { durationMs?: number }) => Promise<DirectWatchScanResult>;
 }
@@ -109,6 +140,24 @@ export async function inspectDirectWatchDevice(deviceId: string): Promise<Direct
   return normalizeDirectWatchInspection(inspection);
 }
 
+export async function pairDirectWatchDevice(deviceId: string): Promise<DirectWatchPairingResult> {
+  const plugin = getDirectWatchPlugin();
+
+  if (!plugin?.pairDevice) {
+    throw new Error("Системное сопряжение часов доступно только в Android-сборке PERFORM.");
+  }
+
+  if (plugin.requestAuthorization) {
+    const authorization = await plugin.requestAuthorization();
+    if (!authorization.granted) {
+      throw new Error(authorization.reason || "Нужно разрешить PERFORM подключение к Bluetooth-устройствам.");
+    }
+  }
+
+  const pairing = await plugin.pairDevice({ deviceId });
+  return normalizeDirectWatchPairing(pairing);
+}
+
 function getDirectWatchPlugin() {
   return (globalThis as CapacitorWithDirectWatch).Capacitor?.Plugins?.DirectWatch ?? null;
 }
@@ -119,10 +168,25 @@ function normalizeDirectWatchDevice(value: unknown): DirectWatchDevice {
   }
 
   return {
+    bondState: normalizeBluetoothState(value.bondState),
+    bondStateCode: normalizeNumber(value.bondStateCode),
+    deviceType: normalizeDeviceType(value.deviceType),
+    deviceTypeCode: normalizeNumber(value.deviceTypeCode),
     id: normalizeString(value.id) ?? "",
+    isConnectable: normalizeNullableBoolean(value.isConnectable),
     isLikelyWatch: typeof value.isLikelyWatch === "boolean" ? value.isLikelyWatch : false,
+    manufacturerData: Array.isArray(value.manufacturerData)
+      ? value.manufacturerData.map(normalizePayloadPreview)
+      : [],
     name: normalizeString(value.name),
     rssi: normalizeNumber(value.rssi),
+    serviceData: Array.isArray(value.serviceData)
+      ? value.serviceData.map(normalizePayloadPreview)
+      : [],
+    serviceUuids: Array.isArray(value.serviceUuids)
+      ? value.serviceUuids.map((uuid) => normalizeString(uuid)).filter((uuid): uuid is string => Boolean(uuid))
+      : [],
+    txPowerLevel: normalizeNumber(value.txPowerLevel),
   };
 }
 
@@ -132,8 +196,12 @@ function normalizeDirectWatchInspection(value: unknown): DirectWatchInspection {
   }
 
   return {
+    bondState: normalizeBluetoothState(value.bondState),
+    bondStateCode: normalizeNumber(value.bondStateCode),
     deviceId: normalizeString(value.deviceId) ?? "",
     deviceName: normalizeString(value.deviceName),
+    deviceType: normalizeDeviceType(value.deviceType),
+    deviceTypeCode: normalizeNumber(value.deviceTypeCode),
     hasBatteryService: normalizeBoolean(value.hasBatteryService),
     hasDeviceInfoService: normalizeBoolean(value.hasDeviceInfoService),
     hasHeartRateService: normalizeBoolean(value.hasHeartRateService),
@@ -142,6 +210,22 @@ function normalizeDirectWatchInspection(value: unknown): DirectWatchInspection {
     services: Array.isArray(value.services)
       ? value.services.map(normalizeDirectWatchService)
       : [],
+  };
+}
+
+function normalizeDirectWatchPairing(value: unknown): DirectWatchPairingResult {
+  if (!isRecord(value)) {
+    return { deviceId: "" };
+  }
+
+  return {
+    bondState: normalizeBluetoothState(value.bondState),
+    bondStateCode: normalizeNumber(value.bondStateCode),
+    deviceId: normalizeString(value.deviceId) ?? "",
+    deviceName: normalizeString(value.deviceName),
+    pairedAt: normalizeString(value.pairedAt),
+    pairingStarted: normalizeNullableBoolean(value.pairingStarted) ?? false,
+    status: normalizeString(value.status),
   };
 }
 
@@ -173,6 +257,19 @@ function normalizeDirectWatchCharacteristic(value: unknown): DirectWatchCharacte
   };
 }
 
+function normalizePayloadPreview(value: unknown): DirectWatchPayloadPreview {
+  if (!isRecord(value)) {
+    return {};
+  }
+
+  return {
+    byteLength: normalizeNumber(value.byteLength),
+    companyId: normalizeNumber(value.companyId),
+    previewHex: normalizeString(value.previewHex),
+    uuid: normalizeString(value.uuid),
+  };
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -187,4 +284,28 @@ function normalizeNumber(value: unknown) {
 
 function normalizeBoolean(value: unknown) {
   return typeof value === "boolean" ? value : false;
+}
+
+function normalizeNullableBoolean(value: unknown) {
+  return typeof value === "boolean" ? value : null;
+}
+
+function normalizeBluetoothState(value: unknown) {
+  const normalized = normalizeString(value);
+  return normalized === "bonded" ||
+    normalized === "bonding" ||
+    normalized === "not-bonded" ||
+    normalized === "unknown"
+    ? normalized
+    : null;
+}
+
+function normalizeDeviceType(value: unknown) {
+  const normalized = normalizeString(value);
+  return normalized === "classic" ||
+    normalized === "dual" ||
+    normalized === "le" ||
+    normalized === "unknown"
+    ? normalized
+    : null;
 }

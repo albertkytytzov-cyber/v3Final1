@@ -151,15 +151,37 @@ export interface MobileAppState {
   coachAiStatus: CoachAiReviewStatus | null;
   directWatchDiagnostic: {
     devices: Array<{
+      bondState?: "bonded" | "bonding" | "not-bonded" | "unknown" | null;
+      bondStateCode?: number | null;
+      deviceType?: "classic" | "dual" | "le" | "unknown" | null;
+      deviceTypeCode?: number | null;
       id: string;
+      isConnectable?: boolean | null;
       isLikelyWatch?: boolean;
+      manufacturerData?: Array<{
+        byteLength?: number | null;
+        companyId?: number | null;
+        previewHex?: string | null;
+        uuid?: string | null;
+      }>;
       name?: string | null;
       rssi?: number | null;
+      serviceData?: Array<{
+        byteLength?: number | null;
+        previewHex?: string | null;
+        uuid?: string | null;
+      }>;
+      serviceUuids?: string[];
+      txPowerLevel?: number | null;
     }>;
     inspectedDeviceId: string | null;
     inspection: {
+      bondState?: "bonded" | "bonding" | "not-bonded" | "unknown" | null;
+      bondStateCode?: number | null;
       deviceId: string;
       deviceName?: string | null;
+      deviceType?: "classic" | "dual" | "le" | "unknown" | null;
+      deviceTypeCode?: number | null;
       hasBatteryService?: boolean;
       hasDeviceInfoService?: boolean;
       hasHeartRateService?: boolean;

@@ -11,6 +11,7 @@ import {
 } from "../integrations/health-connect.js";
 import {
   inspectDirectWatchDevice,
+  pairDirectWatchDevice,
   scanDirectWatchDevices,
 } from "../integrations/direct-watch.js";
 import { readHuaweiHealthDailySummary } from "../integrations/huawei-health.js";
@@ -512,6 +513,51 @@ export function bootstrapMobileApp(root: HTMLElement) {
           inspection: null,
         },
         error: error instanceof Error ? error.message : "Не удалось проверить сервисы часов.",
+        isBusy: false,
+        message: null,
+      });
+    }
+  };
+
+  const pairDirectWatch = async (deviceId: string) => {
+    if (!deviceId) {
+      update({ error: "Выберите часы для сопряжения." });
+      return;
+    }
+
+    update({
+      error: null,
+      isBusy: true,
+      message: "Откройте системное окно сопряжения, подтвердите код на телефоне и часах.",
+    });
+
+    try {
+      const pairing = await pairDirectWatchDevice(deviceId);
+      const devices = state.directWatchDiagnostic.devices.map((device) =>
+        device.id === deviceId
+          ? {
+              ...device,
+              bondState: pairing.bondState ?? device.bondState,
+              bondStateCode: pairing.bondStateCode ?? device.bondStateCode,
+              name: pairing.deviceName ?? device.name,
+            }
+          : device,
+      );
+      const isBonded = pairing.bondState === "bonded";
+      update({
+        directWatchDiagnostic: {
+          ...state.directWatchDiagnostic,
+          devices,
+        },
+        error: null,
+        isBusy: false,
+        message: isBonded
+          ? "Сопряжение выполнено. Теперь нажмите “Проверить”, чтобы прочитать BLE-сервисы часов."
+          : "Сопряжение не завершено. Проверьте системное окно Bluetooth и подтвердите запрос на часах.",
+      });
+    } catch (error) {
+      update({
+        error: error instanceof Error ? error.message : "Не удалось выполнить системное сопряжение часов.",
         isBusy: false,
         message: null,
       });
@@ -1127,6 +1173,12 @@ export function bootstrapMobileApp(root: HTMLElement) {
     root.querySelectorAll<HTMLButtonElement>("[data-direct-watch-inspect]").forEach((button) => {
       button.addEventListener("click", () => {
         void inspectDirectWatch(button.dataset.directWatchInspect ?? "");
+      });
+    });
+
+    root.querySelectorAll<HTMLButtonElement>("[data-direct-watch-pair]").forEach((button) => {
+      button.addEventListener("click", () => {
+        void pairDirectWatch(button.dataset.directWatchPair ?? "");
       });
     });
 
@@ -1974,15 +2026,30 @@ function renderDirectWatchDiagnostics(state: MobileAppState) {
               <div>
                 <strong>${escapeHtml(device.name || "Bluetooth-устройство")}</strong>
                 <span>${escapeHtml(device.isLikelyWatch ? "похоже на часы" : "устройство рядом")} · ${escapeHtml(formatDirectWatchSignal(device.rssi))}</span>
+                <span>${escapeHtml(formatDirectWatchBondState(device.bondState))} · ${escapeHtml(formatDirectWatchDeviceType(device.deviceType))} · ${escapeHtml(formatDirectWatchConnectable(device.isConnectable))}</span>
+                <span>${escapeHtml(formatDirectWatchDeviceId(device.id))}</span>
+                ${renderDirectWatchAdvertisedData(device)}
               </div>
-              <button
-                class="secondary-action"
-                data-direct-watch-inspect="${escapeHtml(device.id)}"
-                type="button"
-                ${state.isBusy ? "disabled" : ""}
-              >
-                Проверить
-              </button>
+              <div class="direct-watch-device-actions">
+                ${device.bondState !== "bonded" ? `
+                  <button
+                    class="secondary-action"
+                    data-direct-watch-pair="${escapeHtml(device.id)}"
+                    type="button"
+                    ${state.isBusy ? "disabled" : ""}
+                  >
+                    Сопрячь
+                  </button>
+                ` : ""}
+                <button
+                  class="secondary-action"
+                  data-direct-watch-inspect="${escapeHtml(device.id)}"
+                  type="button"
+                  ${state.isBusy ? "disabled" : ""}
+                >
+                  Проверить
+                </button>
+              </div>
             </article>
           `).join("")}
         </div>
@@ -2002,6 +2069,10 @@ function renderDirectWatchDiagnostics(state: MobileAppState) {
             <article>
               <span>Устройство</span>
               <strong>${escapeHtml(inspection.deviceName || "Redmi Watch 5")}</strong>
+            </article>
+            <article>
+              <span>Сопряжение</span>
+              <strong>${escapeHtml(formatDirectWatchBondState(inspection.bondState))}</strong>
             </article>
             <article>
               <span>Сервисов</span>
@@ -2049,6 +2120,94 @@ function formatDirectWatchSignal(rssi: number | null | undefined) {
   }
 
   return `слабый сигнал ${rssi} dBm`;
+}
+
+function formatDirectWatchBondState(state: string | null | undefined) {
+  if (state === "bonded") {
+    return "сопряжено";
+  }
+
+  if (state === "bonding") {
+    return "идёт сопряжение";
+  }
+
+  if (state === "not-bonded") {
+    return "не сопряжено";
+  }
+
+  return "сопряжение неизвестно";
+}
+
+function formatDirectWatchDeviceType(type: string | null | undefined) {
+  if (type === "le") {
+    return "BLE";
+  }
+
+  if (type === "dual") {
+    return "Bluetooth dual";
+  }
+
+  if (type === "classic") {
+    return "Bluetooth classic";
+  }
+
+  return "тип неизвестен";
+}
+
+function formatDirectWatchConnectable(value: boolean | null | undefined) {
+  if (value === true) {
+    return "можно подключаться";
+  }
+
+  if (value === false) {
+    return "не рекламирует подключение";
+  }
+
+  return "подключение неизвестно";
+}
+
+function formatDirectWatchDeviceId(id: string) {
+  if (!id) {
+    return "ID неизвестен";
+  }
+
+  return id.length > 7 ? `ID ...${id.slice(-7)}` : `ID ${id}`;
+}
+
+function renderDirectWatchAdvertisedData(
+  device: MobileAppState["directWatchDiagnostic"]["devices"][number],
+) {
+  const serviceUuids = device.serviceUuids ?? [];
+  const manufacturerData = device.manufacturerData ?? [];
+  const serviceData = device.serviceData ?? [];
+
+  if (!serviceUuids.length && !manufacturerData.length && !serviceData.length && device.txPowerLevel == null) {
+    return `<span>рекламируемых BLE-сервисов нет</span>`;
+  }
+
+  return `
+    <details class="direct-watch-advertisement">
+      <summary>Данные поиска Bluetooth</summary>
+      <ul>
+        ${device.txPowerLevel != null ? `<li><strong>TX power</strong><span>${escapeHtml(String(device.txPowerLevel))}</span></li>` : ""}
+        ${serviceUuids.map((uuid) => `
+          <li><strong>Service UUID</strong><span>${escapeHtml(uuid)}</span></li>
+        `).join("")}
+        ${manufacturerData.map((item) => `
+          <li>
+            <strong>Manufacturer ${escapeHtml(item.companyId != null ? String(item.companyId) : "-")}</strong>
+            <span>${escapeHtml(`${item.byteLength ?? 0} байт${item.previewHex ? ` · ${item.previewHex}` : ""}`)}</span>
+          </li>
+        `).join("")}
+        ${serviceData.map((item) => `
+          <li>
+            <strong>Service data</strong>
+            <span>${escapeHtml(`${item.uuid ?? "-"} · ${item.byteLength ?? 0} байт${item.previewHex ? ` · ${item.previewHex}` : ""}`)}</span>
+          </li>
+        `).join("")}
+      </ul>
+    </details>
+  `;
 }
 
 function formatDirectWatchInspectionSummary(

@@ -10,7 +10,10 @@ import android.bluetooth.BluetoothGattService
 import android.bluetooth.BluetoothManager
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Handler
@@ -49,6 +52,7 @@ class DirectWatchPlugin : Plugin() {
     private val devicesByAddress = linkedMapOf<String, ScannedWatchDevice>()
     private var activeScanCallback: ScanCallback? = null
     private var activeGatt: BluetoothGatt? = null
+    private var activeBondReceiver: BroadcastReceiver? = null
 
     @PluginMethod
     fun isAvailable(call: PluginCall) {
@@ -247,9 +251,117 @@ class DirectWatchPlugin : Plugin() {
         mainHandler.postDelayed(timeout, INSPECT_TIMEOUT_MS.toLong())
     }
 
+    @PluginMethod
+    fun pairDevice(call: PluginCall) {
+        val address = call.getString("deviceId")
+        if (address.isNullOrBlank()) {
+            call.reject("deviceId is required")
+            return
+        }
+
+        val adapter = bluetoothAdapter()
+        if (adapter == null || !adapter.isEnabled) {
+            call.reject("Включите Bluetooth на телефоне и повторите сопряжение часов.")
+            return
+        }
+
+        if (!hasRequiredRuntimePermissions()) {
+            call.reject("Нужно разрешить PERFORM подключение к Bluetooth-устройствам.")
+            return
+        }
+
+        val device = try {
+            adapter.getRemoteDevice(address)
+        } catch (error: IllegalArgumentException) {
+            call.reject("Некорректный идентификатор Bluetooth-устройства.", error)
+            return
+        }
+
+        val initialBondState = safeBondState(device)
+        if (initialBondState == BluetoothDevice.BOND_BONDED) {
+            call.resolve(buildPairingResponse(device, pairingStarted = false, status = "already-bonded"))
+            return
+        }
+
+        stopActiveBondReceiver()
+
+        var didFinish = false
+        fun finishPairing(onFinish: () -> Unit) {
+            if (didFinish) {
+                return
+            }
+            didFinish = true
+            mainHandler.removeCallbacksAndMessages(PAIRING_TIMEOUT_TOKEN)
+            stopActiveBondReceiver()
+            onFinish()
+        }
+
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                if (intent.action != BluetoothDevice.ACTION_BOND_STATE_CHANGED) {
+                    return
+                }
+
+                val changedDevice = intentBluetoothDevice(intent)
+                if (changedDevice?.address != device.address) {
+                    return
+                }
+
+                val state = intent.getIntExtra(BluetoothDevice.EXTRA_BOND_STATE, BluetoothDevice.ERROR)
+                if (state == BluetoothDevice.BOND_BONDED) {
+                    finishPairing {
+                        call.resolve(buildPairingResponse(device, pairingStarted = true, status = "bonded"))
+                    }
+                } else if (state == BluetoothDevice.BOND_NONE) {
+                    finishPairing {
+                        call.resolve(buildPairingResponse(device, pairingStarted = true, status = "not-bonded"))
+                    }
+                }
+            }
+        }
+
+        activeBondReceiver = receiver
+        try {
+            val filter = IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                context.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
+            } else {
+                @Suppress("DEPRECATION")
+                context.registerReceiver(receiver, filter)
+            }
+        } catch (error: RuntimeException) {
+            activeBondReceiver = null
+            call.reject("Не удалось подготовить системное сопряжение часов.", error)
+            return
+        }
+
+        val pairingStarted = try {
+            device.createBond()
+        } catch (error: SecurityException) {
+            finishPairing {
+                call.reject("Нет разрешения Bluetooth для сопряжения с часами.", error)
+            }
+            return
+        }
+
+        if (!pairingStarted) {
+            finishPairing {
+                call.resolve(buildPairingResponse(device, pairingStarted = false, status = "not-started"))
+            }
+            return
+        }
+
+        mainHandler.postAtTime({
+            finishPairing {
+                call.resolve(buildPairingResponse(device, pairingStarted = true, status = "timeout"))
+            }
+        }, PAIRING_TIMEOUT_TOKEN, android.os.SystemClock.uptimeMillis() + PAIR_TIMEOUT_MS.toLong())
+    }
+
     override fun handleOnDestroy() {
         stopActiveScan()
         stopActiveGatt()
+        stopActiveBondReceiver()
         super.handleOnDestroy()
     }
 
@@ -294,11 +406,23 @@ class DirectWatchPlugin : Plugin() {
         val device = result.device ?: return
         val address = device.address ?: return
         val name = scanResultName(result, device)
+        val previous = devicesByAddress[address]
+        val bondState = safeBondState(device)
+        val deviceType = safeDeviceType(device)
         devicesByAddress[address] = ScannedWatchDevice(
             id = address,
-            name = name,
-            rssi = result.rssi,
+            name = name ?: previous?.name,
+            rssi = maxOf(result.rssi, previous?.rssi ?: result.rssi),
             isLikelyWatch = isLikelyWatchName(name),
+            bondState = bondState,
+            bondStateLabel = bondStateLabel(bondState),
+            deviceType = deviceType,
+            deviceTypeLabel = deviceTypeLabel(deviceType),
+            isConnectable = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) result.isConnectable else null,
+            serviceUuids = result.scanRecord?.serviceUuids?.map { it.uuid.toString() }.orEmpty(),
+            manufacturerData = manufacturerData(result),
+            serviceData = serviceData(result),
+            txPowerLevel = result.scanRecord?.txPowerLevel?.takeIf { it != Int.MIN_VALUE },
         )
     }
 
@@ -335,12 +459,29 @@ class DirectWatchPlugin : Plugin() {
         val response = JSObject()
         response.put("deviceId", device.address)
         response.put("deviceName", devicesByAddress[device.address]?.name ?: scanResultNameFallback(device))
+        response.put("bondState", bondStateLabel(safeBondState(device)))
+        response.put("bondStateCode", safeBondState(device))
+        response.put("deviceType", deviceTypeLabel(safeDeviceType(device)))
+        response.put("deviceTypeCode", safeDeviceType(device))
         response.put("hasHeartRateService", serviceUuids.contains(HEART_RATE_SERVICE_UUID))
         response.put("hasBatteryService", serviceUuids.contains(BATTERY_SERVICE_UUID))
         response.put("hasDeviceInfoService", serviceUuids.contains(DEVICE_INFO_SERVICE_UUID))
         response.put("serviceCount", services.size)
         response.put("services", JSArray(serviceItems))
         response.put("inspectedAt", java.time.Instant.now().toString())
+        return response
+    }
+
+    private fun buildPairingResponse(device: BluetoothDevice, pairingStarted: Boolean, status: String): JSObject {
+        val response = JSObject()
+        val bondState = safeBondState(device)
+        response.put("deviceId", device.address)
+        response.put("deviceName", devicesByAddress[device.address]?.name ?: scanResultNameFallback(device))
+        response.put("pairingStarted", pairingStarted)
+        response.put("status", status)
+        response.put("bondState", bondStateLabel(bondState))
+        response.put("bondStateCode", bondState)
+        response.put("pairedAt", java.time.Instant.now().toString())
         return response
     }
 
@@ -361,6 +502,37 @@ class DirectWatchPlugin : Plugin() {
         if (value and BluetoothGattCharacteristic.PROPERTY_WRITE != 0) properties.add("write")
         if (value and BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE != 0) properties.add("write-no-response")
         return JSArray(properties)
+    }
+
+    private fun manufacturerData(result: ScanResult): JSArray {
+        val data = result.scanRecord?.manufacturerSpecificData ?: return JSArray()
+        return JSArray((0 until data.size()).map { index ->
+            val item = JSObject()
+            val bytes = data.valueAt(index)
+            item.put("companyId", data.keyAt(index))
+            item.put("byteLength", bytes?.size ?: 0)
+            item.put("previewHex", bytePreviewHex(bytes))
+            item
+        })
+    }
+
+    private fun serviceData(result: ScanResult): JSArray {
+        val data = result.scanRecord?.serviceData ?: return JSArray()
+        return JSArray(data.map { (uuid, bytes) ->
+            val item = JSObject()
+            item.put("uuid", uuid.uuid.toString())
+            item.put("byteLength", bytes?.size ?: 0)
+            item.put("previewHex", bytePreviewHex(bytes))
+            item
+        })
+    }
+
+    private fun bytePreviewHex(bytes: ByteArray?): String? {
+        if (bytes == null || bytes.isEmpty()) {
+            return null
+        }
+
+        return bytes.take(12).joinToString("") { byte -> "%02X".format(byte.toInt() and 0xff) }
     }
 
     private fun knownServiceName(uuid: UUID): String {
@@ -410,11 +582,73 @@ class DirectWatchPlugin : Plugin() {
         activeGatt = null
     }
 
+    private fun stopActiveBondReceiver() {
+        val receiver = activeBondReceiver ?: return
+        try {
+            context.unregisterReceiver(receiver)
+        } catch (_: RuntimeException) {
+            // Receiver may already be unregistered if Android completed the pairing flow.
+        }
+        activeBondReceiver = null
+    }
+
+    private fun intentBluetoothDevice(intent: Intent): BluetoothDevice? {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
+        }
+    }
+
+    private fun safeBondState(device: BluetoothDevice): Int {
+        return try {
+            device.bondState
+        } catch (_: SecurityException) {
+            BluetoothDevice.ERROR
+        }
+    }
+
+    private fun safeDeviceType(device: BluetoothDevice): Int {
+        return try {
+            device.type
+        } catch (_: SecurityException) {
+            BluetoothDevice.DEVICE_TYPE_UNKNOWN
+        }
+    }
+
+    private fun bondStateLabel(state: Int): String {
+        return when (state) {
+            BluetoothDevice.BOND_BONDED -> "bonded"
+            BluetoothDevice.BOND_BONDING -> "bonding"
+            BluetoothDevice.BOND_NONE -> "not-bonded"
+            else -> "unknown"
+        }
+    }
+
+    private fun deviceTypeLabel(type: Int): String {
+        return when (type) {
+            BluetoothDevice.DEVICE_TYPE_CLASSIC -> "classic"
+            BluetoothDevice.DEVICE_TYPE_DUAL -> "dual"
+            BluetoothDevice.DEVICE_TYPE_LE -> "le"
+            else -> "unknown"
+        }
+    }
+
     private data class ScannedWatchDevice(
         val id: String,
         val name: String?,
         val rssi: Int,
         val isLikelyWatch: Boolean,
+        val bondState: Int,
+        val bondStateLabel: String,
+        val deviceType: Int,
+        val deviceTypeLabel: String,
+        val isConnectable: Boolean?,
+        val serviceUuids: List<String>,
+        val manufacturerData: JSArray,
+        val serviceData: JSArray,
+        val txPowerLevel: Int?,
     ) {
         fun toJson(): JSObject {
             val item = JSObject()
@@ -422,6 +656,15 @@ class DirectWatchPlugin : Plugin() {
             item.put("name", name)
             item.put("rssi", rssi)
             item.put("isLikelyWatch", isLikelyWatch)
+            item.put("bondState", bondStateLabel)
+            item.put("bondStateCode", bondState)
+            item.put("deviceType", deviceTypeLabel)
+            item.put("deviceTypeCode", deviceType)
+            item.put("isConnectable", isConnectable)
+            item.put("serviceUuids", JSArray(serviceUuids))
+            item.put("manufacturerData", manufacturerData)
+            item.put("serviceData", serviceData)
+            item.put("txPowerLevel", txPowerLevel)
             return item
         }
     }
@@ -429,6 +672,8 @@ class DirectWatchPlugin : Plugin() {
     companion object {
         private const val DEFAULT_SCAN_DURATION_MS = 6_000
         private const val INSPECT_TIMEOUT_MS = 10_000
+        private const val PAIR_TIMEOUT_MS = 30_000
+        private val PAIRING_TIMEOUT_TOKEN = Any()
         private val HEART_RATE_SERVICE_UUID: UUID = UUID.fromString("0000180d-0000-1000-8000-00805f9b34fb")
         private val HEART_RATE_MEASUREMENT_UUID: UUID = UUID.fromString("00002a37-0000-1000-8000-00805f9b34fb")
         private val BATTERY_SERVICE_UUID: UUID = UUID.fromString("0000180f-0000-1000-8000-00805f9b34fb")
