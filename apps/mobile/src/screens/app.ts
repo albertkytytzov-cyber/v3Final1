@@ -57,6 +57,7 @@ import type {
 } from "../types/models.js";
 
 const runtimeConfig = readRuntimeConfig();
+const SHOW_DIRECT_WATCH_DIAGNOSTICS = false;
 const mobileLoadBlockProfiles: Record<AssignedPlanBlock["blockType"], { durationMinutes: number; rpe: number }> = {
   CNS_high: { durationMinutes: 24, rpe: 8 },
   activation: { durationMinutes: 14, rpe: 4 },
@@ -1971,7 +1972,7 @@ function renderDeviceHealthCard(state: MobileAppState, athleteId: string, date: 
         </article>
       </div>
       ${renderHealthConnectDiagnostics(summary)}
-      ${canSync ? renderDirectWatchDiagnostics(state) : ""}
+      ${canSync && SHOW_DIRECT_WATCH_DIAGNOSTICS ? renderDirectWatchDiagnostics(state) : ""}
       ${workouts.length ? `
         <div class="device-health-signal-list">
           ${workouts.map((workout) => `
