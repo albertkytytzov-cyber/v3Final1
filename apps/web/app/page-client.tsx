@@ -9032,9 +9032,9 @@ export function PageClient({
       }));
       setStatusMessage(
         copyFor(language, {
-          en: `Imported ${draft.days.length} training day(s). Skipped service blocks: ${draft.skippedItems.length}.`,
-          ru: `Импортировано тренировочных дней: ${draft.days.length}. Пропущено служебных блоков: ${draft.skippedItems.length}.`,
-          bg: `Импортирани тренировъчни дни: ${draft.days.length}. Пропуснати служебни блокове: ${draft.skippedItems.length}.`,
+          en: `File imported: ${draft.days.length} training day(s). Click "Add to library" to save the template.`,
+          ru: `Файл импортирован: ${draft.days.length} тренировочных дн. Нажмите «Добавить в библиотеку», чтобы сохранить шаблон.`,
+          bg: `Файлът е импортиран: ${draft.days.length} тренировъчни дни. Натиснете „Добави в библиотеката“, за да запазите шаблона.`,
         }),
       );
     } catch (error) {
@@ -19362,6 +19362,20 @@ export function PageClient({
                       </label>
                       <button
                         className="primary-button"
+                        disabled={busy || !importedPlanDraft}
+                        onClick={() => void handleSaveCurrentPlanTemplate()}
+                        type="button"
+                      >
+                        {busy
+                          ? ui("syncingNow")
+                          : copyFor(language, {
+                              en: "Add to library",
+                              ru: "Добавить в библиотеку",
+                              bg: "Добави в библиотеката",
+                            })}
+                      </button>
+                      <button
+                        className="secondary-button"
                         disabled={busy || !importedPlanDraft || (!selectedAthleteId && !assignedPlanForm.athleteId)}
                         onClick={handleAssignImportedPlan}
                         type="button"
@@ -20444,21 +20458,7 @@ export function PageClient({
                     })}
                   </p>
                 </div>
-                <div className="planning-template-library-actions">
-                  <span>{planTemplates.length}</span>
-                  <button
-                    className="secondary-button"
-                    disabled={busy}
-                    onClick={startNewPlanTemplateDraft}
-                    type="button"
-                  >
-                    {copyFor(language, {
-                      en: "Add template",
-                      ru: "Добавить шаблон",
-                      bg: "Добави шаблон",
-                    })}
-                  </button>
-                </div>
+                <span>{planTemplates.length}</span>
               </div>
               {planTemplates.length === 0 ? (
                 <p className="placeholder-copy">
