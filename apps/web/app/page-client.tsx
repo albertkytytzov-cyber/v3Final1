@@ -6384,6 +6384,8 @@ export function PageClient({
   const [planForm, setPlanForm] =
     useState<PlanTemplatePayload>(() => createLocalizedDefaultPlanTemplate(language));
   const [importedPlanDraft, setImportedPlanDraft] = useState<ImportedPlanDraft | null>(null);
+  const [savedImportedPlanTemplate, setSavedImportedPlanTemplate] =
+    useState<PlanTemplateSummary | null>(null);
   const [isTemplateDraftActive, setIsTemplateDraftActive] = useState(false);
   const [selectedTemplateDayIndex, setSelectedTemplateDayIndex] = useState(0);
   const [selectedTemplateAssignMode, setSelectedTemplateAssignMode] =
@@ -8423,7 +8425,10 @@ export function PageClient({
     }
   }
 
-  async function createPlanTemplateFromDraft(payload: PlanTemplatePayload) {
+  async function createPlanTemplateFromDraft(
+    payload: PlanTemplatePayload,
+    options: { clearImportedDraft?: boolean } = {},
+  ) {
     const response = await apiRequest<{ template: PlanTemplateSummary }>("/plans/templates", {
       method: "POST",
       body: JSON.stringify(payload),
@@ -8439,7 +8444,10 @@ export function PageClient({
     }));
     setSelectedTemplateDayIndex(0);
     setSelectedTemplateAssignDayIndexes([]);
-    setImportedPlanDraft(null);
+    if (options.clearImportedDraft ?? true) {
+      setImportedPlanDraft(null);
+      setSavedImportedPlanTemplate(null);
+    }
     setIsTemplateDraftActive(false);
     return response.template;
   }
@@ -8447,6 +8455,7 @@ export function PageClient({
   function startNewPlanTemplateDraft() {
     setPlanForm(createLocalizedDefaultPlanTemplate(language));
     setImportedPlanDraft(null);
+    setSavedImportedPlanTemplate(null);
     setIsTemplateDraftActive(true);
     setSelectedTemplateDayIndex(0);
     setSelectedTemplateAssignMode("full");
@@ -8515,6 +8524,7 @@ export function PageClient({
     setIsTemplateDraftActive(true);
 
     if (importedPlanDraft) {
+      setSavedImportedPlanTemplate(null);
       setImportedPlanDraft((current) =>
         current ? syncImportedDraftTemplate(current, nextTemplate) : current,
       );
@@ -8716,6 +8726,36 @@ export function PageClient({
     try {
       await createPlanTemplateFromDraft(getCurrentTemplatePayload());
       setStatusMessage(ui("templateCreated"));
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : ui("templateRequestFailed"),
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleSaveImportedPlanTemplate() {
+    if (!importedPlanDraft) {
+      return;
+    }
+
+    setBusy(true);
+    setErrorMessage("");
+
+    try {
+      const savedTemplate = await createPlanTemplateFromDraft(importedPlanDraft.template, {
+        clearImportedDraft: false,
+      });
+
+      setSavedImportedPlanTemplate(savedTemplate);
+      setStatusMessage(
+        copyFor(language, {
+          en: `Template saved to library: ${savedTemplate.name}.`,
+          ru: `Шаблон сохранён в библиотеку: ${savedTemplate.name}.`,
+          bg: `Шаблонът е записан в библиотеката: ${savedTemplate.name}.`,
+        }),
+      );
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : ui("templateRequestFailed"),
@@ -9018,6 +9058,7 @@ export function PageClient({
       const firstDay = draft.days[0];
 
       setImportedPlanDraft(draft);
+      setSavedImportedPlanTemplate(null);
       setPlanForm(draft.template);
       setIsTemplateDraftActive(true);
       setSelectedTemplateDayIndex(0);
@@ -9039,6 +9080,7 @@ export function PageClient({
       );
     } catch (error) {
       setImportedPlanDraft(null);
+      setSavedImportedPlanTemplate(null);
       setIsTemplateDraftActive(false);
       setErrorMessage(
         error instanceof Error
@@ -9073,10 +9115,12 @@ export function PageClient({
         );
       }
 
-      const templateResponse = await apiRequest<{ template: PlanTemplateSummary }>("/plans/templates", {
-        method: "POST",
-        body: JSON.stringify(importedPlanDraft.template),
-      });
+      const templateResponse = savedImportedPlanTemplate
+        ? { template: savedImportedPlanTemplate }
+        : await apiRequest<{ template: PlanTemplateSummary }>("/plans/templates", {
+            method: "POST",
+            body: JSON.stringify(importedPlanDraft.template),
+          });
       const createdItems: TemplatePackItem[] = importedPlanDraft.days.map((day) => ({
         templateId: templateResponse.template.id,
         templateDayIndex: day.templateDayIndex,
@@ -19103,20 +19147,32 @@ export function PageClient({
                   </label>
                   <button
                     className="primary-button"
-                    disabled={busy || !importedPlanDraft}
-                    onClick={() => void handleSaveCurrentPlanTemplate()}
+                    disabled={busy || !importedPlanDraft || Boolean(savedImportedPlanTemplate)}
+                    onClick={() => void handleSaveImportedPlanTemplate()}
                     type="button"
                   >
                     {busy
                       ? ui("syncingNow")
-                      : copyFor(language, {
-                          en: "Save template",
-                          ru: "Сохранить шаблон",
-                          bg: "Запази шаблон",
-                        })}
+                      : savedImportedPlanTemplate
+                        ? copyFor(language, {
+                            en: "Template saved",
+                            ru: "Шаблон сохранён",
+                            bg: "Шаблонът е записан",
+                          })
+                        : copyFor(language, {
+                            en: "Save template",
+                            ru: "Сохранить шаблон",
+                            bg: "Запази шаблон",
+                          })}
                   </button>
                   <small>
-                    {importedPlanDraft
+                    {savedImportedPlanTemplate
+                      ? copyFor(language, {
+                          en: "Saved. You can select it in the library or assign this imported plan without creating a duplicate.",
+                          ru: "Сохранено. Его можно выбрать в библиотеке или назначить этот импорт без создания дубля.",
+                          bg: "Записано. Може да го изберете от библиотеката или да назначите този импорт без дубликат.",
+                        })
+                      : importedPlanDraft
                       ? copyFor(language, {
                           en: "The imported file is ready to be saved to the template library.",
                           ru: "Импортированный файл готов к сохранению в библиотеку шаблонов.",
@@ -20583,6 +20639,7 @@ export function PageClient({
                           }));
                           setPlanForm(templateSummaryToPayload(template, language));
                           setImportedPlanDraft(null);
+                          setSavedImportedPlanTemplate(null);
                           setIsTemplateDraftActive(false);
                           setSelectedTemplateDayIndex(0);
                           setSelectedTemplateAssignDayIndexes([]);
