@@ -8,6 +8,10 @@
         <package android:name="com.xiaomi.wearable" />
         <package android:name="com.mi.health" />
         <package android:name="com.xiaomi.hm.health" />
+        <package android:name="com.mc.xiaomi" />
+        <package android:name="com.mc.xiaomi1" />
+        <package android:name="com.mc.miband" />
+        <package android:name="com.mc.simplehealth" />
     </queries>
 
     <uses-permission android:name="android.permission.health.READ_SLEEP" />

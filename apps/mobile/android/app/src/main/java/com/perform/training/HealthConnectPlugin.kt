@@ -222,13 +222,21 @@ class HealthConnectPlugin : Plugin() {
         val allTotalCaloriesRecords = readAllRecords(client, TotalCaloriesBurnedRecord::class, range, emptySet())
         val allActiveCaloriesRecords = readAllRecords(client, ActiveCaloriesBurnedRecord::class, range, emptySet())
         val installedKnownSources = installedKnownHealthSourcePackages()
+        val supportedRecords = sleepRecords +
+            restingHeartRateRecords +
+            heartRateRecords +
+            exerciseRecords +
+            distanceRecords +
+            totalCaloriesRecords +
+            activeCaloriesRecords
+        val knownSourcePackages = (installedKnownSources + recordOriginPackages(supportedRecords)).distinct()
 
         val result = JSObject()
         val rawPayload = JSObject()
 
         result.put("entryDate", dayRange.entryDate)
         result.put("provider", PROVIDER)
-        result.put("sourceDevice", healthSourceDeviceLabel(installedKnownSources))
+        result.put("sourceDevice", healthSourceDeviceLabel(knownSourcePackages))
         val heartRateSummary = buildHeartRateSummary(
             restingHeartRateRecords,
             heartRateRecords,
@@ -247,20 +255,13 @@ class HealthConnectPlugin : Plugin() {
 
         rawPayload.put(
             "dataOrigin",
-            recordOrigins(
-                sleepRecords +
-                    restingHeartRateRecords +
-                    heartRateRecords +
-                    exerciseRecords +
-                    distanceRecords +
-                    totalCaloriesRecords +
-                    activeCaloriesRecords,
-            ).ifBlank { SUPPORTED_HEALTH_SOURCE_PACKAGES.joinToString(", ") },
+            recordOrigins(supportedRecords).ifBlank { SUPPORTED_HEALTH_SOURCE_PACKAGES.joinToString(", ") },
         )
-        rawPayload.put("hasMiFitness", installedKnownSources.contains(MI_FITNESS_PACKAGE))
-        rawPayload.put("hasNotify", installedKnownSources.any { packageName -> NOTIFY_HEALTH_SOURCE_PACKAGES.contains(packageName) })
-        rawPayload.put("hasKnownHealthSource", installedKnownSources.isNotEmpty())
+        rawPayload.put("hasMiFitness", knownSourcePackages.contains(MI_FITNESS_PACKAGE))
+        rawPayload.put("hasNotify", knownSourcePackages.any { packageName -> NOTIFY_HEALTH_SOURCE_PACKAGES.contains(packageName) })
+        rawPayload.put("hasKnownHealthSource", knownSourcePackages.isNotEmpty())
         rawPayload.put("knownHealthSourcesInstalled", installedKnownSources.joinToString(", "))
+        rawPayload.put("knownHealthSourceOrigins", knownSourcePackages.joinToString(", "))
         rawPayload.put("sleepLookupStart", dayRange.sleepLookupStart.toString())
         rawPayload.put("sleepLookupEnd", dayRange.end.toString())
         rawPayload.put("sleepRecordCount", sleepRecords.size)
@@ -386,7 +387,10 @@ class HealthConnectPlugin : Plugin() {
         val workout = JSObject()
         workout.put("entryDate", dayRange.entryDate)
         workout.put("provider", PROVIDER)
-        workout.put("sourceDevice", healthSourceDeviceLabel(installedKnownSources))
+        workout.put(
+            "sourceDevice",
+            healthSourceDeviceLabel(installedKnownSources + exerciseRecord.metadata.dataOrigin.packageName),
+        )
         workout.put(
             "sourceWorkoutId",
             buildSourceWorkoutId(exerciseRecord),
@@ -581,12 +585,16 @@ class HealthConnectPlugin : Plugin() {
     }
 
     private fun recordOrigins(records: List<Record>): String {
+        return recordOriginPackages(records)
+            .joinToString(", ")
+    }
+
+    private fun recordOriginPackages(records: List<Record>): List<String> {
         return records
             .map { record -> record.metadata.dataOrigin.packageName }
             .filter { packageName -> packageName.isNotBlank() }
             .distinct()
             .sorted()
-            .joinToString(", ")
     }
 
     private fun buildSleepSummary(records: List<SleepSessionRecord>): JSObject? {
@@ -845,6 +853,7 @@ class HealthConnectPlugin : Plugin() {
         private const val XIAOMI_HEALTH_PACKAGE = "com.mi.health"
         private const val ZEPP_LIFE_PACKAGE = "com.xiaomi.hm.health"
         private const val NOTIFY_XIAOMI_PACKAGE = "com.mc.xiaomi"
+        private const val NOTIFY_XIAOMI_PACKAGE_LEGACY = "com.mc.xiaomi1"
         private const val NOTIFY_MI_BAND_PACKAGE = "com.mc.miband"
         private const val SIMPLE_HEALTH_PACKAGE = "com.mc.simplehealth"
         private const val PROVIDER = "health-connect"
@@ -861,6 +870,7 @@ class HealthConnectPlugin : Plugin() {
         )
         private val NOTIFY_HEALTH_SOURCE_PACKAGES = listOf(
             NOTIFY_XIAOMI_PACKAGE,
+            NOTIFY_XIAOMI_PACKAGE_LEGACY,
             NOTIFY_MI_BAND_PACKAGE,
             SIMPLE_HEALTH_PACKAGE,
         )
