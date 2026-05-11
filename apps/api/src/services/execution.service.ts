@@ -10,6 +10,7 @@ import {
 import { buildExecutionReviewPlan } from "../domain/execution-review.engine";
 import { pool } from "../db";
 import { markAnalyticsDirty } from "./analytics/analytics-query.service";
+import { markCoachTeamDayDirtyForAthlete } from "./analytics/coach-team-day.service";
 import { loadAssignedPlans } from "./planning/planning-query.service";
 
 interface ExecutionResultRow {
@@ -687,11 +688,18 @@ export async function submitExecutionResult(
     [executionResultId, input.athleteId],
   );
 
-  await markAnalyticsDirty({
-    athleteId: input.athleteId,
-    referenceDate: blockAccess.rows[0].day_date,
-    reason: "execution",
-  });
+  await Promise.all([
+    markAnalyticsDirty({
+      athleteId: input.athleteId,
+      referenceDate: blockAccess.rows[0].day_date,
+      reason: "execution",
+    }),
+    markCoachTeamDayDirtyForAthlete({
+      athleteId: input.athleteId,
+      entryDate: blockAccess.rows[0].day_date,
+      reason: "execution",
+    }),
+  ]);
 
   return savedResult;
 }

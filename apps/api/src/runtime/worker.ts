@@ -7,10 +7,18 @@ import {
   markAnalyticsDirtyFailed,
   markAnalyticsDirtyProcessed,
 } from "../services/analytics/analytics-query.service";
+import {
+  buildCoachTeamDay,
+  countPendingCoachTeamDayDirtyFlags,
+  listPendingCoachTeamDayDirtyFlags,
+  markCoachTeamDayDirtyFailed,
+  markCoachTeamDayDirtyProcessed,
+} from "../services/analytics/coach-team-day.service";
 
 const port = Number(process.env.WORKER_PORT ?? 4010);
 const intervalMs = Number(process.env.WORKER_INTERVAL_MS ?? 60_000);
 const analyticsBatchSize = Number(process.env.WORKER_ANALYTICS_BATCH_SIZE ?? 8);
+const coachTeamDayBatchSize = Number(process.env.WORKER_COACH_TEAM_DAY_BATCH_SIZE ?? 8);
 
 let lastRunAt: string | null = null;
 let lastError: string | null = null;
@@ -18,6 +26,9 @@ let deletedSessions = 0;
 let analyticsJobsProcessed = 0;
 let analyticsJobsFailed = 0;
 let analyticsJobsPending = 0;
+let coachTeamDayJobsProcessed = 0;
+let coachTeamDayJobsFailed = 0;
+let coachTeamDayJobsPending = 0;
 
 async function processAnalyticsDirtyFlags() {
   const dirtyFlags = await listPendingAnalyticsDirtyFlags(analyticsBatchSize);
@@ -51,6 +62,41 @@ async function processAnalyticsDirtyFlags() {
   analyticsJobsPending = await countPendingAnalyticsDirtyFlags();
 }
 
+async function processCoachTeamDayDirtyFlags() {
+  const dirtyFlags = await listPendingCoachTeamDayDirtyFlags(coachTeamDayBatchSize);
+  let processedCount = 0;
+  let failedCount = 0;
+
+  for (const dirtyFlag of dirtyFlags) {
+    try {
+      await buildCoachTeamDay({
+        coachUserId: dirtyFlag.coachUserId,
+        entryDate: dirtyFlag.entryDate,
+        role: dirtyFlag.role,
+      });
+      await markCoachTeamDayDirtyProcessed({
+        coachUserId: dirtyFlag.coachUserId,
+        entryDate: dirtyFlag.entryDate,
+        role: dirtyFlag.role,
+      });
+      processedCount += 1;
+    } catch (error) {
+      failedCount += 1;
+      await markCoachTeamDayDirtyFailed({
+        coachUserId: dirtyFlag.coachUserId,
+        entryDate: dirtyFlag.entryDate,
+        errorMessage:
+          error instanceof Error ? error.message : "Coach team day cache rebuild failed",
+        role: dirtyFlag.role,
+      });
+    }
+  }
+
+  coachTeamDayJobsProcessed = processedCount;
+  coachTeamDayJobsFailed = failedCount;
+  coachTeamDayJobsPending = await countPendingCoachTeamDayDirtyFlags();
+}
+
 async function runWorkerTick() {
   try {
     const result = await pool.query<{ deleted_count: string }>(`
@@ -64,6 +110,7 @@ async function runWorkerTick() {
 
     deletedSessions = Number(result.rows[0]?.deleted_count ?? 0);
     await processAnalyticsDirtyFlags();
+    await processCoachTeamDayDirtyFlags();
     lastRunAt = new Date().toISOString();
     lastError = null;
   } catch (error) {
@@ -91,6 +138,9 @@ const server = createServer((request, response) => {
       analyticsJobsProcessed,
       analyticsJobsFailed,
       analyticsJobsPending,
+      coachTeamDayJobsProcessed,
+      coachTeamDayJobsFailed,
+      coachTeamDayJobsPending,
     }),
   );
 });

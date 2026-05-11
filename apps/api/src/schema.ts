@@ -673,6 +673,19 @@ export async function ensureSchema() {
       PRIMARY KEY (athlete_id, reference_date)
     );
 
+    CREATE TABLE IF NOT EXISTS coach_team_day_dirty_flags (
+      coach_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      role TEXT NOT NULL DEFAULT 'coach',
+      entry_date DATE NOT NULL,
+      reason TEXT NOT NULL DEFAULT 'data_changed',
+      attempts INTEGER NOT NULL DEFAULT 0,
+      last_error TEXT,
+      marked_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      processed_at TIMESTAMPTZ,
+      PRIMARY KEY (coach_user_id, role, entry_date)
+    );
+
     CREATE TABLE IF NOT EXISTS coach_team_day_cache (
       coach_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       role TEXT NOT NULL DEFAULT 'coach',
@@ -745,6 +758,17 @@ export async function ensureSchema() {
     "TIMESTAMPTZ NOT NULL DEFAULT NOW()",
   );
   await ensureColumn("analytics_dirty_flags", "processed_at", "TIMESTAMPTZ");
+  await ensureColumn("coach_team_day_dirty_flags", "role", "TEXT NOT NULL DEFAULT 'coach'");
+  await ensureColumn("coach_team_day_dirty_flags", "reason", "TEXT NOT NULL DEFAULT 'data_changed'");
+  await ensureColumn("coach_team_day_dirty_flags", "attempts", "INTEGER NOT NULL DEFAULT 0");
+  await ensureColumn("coach_team_day_dirty_flags", "last_error", "TEXT");
+  await ensureColumn("coach_team_day_dirty_flags", "marked_at", "TIMESTAMPTZ NOT NULL DEFAULT NOW()");
+  await ensureColumn(
+    "coach_team_day_dirty_flags",
+    "next_attempt_at",
+    "TIMESTAMPTZ NOT NULL DEFAULT NOW()",
+  );
+  await ensureColumn("coach_team_day_dirty_flags", "processed_at", "TIMESTAMPTZ");
   await ensureColumn("coach_team_day_cache", "role", "TEXT NOT NULL DEFAULT 'coach'");
   await ensureColumn("coach_team_day_cache", "source_fingerprint", "TEXT NOT NULL DEFAULT ''");
   await ensureColumn("coach_team_day_cache", "rows_json", "JSONB NOT NULL DEFAULT '[]'::jsonb");
@@ -1441,6 +1465,11 @@ export async function ensureSchema() {
       WHERE processed_at IS NULL;
     CREATE INDEX IF NOT EXISTS idx_analytics_dirty_flags_athlete_date
       ON analytics_dirty_flags (athlete_id, reference_date DESC);
+    CREATE INDEX IF NOT EXISTS idx_coach_team_day_dirty_flags_pending
+      ON coach_team_day_dirty_flags (next_attempt_at ASC, marked_at ASC)
+      WHERE processed_at IS NULL;
+    CREATE INDEX IF NOT EXISTS idx_coach_team_day_dirty_flags_coach_date
+      ON coach_team_day_dirty_flags (coach_user_id, role, entry_date DESC);
     CREATE INDEX IF NOT EXISTS idx_coach_team_day_cache_computed
       ON coach_team_day_cache (computed_at DESC);
   `);

@@ -16,6 +16,7 @@ import { estimateBlocksLoad } from "../../domain/planning/load-balance.policy";
 import { normalizePlanDeviceWorkoutSessions } from "../../domain/planning/plan-structure-normalization";
 import { pool } from "../../db";
 import { markAnalyticsDirty } from "../analytics/analytics-query.service";
+import { markCoachTeamDayDirtyForAthlete } from "../analytics/coach-team-day.service";
 import { getCompetitionContextForAthlete } from "../competition/competition-query.service";
 import {
   getAssignedPlanById,
@@ -815,13 +816,22 @@ export async function deleteAssignedPlan(input: {
   await pool.query("DELETE FROM assigned_plans WHERE id = $1", [input.assignedPlanId]);
 
   await Promise.all(
-    assignedPlan.rows.filter((row) => row.day_date).map((row) =>
-      markAnalyticsDirty({
-        athleteId: row.athlete_id,
-        referenceDate: row.day_date ?? new Date().toISOString().slice(0, 10),
-        reason: "plan_deleted",
-      }),
-    ),
+    assignedPlan.rows.filter((row) => row.day_date).map((row) => {
+      const entryDate = row.day_date ?? new Date().toISOString().slice(0, 10);
+
+      return Promise.all([
+        markAnalyticsDirty({
+          athleteId: row.athlete_id,
+          referenceDate: entryDate,
+          reason: "plan_deleted",
+        }),
+        markCoachTeamDayDirtyForAthlete({
+          athleteId: row.athlete_id,
+          entryDate,
+          reason: "plan_deleted",
+        }),
+      ]);
+    }),
   );
 
   return {
@@ -859,11 +869,18 @@ export async function assignPlan(input: {
     athleteId: input.payload.athleteId,
     dates: [input.payload.startDate],
   });
-  await markAnalyticsDirty({
-    athleteId: input.payload.athleteId,
-    referenceDate: input.payload.startDate,
-    reason: "plan_assigned",
-  });
+  await Promise.all([
+    markAnalyticsDirty({
+      athleteId: input.payload.athleteId,
+      referenceDate: input.payload.startDate,
+      reason: "plan_assigned",
+    }),
+    markCoachTeamDayDirtyForAthlete({
+      athleteId: input.payload.athleteId,
+      entryDate: input.payload.startDate,
+      reason: "plan_assigned",
+    }),
+  ]);
 
   return {
     assignedPlan,
@@ -922,11 +939,18 @@ export async function autoAssignMicrocycle(input: {
   });
   await Promise.all(
     createdPlans.map((plan) =>
-      markAnalyticsDirty({
-        athleteId: input.payload.athleteId,
-        referenceDate: plan.day.dayDate,
-        reason: "plan_auto_assigned",
-      }),
+      Promise.all([
+        markAnalyticsDirty({
+          athleteId: input.payload.athleteId,
+          referenceDate: plan.day.dayDate,
+          reason: "plan_auto_assigned",
+        }),
+        markCoachTeamDayDirtyForAthlete({
+          athleteId: input.payload.athleteId,
+          entryDate: plan.day.dayDate,
+          reason: "plan_auto_assigned",
+        }),
+      ]),
     ),
   );
 

@@ -8,6 +8,7 @@ import {
   getCoachAiReviewStatus,
   tryBuildCoachDayAiModelReview,
 } from "./coach-ai-model-review.service";
+import { markCoachTeamDayDirtyForAthlete } from "./analytics/coach-team-day.service";
 
 interface CoachDayAiReviewRow {
   id: string;
@@ -313,7 +314,15 @@ export async function saveCoachDayAiReview(input: {
     ],
   );
 
-  return mapCoachDayAiReview(result.rows[0]);
+  const review = mapCoachDayAiReview(result.rows[0]);
+
+  await markCoachTeamDayDirtyForAthlete({
+    athleteId: review.athleteId,
+    entryDate: review.entryDate,
+    reason: "coach_ai_review",
+  });
+
+  return review;
 }
 
 async function loadCoachDayAiReviews(whereSql: string, params: unknown[]) {

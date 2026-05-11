@@ -12,6 +12,7 @@ import type {
 } from "@training-platform/shared";
 import type { PoolClient } from "pg";
 import { pool } from "../db";
+import { markCoachTeamDayDirtyForAthlete } from "./analytics/coach-team-day.service";
 
 interface DeviceHealthDailySummaryRow {
   id: string;
@@ -522,7 +523,15 @@ export async function upsertDeviceHealthDailySummary(input: {
     ],
   );
 
-  return mapDeviceHealthDailySummary(result.rows[0]);
+  const summary = mapDeviceHealthDailySummary(result.rows[0]);
+
+  await markCoachTeamDayDirtyForAthlete({
+    athleteId: input.athleteId,
+    entryDate: summary.entryDate,
+    reason: "device_health",
+  });
+
+  return summary;
 }
 
 export async function listDeviceWorkoutsForAthlete(
@@ -595,7 +604,15 @@ export async function syncDeviceWorkouts(input: {
     client.release();
   }
 
-  return listDeviceWorkoutsForAthlete(input.athleteId, input.payload.entryDate);
+  const workouts = await listDeviceWorkoutsForAthlete(input.athleteId, input.payload.entryDate);
+
+  await markCoachTeamDayDirtyForAthlete({
+    athleteId: input.athleteId,
+    entryDate: input.payload.entryDate,
+    reason: "device_workouts",
+  });
+
+  return workouts;
 }
 
 export async function listDeviceWorkoutLinksForAthlete(
@@ -680,6 +697,12 @@ export async function linkDeviceWorkoutToPlanBlock(input: {
   );
 
   const [link] = await hydrateDeviceWorkoutLinks(result.rows);
+  await markCoachTeamDayDirtyForAthlete({
+    athleteId: input.athleteId,
+    entryDate: link.workout.entryDate,
+    reason: "device_workout_link",
+  });
+
   return link;
 }
 
@@ -687,16 +710,32 @@ export async function deleteDeviceWorkoutLink(input: {
   athleteId: string;
   linkId: string;
 }): Promise<boolean> {
-  const result = await pool.query(
+  const result = await pool.query<{ entry_date: string }>(
     `
-      DELETE FROM training_plan_device_links
-      WHERE id = $1
-        AND athlete_id = $2
+      WITH deleted AS (
+        DELETE FROM training_plan_device_links
+        WHERE id = $1
+          AND athlete_id = $2
+        RETURNING device_workout_id
+      )
+      SELECT device_workouts.entry_date::text
+      FROM deleted
+      JOIN device_workouts ON device_workouts.id = deleted.device_workout_id
     `,
     [input.linkId, input.athleteId],
   );
 
-  return (result.rowCount ?? 0) > 0;
+  const entryDate = result.rows[0]?.entry_date;
+
+  if (entryDate) {
+    await markCoachTeamDayDirtyForAthlete({
+      athleteId: input.athleteId,
+      entryDate,
+      reason: "device_workout_unlink",
+    });
+  }
+
+  return Boolean(entryDate);
 }
 
 async function upsertDeviceWorkout(

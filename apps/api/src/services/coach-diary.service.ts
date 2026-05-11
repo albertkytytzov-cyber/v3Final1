@@ -5,6 +5,7 @@ import type {
   UserRole,
 } from "@training-platform/shared";
 import { pool } from "../db";
+import { markCoachTeamDayDirtyForAthlete } from "./analytics/coach-team-day.service";
 
 interface CoachDiaryEntryRow {
   id: string;
@@ -302,5 +303,13 @@ export async function submitCoachDiaryEntry(
     ],
   );
 
-  return mapCoachDiaryEntry(result.rows[0]);
+  const entry = mapCoachDiaryEntry(result.rows[0]);
+
+  await markCoachTeamDayDirtyForAthlete({
+    athleteId: entry.athleteId,
+    entryDate: entry.entryDate,
+    reason: "coach_diary",
+  });
+
+  return entry;
 }

@@ -16,6 +16,14 @@ interface CoachTeamDayCacheRow {
   computed_at: string;
 }
 
+interface CoachTeamDayDirtyFlagRow {
+  coach_user_id: string;
+  role: string;
+  entry_date: string;
+  reason: string;
+  attempts: number;
+}
+
 interface CoachTeamDaySourceFingerprintRow {
   source_fingerprint: string;
 }
@@ -199,6 +207,202 @@ function resolveExecutionStatus(input: {
   }
 
   return "partial";
+}
+
+function normalizeDateText(value: string | Date) {
+  return value instanceof Date ? value.toISOString().slice(0, 10) : value.slice(0, 10);
+}
+
+function dirtyReferenceDates(entryDate: string | Date) {
+  return Array.from(
+    new Set([
+      normalizeDateText(entryDate),
+      new Date().toISOString().slice(0, 10),
+    ]),
+  );
+}
+
+export async function markCoachTeamDayDirty(input: {
+  coachUserId: string;
+  role?: string;
+  entryDate: string | Date;
+  reason?: string;
+}) {
+  await pool.query(
+    `
+      WITH dirty_dates AS (
+        SELECT DISTINCT unnest($3::date[]) AS entry_date
+      )
+      INSERT INTO coach_team_day_dirty_flags (
+        coach_user_id,
+        role,
+        entry_date,
+        reason,
+        attempts,
+        last_error,
+        marked_at,
+        next_attempt_at,
+        processed_at
+      )
+      SELECT
+        $1,
+        $2,
+        dirty_dates.entry_date,
+        $4,
+        0,
+        NULL,
+        NOW(),
+        NOW(),
+        NULL
+      FROM dirty_dates
+      ON CONFLICT (coach_user_id, role, entry_date)
+      DO UPDATE SET
+        reason = EXCLUDED.reason,
+        attempts = 0,
+        last_error = NULL,
+        marked_at = NOW(),
+        next_attempt_at = NOW(),
+        processed_at = NULL
+    `,
+    [
+      input.coachUserId,
+      input.role ?? "coach",
+      dirtyReferenceDates(input.entryDate),
+      input.reason ?? "data_changed",
+    ],
+  );
+}
+
+export async function markCoachTeamDayDirtyForAthlete(input: {
+  athleteId: string;
+  entryDate: string | Date;
+  reason?: string;
+}) {
+  await pool.query(
+    `
+      WITH dirty_dates AS (
+        SELECT DISTINCT unnest($2::date[]) AS entry_date
+      ),
+      coach_rows AS (
+        SELECT DISTINCT coach_user_id
+        FROM coach_athletes
+        WHERE athlete_id = $1
+      )
+      INSERT INTO coach_team_day_dirty_flags (
+        coach_user_id,
+        role,
+        entry_date,
+        reason,
+        attempts,
+        last_error,
+        marked_at,
+        next_attempt_at,
+        processed_at
+      )
+      SELECT
+        coach_rows.coach_user_id,
+        'coach',
+        dirty_dates.entry_date,
+        $3,
+        0,
+        NULL,
+        NOW(),
+        NOW(),
+        NULL
+      FROM coach_rows
+      CROSS JOIN dirty_dates
+      ON CONFLICT (coach_user_id, role, entry_date)
+      DO UPDATE SET
+        reason = EXCLUDED.reason,
+        attempts = 0,
+        last_error = NULL,
+        marked_at = NOW(),
+        next_attempt_at = NOW(),
+        processed_at = NULL
+    `,
+    [
+      input.athleteId,
+      dirtyReferenceDates(input.entryDate),
+      input.reason ?? "data_changed",
+    ],
+  );
+}
+
+export async function listPendingCoachTeamDayDirtyFlags(limit = 8) {
+  const result = await pool.query<CoachTeamDayDirtyFlagRow>(
+    `
+      SELECT
+        coach_user_id,
+        role,
+        entry_date::text,
+        reason,
+        attempts
+      FROM coach_team_day_dirty_flags
+      WHERE processed_at IS NULL
+        AND next_attempt_at <= NOW()
+      ORDER BY next_attempt_at ASC, marked_at ASC
+      LIMIT $1
+    `,
+    [limit],
+  );
+
+  return result.rows.map((row) => ({
+    attempts: row.attempts,
+    coachUserId: row.coach_user_id,
+    entryDate: row.entry_date,
+    reason: row.reason,
+    role: row.role,
+  }));
+}
+
+export async function countPendingCoachTeamDayDirtyFlags() {
+  const result = await pool.query<{ pending_count: string }>(
+    `
+      SELECT COUNT(*)::text AS pending_count
+      FROM coach_team_day_dirty_flags
+      WHERE processed_at IS NULL
+    `,
+  );
+
+  return Number(result.rows[0]?.pending_count ?? 0);
+}
+
+export async function markCoachTeamDayDirtyProcessed(input: {
+  coachUserId: string;
+  role: string;
+  entryDate: string | Date;
+}) {
+  await pool.query(
+    `
+      UPDATE coach_team_day_dirty_flags
+      SET processed_at = NOW(),
+          last_error = NULL
+      WHERE coach_user_id = $1
+        AND role = $2
+        AND entry_date = $3::date
+    `,
+    [input.coachUserId, input.role, input.entryDate],
+  );
+}
+
+export async function markCoachTeamDayDirtyFailed(input: {
+  coachUserId: string;
+  role: string;
+  entryDate: string | Date;
+  errorMessage: string;
+}) {
+  await pool.query(
+    `
+      UPDATE coach_team_day_dirty_flags
+      SET attempts = attempts + 1,
+          last_error = $4,
+          next_attempt_at = NOW() + INTERVAL '5 minutes'
+      WHERE coach_user_id = $1
+        AND role = $2
+        AND entry_date = $3::date
+    `,
+    [input.coachUserId, input.role, input.entryDate, input.errorMessage],
+  );
 }
 
 async function buildCoachTeamDaySourceFingerprint(input: {

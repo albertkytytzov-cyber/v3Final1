@@ -5,6 +5,7 @@ import type {
 import { calculateReadiness } from "../domain/readiness.engine";
 import { pool } from "../db";
 import { markAnalyticsDirty } from "./analytics/analytics-query.service";
+import { markCoachTeamDayDirtyForAthlete } from "./analytics/coach-team-day.service";
 import { getCompetitionContextForAthlete } from "./competition/competition-query.service";
 
 interface ReadinessRow {
@@ -337,11 +338,18 @@ export async function submitReadiness(
     ],
   );
 
-  await markAnalyticsDirty({
-    athleteId: input.athleteId,
-    referenceDate: entry.rows[0].entry_date,
-    reason: "readiness",
-  });
+  await Promise.all([
+    markAnalyticsDirty({
+      athleteId: input.athleteId,
+      referenceDate: entry.rows[0].entry_date,
+      reason: "readiness",
+    }),
+    markCoachTeamDayDirtyForAthlete({
+      athleteId: input.athleteId,
+      entryDate: entry.rows[0].entry_date,
+      reason: "readiness",
+    }),
+  ]);
 
   return {
     id: entry.rows[0].id,
