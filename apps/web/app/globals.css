@@ -1047,7 +1047,17 @@ td {
   grid-template-columns: 224px minmax(0, 1fr);
 }
 
+.workspace-layout.workspace-layout-coach {
+  grid-template-columns: 224px minmax(0, 1fr);
+}
+
 .workspace-layout.workspace-layout-athlete .workspace-stage {
+  grid-column: 2;
+  width: 100%;
+  max-width: 100%;
+}
+
+.workspace-layout.workspace-layout-coach .workspace-stage {
   grid-column: 2;
   width: 100%;
   max-width: 100%;
@@ -1401,6 +1411,13 @@ td {
 
 .workspace-layout-coach .workspace-stage {
   gap: 12px;
+}
+
+.workspace-layout-coach .workspace-content,
+.workspace-layout-coach .workspace-scene-coach,
+.workspace-layout-coach .coach-dashboard-shell,
+.workspace-layout-coach .coach-dashboard-grid {
+  width: 100%;
 }
 
 .workspace-layout-coach .workspace-stage-header {
