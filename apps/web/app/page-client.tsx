@@ -10983,6 +10983,9 @@ export function PageClient({
   const isCoachAthletesWorkspace = activeWorkspace === "coach-athletes";
   const isCoachAnalyticsWorkspace = activeWorkspace === "coach-analytics";
   const isCoachReviewWorkspace = activeWorkspace === "coach-review";
+  const shouldRenderCoachReviewSurface =
+    isCoachReviewWorkspace || (isCoachDashboardWorkspace && coachView === "execution");
+  const shouldRenderCoachTeamDayPanel = isCoachDashboardWorkspace || isCoachReviewWorkspace;
   const showCoachRosterColumn = false;
   const showCoachInspectorColumn = isCoachDashboardWorkspace;
   const showAthleteProfileEditor = isAthleteProfileEditorOpen;
@@ -11968,13 +11971,13 @@ export function PageClient({
       item.payload.athleteId === selectedAthleteId &&
       item.payload.assignedPlanId === coachExecutionReview?.assignedPlanId,
   );
-  const coachReviewDayOptions = selectedAthleteId
+  const coachReviewDayOptions = shouldRenderCoachReviewSurface && selectedAthleteId
     ? assignedPlans
         .filter((plan) => plan.athleteId === selectedAthleteId)
         .slice()
         .sort((left, right) => left.day.dayDate.localeCompare(right.day.dayDate))
     : [];
-  const coachDiaryTaskChoices: CoachDiaryTaskChoice[] = coachExecutionReview
+  const coachDiaryTaskChoices: CoachDiaryTaskChoice[] = shouldRenderCoachReviewSurface && coachExecutionReview
     ? coachExecutionReview.sessions.flatMap((session) =>
         session.blocks.flatMap<CoachDiaryTaskChoice>((block) => {
           const exercises = [...(block.exercises ?? [])].sort(
@@ -12001,7 +12004,7 @@ export function PageClient({
         }),
       )
     : [];
-  const selectedCoachDiaryEntries = coachExecutionReview
+  const selectedCoachDiaryEntries = shouldRenderCoachReviewSurface && coachExecutionReview
     ? coachDiaryEntries
         .filter(
           (entry) =>
@@ -12011,11 +12014,11 @@ export function PageClient({
         .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
     : [];
   const latestCoachDiaryEntry = selectedCoachDiaryEntries[0] ?? null;
-  const selectedCoachAiReviewHistory = coachExecutionReview
+  const selectedCoachAiReviewHistory = shouldRenderCoachReviewSurface && coachExecutionReview
     ? getCoachAiReviewsForDay(coachAiReviews, selectedAthleteId, coachExecutionReview.dayDate)
     : [];
   const latestCoachAiReview = selectedCoachAiReviewHistory[0] ?? null;
-  const selectedCoachReadinessEntry = coachExecutionReview
+  const selectedCoachReadinessEntry = shouldRenderCoachReviewSurface && coachExecutionReview
     ? (
         selectedAthleteEntries.find(
           (entry) =>
@@ -12030,28 +12033,28 @@ export function PageClient({
         null
       )
     : null;
-  const selectedCoachDeviceHealthSummary = coachExecutionReview
+  const selectedCoachDeviceHealthSummary = shouldRenderCoachReviewSurface && coachExecutionReview
     ? getDeviceHealthSummaryForDay(
         coachDeviceHealthSummaries,
         selectedAthleteId,
         coachExecutionReview.dayDate,
       )
     : null;
-  const selectedCoachDeviceWorkouts = coachExecutionReview
+  const selectedCoachDeviceWorkouts = shouldRenderCoachReviewSurface && coachExecutionReview
     ? getDeviceWorkoutsForDay(
         coachDeviceWorkouts,
         selectedAthleteId,
         coachExecutionReview.dayDate,
       )
     : [];
-  const selectedCoachDeviceWorkoutLinks = coachExecutionReview
+  const selectedCoachDeviceWorkoutLinks = shouldRenderCoachReviewSurface && coachExecutionReview
     ? getDeviceWorkoutLinksForDay(
         coachDeviceWorkoutLinks,
         selectedAthleteId,
         coachExecutionReview.dayDate,
       )
     : [];
-  const selectedCoachDayAiPayload = coachExecutionReview
+  const selectedCoachDayAiPayload = shouldRenderCoachReviewSurface && coachExecutionReview
     ? buildCoachDayAiPayloadFromReview({
         athlete: selectedCoachAthlete,
         deviceHealthSummary: selectedCoachDeviceHealthSummary,
@@ -12070,7 +12073,7 @@ export function PageClient({
       selectedCoachDayAiPayloadJson &&
       getCoachDayAiPayloadFingerprint(latestCoachAiReview.dayPayload) !== selectedCoachDayAiPayloadJson,
   );
-  const selectedCoachDayDataQuality = coachExecutionReview
+  const selectedCoachDayDataQuality = shouldRenderCoachReviewSurface && coachExecutionReview
     ? buildCoachDayDataQuality({
         coachComment: latestCoachDiaryEntry?.notes.trim() || null,
         deviceHealthSummary: selectedCoachDeviceHealthSummary,
@@ -12081,7 +12084,7 @@ export function PageClient({
         readinessEntry: selectedCoachReadinessEntry,
       })
     : null;
-  const selectedCoachPlannedLoad = coachExecutionReview
+  const selectedCoachPlannedLoad = shouldRenderCoachReviewSurface && coachExecutionReview
     ? roundCoachAiLoad(
         coachExecutionReview.sessions.reduce(
           (total, session) =>
@@ -12095,7 +12098,7 @@ export function PageClient({
         ),
       )
     : 0;
-  const selectedCoachActualLoad = coachExecutionReview
+  const selectedCoachActualLoad = shouldRenderCoachReviewSurface && coachExecutionReview
     ? roundCoachAiLoad(
         coachExecutionReview.sessions.reduce(
           (total, session) =>
@@ -12108,7 +12111,7 @@ export function PageClient({
         ),
       )
     : 0;
-  const selectedCoachExecutionStatusLabel = !coachExecutionReview ||
+  const selectedCoachExecutionStatusLabel = !shouldRenderCoachReviewSurface || !coachExecutionReview ||
     coachExecutionReview.summary.plannedBlocks === 0
       ? copyFor(language, { en: "No plan for the day", ru: "На день нет плана", bg: "Няма план за деня" })
       : coachExecutionReview.summary.completedBlocks >= coachExecutionReview.summary.plannedBlocks
@@ -12116,7 +12119,7 @@ export function PageClient({
         : coachExecutionReview.summary.completedBlocks + coachExecutionReview.summary.partialBlocks > 0
           ? copyFor(language, { en: "Partially completed", ru: "Частично выполнено", bg: "Частично изпълнено" })
           : copyFor(language, { en: "Not completed", ru: "Не выполнено", bg: "Не е изпълнено" });
-  const selectedCoachDeviceLinkTargets = coachExecutionReview
+  const selectedCoachDeviceLinkTargets = shouldRenderCoachReviewSurface && coachExecutionReview
     ? coachExecutionReview.sessions.flatMap(getDeviceWorkoutLinkTargetsForSession)
     : [];
   const selectedCoachFullyLinkedDeviceTargets = selectedCoachDeviceLinkTargets.filter((target) =>
@@ -12152,7 +12155,7 @@ export function PageClient({
         bg: "тренировки от устройство не са дошли",
       });
   const selectedCoachLoadDelta = roundCoachAiLoad(selectedCoachActualLoad - selectedCoachPlannedLoad);
-  const selectedCoachLoadExplanation = coachExecutionReview
+  const selectedCoachLoadExplanation = shouldRenderCoachReviewSurface && coachExecutionReview
     ? buildCoachDayAiLoadExplanation({
         actualLoad: selectedCoachActualLoad,
         fullyLinkedDeviceTargets: selectedCoachFullyLinkedDeviceTargets,
@@ -12178,7 +12181,7 @@ export function PageClient({
       bg: "Денят може да се анализира с текущите данни.",
     });
   const coachTeamDayDate = coachTeamDayDateFilter || coachExecutionReview?.dayDate || getDateInputValue();
-  const coachTeamDayRows = coachAthletes.map((athlete) => {
+  const coachTeamDayRows = shouldRenderCoachTeamDayPanel ? coachAthletes.map((athlete) => {
     const plansForDay = assignedPlans.filter(
       (plan) => plan.athleteId === athlete.athleteId && plan.day.dayDate === coachTeamDayDate,
     );
@@ -12280,7 +12283,7 @@ export function PageClient({
             ? copyFor(language, { en: "Completed", ru: "Выполнено", bg: "Изпълнено" })
             : copyFor(language, { en: "Partial", ru: "Частично", bg: "Частично" }),
     };
-  });
+  }) : [];
   const athleteChangedToday = adaptedPlan
     ? [
         ...adaptedPlan.reducedBlocks.map((name) => ({
@@ -15408,7 +15411,7 @@ export function PageClient({
                 </div>
                 ) : null}
 
-                {isCoachReviewWorkspace || (isCoachDashboardWorkspace && coachView === "execution") ? (
+                {shouldRenderCoachReviewSurface ? (
                 <div className="entry-summary coach-review-card">
                   <div className="summary-topline">
                     <strong>{t("executionReview")}</strong>
@@ -16321,7 +16324,7 @@ export function PageClient({
                 </div>
                 ) : null}
 
-                {(isCoachDashboardWorkspace || isCoachReviewWorkspace) && coachTeamDayRows.length > 0 ? (
+                {shouldRenderCoachTeamDayPanel && coachTeamDayRows.length > 0 ? (
                 <div className="entry-summary coach-team-day-panel">
                   <div className="summary-topline">
                     <strong>
