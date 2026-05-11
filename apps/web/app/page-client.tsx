@@ -282,6 +282,7 @@ type SeasonEditorMode = "starts" | "plan" | "result" | "cycles";
 type ReviewBlock = ExecutionReviewPlan["sessions"][number]["blocks"][number];
 type ReviewExercise = NonNullable<ReviewBlock["exercises"]>[number];
 type CoachDayAiTaskStatus = Exclude<CoachDayAiPayload["execution"]["status"], "no-plan">;
+type CoachTeamDaySummary = CoachTeamDayResponse["rows"][number];
 
 const MONTH_LABELS: Record<Language, string[]> = {
   en: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
@@ -669,6 +670,43 @@ function formatCoachAiReviewSource(source: CoachDayAiReview["source"], language:
     ru: "локальный черновик",
     bg: "локална чернова",
   });
+}
+
+function getCoachTeamDayExecutionStatusLabel(
+  status: CoachTeamDaySummary["executionStatus"],
+  language: Language,
+) {
+  if (status === "no_plan") {
+    return copyFor(language, { en: "No plan", ru: "Нет плана", bg: "Няма план" });
+  }
+
+  if (status === "no_execution") {
+    return copyFor(language, { en: "No execution marks", ru: "Нет отметок", bg: "Няма изпълнение" });
+  }
+
+  if (status === "completed") {
+    return copyFor(language, { en: "Completed", ru: "Выполнено", bg: "Изпълнено" });
+  }
+
+  return copyFor(language, { en: "Partially completed", ru: "Частично выполнено", bg: "Частично изпълнено" });
+}
+
+function getCoachAiExecutionStatusFromTeamDay(
+  status: CoachTeamDaySummary["executionStatus"],
+): CoachDayAiPayload["execution"]["status"] {
+  if (status === "no_plan") {
+    return "no-plan";
+  }
+
+  if (status === "completed") {
+    return "completed";
+  }
+
+  if (status === "partial") {
+    return "partial";
+  }
+
+  return "missed";
 }
 
 function roundCoachAiLoad(value: number) {
@@ -1876,6 +1914,7 @@ function buildCoachDayAiPayloadFromReview(input: {
   language: Language;
   readinessEntry: ReadinessEntry | null;
   review: ExecutionReviewPlan;
+  teamDaySummary?: CoachTeamDaySummary | null;
 }): CoachDayAiPayload {
   const blocks = input.review.sessions.flatMap((session) =>
     session.blocks.map((block) => {
@@ -1903,10 +1942,15 @@ function buildCoachDayAiPayloadFromReview(input: {
       };
     }),
   );
-  const plannedLoad = roundCoachAiLoad(blocks.reduce((sum, block) => sum + block.plannedLoad, 0));
-  const actualLoad = roundCoachAiLoad(blocks.reduce((sum, block) => sum + block.actualLoad, 0));
+  const localPlannedLoad = roundCoachAiLoad(blocks.reduce((sum, block) => sum + block.plannedLoad, 0));
+  const localActualLoad = roundCoachAiLoad(blocks.reduce((sum, block) => sum + block.actualLoad, 0));
+  const plannedLoad = roundCoachAiLoad(input.teamDaySummary?.plannedLoad ?? localPlannedLoad);
+  const actualLoad = roundCoachAiLoad(input.teamDaySummary?.actualLoad ?? localActualLoad);
   const coachComment = input.diaryEntry?.notes.trim() || null;
-  const hasExecutionMarks = hasReviewExecutionMarks(input.review);
+  const hasExecutionMarks =
+    input.teamDaySummary?.executionResultCount !== undefined
+      ? input.teamDaySummary.executionResultCount > 0
+      : hasReviewExecutionMarks(input.review);
   const deviceWorkoutLinks = input.deviceWorkoutLinks ?? [];
   const linkedWorkouts = (input.deviceWorkoutLinks ?? []).map((link) => {
     const planBlockName =
@@ -1944,8 +1988,9 @@ function buildCoachDayAiPayloadFromReview(input: {
   const fullyLinkedDeviceTargets = deviceLinkTargets.filter((target) =>
     getDeviceWorkoutLinkGroupForBlocks(deviceWorkoutLinks, target.assignedBlockIds).isFullyLinked
   ).length;
-  const executionStatus =
-    input.review.summary.plannedBlocks === 0
+  const executionStatus = input.teamDaySummary
+    ? getCoachAiExecutionStatusFromTeamDay(input.teamDaySummary.executionStatus)
+    : input.review.summary.plannedBlocks === 0
       ? "no-plan"
       : input.review.summary.completedBlocks >= input.review.summary.plannedBlocks
         ? "completed"
@@ -2054,11 +2099,13 @@ function buildCoachDayAiPayloadFromReview(input: {
                 bg: "Частично изпълнено",
               })
             : executionStatus === "missed"
-              ? copyFor(input.language, {
-                  en: "Not completed",
-                  ru: "Не выполнено",
-                  bg: "Не е изпълнено",
-                })
+              ? input.teamDaySummary?.executionStatus === "no_execution"
+                ? getCoachTeamDayExecutionStatusLabel(input.teamDaySummary.executionStatus, input.language)
+                : copyFor(input.language, {
+                    en: "Not completed",
+                    ru: "Не выполнено",
+                    bg: "Не е изпълнено",
+                  })
               : copyFor(input.language, {
                   en: "No plan",
                   ru: "Нет плана",
@@ -12141,6 +12188,16 @@ export function PageClient({
         coachExecutionReview.dayDate,
       )
     : [];
+  const coachTeamDayDate = coachTeamDayDateFilter || coachExecutionReview?.dayDate || getDateInputValue();
+  const coachTeamDaySummaryByAthleteId = new Map(
+    coachTeamDayOverview?.entryDate === coachTeamDayDate
+      ? coachTeamDayOverview.rows.map((row) => [row.athleteId, row])
+      : [],
+  );
+  const selectedCoachTeamDaySummary =
+    shouldRenderCoachReviewSurface && selectedAthleteId && coachExecutionReview?.dayDate === coachTeamDayDate
+      ? coachTeamDaySummaryByAthleteId.get(selectedAthleteId) ?? null
+      : null;
   const selectedCoachDayAiPayload = shouldRenderCoachReviewSurface && coachExecutionReview
     ? buildCoachDayAiPayloadFromReview({
         athlete: selectedCoachAthlete,
@@ -12150,6 +12207,7 @@ export function PageClient({
         language,
         readinessEntry: selectedCoachReadinessEntry,
         review: coachExecutionReview,
+        teamDaySummary: selectedCoachTeamDaySummary,
       })
     : null;
   const selectedCoachDayAiPayloadJson = selectedCoachDayAiPayload
@@ -12164,14 +12222,20 @@ export function PageClient({
     ? buildCoachDayDataQuality({
         coachComment: latestCoachDiaryEntry?.notes.trim() || null,
         deviceHealthSummary: selectedCoachDeviceHealthSummary,
-        hasDeviceWorkouts: selectedCoachDeviceWorkouts.length > 0,
-        hasExecutionMarks: hasReviewExecutionMarks(coachExecutionReview),
-        hasPlan: coachExecutionReview.summary.plannedBlocks > 0,
+        hasDeviceWorkouts: selectedCoachTeamDaySummary
+          ? selectedCoachTeamDaySummary.deviceWorkoutCount > 0
+          : selectedCoachDeviceWorkouts.length > 0,
+        hasExecutionMarks: selectedCoachTeamDaySummary
+          ? selectedCoachTeamDaySummary.executionResultCount > 0
+          : hasReviewExecutionMarks(coachExecutionReview),
+        hasPlan: selectedCoachTeamDaySummary
+          ? selectedCoachTeamDaySummary.plannedBlocks > 0
+          : coachExecutionReview.summary.plannedBlocks > 0,
         language,
         readinessEntry: selectedCoachReadinessEntry,
       })
     : null;
-  const selectedCoachPlannedLoad = shouldRenderCoachReviewSurface && coachExecutionReview
+  const selectedCoachLocalPlannedLoad = shouldRenderCoachReviewSurface && coachExecutionReview
     ? roundCoachAiLoad(
         coachExecutionReview.sessions.reduce(
           (total, session) =>
@@ -12185,7 +12249,7 @@ export function PageClient({
         ),
       )
     : 0;
-  const selectedCoachActualLoad = shouldRenderCoachReviewSurface && coachExecutionReview
+  const selectedCoachLocalActualLoad = shouldRenderCoachReviewSurface && coachExecutionReview
     ? roundCoachAiLoad(
         coachExecutionReview.sessions.reduce(
           (total, session) =>
@@ -12198,8 +12262,15 @@ export function PageClient({
         ),
       )
     : 0;
-  const selectedCoachExecutionStatusLabel = !shouldRenderCoachReviewSurface || !coachExecutionReview ||
-    coachExecutionReview.summary.plannedBlocks === 0
+  const selectedCoachPlannedLoad = roundCoachAiLoad(
+    selectedCoachTeamDaySummary?.plannedLoad ?? selectedCoachLocalPlannedLoad,
+  );
+  const selectedCoachActualLoad = roundCoachAiLoad(
+    selectedCoachTeamDaySummary?.actualLoad ?? selectedCoachLocalActualLoad,
+  );
+  const selectedCoachExecutionStatusLabel = selectedCoachTeamDaySummary
+    ? getCoachTeamDayExecutionStatusLabel(selectedCoachTeamDaySummary.executionStatus, language)
+    : !shouldRenderCoachReviewSurface || !coachExecutionReview || coachExecutionReview.summary.plannedBlocks === 0
       ? copyFor(language, { en: "No plan for the day", ru: "На день нет плана", bg: "Няма план за деня" })
       : coachExecutionReview.summary.completedBlocks >= coachExecutionReview.summary.plannedBlocks
         ? copyFor(language, { en: "Completed", ru: "Выполнено", bg: "Изпълнено" })
@@ -12215,6 +12286,10 @@ export function PageClient({
       target.assignedBlockIds,
     ).isFullyLinked
   ).length;
+  const selectedCoachDeviceWorkoutCount =
+    selectedCoachTeamDaySummary?.deviceWorkoutCount ?? selectedCoachDeviceWorkouts.length;
+  const selectedCoachDeviceWorkoutLinkedCount =
+    selectedCoachTeamDaySummary?.deviceWorkoutLinkedCount ?? selectedCoachFullyLinkedDeviceTargets;
   const selectedCoachRecoverySummary = selectedCoachDeviceHealthSummary
     ? [
         `${copyFor(language, { en: "sleep", ru: "сон", bg: "сън" })} ${formatDeviceSleepValue(selectedCoachDeviceHealthSummary, language)}`,
@@ -12226,12 +12301,12 @@ export function PageClient({
         ru: "данные восстановления с устройства не пришли",
         bg: "данните за възстановяване от устройство не са дошли",
       });
-  const selectedCoachDeviceFactSummary = selectedCoachDeviceWorkouts.length
-    ? `${selectedCoachDeviceWorkouts.length} ${copyFor(language, {
+  const selectedCoachDeviceFactSummary = selectedCoachDeviceWorkoutCount > 0
+    ? `${selectedCoachDeviceWorkoutCount} ${copyFor(language, {
         en: "workouts",
         ru: "тренировок",
         bg: "тренировки",
-      })} · ${selectedCoachFullyLinkedDeviceTargets}/${selectedCoachDeviceLinkTargets.length || 0} ${copyFor(language, {
+      })} · ${selectedCoachDeviceWorkoutLinkedCount}/${selectedCoachDeviceWorkoutCount} ${copyFor(language, {
         en: "linked",
         ru: "связано",
         bg: "свързани",
@@ -12246,7 +12321,9 @@ export function PageClient({
     ? buildCoachDayAiLoadExplanation({
         actualLoad: selectedCoachActualLoad,
         fullyLinkedDeviceTargets: selectedCoachFullyLinkedDeviceTargets,
-        hasExecutionMarks: hasReviewExecutionMarks(coachExecutionReview),
+        hasExecutionMarks: selectedCoachTeamDaySummary
+          ? selectedCoachTeamDaySummary.executionResultCount > 0
+          : hasReviewExecutionMarks(coachExecutionReview),
         language,
         linkableDeviceTargets: selectedCoachDeviceLinkTargets.length,
         plannedLoad: selectedCoachPlannedLoad,
@@ -12267,12 +12344,6 @@ export function PageClient({
       ru: "День можно разбирать по текущим данным.",
       bg: "Денят може да се анализира с текущите данни.",
     });
-  const coachTeamDayDate = coachTeamDayDateFilter || coachExecutionReview?.dayDate || getDateInputValue();
-  const coachTeamDaySummaryByAthleteId = new Map(
-    coachTeamDayOverview?.entryDate === coachTeamDayDate
-      ? coachTeamDayOverview.rows.map((row) => [row.athleteId, row])
-      : [],
-  );
   const coachTeamDayRows = shouldRenderCoachTeamDayPanel ? coachAthletes.map((athlete) => {
     const teamDaySummary = coachTeamDaySummaryByAthleteId.get(athlete.athleteId);
     if (teamDaySummary) {
@@ -12305,13 +12376,7 @@ export function PageClient({
         deviceWorkoutLinkedCount: teamDaySummary.deviceWorkoutLinkedCount,
         plannedLoad: teamDaySummary.plannedLoad,
         readinessEntry: teamDaySummary.readinessEntry,
-        statusLabel: teamDaySummary.executionStatus === "no_plan"
-          ? copyFor(language, { en: "No plan", ru: "Нет плана", bg: "Няма план" })
-          : teamDaySummary.executionStatus === "no_execution"
-            ? copyFor(language, { en: "No execution", ru: "Нет отметок", bg: "Няма изпълнение" })
-            : teamDaySummary.executionStatus === "completed"
-              ? copyFor(language, { en: "Completed", ru: "Выполнено", bg: "Изпълнено" })
-              : copyFor(language, { en: "Partial", ru: "Частично", bg: "Частично" }),
+        statusLabel: getCoachTeamDayExecutionStatusLabel(teamDaySummary.executionStatus, language),
       };
     }
 
