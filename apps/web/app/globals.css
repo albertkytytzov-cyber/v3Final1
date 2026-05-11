@@ -17,11 +17,16 @@
   --shadow-soft: 0 12px 30px rgba(18, 32, 45, 0.06);
 }
 
-* {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
 html {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
   scroll-behavior: smooth;
   scrollbar-gutter: stable both-edges;
   font-family: "Aptos", "Segoe UI Variable Text", "Segoe UI", sans-serif;
@@ -33,7 +38,10 @@ html {
 
 body {
   margin: 0;
+  width: 100%;
+  max-width: 100%;
   min-height: 100vh;
+  overflow-x: hidden;
   color: var(--text);
   background: transparent;
 }
@@ -58,14 +66,78 @@ a {
 
 button,
 input,
-select {
+select,
+textarea {
+  max-width: 100%;
+  min-width: 0;
   font: inherit;
 }
 
 .page-shell {
-  width: min(1680px, calc(100% - 28px));
+  width: min(1680px, calc(100% - clamp(12px, 2vw, 28px)));
   margin: 0 auto;
   padding: 18px 0 48px;
+}
+
+img,
+svg,
+canvas,
+video {
+  max-width: 100%;
+}
+
+table {
+  max-width: 100%;
+}
+
+th,
+td {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+:where(
+  .panel,
+  .entry-summary,
+  .auth-form,
+  .wide-card,
+  .workspace-content,
+  .workspace-stage,
+  .workspace-scene,
+  .workspace-context,
+  .planning-workgrid,
+  .planning-workgrid > *,
+  .coach-dashboard-shell,
+  .coach-dashboard-grid,
+  .coach-inspector-card,
+  .athlete-day-card,
+  .planning-template-structure-card,
+  .planning-template-day-card,
+  .preparation-plan-document,
+  .preparation-plan-day-card
+) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+:where(
+  h1,
+  h2,
+  h3,
+  h4,
+  p,
+  li,
+  dd,
+  dt,
+  label,
+  .placeholder-copy,
+  .summary-topline,
+  .status-chip,
+  .context-chip,
+  .entry-summary,
+  .auth-form
+) {
+  overflow-wrap: anywhere;
 }
 
 .panel {
@@ -3837,6 +3909,9 @@ select {
   display: grid;
   gap: 8px;
   min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  padding-bottom: 2px;
 }
 
 .coach-team-day-date-control {
@@ -3864,7 +3939,8 @@ select {
   grid-template-columns: minmax(170px, 1.1fr) repeat(7, minmax(76px, 0.52fr)) minmax(190px, 1.2fr) auto;
   gap: 8px;
   align-items: center;
-  min-width: 0;
+  width: 100%;
+  min-width: 980px;
 }
 
 .coach-team-day-header {
@@ -6643,12 +6719,14 @@ select {
 .preparation-plan-table-scroll {
   max-width: 100%;
   overflow-x: auto;
+  padding-bottom: 2px;
 }
 
 .preparation-plan-document table {
   width: 100%;
   min-width: 680px;
   border-collapse: collapse;
+  table-layout: fixed;
   font-size: 0.9rem;
 }
 
