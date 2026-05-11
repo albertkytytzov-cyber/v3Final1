@@ -54,6 +54,10 @@ interface CoachTeamDayRow {
   execution_result_count: string;
   planned_load: string;
   actual_load: string;
+  device_confirmed_blocks: string;
+  device_confirmed_load: string;
+  manual_actual_load: string;
+  manual_execution_result_count: string;
   device_health_id: string | null;
   device_health_provider: DeviceHealthProvider | null;
   device_health_entry_date: string | null;
@@ -423,7 +427,7 @@ async function buildCoachTeamDaySourceFingerprint(input: {
           AND (coach_athletes.coach_user_id = $1 OR $2 = 'admin')
       ),
       source_versions AS (
-        SELECT 'schema' AS source_name, 1::bigint AS row_count, 'coach-team-day-v2' AS marker
+        SELECT 'schema' AS source_name, 1::bigint AS row_count, 'coach-team-day-v3' AS marker
         UNION ALL
         SELECT
           'roster' AS source_name,
@@ -722,6 +726,44 @@ async function buildCoachTeamDayRows(input: {
         WHERE device_workouts.entry_date = $3::date
         GROUP BY training_plan_device_links.athlete_id
       ),
+      device_confirmed_load_day AS (
+        SELECT
+          link_targets.athlete_id,
+          COUNT(*)::integer AS confirmed_blocks,
+          SUM(link_targets.planned_load) AS confirmed_planned_load,
+          MAX(link_targets.linked_at) AS linked_at
+        FROM (
+          SELECT
+            training_plan_device_links.athlete_id,
+            training_plan_device_links.assigned_block_id,
+            MAX(COALESCE(training_load_logs.planned_load, 0)) AS planned_load,
+            MAX(training_plan_device_links.linked_at) AS linked_at
+          FROM training_plan_device_links
+          JOIN device_workouts
+            ON device_workouts.id = training_plan_device_links.device_workout_id
+          JOIN assigned_plans
+            ON assigned_plans.id = training_plan_device_links.assigned_plan_id
+          JOIN assigned_plan_days
+            ON assigned_plan_days.assigned_plan_id = assigned_plans.id
+          JOIN assigned_day_sessions
+            ON assigned_day_sessions.assigned_day_id = assigned_plan_days.id
+          JOIN assigned_day_blocks
+            ON assigned_day_blocks.id = training_plan_device_links.assigned_block_id
+           AND assigned_day_blocks.assigned_session_id = assigned_day_sessions.id
+          JOIN roster ON roster.athlete_id = training_plan_device_links.athlete_id
+          LEFT JOIN training_load_logs
+            ON training_load_logs.athlete_id = training_plan_device_links.athlete_id
+           AND training_load_logs.assigned_block_id = training_plan_device_links.assigned_block_id
+           AND training_load_logs.log_date = device_workouts.entry_date
+          WHERE device_workouts.entry_date = $3::date
+            AND assigned_plan_days.day_date = $3::date
+            AND assigned_plans.status = 'active'
+          GROUP BY
+            training_plan_device_links.athlete_id,
+            training_plan_device_links.assigned_block_id
+        ) link_targets
+        GROUP BY link_targets.athlete_id
+      ),
       device_confirmed_blocks AS (
         SELECT
           link_targets.athlete_id,
@@ -786,6 +828,7 @@ async function buildCoachTeamDayRows(input: {
           COALESCE(GREATEST(device_health_day.synced_at, device_health_day.updated_at), '-infinity'::timestamptz),
           COALESCE(device_workouts_day.synced_at, '-infinity'::timestamptz),
           COALESCE(device_links_day.linked_at, '-infinity'::timestamptz),
+          COALESCE(device_confirmed_load_day.linked_at, '-infinity'::timestamptz),
           COALESCE(device_confirmed_blocks.linked_at, '-infinity'::timestamptz),
           COALESCE(diary_day.updated_at, '-infinity'::timestamptz)
         )::text AS data_updated_at,
@@ -817,16 +860,33 @@ async function buildCoachTeamDayRows(input: {
           COALESCE(device_confirmed_blocks.confirmed_blocks, 0)
         )::text AS execution_result_count,
         COALESCE(load_day.planned_load, 0)::text AS planned_load,
+        COALESCE(load_day.actual_load, 0)::text AS manual_actual_load,
+        COALESCE(execution_day.execution_result_count, 0)::text AS manual_execution_result_count,
+        COALESCE(device_confirmed_load_day.confirmed_blocks, 0)::text AS device_confirmed_blocks,
         (
           CASE
-            WHEN COALESCE(device_confirmed_blocks.confirmed_blocks, 0) > 0 THEN
+            WHEN COALESCE(device_confirmed_load_day.confirmed_blocks, 0) > 0 THEN
+              LEAST(
+                COALESCE(load_day.planned_load, 0),
+                CASE
+                  WHEN COALESCE(device_confirmed_load_day.confirmed_planned_load, 0) > 0
+                    THEN COALESCE(device_confirmed_load_day.confirmed_planned_load, 0)
+                  ELSE COALESCE(load_day.planned_load, 0)
+                END
+              )
+            ELSE 0
+          END
+        )::text AS device_confirmed_load,
+        (
+          CASE
+            WHEN COALESCE(device_confirmed_load_day.confirmed_blocks, 0) > 0 THEN
               GREATEST(
                 COALESCE(load_day.actual_load, 0),
                 LEAST(
                   COALESCE(load_day.planned_load, 0),
                   CASE
-                    WHEN COALESCE(device_confirmed_blocks.confirmed_planned_load, 0) > 0
-                      THEN COALESCE(device_confirmed_blocks.confirmed_planned_load, 0)
+                    WHEN COALESCE(device_confirmed_load_day.confirmed_planned_load, 0) > 0
+                      THEN COALESCE(device_confirmed_load_day.confirmed_planned_load, 0)
                     ELSE COALESCE(load_day.planned_load, 0)
                   END
                 )
@@ -878,6 +938,7 @@ async function buildCoachTeamDayRows(input: {
       LEFT JOIN device_health_day ON device_health_day.athlete_id = roster.athlete_id
       LEFT JOIN device_workouts_day ON device_workouts_day.athlete_id = roster.athlete_id
       LEFT JOIN device_links_day ON device_links_day.athlete_id = roster.athlete_id
+      LEFT JOIN device_confirmed_load_day ON device_confirmed_load_day.athlete_id = roster.athlete_id
       LEFT JOIN device_confirmed_blocks ON device_confirmed_blocks.athlete_id = roster.athlete_id
       LEFT JOIN diary_day ON diary_day.athlete_id = roster.athlete_id
       ORDER BY roster.athlete_id
@@ -891,9 +952,11 @@ async function buildCoachTeamDayRows(input: {
     const plannedBlocks = Number(row.planned_blocks);
     const completedBlocks = Number(row.completed_blocks);
     const executionResultCount = Number(row.execution_result_count);
+    const actualLoad = Number(Number(row.actual_load).toFixed(1));
+    const plannedLoad = Number(Number(row.planned_load).toFixed(1));
 
     return {
-      actualLoad: Number(Number(row.actual_load).toFixed(1)),
+      actualLoad,
       athleteId: row.athlete_id,
       cachedAt,
       coachCommentUpdatedAt: row.coach_comment_updated_at,
@@ -901,6 +964,8 @@ async function buildCoachTeamDayRows(input: {
       dataUpdatedAt: row.data_updated_at?.includes("-infinity")
         ? null
         : row.data_updated_at,
+      deviceConfirmedBlocks: Number(row.device_confirmed_blocks),
+      deviceConfirmedLoad: Number(Number(row.device_confirmed_load).toFixed(1)),
       deviceHealthSummary: buildDeviceHealthSummary(row),
       deviceWorkoutCount: Number(row.device_workout_count),
       deviceWorkoutLinkedCount: Number(row.device_workout_linked_count),
@@ -912,9 +977,12 @@ async function buildCoachTeamDayRows(input: {
         executionResultCount,
         plannedBlocks,
       }),
+      loadDelta: Number((actualLoad - plannedLoad).toFixed(1)),
+      manualActualLoad: Number(Number(row.manual_actual_load).toFixed(1)),
+      manualExecutionResultCount: Number(row.manual_execution_result_count),
       partialBlocks: Number(row.partial_blocks),
       plannedBlocks,
-      plannedLoad: Number(Number(row.planned_load).toFixed(1)),
+      plannedLoad,
       readinessEntry: buildReadinessEntry(row),
     };
   });

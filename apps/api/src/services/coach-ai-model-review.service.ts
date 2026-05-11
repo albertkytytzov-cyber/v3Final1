@@ -41,6 +41,7 @@ const systemPrompt = [
   "Сравни плановую нагрузку, фактическую нагрузку и расхождение; используй load.explanation как объяснение расчёта.",
   "Если есть данные устройства, учитывай сон, пульс покоя, SpO2 и тренировки с телефона как контекст восстановления, но не делай медицинских выводов.",
   "Если тренировка устройства связана с блоком плана, учитывай эту связь; если не связана, прямо скажи, что сравнение устройства с планом ограничено.",
+  "Если load.deviceConfirmed > 0 и load.manualActual = 0, не называй день невыполненным: пиши, что факт подтверждён устройством, а ручные отметки отсутствуют.",
   "Не меняй план, дневник, назначения и статусы.",
   "Не назначай тренировки и не предлагай автоматические изменения плана.",
   "Не ставь медицинские диагнозы и не выдавай рекомендации как медицинское назначение.",
@@ -271,9 +272,11 @@ function buildModelSafePayload(payload: CoachDayAiPayload) {
     load: {
       actual: payload.load.actual,
       delta: payload.load.delta,
+      deviceConfirmed: payload.load.deviceConfirmed,
       explanation: payload.load.explanation
         .slice(0, 6)
         .map((item) => toLimitedString(item, maxShortStringLength)),
+      manualActual: payload.load.manualActual,
       planned: payload.load.planned,
     },
     plan: {

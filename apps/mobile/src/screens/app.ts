@@ -1497,8 +1497,9 @@ function renderCoachDayStatusCard(dayData: CoachDayCleanSummary, aiReview: Coach
   const loadDelta = roundLoad(summary.actualLoad - summary.plannedLoad);
   const loadExplanation = [
     `Плановая: ${formatLoadValue(summary.plannedLoad)} из назначенных блоков плана.`,
-    `Фактическая: ${formatLoadValue(summary.actualLoad)} ${dayData.hasExecutionMarks ? "из сохранённых отметок выполнения" : "потому что выполнение ещё не отмечено"}.`,
-    `Устройство: ${linkGroups.length ? `${linkedSessionCount}/${linkGroups.length} плановых целей связано` : "в плане нет цели для привязки тренировки"}.`,
+    `Факт по отметкам: ${formatLoadValue(summary.manualActualLoad)} ${dayData.hasExecutionMarks ? "из сохранённых отметок выполнения" : "ручные отметки выполнения не сохранены"}.`,
+    `Подтверждено устройством: ${formatLoadValue(summary.deviceConfirmedLoad)} ${linkGroups.length ? `· ${linkedSessionCount}/${linkGroups.length} плановых целей связано` : "· в плане нет цели для привязки тренировки"}.`,
+    `Итоговый факт: ${formatLoadValue(summary.actualLoad)} ${summary.deviceConfirmedLoad > summary.manualActualLoad ? "по связанной тренировке устройства" : "без повторного суммирования ручных и device-данных"}.`,
     `Расхождение: ${formatLoadValue(loadDelta)} ${loadDelta === 0
       ? "единиц нагрузки"
       : loadDelta > 0
@@ -1539,7 +1540,7 @@ function renderCoachDayStatusCard(dayData: CoachDayCleanSummary, aiReview: Coach
           <article>
             <span>План / факт</span>
             <strong>${escapeHtml(formatLoadValue(summary.actualLoad))} / ${escapeHtml(formatLoadValue(summary.plannedLoad))}</strong>
-            <small>${completionRate}% выполнения</small>
+            <small>отметки ${escapeHtml(formatLoadValue(summary.manualActualLoad))} · устройство ${escapeHtml(formatLoadValue(summary.deviceConfirmedLoad))}</small>
           </article>
           <article>
             <span>Восстановление</span>
@@ -1637,7 +1638,7 @@ function renderCoachDayExerciseChecklist(dayData: CoachDayCleanSummary) {
           <article class="is-${exercise.status}">
             <span>${escapeHtml(exercise.statusLabel)}</span>
             <strong>${escapeHtml(exercise.name)}</strong>
-            <p>${escapeHtml(block.sessionName)} · ${escapeHtml(block.name)} · ${escapeHtml(exercise.plannedWork || "-")}</p>
+            <p>${escapeHtml(block.sessionName)} · ${escapeHtml(block.name)} · ${escapeHtml(exercise.plannedWork || "-")} · ${escapeHtml(exercise.sourceLabel)}</p>
           </article>
         `).join("")}
       </div>
@@ -3810,6 +3811,8 @@ interface CoachTodayDaySummary {
   missedExerciseCount: number;
   plannedLoad: number;
   actualLoad: number;
+  deviceConfirmedLoad: number;
+  manualActualLoad: number;
   templateNames: string[];
   latestDiaryEntry: CoachDiaryEntry | null;
 }
@@ -3826,6 +3829,7 @@ interface CoachDayExerciseCleanSummary {
   actualDetails: string;
   status: ExecutionDayStatus;
   statusLabel: string;
+  sourceLabel: string;
 }
 
 interface CoachDayBlockCleanSummary {
@@ -3840,8 +3844,11 @@ interface CoachDayBlockCleanSummary {
   notes: string;
   status: ExecutionDayStatus;
   statusLabel: string;
+  sourceLabel: string;
   plannedLoad: number;
   actualLoad: number;
+  deviceConfirmedLoad: number;
+  manualActualLoad: number;
   loadDeltaLabel: string;
   exercises: CoachDayExerciseCleanSummary[];
 }
@@ -4931,6 +4938,8 @@ function getCoachDaySummary(
   const groups = getExecutionPlanGroups(plans);
   const diaryEntries = getCoachDiaryEntriesForAthleteDate(state, athleteId, date);
   const templateNames = Array.from(new Set(plans.map((plan) => plan.templateName).filter(Boolean)));
+  const deviceWorkoutLinks = getDeviceWorkoutLinksForDate(state, athleteId, date);
+  const linkedBlockIds = new Set(deviceWorkoutLinks.map((link) => link.assignedBlockId));
   let sessionCount = 0;
   let blockCount = 0;
   let completedBlockCount = 0;
@@ -4941,7 +4950,8 @@ function getCoachDaySummary(
   let partialExerciseCount = 0;
   let missedExerciseCount = 0;
   let plannedLoad = 0;
-  let actualLoad = 0;
+  let manualActualLoad = 0;
+  let linkedPlannedLoad = 0;
 
   for (const group of groups) {
     sessionCount += group.plan.day.sessions.length;
@@ -4950,15 +4960,22 @@ function getCoachDaySummary(
       const result = getExecutionResultForBlock(state, item.plan.id, item.block.id);
       const blockPlannedLoad = getExecutionBlockPlannedLoad(item.block, result);
       const blockStatus = getExecutionBlockStatus(item.block, result);
+      const statusForSummary = result || !linkedBlockIds.has(item.block.id)
+        ? blockStatus
+        : "completed";
       const exercises = item.block.exercises ?? [];
 
       blockCount += 1;
       plannedLoad += blockPlannedLoad;
-      actualLoad += getExecutionBlockActualLoad(item.block, result, blockPlannedLoad);
+      manualActualLoad += getExecutionBlockActualLoad(item.block, result, blockPlannedLoad);
 
-      if (blockStatus === "completed") {
+      if (linkedBlockIds.has(item.block.id)) {
+        linkedPlannedLoad += blockPlannedLoad;
+      }
+
+      if (statusForSummary === "completed") {
         completedBlockCount += 1;
-      } else if (blockStatus === "partial") {
+      } else if (statusForSummary === "partial") {
         partialBlockCount += 1;
       } else {
         missedBlockCount += 1;
@@ -4988,15 +5005,21 @@ function getCoachDaySummary(
         : completedBlockCount + partialBlockCount > 0
           ? "partial"
           : "missed";
+  const deviceConfirmedLoad = linkedBlockIds.size > 0
+    ? roundLoad(Math.min(plannedLoad, linkedPlannedLoad > 0 ? linkedPlannedLoad : plannedLoad))
+    : 0;
+  const actualLoad = roundLoad(Math.max(manualActualLoad, deviceConfirmedLoad));
 
   return {
-    actualLoad: roundLoad(actualLoad),
+    actualLoad,
     blockCount,
     completedBlockCount,
     completedExerciseCount,
     date,
+    deviceConfirmedLoad,
     exerciseCount,
     latestDiaryEntry: diaryEntries[0] ?? null,
+    manualActualLoad: roundLoad(manualActualLoad),
     missedBlockCount,
     missedExerciseCount,
     partialBlockCount,
@@ -5024,6 +5047,7 @@ function getCoachDayCleanSummary(
   const deviceHealthSummary = getDeviceHealthSummaryForDate(state, athleteId, date);
   const deviceWorkouts = getDeviceWorkoutsForDate(state, athleteId, date);
   const deviceWorkoutLinks = getDeviceWorkoutLinksForDate(state, athleteId, date);
+  const linkedBlockIds = new Set(deviceWorkoutLinks.map((link) => link.assignedBlockId));
   let hasExecutionMarks = false;
   const blocks = groups.flatMap((group) =>
     group.blockItems.map((item) => {
@@ -5031,7 +5055,10 @@ function getCoachDayCleanSummary(
       hasExecutionMarks = hasExecutionMarks || Boolean(result);
       const plannedLoad = getExecutionBlockPlannedLoad(item.block, result);
       const actualLoad = getExecutionBlockActualLoad(item.block, result, plannedLoad);
-      const status = getExecutionBlockStatus(item.block, result);
+      const isDeviceLinked = linkedBlockIds.has(item.block.id);
+      const status = result || !isDeviceLinked
+        ? getExecutionBlockStatus(item.block, result)
+        : "completed";
       const exercises = (item.block.exercises ?? [])
         .slice()
         .sort((left, right) => left.orderIndex - right.orderIndex)
@@ -5051,15 +5078,18 @@ function getCoachDayCleanSummary(
             sessionName: item.sessionName,
             status: exerciseStatus,
             statusLabel: formatExerciseResultStatus(exerciseResult),
+            sourceLabel: getMobileExecutionSourceLabel(Boolean(exerciseResult), isDeviceLinked),
           };
         });
 
       return {
-        actualLoad: roundLoad(actualLoad),
+        actualLoad: roundLoad(result ? actualLoad : isDeviceLinked ? plannedLoad : actualLoad),
         assignedBlockId: item.block.id,
         assignedPlanId: item.plan.id,
+        deviceConfirmedLoad: isDeviceLinked ? roundLoad(plannedLoad) : 0,
         exercises,
         loadDeltaLabel: formatExecutionBlockLoadDelta(actualLoad, plannedLoad),
+        manualActualLoad: roundLoad(actualLoad),
         name: item.block.name,
         notes: item.block.notes,
         plannedLoad: roundLoad(plannedLoad),
@@ -5069,6 +5099,7 @@ function getCoachDayCleanSummary(
         sessionName: item.sessionName,
         status,
         statusLabel: getExecutionDayStatusLabel(status),
+        sourceLabel: getMobileExecutionSourceLabel(Boolean(result), isDeviceLinked),
         target: formatBlockTarget(item.block),
       };
     }),
@@ -5095,6 +5126,18 @@ function getCoachDayCleanSummary(
 
 function getCoachDayAiReviewKey(athleteId: string, entryDate: string) {
   return `${athleteId}::${entryDate}`;
+}
+
+function getMobileExecutionSourceLabel(hasManualMark: boolean, hasDeviceLink: boolean) {
+  if (hasManualMark) {
+    return "отмечено спортсменом";
+  }
+
+  if (hasDeviceLink) {
+    return "подтверждено устройством";
+  }
+
+  return "нет отметки или данных устройства";
 }
 
 function buildCoachAiReviewByDay(reviews: CoachDayAiReview[]) {
@@ -5220,13 +5263,17 @@ function buildCoachDayAiPayload(dayData: CoachDayCleanSummary): CoachDayAiPayloa
     load: {
       actual: summary.actualLoad,
       delta: roundLoad(summary.actualLoad - summary.plannedLoad),
+      deviceConfirmed: summary.deviceConfirmedLoad,
       explanation: buildCoachDayAiLoadExplanation({
         actualLoad: summary.actualLoad,
+        deviceConfirmedLoad: summary.deviceConfirmedLoad,
         fullyLinkedDeviceTargets,
         hasExecutionMarks: dayData.hasExecutionMarks,
         linkableDeviceTargets: deviceLinkGroups.length,
+        manualActualLoad: summary.manualActualLoad,
         plannedLoad: summary.plannedLoad,
       }),
+      manualActual: summary.manualActualLoad,
       planned: summary.plannedLoad,
     },
     plan: {
@@ -5268,19 +5315,20 @@ function buildCoachDayAiLimitations(dataQuality: NonNullable<CoachDayAiPayload["
 
 function buildCoachDayAiLoadExplanation(input: {
   actualLoad: number;
+  deviceConfirmedLoad: number;
   fullyLinkedDeviceTargets: number;
   hasExecutionMarks: boolean;
   linkableDeviceTargets: number;
+  manualActualLoad: number;
   plannedLoad: number;
 }) {
   const delta = roundLoad(input.actualLoad - input.plannedLoad);
 
   return [
     `Плановая: ${formatLoadValue(input.plannedLoad)} из назначенных блоков плана.`,
-    `Фактическая: ${formatLoadValue(input.actualLoad)} ${input.hasExecutionMarks ? "из сохранённых отметок выполнения" : "потому что выполнение ещё не отмечено"}.`,
-    input.linkableDeviceTargets > 0
-      ? `Устройство: ${input.fullyLinkedDeviceTargets}/${input.linkableDeviceTargets} плановых целей связано.`
-      : "Устройство: в плане нет цели для привязки тренировки.",
+    `Факт по отметкам: ${formatLoadValue(input.manualActualLoad)} ${input.hasExecutionMarks ? "из сохранённых отметок выполнения" : "ручные отметки выполнения не сохранены"}.`,
+    `Подтверждено устройством: ${formatLoadValue(input.deviceConfirmedLoad)} ${input.linkableDeviceTargets > 0 ? `· ${input.fullyLinkedDeviceTargets}/${input.linkableDeviceTargets} плановых целей связано` : "· в плане нет цели для привязки тренировки"}.`,
+    `Итоговый факт: ${formatLoadValue(input.actualLoad)} ${input.deviceConfirmedLoad > input.manualActualLoad ? "по связанной тренировке устройства" : "без повторного суммирования ручных и device-данных"}.`,
     `Расхождение: ${formatLoadValue(delta)} ${delta === 0 ? "единиц нагрузки" : delta > 0 ? "выше плана; проверьте длительность/RPE или дополнительную работу" : "ниже плана; часть задач не выполнена или не отмечена"}.`,
   ];
 }
@@ -5292,6 +5340,7 @@ function buildCoachDayDataQuality(dayData: CoachDayCleanSummary): NonNullable<Co
   const hasRestingHr = device?.heartRate?.restingBpm !== null && device?.heartRate?.restingBpm !== undefined;
   const hasOxygenSaturation = hasDeviceOxygenSaturationData(device);
   const hasDeviceWorkout = Boolean(device?.workout) || dayData.deviceWorkouts.length > 0;
+  const hasDeviceLinkedWorkout = dayData.deviceWorkoutLinks.length > 0;
   const signals = [
     {
       action: "Попросите спортсмена отправить готовность за выбранный день.",
@@ -5309,7 +5358,7 @@ function buildCoachDayDataQuality(dayData: CoachDayCleanSummary): NonNullable<Co
       action: "Попросите спортсмена отметить выполнение упражнений.",
       key: "execution",
       label: "выполнение",
-      present: dayData.summary.planCount === 0 || dayData.hasExecutionMarks,
+      present: dayData.summary.planCount === 0 || dayData.hasExecutionMarks || hasDeviceLinkedWorkout,
     },
     {
       action: "Добавьте короткий комментарий тренера по дню.",

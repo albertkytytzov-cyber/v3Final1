@@ -91,8 +91,16 @@ function readDayPayload(value: unknown): CoachDayAiPayload {
     load: {
       actual: readNumber(load.actual, "load.actual"),
       delta: readNumber(load.delta, "load.delta"),
+      deviceConfirmed: readNumber(
+        load.deviceConfirmed ?? 0,
+        "load.deviceConfirmed",
+      ),
       explanation: readArray(load.explanation ?? [], "load.explanation").map((item) =>
         readString(item, "load.explanation[]")
+      ),
+      manualActual: readNumber(
+        load.manualActual ?? load.actual,
+        "load.manualActual",
       ),
       planned: readNumber(load.planned, "load.planned"),
     },

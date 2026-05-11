@@ -191,12 +191,15 @@ function buildDiagnosticCoachDayPayload(entryDate: string): CoachDayAiPayload {
     load: {
       actual: 78,
       delta: -22,
+      deviceConfirmed: 54,
       explanation: [
         "Плановая: 100 из назначенных блоков плана.",
-        "Фактическая: 78 из сохранённых отметок выполнения.",
-        "Устройство: 1/1 плановых целей связано.",
+        "Факт по отметкам: 78 из сохранённых отметок выполнения.",
+        "Подтверждено устройством: 54 · 1/1 плановых целей связано.",
+        "Итоговый факт: 78 без повторного суммирования ручных и device-данных.",
         "Расхождение: -22 ниже плана; часть задач не выполнена или не отмечена.",
       ],
+      manualActual: 78,
       planned: 100,
     },
     plan: {
@@ -381,6 +384,7 @@ function buildObservation(payload: CoachDayAiPayload) {
     ? `${payload.execution.exercises.completed}/${payload.execution.exercises.total} упражнений`
     : `${payload.execution.blocks.completed}/${payload.execution.blocks.total} блоков`;
 
+  const deviceConfirmedLabel = buildDeviceConfirmedLoadObservation(payload);
   const deviceLabel = buildDeviceHealthObservation(payload);
   const deltaLabel = payload.load.delta === 0
     ? "расхождения с планом нет"
@@ -388,7 +392,7 @@ function buildObservation(payload: CoachDayAiPayload) {
       ? `выше плана на ${formatLoadValue(payload.load.delta)}`
       : `ниже плана на ${formatLoadValue(Math.abs(payload.load.delta))}`;
 
-  return `День отмечен как «${payload.execution.statusLabel.toLowerCase()}»: выполнено ${exerciseLabel}, нагрузка ${formatLoadValue(payload.load.actual)} из ${formatLoadValue(payload.load.planned)}, ${deltaLabel}.${deviceLabel ? ` ${deviceLabel}` : ""}`;
+  return `День отмечен как «${payload.execution.statusLabel.toLowerCase()}»: выполнено ${exerciseLabel}, нагрузка ${formatLoadValue(payload.load.actual)} из ${formatLoadValue(payload.load.planned)}, ${deltaLabel}.${deviceConfirmedLabel ? ` ${deviceConfirmedLabel}` : ""}${deviceLabel ? ` ${deviceLabel}` : ""}`;
 }
 
 function buildRiskNotes(payload: CoachDayAiPayload) {
@@ -410,8 +414,10 @@ function buildRiskNotes(payload: CoachDayAiPayload) {
     }
   }
 
-  if (payload.execution.status === "missed") {
+  if (payload.execution.status === "missed" && payload.load.deviceConfirmed <= 0) {
     risks.push("День не выполнен: аналитика следующего дня должна учитывать фактический пропуск, а не плановую нагрузку.");
+  } else if (payload.execution.status === "missed") {
+    risks.push("Ручных отметок выполнения нет, но связанная тренировка устройства подтверждает факт по плановому блоку; проверьте оставшиеся задачи дня.");
   } else if (payload.execution.status === "partial") {
     risks.push("Есть частичное выполнение: важно смотреть, какие упражнения пропущены, а не оценивать день только по общей нагрузке.");
   }
@@ -579,6 +585,18 @@ function addDeviceHealthTomorrowActions(actions: string[], payload: CoachDayAiPa
   if (isDeviceSleepLow(payload) || isDeviceRestingHrHigh(payload)) {
     actions.push("Сверьте сон и пульс покоя с самочувствием, прежде чем оставлять тяжёлую работу на следующий день.");
   }
+}
+
+function buildDeviceConfirmedLoadObservation(payload: CoachDayAiPayload) {
+  if (payload.load.deviceConfirmed <= 0) {
+    return "";
+  }
+
+  if (payload.load.manualActual <= 0) {
+    return `Факт нагрузки подтверждён устройством: ${formatLoadValue(payload.load.deviceConfirmed)} из привязанной тренировки, без ручной отметки спортсмена.`;
+  }
+
+  return `Факт устройства подтверждает ${formatLoadValue(payload.load.deviceConfirmed)} нагрузки по привязанной тренировке; итог не суммируется повторно с ручной отметкой.`;
 }
 
 function isDeviceSleepLow(payload: CoachDayAiPayload) {

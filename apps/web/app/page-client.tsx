@@ -1867,6 +1867,7 @@ function DeviceWorkoutMetricGrid({
 function buildCoachDayDataQuality(input: {
   coachComment: string | null;
   deviceHealthSummary: DeviceHealthDailySummary | null;
+  hasDeviceLinkedWorkouts?: boolean;
   hasDeviceWorkouts?: boolean;
   hasExecutionMarks: boolean;
   hasPlan: boolean;
@@ -1910,7 +1911,7 @@ function buildCoachDayDataQuality(input: {
       }),
       key: "execution",
       label: copyFor(input.language, { en: "execution", ru: "выполнение", bg: "изпълнение" }),
-      present: !input.hasPlan || input.hasExecutionMarks,
+      present: !input.hasPlan || input.hasExecutionMarks || Boolean(input.hasDeviceLinkedWorkouts),
     },
     {
       action: copyFor(input.language, {
@@ -2018,10 +2019,12 @@ function buildCoachDayAiLimitations(
 
 function buildCoachDayAiLoadExplanation(input: {
   actualLoad: number;
+  deviceConfirmedLoad: number;
   fullyLinkedDeviceTargets: number;
   hasExecutionMarks: boolean;
   language: Language;
   linkableDeviceTargets: number;
+  manualActualLoad: number;
   plannedLoad: number;
 }) {
   const delta = roundCoachAiLoad(input.actualLoad - input.plannedLoad);
@@ -2032,27 +2035,38 @@ function buildCoachDayAiLoadExplanation(input: {
       ru: "из назначенных блоков плана",
       bg: "от назначените блокове",
     })}.`,
-    `${copyFor(input.language, { en: "Actual", ru: "Фактическая", bg: "Реально" })}: ${formatCoachDayLoadValue(input.actualLoad)} ${input.hasExecutionMarks
+    `${copyFor(input.language, { en: "Manual fact", ru: "Факт по отметкам", bg: "Факт по отметки" })}: ${formatCoachDayLoadValue(input.manualActualLoad)} ${input.hasExecutionMarks
       ? copyFor(input.language, {
           en: "from saved execution marks",
           ru: "из сохранённых отметок выполнения",
           bg: "от запазените отметки за изпълнение",
         })
       : copyFor(input.language, {
-          en: "because execution has not been marked",
-          ru: "потому что выполнение ещё не отмечено",
-          bg: "защото изпълнението още не е отбелязано",
+          en: "manual execution marks have not been saved",
+          ru: "ручные отметки выполнения не сохранены",
+          bg: "ръчните отметки за изпълнение не са запазени",
         })}.`,
-    `${copyFor(input.language, { en: "Device", ru: "Устройство", bg: "Устройство" })}: ${input.linkableDeviceTargets
-      ? `${input.fullyLinkedDeviceTargets}/${input.linkableDeviceTargets} ${copyFor(input.language, {
+    `${copyFor(input.language, { en: "Device confirmed", ru: "Подтверждено устройством", bg: "Потвърдено от устройство" })}: ${formatCoachDayLoadValue(input.deviceConfirmedLoad)} ${input.linkableDeviceTargets
+      ? `· ${input.fullyLinkedDeviceTargets}/${input.linkableDeviceTargets} ${copyFor(input.language, {
           en: "plan targets linked",
           ru: "плановых целей связано",
           bg: "планови цели са свързани",
         })}`
-      : copyFor(input.language, {
+      : `· ${copyFor(input.language, {
           en: "no linkable workout target in the plan",
           ru: "в плане нет цели для привязки тренировки",
           bg: "няма цел за свързване на тренировка",
+        })}`}.`,
+    `${copyFor(input.language, { en: "Final actual", ru: "Итоговый факт", bg: "Краен факт" })}: ${formatCoachDayLoadValue(input.actualLoad)} ${input.deviceConfirmedLoad > input.manualActualLoad
+      ? copyFor(input.language, {
+          en: "because a linked device workout confirmed the plan block",
+          ru: "потому что связанная тренировка устройства подтвердила блок плана",
+          bg: "защото свързана тренировка от устройство потвърди блока",
+        })
+      : copyFor(input.language, {
+          en: "manual and device data are not added twice",
+          ru: "ручные и device-данные не суммируются повторно",
+          bg: "ръчните и device данните не се сумират повторно",
         })}.`,
     `${copyFor(input.language, { en: "Difference", ru: "Расхождение", bg: "Разлика" })}: ${formatCoachDayLoadValue(delta)} ${delta === 0
       ? copyFor(input.language, { en: "load points", ru: "единиц нагрузки", bg: "точки натоварване" })
@@ -2097,6 +2111,93 @@ function getCoachAiBlockActualLoad(block: ReviewBlock, plannedLoad: number) {
   });
 }
 
+function getCoachDeviceConfirmedLoadFromReview(
+  review: ExecutionReviewPlan,
+  deviceWorkoutLinks: DeviceWorkoutLink[],
+  plannedLoad: number,
+) {
+  if (deviceWorkoutLinks.length === 0) {
+    return 0;
+  }
+
+  const linkedBlockIds = new Set(deviceWorkoutLinks.map((link) => link.assignedBlockId));
+  const linkedPlannedLoad = review.sessions.reduce(
+    (total, session) =>
+      total +
+      session.blocks.reduce((blockTotal, block) => {
+        if (!linkedBlockIds.has(block.id)) {
+          return blockTotal;
+        }
+
+        return blockTotal + getCoachAiBlockPlannedLoad(block);
+      }, 0),
+    0,
+  );
+
+  return roundCoachAiLoad(Math.min(plannedLoad, linkedPlannedLoad > 0 ? linkedPlannedLoad : plannedLoad));
+}
+
+function getCoachManualExecutionCount(summary: CoachTeamDaySummary | null | undefined) {
+  return summary?.manualExecutionResultCount ?? summary?.executionResultCount ?? 0;
+}
+
+function getCoachBlockExecutionSourceLabel(input: {
+  block: ReviewBlock;
+  deviceWorkoutLinks: DeviceWorkoutLink[];
+  language: Language;
+}) {
+  if (input.block.actualResult) {
+    return copyFor(input.language, {
+      en: "marked by athlete",
+      ru: "отмечено спортсменом",
+      bg: "отбелязано от спортиста",
+    });
+  }
+
+  if (input.deviceWorkoutLinks.some((link) => link.assignedBlockId === input.block.id)) {
+    return copyFor(input.language, {
+      en: "confirmed by device",
+      ru: "подтверждено устройством",
+      bg: "потвърдено от устройство",
+    });
+  }
+
+  return copyFor(input.language, {
+    en: "no mark or device link",
+    ru: "нет отметки или привязки устройства",
+    bg: "няма отметка или връзка с устройство",
+  });
+}
+
+function getCoachExerciseExecutionSourceLabel(input: {
+  block: ReviewBlock;
+  exercise: ReviewExercise;
+  deviceWorkoutLinks: DeviceWorkoutLink[];
+  language: Language;
+}) {
+  if (input.exercise.actualResult) {
+    return copyFor(input.language, {
+      en: "marked by athlete",
+      ru: "отмечено спортсменом",
+      bg: "отбелязано от спортиста",
+    });
+  }
+
+  if (input.deviceWorkoutLinks.some((link) => link.assignedBlockId === input.block.id)) {
+    return copyFor(input.language, {
+      en: "block confirmed by device",
+      ru: "блок подтверждён устройством",
+      bg: "блокът е потвърден от устройство",
+    });
+  }
+
+  return copyFor(input.language, {
+    en: "no data",
+    ru: "нет данных",
+    bg: "няма данни",
+  });
+}
+
 function buildCoachDayAiPayloadFromReview(input: {
   athlete: CoachAthleteSummary | null;
   deviceHealthSummary: DeviceHealthDailySummary | null;
@@ -2136,7 +2237,16 @@ function buildCoachDayAiPayloadFromReview(input: {
   const localPlannedLoad = roundCoachAiLoad(blocks.reduce((sum, block) => sum + block.plannedLoad, 0));
   const localActualLoad = roundCoachAiLoad(blocks.reduce((sum, block) => sum + block.actualLoad, 0));
   const plannedLoad = roundCoachAiLoad(input.teamDaySummary?.plannedLoad ?? localPlannedLoad);
-  const actualLoad = roundCoachAiLoad(input.teamDaySummary?.actualLoad ?? localActualLoad);
+  const deviceWorkoutLinks = input.deviceWorkoutLinks ?? [];
+  const manualActualLoad = roundCoachAiLoad(input.teamDaySummary?.manualActualLoad ?? localActualLoad);
+  const deviceConfirmedLoad = roundCoachAiLoad(
+    input.teamDaySummary?.deviceConfirmedLoad ??
+      getCoachDeviceConfirmedLoadFromReview(input.review, deviceWorkoutLinks, plannedLoad),
+  );
+  const actualLoad = roundCoachAiLoad(
+    input.teamDaySummary?.actualLoad ??
+      Math.max(manualActualLoad, Math.min(plannedLoad, deviceConfirmedLoad)),
+  );
   const plannedBlocks = input.teamDaySummary?.plannedBlocks ?? input.review.summary.plannedBlocks;
   const completedBlocks = input.teamDaySummary?.completedBlocks ?? input.review.summary.completedBlocks;
   const partialBlocks = input.teamDaySummary?.partialBlocks ?? input.review.summary.partialBlocks;
@@ -2145,10 +2255,9 @@ function buildCoachDayAiPayloadFromReview(input: {
     : input.review.summary.missedBlocks;
   const coachComment = input.diaryEntry?.notes.trim() || null;
   const hasExecutionMarks =
-    input.teamDaySummary?.executionResultCount !== undefined
-      ? input.teamDaySummary.executionResultCount > 0
+    input.teamDaySummary
+      ? getCoachManualExecutionCount(input.teamDaySummary) > 0
       : hasReviewExecutionMarks(input.review);
-  const deviceWorkoutLinks = input.deviceWorkoutLinks ?? [];
   const linkedWorkouts = (input.deviceWorkoutLinks ?? []).map((link) => {
     const planBlockName =
       input.review.sessions
@@ -2197,6 +2306,7 @@ function buildCoachDayAiPayloadFromReview(input: {
   const dataQuality = buildCoachDayDataQuality({
     coachComment,
     deviceHealthSummary: input.deviceHealthSummary,
+    hasDeviceLinkedWorkouts: deviceWorkoutLinks.length > 0,
     hasDeviceWorkouts: input.teamDaySummary
       ? input.teamDaySummary.deviceWorkoutCount > 0
       : linkedWorkouts.length > 0,
@@ -2314,14 +2424,18 @@ function buildCoachDayAiPayloadFromReview(input: {
     load: {
       actual: actualLoad,
       delta: roundCoachAiLoad(actualLoad - plannedLoad),
+      deviceConfirmed: deviceConfirmedLoad,
       explanation: buildCoachDayAiLoadExplanation({
         actualLoad,
+        deviceConfirmedLoad,
         fullyLinkedDeviceTargets,
         hasExecutionMarks,
         language: input.language,
         linkableDeviceTargets: deviceLinkTargets.length,
+        manualActualLoad,
         plannedLoad,
       }),
+      manualActual: manualActualLoad,
       planned: plannedLoad,
     },
     plan: {
@@ -12414,11 +12528,12 @@ export function PageClient({
     ? buildCoachDayDataQuality({
         coachComment: latestCoachDiaryEntry?.notes.trim() || null,
         deviceHealthSummary: selectedCoachDeviceHealthSummary,
+        hasDeviceLinkedWorkouts: selectedCoachDeviceWorkoutLinks.length > 0,
         hasDeviceWorkouts: selectedCoachTeamDaySummary
           ? selectedCoachTeamDaySummary.deviceWorkoutCount > 0
           : selectedCoachDeviceWorkouts.length > 0,
         hasExecutionMarks: selectedCoachTeamDaySummary
-          ? selectedCoachTeamDaySummary.executionResultCount > 0
+          ? getCoachManualExecutionCount(selectedCoachTeamDaySummary) > 0
           : hasReviewExecutionMarks(coachExecutionReview),
         hasPlan: selectedCoachTeamDaySummary
           ? selectedCoachTeamDaySummary.plannedBlocks > 0
@@ -12457,8 +12572,25 @@ export function PageClient({
   const selectedCoachPlannedLoad = roundCoachAiLoad(
     selectedCoachTeamDaySummary?.plannedLoad ?? selectedCoachLocalPlannedLoad,
   );
+  const selectedCoachManualActualLoad = roundCoachAiLoad(
+    selectedCoachTeamDaySummary?.manualActualLoad ?? selectedCoachLocalActualLoad,
+  );
+  const selectedCoachDeviceConfirmedLoad = roundCoachAiLoad(
+    selectedCoachTeamDaySummary?.deviceConfirmedLoad ??
+      (coachExecutionReview
+        ? getCoachDeviceConfirmedLoadFromReview(
+            coachExecutionReview,
+            selectedCoachDeviceWorkoutLinks,
+            selectedCoachPlannedLoad,
+          )
+        : 0),
+  );
   const selectedCoachActualLoad = roundCoachAiLoad(
-    selectedCoachTeamDaySummary?.actualLoad ?? selectedCoachLocalActualLoad,
+    selectedCoachTeamDaySummary?.actualLoad ??
+      Math.max(
+        selectedCoachManualActualLoad,
+        Math.min(selectedCoachPlannedLoad, selectedCoachDeviceConfirmedLoad),
+      ),
   );
   const selectedCoachExecutionStatusLabel = selectedCoachTeamDaySummary
     ? getCoachTeamDayExecutionStatusLabel(selectedCoachTeamDaySummary.executionStatus, language)
@@ -12514,12 +12646,14 @@ export function PageClient({
   const selectedCoachLoadExplanation = shouldRenderCoachReviewSurface && coachExecutionReview
     ? buildCoachDayAiLoadExplanation({
         actualLoad: selectedCoachActualLoad,
+        deviceConfirmedLoad: selectedCoachDeviceConfirmedLoad,
         fullyLinkedDeviceTargets: selectedCoachFullyLinkedDeviceTargets,
         hasExecutionMarks: selectedCoachTeamDaySummary
-          ? selectedCoachTeamDaySummary.executionResultCount > 0
+          ? getCoachManualExecutionCount(selectedCoachTeamDaySummary) > 0
           : hasReviewExecutionMarks(coachExecutionReview),
         language,
         linkableDeviceTargets: selectedCoachDeviceLinkTargets.length,
+        manualActualLoad: selectedCoachManualActualLoad,
         plannedLoad: selectedCoachPlannedLoad,
       })
     : [];
@@ -12544,8 +12678,9 @@ export function PageClient({
       const dataQuality = buildCoachDayDataQuality({
         coachComment: teamDaySummary.coachCommentUpdatedAt ? "comment" : null,
         deviceHealthSummary: teamDaySummary.deviceHealthSummary,
+        hasDeviceLinkedWorkouts: teamDaySummary.deviceWorkoutLinkedCount > 0,
         hasDeviceWorkouts: teamDaySummary.deviceWorkoutCount > 0,
-        hasExecutionMarks: teamDaySummary.executionResultCount > 0,
+        hasExecutionMarks: getCoachManualExecutionCount(teamDaySummary) > 0,
         hasPlan: teamDaySummary.plannedBlocks > 0,
         language,
         readinessEntry: teamDaySummary.readinessEntry,
@@ -15884,7 +16019,12 @@ export function PageClient({
                               <strong>
                                 {formatCoachDayLoadValue(selectedCoachActualLoad)} / {formatCoachDayLoadValue(selectedCoachPlannedLoad)}
                               </strong>
-                              <small>{coachExecutionReview.summary.completionRate}% {ui("completionPercent")}</small>
+                              <small>
+                                {copyFor(language, { en: "manual", ru: "отметки", bg: "отметки" })}{" "}
+                                {formatCoachDayLoadValue(selectedCoachManualActualLoad)} ·{" "}
+                                {copyFor(language, { en: "device", ru: "устройство", bg: "устройство" })}{" "}
+                                {formatCoachDayLoadValue(selectedCoachDeviceConfirmedLoad)}
+                              </small>
                             </article>
                             <article>
                               <span>{copyFor(language, { en: "Recovery", ru: "Восстановление", bg: "Възстановяване" })}</span>
@@ -15950,7 +16090,7 @@ export function PageClient({
                             {
                               label: copyFor(language, { en: "Actual load", ru: "Фактическая нагрузка", bg: "Реално натоварване" }),
                               value: formatCoachDayLoadValue(selectedCoachActualLoad),
-                              detail: `${coachExecutionReview.summary.completionRate}% ${ui("completionPercent")}`,
+                              detail: `${copyFor(language, { en: "manual", ru: "отметки", bg: "отметки" })} ${formatCoachDayLoadValue(selectedCoachManualActualLoad)} · ${copyFor(language, { en: "device", ru: "устройство", bg: "устройство" })} ${formatCoachDayLoadValue(selectedCoachDeviceConfirmedLoad)}`,
                             },
                             {
                               label: copyFor(language, { en: "Execution", ru: "Выполнение", bg: "Изпълнение" }),
@@ -16654,7 +16794,13 @@ export function PageClient({
                                   <span>{translateExecutionStatus(exercise.executionStatus, language)}</span>
                                   <strong>{exercise.name}</strong>
                                   <small>
-                                    {session.name} / {block.name} / {formatExerciseTarget(exercise, language)}
+                                    {session.name} / {block.name} / {formatExerciseTarget(exercise, language)} /{" "}
+                                    {getCoachExerciseExecutionSourceLabel({
+                                      block,
+                                      deviceWorkoutLinks: selectedCoachDeviceWorkoutLinks,
+                                      exercise,
+                                      language,
+                                    })}
                                   </small>
                                 </article>
                               )),
@@ -16668,7 +16814,12 @@ export function PageClient({
                               <div className="coach-review-block-main">
                                 <strong>{block.name}</strong>
                                 <span>
-                                  {session.name} / {translateExecutionStatus(block.executionStatus, language)}
+                                  {session.name} / {translateExecutionStatus(block.executionStatus, language)} /{" "}
+                                  {getCoachBlockExecutionSourceLabel({
+                                    block,
+                                    deviceWorkoutLinks: selectedCoachDeviceWorkoutLinks,
+                                    language,
+                                  })}
                                 </span>
                               </div>
                               <div className="coach-review-block-values">

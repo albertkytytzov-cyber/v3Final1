@@ -325,6 +325,8 @@ export interface CoachTeamDayRowSummary {
   coachCommentUpdatedAt: string | null;
   completedBlocks: number;
   dataUpdatedAt: string | null;
+  deviceConfirmedBlocks: number;
+  deviceConfirmedLoad: number;
   deviceHealthSummary: DeviceHealthDailySummary | null;
   deviceWorkoutCount: number;
   deviceWorkoutLinkedCount: number;
@@ -332,6 +334,9 @@ export interface CoachTeamDayRowSummary {
   entryDate: string;
   executionResultCount: number;
   executionStatus: CoachTeamDayExecutionStatus;
+  loadDelta: number;
+  manualActualLoad: number;
+  manualExecutionResultCount: number;
   partialBlocks: number;
   plannedBlocks: number;
   plannedLoad: number;
@@ -1108,7 +1113,9 @@ export interface CoachDayAiPayload {
   load: {
     actual: number;
     delta: number;
+    deviceConfirmed: number;
     explanation: string[];
+    manualActual: number;
     planned: number;
   };
   plan: {
