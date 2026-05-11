@@ -11061,7 +11061,8 @@ export function PageClient({
   const isCoachReviewWorkspace = activeWorkspace === "coach-review";
   const shouldRenderCoachReviewSurface =
     isCoachReviewWorkspace || (isCoachDashboardWorkspace && coachView === "execution");
-  const shouldRenderCoachTeamDayPanel = isCoachDashboardWorkspace || isCoachReviewWorkspace;
+  const shouldRenderCoachTeamDayPanel =
+    (isCoachDashboardWorkspace || isCoachReviewWorkspace) && !selectedAthleteId;
   const showCoachRosterColumn = false;
   const showCoachInspectorColumn = isCoachDashboardWorkspace;
   const showAthleteProfileEditor = isAthleteProfileEditorOpen;
