@@ -7480,7 +7480,11 @@ export function PageClient({
     }
   }
 
-  async function loadCoachAthletes(preferredAthleteId?: string) {
+  async function loadCoachAthletes(
+    preferredAthleteId?: string,
+    options: { hydrateSelection?: boolean } = {},
+  ) {
+    const hydrateSelection = options.hydrateSelection ?? true;
     const response = await apiRequest<{ athletes: CoachAthleteSummary[] }>(
       "/coach/athletes",
     );
@@ -7508,6 +7512,10 @@ export function PageClient({
       setSelectedSeasonStartId("");
       setAssignedPlanForm((current) => ({ ...current, athleteId }));
       setMicrocycleForm((current) => ({ ...current, athleteId }));
+      if (!hydrateSelection) {
+        return;
+      }
+
       await Promise.all([
         loadCoachAthleteReadiness(athleteId),
         loadCoachTeamDayData(response.athletes),
@@ -11277,7 +11285,7 @@ export function PageClient({
 
       try {
         await Promise.all([
-          loadCoachAthletes(selectedAthleteId || undefined),
+          loadCoachAthletes(selectedAthleteId || undefined, { hydrateSelection: false }),
           loadAvailableCoachAthletes(),
         ]);
       } catch {
@@ -13073,7 +13081,9 @@ export function PageClient({
     }
 
     if (activeWorkspace === "coach-dashboard") {
-      setActiveWorkspace("coach-analytics");
+      startTransition(() => {
+        setActiveWorkspace("coach-analytics");
+      });
       scrollViewportToTop();
       return;
     }
@@ -13107,7 +13117,13 @@ export function PageClient({
                 }`.trim()}
                 key={link.id}
                 onClick={() => {
-                  setActiveWorkspace(link.id);
+                  if (link.id === activeWorkspace) {
+                    return;
+                  }
+
+                  startTransition(() => {
+                    setActiveWorkspace(link.id);
+                  });
                   scrollViewportToTop();
                 }}
                 type="button"
