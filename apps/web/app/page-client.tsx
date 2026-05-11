@@ -9538,8 +9538,12 @@ export function PageClient({
   }
 
   async function handleDeleteSelectedAssignedPlans() {
-    const selectedPlans = assignedPlans.filter((plan) =>
-      selectedAssignedPlanIds.includes(plan.id),
+    const currentAthleteId =
+      user?.role === "athlete" ? user.athleteId : selectedAthleteId || null;
+    const selectedPlans = assignedPlans.filter(
+      (plan) =>
+        selectedAssignedPlanIds.includes(plan.id) &&
+        (!currentAthleteId || plan.athleteId === currentAthleteId),
     );
 
     if (!selectedPlans.length) {
@@ -12888,12 +12892,13 @@ export function PageClient({
     selectedTemplateAssignDayIndexes,
   );
   const selectedTemplateAssignmentCount = selectedTemplateAssignmentIndexes.length;
-  const selectedAssignedPlans = assignedPlans.filter((plan) =>
+  const selectedAssignedPlans = relevantAssignedPlans.filter((plan) =>
     selectedAssignedPlanIds.includes(plan.id),
   );
   const selectedAssignedPlanCount = selectedAssignedPlans.length;
   const allAssignedPlansSelected =
-    assignedPlans.length > 0 && selectedAssignedPlanCount === assignedPlans.length;
+    relevantAssignedPlans.length > 0 &&
+    selectedAssignedPlanCount === relevantAssignedPlans.length;
   const selectedPreparationWeek =
     preparationPlanDraft.weeks[selectedPreparationWeekIndex] ?? preparationPlanDraft.weeks[0] ?? null;
   const selectedPreparationDay =
@@ -22307,9 +22312,9 @@ export function PageClient({
                     bg: "Назначени планове",
                   })}
                 </strong>
-                <span>{assignedPlans.length}</span>
+                <span>{relevantAssignedPlans.length}</span>
               </div>
-              {assignedPlans.length === 0 ? (
+              {relevantAssignedPlans.length === 0 ? (
                 <p className="placeholder-copy">
                   {ui("noActiveAssignments")}
                 </p>
@@ -22321,7 +22326,9 @@ export function PageClient({
                         checked={allAssignedPlansSelected}
                         onChange={(event) =>
                           setSelectedAssignedPlanIds(
-                            event.target.checked ? assignedPlans.map((plan) => plan.id) : [],
+                            event.target.checked
+                              ? relevantAssignedPlans.map((plan) => plan.id)
+                              : [],
                           )
                         }
                         type="checkbox"
@@ -22368,7 +22375,7 @@ export function PageClient({
                       </button>
                     </div>
                   </div>
-                  {assignedPlans.map((plan) => (
+                  {relevantAssignedPlans.map((plan) => (
                     <details className="planning-assigned-plan-card" key={plan.id}>
                       <summary>
                         <label
