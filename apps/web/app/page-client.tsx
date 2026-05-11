@@ -283,6 +283,13 @@ type ReviewBlock = ExecutionReviewPlan["sessions"][number]["blocks"][number];
 type ReviewExercise = NonNullable<ReviewBlock["exercises"]>[number];
 type CoachDayAiTaskStatus = Exclude<CoachDayAiPayload["execution"]["status"], "no-plan">;
 type CoachTeamDaySummary = CoachTeamDayResponse["rows"][number];
+type ReadinessHistoryChartPoint = {
+  date: string;
+  score: number;
+  status: ReadinessEntry["status"];
+  restingHr?: number | null;
+  painLevel?: number | null;
+};
 
 const MONTH_LABELS: Record<Language, string[]> = {
   en: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
@@ -1651,6 +1658,188 @@ function DeviceWorkoutMiniGraph({
       {series.map((item) => (
         <DeviceWorkoutSeriesGraph key={item.key} language={language} series={item} workout={workout} />
       ))}
+    </div>
+  );
+}
+
+function formatReadinessChartDate(dateValue: string) {
+  const [year, month, day] = dateValue.split("-");
+
+  if (!year || !month || !day) {
+    return dateValue;
+  }
+
+  return `${day}.${month}`;
+}
+
+function toReadinessHistoryChartPoints(entries: ReadinessEntry[]): ReadinessHistoryChartPoint[] {
+  return entries.map((entry) => ({
+    date: entry.entryDate,
+    painLevel: entry.painLevel,
+    restingHr: entry.restingHr,
+    score: entry.score,
+    status: entry.status,
+  }));
+}
+
+function ReadinessHistoryChart({
+  language,
+  points,
+}: {
+  language: Language;
+  points: ReadinessHistoryChartPoint[];
+}) {
+  const chartPoints = [...points]
+    .filter((point) => point.date && Number.isFinite(point.score))
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .slice(-14);
+
+  if (chartPoints.length === 0) {
+    return null;
+  }
+
+  const first = chartPoints[0];
+  const latest = chartPoints.at(-1);
+
+  if (!first || !latest) {
+    return null;
+  }
+
+  const scores = chartPoints.map((point) => point.score);
+  const average = Math.round(scores.reduce((sum, value) => sum + value, 0) / scores.length);
+  const min = Math.min(...scores);
+  const max = Math.max(...scores);
+  const scoreToY = (score: number) => 92 - (Math.min(100, Math.max(0, score)) / 100) * 84;
+  const plotPoints = chartPoints.map((point, index) => ({
+    ...point,
+    x: chartPoints.length === 1 ? 50 : 4 + (index / (chartPoints.length - 1)) * 92,
+    y: scoreToY(point.score),
+  }));
+  const linePoints = plotPoints.map((point) => `${point.x.toFixed(2)},${point.y.toFixed(2)}`).join(" ");
+  const labelIndexes = Array.from(
+    new Set([0, Math.floor((chartPoints.length - 1) / 2), chartPoints.length - 1]),
+  );
+  const axisLabels = [100, 80, 60, 0];
+  const averageY = scoreToY(average);
+  const greenBottomY = scoreToY(80);
+  const yellowBottomY = scoreToY(60);
+
+  return (
+    <div className="readiness-history-chart">
+      <div className="readiness-history-chart-summary">
+        <article>
+          <span>{copyFor(language, { en: "Latest", ru: "Последняя", bg: "Последна" })}</span>
+          <strong>{latest.score}</strong>
+          <span className={`status-chip ${latest.status}`}>
+            {formatCoachAiReadinessStatus(latest.status, language)}
+          </span>
+        </article>
+        <article>
+          <span>{copyFor(language, { en: "Average", ru: "Средняя", bg: "Средна" })}</span>
+          <strong>{average}</strong>
+          <small>{chartPoints.length} {copyFor(language, { en: "entries", ru: "записей", bg: "записа" })}</small>
+        </article>
+        <article>
+          <span>{copyFor(language, { en: "Range", ru: "Диапазон", bg: "Диапазон" })}</span>
+          <strong>{min}-{max}</strong>
+          <small>{formatReadinessChartDate(first.date)} - {formatReadinessChartDate(latest.date)}</small>
+        </article>
+      </div>
+
+      <div className="readiness-history-plot">
+        <div className="readiness-history-axis-y" aria-hidden="true">
+          {axisLabels.map((label) => (
+            <span key={label}>{label}</span>
+          ))}
+        </div>
+        <div className="readiness-history-svg-wrap">
+          <svg
+            aria-label={copyFor(language, {
+              en: "Athlete readiness history graph",
+              ru: "График истории готовности спортсмена",
+              bg: "Графика на историята на готовността на спортиста",
+            })}
+            role="img"
+            viewBox="0 0 100 100"
+            preserveAspectRatio="none"
+          >
+            <rect className="readiness-zone green" x="0" y="8" width="100" height={(greenBottomY - 8).toFixed(2)} />
+            <rect
+              className="readiness-zone yellow"
+              x="0"
+              y={greenBottomY.toFixed(2)}
+              width="100"
+              height={(yellowBottomY - greenBottomY).toFixed(2)}
+            />
+            <rect
+              className="readiness-zone red"
+              x="0"
+              y={yellowBottomY.toFixed(2)}
+              width="100"
+              height={(92 - yellowBottomY).toFixed(2)}
+            />
+            {axisLabels.slice(0, 3).map((label) => (
+              <line
+                className="readiness-grid-line"
+                key={label}
+                x1="0"
+                x2="100"
+                y1={scoreToY(label).toFixed(2)}
+                y2={scoreToY(label).toFixed(2)}
+              />
+            ))}
+            <line
+              className="readiness-average-line"
+              x1="0"
+              x2="100"
+              y1={averageY.toFixed(2)}
+              y2={averageY.toFixed(2)}
+            />
+            {chartPoints.length > 1 ? (
+              <polyline className="readiness-history-line" points={linePoints} />
+            ) : null}
+            {plotPoints.map((point) => {
+              const detail = [
+                `${point.date}: ${formatCoachAiReadinessStatus(point.status, language)} / ${point.score}`,
+                point.restingHr !== null && point.restingHr !== undefined
+                  ? `${copyFor(language, { en: "HR", ru: "пульс", bg: "пулс" })}: ${point.restingHr}`
+                  : null,
+                point.painLevel !== null && point.painLevel !== undefined
+                  ? `${copyFor(language, { en: "pain", ru: "боль", bg: "болка" })}: ${point.painLevel}`
+                  : null,
+              ].filter(Boolean).join(" · ");
+
+              return (
+                <circle
+                  className={`readiness-history-dot ${point.status}`}
+                  cx={point.x.toFixed(2)}
+                  cy={point.y.toFixed(2)}
+                  key={point.date}
+                  r="1.9"
+                >
+                  <title>{detail}</title>
+                </circle>
+              );
+            })}
+          </svg>
+        </div>
+        <div className="readiness-history-axis-x" aria-hidden="true">
+          {labelIndexes.map((index) => {
+            const point = chartPoints[index];
+
+            return point ? <span key={point.date}>{formatReadinessChartDate(point.date)}</span> : null;
+          })}
+        </div>
+      </div>
+
+      <div className="readiness-history-legend" aria-hidden="true">
+        <span><i className="green" />80-100</span>
+        <span><i className="yellow" />60-79</span>
+        <span><i className="red" />0-59</span>
+        <span className="readiness-average-label">
+          {copyFor(language, { en: "average line", ru: "линия средней", bg: "линия на средната" })}
+        </span>
+      </div>
     </div>
   );
 }
@@ -14194,16 +14383,10 @@ export function PageClient({
                     </div>
 
                     {analyticsOverview?.readinessTrend.length ? (
-                      <div className="analytics-trend-list">
-                        <strong>{ui("readinessTrend")}</strong>
-                        <ul>
-                          {analyticsOverview.readinessTrend.slice(-5).reverse().map((point) => (
-                            <li key={point.date}>
-                              {point.date}: {readinessMeta[point.status].label} / {point.score}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
+                      <ReadinessHistoryChart
+                        language={language}
+                        points={analyticsOverview.readinessTrend}
+                      />
                     ) : null}
 
                     {executionResults.length ? (
@@ -14576,16 +14759,12 @@ export function PageClient({
                       ))}
                     </div>
 
-                    <div className="analytics-trend-list">
-                      <strong>{ui("readinessTrend")}</strong>
-                      <ul>
-                        {analyticsOverview.readinessTrend.slice(-3).reverse().map((point) => (
-                          <li key={point.date}>
-                            {point.date}: {readinessMeta[point.status].label} / {point.score}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
+                    {analyticsOverview.readinessTrend.length ? (
+                      <ReadinessHistoryChart
+                        language={language}
+                        points={analyticsOverview.readinessTrend}
+                      />
+                    ) : null}
                   </>
                 ) : (
                   <p className="placeholder-copy">
@@ -15472,19 +15651,10 @@ export function PageClient({
                       {ui("athleteNoReadinessYet")}
                     </p>
                   ) : (
-                    <ul>
-                      {selectedAthleteEntries.map((entry) => (
-                        <li key={entry.id}>
-                          {entry.entryDate}: {readinessMeta[entry.status].label} /{" "}
-                          {copyFor(language, { en: "score", ru: "оценка", bg: "оценка" })}{" "}
-                          {entry.score} /{" "}
-                          {copyFor(language, { en: "HR", ru: "пульс", bg: "пулс" })}{" "}
-                          {entry.restingHr} /{" "}
-                          {copyFor(language, { en: "pain", ru: "боль", bg: "болка" })}{" "}
-                          {entry.painLevel}
-                        </li>
-                      ))}
-                    </ul>
+                    <ReadinessHistoryChart
+                      language={language}
+                      points={toReadinessHistoryChartPoints(selectedAthleteEntries)}
+                    />
                   )}
                 </div>
                 ) : null}
@@ -16709,6 +16879,21 @@ export function PageClient({
                       </div>
 
                       <div className="coach-analytics-grid coach-analytics-grid-v2">
+                        {coachAnalyticsOverview.readinessTrend.length ? (
+                          <article className="entry-summary coach-analytics-card coach-analytics-card-wide">
+                            <div className="summary-topline">
+                              <strong>{ui("athleteReadinessHistory")}</strong>
+                              <span>
+                                {coachAnalyticsOverview.readinessTrend.length} {ui("recentEntries")}
+                              </span>
+                            </div>
+                            <ReadinessHistoryChart
+                              language={language}
+                              points={coachAnalyticsOverview.readinessTrend}
+                            />
+                          </article>
+                        ) : null}
+
                         <article className="entry-summary coach-analytics-card coach-analytics-card-wide">
                           <div className="summary-topline">
                             <strong>{ui("analyticsCoachInsights")}</strong>
