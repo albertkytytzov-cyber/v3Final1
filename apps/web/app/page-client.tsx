@@ -6845,6 +6845,7 @@ export function PageClient({
     previewState?.assignedPlans ?? [],
   );
   const [selectedAssignedPlanIds, setSelectedAssignedPlanIds] = useState<string[]>([]);
+  const [selectedAssignedPlanPreviewId, setSelectedAssignedPlanPreviewId] = useState("");
   const [competitions, setCompetitions] = useState<CompetitionSummary[]>(
     previewState?.competitions ?? [],
   );
@@ -12899,6 +12900,10 @@ export function PageClient({
   const allAssignedPlansSelected =
     relevantAssignedPlans.length > 0 &&
     selectedAssignedPlanCount === relevantAssignedPlans.length;
+  const selectedAssignedPlanPreview =
+    relevantAssignedPlans.find((plan) => plan.id === selectedAssignedPlanPreviewId) ??
+    relevantAssignedPlans[0] ??
+    null;
   const selectedPreparationWeek =
     preparationPlanDraft.weeks[selectedPreparationWeekIndex] ?? preparationPlanDraft.weeks[0] ?? null;
   const selectedPreparationDay =
@@ -22320,6 +22325,40 @@ export function PageClient({
                 </p>
               ) : (
                 <div className="planning-assigned-plan-list">
+                  <label className="field planning-assigned-plan-picker">
+                    <span>
+                      {copyFor(language, {
+                        en: "Show assigned day",
+                        ru: "Показать назначение",
+                        bg: "Покажи назначение",
+                      })}
+                    </span>
+                    <select
+                      aria-label={copyFor(language, {
+                        en: "Show assigned day",
+                        ru: "Показать назначение",
+                        bg: "Покажи назначение",
+                      })}
+                      onChange={(event) => setSelectedAssignedPlanPreviewId(event.target.value)}
+                      value={selectedAssignedPlanPreview?.id ?? ""}
+                    >
+                      {relevantAssignedPlans.map((plan) => (
+                        <option key={plan.id} value={plan.id}>
+                          {plan.athleteName} · {plan.day.dayDate} ·{" "}
+                          {localizedPlannerDayLabel(plan.day.label, language)} ·{" "}
+                          {translateKnownTemplateText(plan.templateName, language)}
+                        </option>
+                      ))}
+                    </select>
+                    <small>
+                      {copyFor(language, {
+                        en: "Choose the assigned day to review. The full list stays in the selector.",
+                        ru: "Выберите назначенный день для просмотра. Полный список остаётся в выборе.",
+                        bg: "Изберете назначен ден за преглед. Пълният списък остава в избора.",
+                      })}
+                    </small>
+                  </label>
+
                   <div className="planning-assigned-delete-bar">
                     <label className="planning-assigned-select planning-assigned-select-all">
                       <input
@@ -22375,22 +22414,22 @@ export function PageClient({
                       </button>
                     </div>
                   </div>
-                  {relevantAssignedPlans.map((plan) => (
-                    <details className="planning-assigned-plan-card" key={plan.id}>
+                  {selectedAssignedPlanPreview ? (
+                    <details className="planning-assigned-plan-card" key={selectedAssignedPlanPreview.id} open>
                       <summary>
                         <label
                           className="planning-assigned-select"
                           onClick={(event) => event.stopPropagation()}
                         >
                           <input
-                            checked={selectedAssignedPlanIds.includes(plan.id)}
+                            checked={selectedAssignedPlanIds.includes(selectedAssignedPlanPreview.id)}
                             onChange={(event) =>
                               setSelectedAssignedPlanIds((current) =>
                                 event.target.checked
-                                  ? current.includes(plan.id)
+                                  ? current.includes(selectedAssignedPlanPreview.id)
                                     ? current
-                                    : [...current, plan.id]
-                                  : current.filter((id) => id !== plan.id),
+                                    : [...current, selectedAssignedPlanPreview.id]
+                                  : current.filter((id) => id !== selectedAssignedPlanPreview.id),
                               )
                             }
                             type="checkbox"
@@ -22405,13 +22444,16 @@ export function PageClient({
                         </label>
                         <div className="planning-assigned-plan-summary-copy">
                           <strong>
-                            {plan.athleteName}: {translateKnownTemplateText(plan.templateName, language)}
+                            {selectedAssignedPlanPreview.athleteName}:{" "}
+                            {translateKnownTemplateText(selectedAssignedPlanPreview.templateName, language)}
                           </strong>
                           <span>
-                            {plan.day.dayDate} / {localizedPlannerDayLabel(plan.day.label, language)} / {t("phase")}{" "}
-                            {plan.plannedPhase
+                            {selectedAssignedPlanPreview.day.dayDate} /{" "}
+                            {localizedPlannerDayLabel(selectedAssignedPlanPreview.day.label, language)} /{" "}
+                            {t("phase")}{" "}
+                            {selectedAssignedPlanPreview.plannedPhase
                               ? localizedOptionLabel(
-                                  plan.plannedPhase,
+                                  selectedAssignedPlanPreview.plannedPhase,
                                   language,
                                   PREPARATION_PHASE_LABELS,
                                 )
@@ -22424,7 +22466,7 @@ export function PageClient({
                         </div>
                       </summary>
                       <div className="planning-assigned-session-list">
-                        {plan.day.sessions.map((session) => (
+                        {selectedAssignedPlanPreview.day.sessions.map((session) => (
                           <section className="planning-assigned-session" key={session.id}>
                             <strong>{session.name}</strong>
                             {session.blocks.map((block) => (
@@ -22454,7 +22496,7 @@ export function PageClient({
                         ))}
                       </div>
                     </details>
-                  ))}
+                  ) : null}
                 </div>
               )}
             </div>
