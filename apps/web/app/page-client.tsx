@@ -81,6 +81,7 @@ import {
   estimateTrainingActualLoad,
   estimateTrainingBlockLoad,
   estimateTrainingBlocksLoad,
+  isDeviceWorkoutLinkablePlanBlock,
   type UwwEventSyncFilters,
   type UwwEventSyncOptions,
   type UwwEventSyncOptionsResponse,
@@ -873,9 +874,9 @@ function getDeviceWorkoutLinkGroupForBlocks(
 }
 
 function isDeviceWorkoutLinkableBlock(
-  block: Pick<AssignedPlanSummary["day"]["sessions"][number]["blocks"][number], "rowKind">,
+  block: Pick<AssignedPlanSummary["day"]["sessions"][number]["blocks"][number], "name" | "notes" | "rowKind">,
 ) {
-  return (block.rowKind ?? "exercise") === "workout";
+  return isDeviceWorkoutLinkablePlanBlock(block);
 }
 
 function isLoadBearingPlanBlock(
@@ -8484,6 +8485,9 @@ export function PageClient({
           current,
         )
       );
+      if (coachExecutionReview?.dayDate) {
+        await loadCoachTeamDayData(coachAthletes, coachExecutionReview.dayDate);
+      }
       setStatusMessage(
         input.deviceWorkoutId
           ? copyFor(language, {
@@ -12476,8 +12480,10 @@ export function PageClient({
   ).length;
   const selectedCoachDeviceWorkoutCount =
     selectedCoachTeamDaySummary?.deviceWorkoutCount ?? selectedCoachDeviceWorkouts.length;
-  const selectedCoachDeviceWorkoutLinkedCount =
-    selectedCoachTeamDaySummary?.deviceWorkoutLinkedCount ?? selectedCoachFullyLinkedDeviceTargets;
+  const selectedCoachDeviceWorkoutLinkedCount = Math.max(
+    selectedCoachTeamDaySummary?.deviceWorkoutLinkedCount ?? 0,
+    selectedCoachFullyLinkedDeviceTargets,
+  );
   const selectedCoachRecoverySummary = selectedCoachDeviceHealthSummary
     ? [
         `${copyFor(language, { en: "sleep", ru: "сон", bg: "сън" })} ${formatDeviceSleepValue(selectedCoachDeviceHealthSummary, language)}`,

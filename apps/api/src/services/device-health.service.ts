@@ -1,3 +1,4 @@
+import { isDeviceWorkoutLinkablePlanBlock } from "@training-platform/shared";
 import type {
   DeviceHealthDailySummary,
   DeviceHealthDailySummaryPayload,
@@ -9,6 +10,7 @@ import type {
   DeviceWorkoutPayload,
   DeviceWorkoutSample,
   DeviceWorkoutsSyncPayload,
+  PlanBlockRowKind,
 } from "@training-platform/shared";
 import type { PoolClient } from "pg";
 import { pool } from "../db";
@@ -887,6 +889,8 @@ async function assertDeviceWorkoutLinkTarget(
   payload: DeviceWorkoutLinkPayload,
 ) {
   const result = await pool.query<{
+    block_name: string;
+    block_notes: string;
     plan_day_date: string;
     row_kind: string | null;
     workout_date: string;
@@ -895,6 +899,8 @@ async function assertDeviceWorkoutLinkTarget(
     `
       SELECT
         assigned_plan_days.day_date::text AS plan_day_date,
+        assigned_day_blocks.name AS block_name,
+        assigned_day_blocks.notes AS block_notes,
         assigned_day_blocks.row_kind,
         device_workouts.entry_date::text AS workout_date,
         ($3::uuid IS NULL OR assigned_block_exercises.id IS NOT NULL) AS exercise_matches
@@ -930,7 +936,17 @@ async function assertDeviceWorkoutLinkTarget(
     throw new Error("Selected plan block or device workout was not found");
   }
 
-  if (["instruction", "control", "note", "recovery"].includes(target.row_kind ?? "exercise")) {
+  const rowKind = target.row_kind ?? "exercise";
+  const isWorkoutInstruction = isDeviceWorkoutLinkablePlanBlock({
+    name: target.block_name,
+    notes: target.block_notes,
+    rowKind: rowKind as PlanBlockRowKind,
+  });
+
+  if (
+    ["control", "note", "recovery"].includes(rowKind) ||
+    (rowKind === "instruction" && !isWorkoutInstruction)
+  ) {
     throw new Error("Device workout can only be linked to training plan blocks");
   }
 

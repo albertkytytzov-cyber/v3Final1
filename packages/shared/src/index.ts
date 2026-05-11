@@ -393,6 +393,37 @@ export type PlanSessionExecutionMode = "whole_session" | "by_blocks";
 
 export type PlanDeviceLinkMode = "session" | "block" | "none";
 
+export type DeviceWorkoutLinkablePlanBlockInput = Pick<
+  PlanBlockInput,
+  "name" | "notes"
+> &
+  Partial<Pick<PlanBlockInput, "rowKind">>;
+
+const DEVICE_WORKOUT_LINK_NAME_PATTERN =
+  /кросс|поход|бег|пано|кругов|трениров|спринт|ускор|отрез|интервал/iu;
+
+const DEVICE_WORKOUT_IMPORT_MARKER_PATTERN =
+  /(?:тип|type)\s*:\s*(?:exercise)?workout|exerciseworkout/iu;
+
+export function isDeviceWorkoutLinkablePlanBlock(
+  block: DeviceWorkoutLinkablePlanBlockInput,
+) {
+  const rowKind = block.rowKind ?? "exercise";
+
+  if (rowKind === "workout") {
+    return true;
+  }
+
+  if (rowKind !== "instruction") {
+    return false;
+  }
+
+  return (
+    DEVICE_WORKOUT_LINK_NAME_PATTERN.test(block.name) ||
+    DEVICE_WORKOUT_IMPORT_MARKER_PATTERN.test(block.notes)
+  );
+}
+
 export interface PlanExerciseInput {
   id?: string;
   name: string;

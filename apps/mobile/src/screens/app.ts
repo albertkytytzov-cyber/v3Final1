@@ -29,6 +29,7 @@ import { createPendingAction, enqueueAction, flushSyncQueue } from "../sync/sync
 import {
   estimateTrainingActualLoad,
   estimateTrainingBlockLoad,
+  isDeviceWorkoutLinkablePlanBlock,
 } from "@training-platform/shared";
 import type {
   AssignedBlockExercise,
@@ -5702,8 +5703,10 @@ function getDeviceWorkoutLinkGroupForBlocks(
   };
 }
 
-function isMobileDeviceWorkoutLinkableBlock(block: Pick<CoachDayBlockCleanSummary, "rowKind">) {
-  return (block.rowKind ?? "exercise") === "workout";
+function isMobileDeviceWorkoutLinkableBlock(
+  block: Pick<CoachDayBlockCleanSummary, "name" | "notes" | "rowKind">,
+) {
+  return isDeviceWorkoutLinkablePlanBlock(block);
 }
 
 function isMobileLoadBearingPlanBlock(block: Pick<CoachDayBlockCleanSummary, "rowKind">) {
