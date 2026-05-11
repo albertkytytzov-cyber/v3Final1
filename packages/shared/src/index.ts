@@ -312,6 +312,39 @@ export interface CoachDashboardResponse {
   athletes: CoachAthleteSummary[];
 }
 
+export type CoachTeamDayExecutionStatus =
+  | "no_plan"
+  | "no_execution"
+  | "partial"
+  | "completed";
+
+export interface CoachTeamDayRowSummary {
+  athleteId: string;
+  actualLoad: number;
+  cachedAt: string;
+  coachCommentUpdatedAt: string | null;
+  completedBlocks: number;
+  dataUpdatedAt: string | null;
+  deviceHealthSummary: DeviceHealthDailySummary | null;
+  deviceWorkoutCount: number;
+  deviceWorkoutLinkedCount: number;
+  deviceWorkoutSyncedAt: string | null;
+  entryDate: string;
+  executionResultCount: number;
+  executionStatus: CoachTeamDayExecutionStatus;
+  partialBlocks: number;
+  plannedBlocks: number;
+  plannedLoad: number;
+  readinessEntry: ReadinessEntry | null;
+}
+
+export interface CoachTeamDayResponse {
+  computedAt: string;
+  entryDate: string;
+  rows: CoachTeamDayRowSummary[];
+  source: "cache" | "computed";
+}
+
 export interface CoachAvailableAthletesResponse {
   athletes: CoachAthleteSummary[];
 }

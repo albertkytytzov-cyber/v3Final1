@@ -14,11 +14,13 @@ import {
   saveCoachAthleteProfile,
   saveCoachAnalyticsDecision,
 } from "../../services/analytics/coach-dashboard.service";
+import { buildCoachTeamDay } from "../../services/analytics/coach-team-day.service";
 import type { ApiGuards, HttpErrorFactory } from "../guards";
 import { readIdempotencyKey } from "../idempotency";
 import {
   parseAnalyticsAthleteParams,
   parseAnalyticsDecisionBody,
+  parseCoachTeamDayQuery,
   parseCoachAthleteProfileBody,
 } from "./analytics.schemas";
 
@@ -56,6 +58,27 @@ export function registerAnalyticsRoutes(
     return {
       athletes: await listAvailableCoachAthletes(),
     };
+  });
+
+  app.get("/api/v1/coach/team-day", async (request) => {
+    const user = await dependencies.guards.requireUser(request);
+
+    if (user.role !== "coach" && user.role !== "admin") {
+      throw dependencies.httpError(403, "Only coach or admin accounts can view team day analytics");
+    }
+
+    let entryDate: string;
+    try {
+      entryDate = parseCoachTeamDayQuery(request.query).entryDate;
+    } catch (error) {
+      throw dependencies.httpError(400, (error as Error).message);
+    }
+
+    return buildCoachTeamDay({
+      coachUserId: user.id,
+      entryDate,
+      role: user.role,
+    });
   });
 
   app.post("/api/v1/coach/athletes/:athleteId/assign", async (request) => {

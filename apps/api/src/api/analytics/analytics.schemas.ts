@@ -102,6 +102,20 @@ export function parseAnalyticsAthleteParams(params: unknown): { athleteId: strin
   return { athleteId };
 }
 
+export function parseCoachTeamDayQuery(query: unknown): { entryDate: string } {
+  const rawDate = (query as { date?: unknown } | null)?.date;
+  const entryDate =
+    typeof rawDate === "string" && rawDate.trim()
+      ? rawDate.trim()
+      : new Date().toISOString().slice(0, 10);
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(entryDate)) {
+    throw new Error("date must be a valid date in YYYY-MM-DD format");
+  }
+
+  return { entryDate };
+}
+
 export function parseAnalyticsDecisionBody(body: unknown): AnalyticsCoachActionDecisionPayload {
   const payload = (body ?? {}) as Partial<
     Record<keyof AnalyticsCoachActionDecisionPayload, unknown>

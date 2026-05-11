@@ -48,6 +48,7 @@ import {
   type CoachDayAiReview,
   type CoachDayAiReviewHistoryResponse,
   type CoachDayAiReviewResponse,
+  type CoachTeamDayResponse,
   type DeviceHealthDailySummariesResponse,
   type DeviceHealthDailySummary,
   type DeviceWorkout,
@@ -6568,6 +6569,8 @@ export function PageClient({
   const [coachTeamDayDateFilter, setCoachTeamDayDateFilter] = useState(
     previewState?.coachExecutionReview?.dayDate ?? getDateInputValue(),
   );
+  const [coachTeamDayOverview, setCoachTeamDayOverview] =
+    useState<CoachTeamDayResponse | null>(null);
   const [athleteProfileForm, setAthleteProfileForm] =
     useState<CoachAthleteProfilePayload>(emptyAthleteProfileForm);
   const [isAthleteProfileEditorOpen, setIsAthleteProfileEditorOpen] = useState(false);
@@ -6822,6 +6825,7 @@ export function PageClient({
     setCoachDeviceWorkoutLinks([]);
     setCoachDeviceWorkouts([]);
     setCoachReadinessEntries([]);
+    setCoachTeamDayOverview(null);
     setCoachDiaryDraft(emptyCoachDiaryDraft);
     setCoachAiReviews([]);
     setCoachAiReviewMessage("");
@@ -7529,7 +7533,6 @@ export function PageClient({
 
       await Promise.all([
         loadCoachAthleteReadiness(athleteId),
-        loadCoachTeamDayData(response.athletes),
         loadCoachAdaptedPlan(athleteId),
         loadCoachExecutionReview(athleteId),
         loadCoachDiaryEntries(),
@@ -7590,59 +7593,26 @@ export function PageClient({
     }
   }
 
-  async function loadCoachTeamDayData(athletes: CoachAthleteSummary[]) {
+  async function loadCoachTeamDayData(
+    athletes: CoachAthleteSummary[],
+    entryDate = coachTeamDayDateFilter,
+  ) {
     const athleteIds = Array.from(new Set(athletes.map((athlete) => athlete.athleteId).filter(Boolean)));
 
     if (athleteIds.length === 0) {
-      setCoachReadinessEntries([]);
-      setCoachDeviceHealthSummaries([]);
-      setCoachDeviceWorkoutLinks([]);
-      setCoachDeviceWorkouts([]);
-      setExecutionResults([]);
+      setCoachTeamDayOverview({
+        computedAt: new Date().toISOString(),
+        entryDate,
+        rows: [],
+        source: "computed",
+      });
       return;
     }
 
-    const [
-      readinessResponses,
-      deviceResponses,
-      deviceWorkoutResponses,
-      executionResponses,
-    ] = await Promise.all([
-      Promise.all(
-        athleteIds.map((athleteId) =>
-          apiRequest<{ entries: ReadinessEntry[] }>(
-            `/coach/athletes/${encodeURIComponent(athleteId)}/readiness`,
-          ).catch(() => ({ entries: [] })),
-        ),
-      ),
-      Promise.all(
-        athleteIds.map((athleteId) =>
-          apiRequest<DeviceHealthDailySummariesResponse>(
-            `/coach/athletes/${encodeURIComponent(athleteId)}/device-health`,
-          ).catch(() => ({ summaries: [] })),
-        ),
-      ),
-      Promise.all(
-        athleteIds.map((athleteId) =>
-          apiRequest<DeviceWorkoutsResponse>(
-            `/coach/athletes/${encodeURIComponent(athleteId)}/device-workouts`,
-          ).catch(() => ({ links: [], workouts: [] })),
-        ),
-      ),
-      Promise.all(
-        athleteIds.map((athleteId) =>
-          apiRequest<{ results: ExecutionResult[] }>(
-            `/coach/athletes/${encodeURIComponent(athleteId)}/execution`,
-          ).catch(() => ({ results: [] })),
-        ),
-      ),
-    ]);
-
-    setCoachReadinessEntries(readinessResponses.flatMap((response) => response.entries));
-    setCoachDeviceHealthSummaries(deviceResponses.flatMap((response) => response.summaries));
-    setCoachDeviceWorkoutLinks(deviceWorkoutResponses.flatMap((response) => response.links ?? []));
-    setCoachDeviceWorkouts(deviceWorkoutResponses.flatMap((response) => response.workouts));
-    setExecutionResults(executionResponses.flatMap((response) => response.results));
+    const response = await apiRequest<CoachTeamDayResponse>(
+      `/coach/team-day?date=${encodeURIComponent(entryDate)}`,
+    );
+    setCoachTeamDayOverview(response);
   }
 
   async function loadPlanTemplates() {
@@ -7911,8 +7881,22 @@ export function PageClient({
     );
     setCoachExecutionReview(response.review);
     if (response.review) {
-      await loadCoachDeviceWorkoutsForDay(athleteId, response.review.dayDate).catch(() => null);
+      await Promise.all([
+        loadCoachDeviceHealthForAthlete(athleteId).catch(() => null),
+        loadCoachDeviceWorkoutsForDay(athleteId, response.review.dayDate).catch(() => null),
+      ]);
     }
+  }
+
+  async function loadCoachDeviceHealthForAthlete(athleteId: string) {
+    const response = await apiRequest<DeviceHealthDailySummariesResponse>(
+      `/coach/athletes/${encodeURIComponent(athleteId)}/device-health`,
+    );
+    setCoachDeviceHealthSummaries((current) => [
+      ...current.filter((summary) => summary.athleteId !== athleteId),
+      ...response.summaries,
+    ]);
+    return response;
   }
 
   async function loadCoachDeviceWorkoutsForDay(athleteId: string, entryDate: string) {
@@ -11050,6 +11034,28 @@ export function PageClient({
     if (
       isPreviewMode ||
       !canSeeCoachWorkspace ||
+      !shouldRenderCoachTeamDayPanel ||
+      coachAthletes.length === 0
+    ) {
+      return;
+    }
+
+    void loadCoachTeamDayData(coachAthletes, coachTeamDayDateFilter).catch(() => {
+      setCoachTeamDayOverview(null);
+    });
+  }, [
+    canSeeCoachWorkspace,
+    coachAthletes,
+    coachTeamDayDateFilter,
+    isPreviewMode,
+    shouldRenderCoachTeamDayPanel,
+    user?.id,
+  ]);
+
+  useEffect(() => {
+    if (
+      isPreviewMode ||
+      !canSeeCoachWorkspace ||
       activeWorkspace !== "planning-studio" ||
       planningView !== "calendar" ||
       uwwSyncOptionsLoaded
@@ -12262,7 +12268,53 @@ export function PageClient({
       bg: "Денят може да се анализира с текущите данни.",
     });
   const coachTeamDayDate = coachTeamDayDateFilter || coachExecutionReview?.dayDate || getDateInputValue();
+  const coachTeamDaySummaryByAthleteId = new Map(
+    coachTeamDayOverview?.entryDate === coachTeamDayDate
+      ? coachTeamDayOverview.rows.map((row) => [row.athleteId, row])
+      : [],
+  );
   const coachTeamDayRows = shouldRenderCoachTeamDayPanel ? coachAthletes.map((athlete) => {
+    const teamDaySummary = coachTeamDaySummaryByAthleteId.get(athlete.athleteId);
+    if (teamDaySummary) {
+      const dataQuality = buildCoachDayDataQuality({
+        coachComment: teamDaySummary.coachCommentUpdatedAt ? "comment" : null,
+        deviceHealthSummary: teamDaySummary.deviceHealthSummary,
+        hasDeviceWorkouts: teamDaySummary.deviceWorkoutCount > 0,
+        hasExecutionMarks: teamDaySummary.executionResultCount > 0,
+        hasPlan: teamDaySummary.plannedBlocks > 0,
+        language,
+        readinessEntry: teamDaySummary.readinessEntry,
+      });
+      const aiReview = getCoachAiReviewsForDay(
+        coachAiReviews,
+        athlete.athleteId,
+        coachTeamDayDate,
+      )[0] ?? null;
+      const aiReviewStale = isCoachAiReviewStaleByTimestamps(aiReview, [
+        teamDaySummary.dataUpdatedAt,
+      ]);
+
+      return {
+        actualLoad: teamDaySummary.actualLoad,
+        aiReview,
+        aiReviewStale,
+        athlete,
+        dataQuality,
+        deviceHealthSummary: teamDaySummary.deviceHealthSummary,
+        deviceWorkoutCount: teamDaySummary.deviceWorkoutCount,
+        deviceWorkoutLinkedCount: teamDaySummary.deviceWorkoutLinkedCount,
+        plannedLoad: teamDaySummary.plannedLoad,
+        readinessEntry: teamDaySummary.readinessEntry,
+        statusLabel: teamDaySummary.executionStatus === "no_plan"
+          ? copyFor(language, { en: "No plan", ru: "Нет плана", bg: "Няма план" })
+          : teamDaySummary.executionStatus === "no_execution"
+            ? copyFor(language, { en: "No execution", ru: "Нет отметок", bg: "Няма изпълнение" })
+            : teamDaySummary.executionStatus === "completed"
+              ? copyFor(language, { en: "Completed", ru: "Выполнено", bg: "Изпълнено" })
+              : copyFor(language, { en: "Partial", ru: "Частично", bg: "Частично" }),
+      };
+    }
+
     const plansForDay = assignedPlans.filter(
       (plan) => plan.athleteId === athlete.athleteId && plan.day.dayDate === coachTeamDayDate,
     );
@@ -12352,8 +12404,8 @@ export function PageClient({
       athlete,
       dataQuality,
       deviceHealthSummary,
-      deviceWorkoutLinksForDay,
-      deviceWorkoutsForDay,
+      deviceWorkoutCount: deviceWorkoutsForDay.length,
+      deviceWorkoutLinkedCount: deviceWorkoutLinksForDay.length,
       plannedLoad,
       readinessEntry,
       statusLabel: plansForDay.length === 0
@@ -16459,8 +16511,8 @@ export function PageClient({
                         <span>{formatDeviceRestingHrValue(row.deviceHealthSummary)}</span>
                         <span>{formatDeviceOxygenValue(row.deviceHealthSummary)}</span>
                         <span>
-                          {row.deviceWorkoutsForDay.length
-                            ? `${row.deviceWorkoutLinksForDay.length}/${row.deviceWorkoutsForDay.length} ${copyFor(language, {
+                          {row.deviceWorkoutCount > 0
+                            ? `${row.deviceWorkoutLinkedCount}/${row.deviceWorkoutCount} ${copyFor(language, {
                                 en: "linked",
                                 ru: "связано",
                                 bg: "свързани",

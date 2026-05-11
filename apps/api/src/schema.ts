@@ -672,6 +672,16 @@ export async function ensureSchema() {
       processed_at TIMESTAMPTZ,
       PRIMARY KEY (athlete_id, reference_date)
     );
+
+    CREATE TABLE IF NOT EXISTS coach_team_day_cache (
+      coach_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      role TEXT NOT NULL DEFAULT 'coach',
+      entry_date DATE NOT NULL,
+      source_fingerprint TEXT NOT NULL,
+      rows_json JSONB NOT NULL,
+      computed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (coach_user_id, role, entry_date)
+    );
   `);
 
   await ensureColumn("users", "password_hash", "TEXT");
@@ -735,6 +745,10 @@ export async function ensureSchema() {
     "TIMESTAMPTZ NOT NULL DEFAULT NOW()",
   );
   await ensureColumn("analytics_dirty_flags", "processed_at", "TIMESTAMPTZ");
+  await ensureColumn("coach_team_day_cache", "role", "TEXT NOT NULL DEFAULT 'coach'");
+  await ensureColumn("coach_team_day_cache", "source_fingerprint", "TEXT NOT NULL DEFAULT ''");
+  await ensureColumn("coach_team_day_cache", "rows_json", "JSONB NOT NULL DEFAULT '[]'::jsonb");
+  await ensureColumn("coach_team_day_cache", "computed_at", "TIMESTAMPTZ NOT NULL DEFAULT NOW()");
   await ensureColumn("daily_readiness_entries", "client_request_id", "TEXT");
   await ensureColumn("daily_readiness_entries", "updated_at", "TIMESTAMPTZ NOT NULL DEFAULT NOW()");
   await ensureColumn("readiness_scores", "updated_at", "TIMESTAMPTZ NOT NULL DEFAULT NOW()");
@@ -1368,8 +1382,12 @@ export async function ensureSchema() {
       ON block_exercises (plan_block_id, display_order);
     CREATE INDEX IF NOT EXISTS idx_assigned_plans_athlete_start
       ON assigned_plans (athlete_id, start_date DESC, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_assigned_plans_coach_status
+      ON assigned_plans (coach_user_id, status, start_date DESC);
     CREATE INDEX IF NOT EXISTS idx_assigned_plan_days_plan_date
       ON assigned_plan_days (assigned_plan_id, day_date DESC, display_order);
+    CREATE INDEX IF NOT EXISTS idx_assigned_plan_days_date_plan
+      ON assigned_plan_days (day_date, assigned_plan_id);
     CREATE INDEX IF NOT EXISTS idx_assigned_day_sessions_day_order
       ON assigned_day_sessions (assigned_day_id, display_order);
     CREATE INDEX IF NOT EXISTS idx_assigned_day_blocks_session_order
@@ -1382,6 +1400,8 @@ export async function ensureSchema() {
       ON exercise_result_exercises (execution_result_id, updated_at DESC);
     CREATE INDEX IF NOT EXISTS idx_exercise_results_athlete_updated
       ON exercise_results (athlete_id, updated_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_exercise_results_athlete_date
+      ON exercise_results (athlete_id, training_date DESC);
     CREATE INDEX IF NOT EXISTS idx_exercise_result_exercises_athlete_updated
       ON exercise_result_exercises (athlete_id, updated_at DESC);
     CREATE INDEX IF NOT EXISTS idx_mesocycles_athlete_start
@@ -1421,6 +1441,8 @@ export async function ensureSchema() {
       WHERE processed_at IS NULL;
     CREATE INDEX IF NOT EXISTS idx_analytics_dirty_flags_athlete_date
       ON analytics_dirty_flags (athlete_id, reference_date DESC);
+    CREATE INDEX IF NOT EXISTS idx_coach_team_day_cache_computed
+      ON coach_team_day_cache (computed_at DESC);
   `);
 
   await backfillPlanHierarchy();
