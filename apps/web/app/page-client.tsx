@@ -13070,7 +13070,8 @@ export function PageClient({
     }
 
     if (activeWorkspace === "coach-dashboard") {
-      setCoachView("analytics");
+      setActiveWorkspace("coach-analytics");
+      scrollViewportToTop();
       return;
     }
 
