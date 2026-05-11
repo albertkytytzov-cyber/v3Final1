@@ -1878,7 +1878,8 @@ function buildCoachDayDataQuality(input: {
     input.deviceHealthSummary?.heartRate?.restingBpm !== null &&
     input.deviceHealthSummary?.heartRate?.restingBpm !== undefined;
   const hasOxygenSaturation = hasDeviceOxygenData(input.deviceHealthSummary);
-  const hasDeviceWorkout = Boolean(input.deviceHealthSummary?.workout) || Boolean(input.hasDeviceWorkouts);
+  const hasDeviceWorkout =
+    (input.deviceHealthSummary?.workout?.count ?? 0) > 0 || Boolean(input.hasDeviceWorkouts);
   const signals = [
     {
       action: copyFor(input.language, {
@@ -2135,6 +2136,12 @@ function buildCoachDayAiPayloadFromReview(input: {
   const localActualLoad = roundCoachAiLoad(blocks.reduce((sum, block) => sum + block.actualLoad, 0));
   const plannedLoad = roundCoachAiLoad(input.teamDaySummary?.plannedLoad ?? localPlannedLoad);
   const actualLoad = roundCoachAiLoad(input.teamDaySummary?.actualLoad ?? localActualLoad);
+  const plannedBlocks = input.teamDaySummary?.plannedBlocks ?? input.review.summary.plannedBlocks;
+  const completedBlocks = input.teamDaySummary?.completedBlocks ?? input.review.summary.completedBlocks;
+  const partialBlocks = input.teamDaySummary?.partialBlocks ?? input.review.summary.partialBlocks;
+  const missedBlocks = input.teamDaySummary
+    ? Math.max(plannedBlocks - completedBlocks - partialBlocks, 0)
+    : input.review.summary.missedBlocks;
   const coachComment = input.diaryEntry?.notes.trim() || null;
   const hasExecutionMarks =
     input.teamDaySummary?.executionResultCount !== undefined
@@ -2189,9 +2196,11 @@ function buildCoachDayAiPayloadFromReview(input: {
   const dataQuality = buildCoachDayDataQuality({
     coachComment,
     deviceHealthSummary: input.deviceHealthSummary,
-    hasDeviceWorkouts: linkedWorkouts.length > 0,
+    hasDeviceWorkouts: input.teamDaySummary
+      ? input.teamDaySummary.deviceWorkoutCount > 0
+      : linkedWorkouts.length > 0,
     hasExecutionMarks,
-    hasPlan: input.review.summary.plannedBlocks > 0,
+    hasPlan: plannedBlocks > 0,
     language: input.language,
     readinessEntry: input.readinessEntry,
   });
@@ -2266,10 +2275,10 @@ function buildCoachDayAiPayloadFromReview(input: {
       : null,
     execution: {
       blocks: {
-        completed: input.review.summary.completedBlocks,
-        missed: input.review.summary.missedBlocks,
-        partial: input.review.summary.partialBlocks,
-        total: input.review.summary.plannedBlocks,
+        completed: completedBlocks,
+        missed: missedBlocks,
+        partial: partialBlocks,
+        total: plannedBlocks,
       },
       exercises: {
         completed: input.review.summary.completedExercises,
@@ -11419,35 +11428,19 @@ export function PageClient({
       return;
     }
 
-    const readinessEntry =
-      selectedAthleteEntries.find(
-        (entry) => entry.athleteId === selectedAthleteId && entry.entryDate === coachExecutionReview.dayDate,
-      ) ?? null;
-    const diaryEntry =
-      coachDiaryEntries
-        .filter(
-          (entry) =>
-            entry.athleteId === selectedAthleteId &&
-            entry.assignedPlanId === coachExecutionReview.assignedPlanId,
-        )
-        .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0] ?? null;
-    const deviceHealthSummary = getDeviceHealthSummaryForDay(
-      coachDeviceHealthSummaries,
-      selectedAthleteId,
-      coachExecutionReview.dayDate,
-    );
     const dayPayload = buildCoachDayAiPayloadFromReview({
       athlete: selectedCoachAthlete,
-      deviceHealthSummary,
+      deviceHealthSummary: selectedCoachDeviceHealthSummary,
       deviceWorkoutLinks: getDeviceWorkoutLinksForDay(
         coachDeviceWorkoutLinks,
         selectedAthleteId,
         coachExecutionReview.dayDate,
       ),
-      diaryEntry,
+      diaryEntry: latestCoachDiaryEntry,
       language,
-      readinessEntry,
+      readinessEntry: selectedCoachReadinessEntry,
       review: coachExecutionReview,
+      teamDaySummary: selectedCoachTeamDaySummary,
     });
 
     setCoachAiReviewBusy(true);
