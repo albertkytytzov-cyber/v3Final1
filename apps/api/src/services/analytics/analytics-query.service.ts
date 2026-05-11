@@ -3,6 +3,7 @@ import type {
   AnalyticsCoachActionDecisionPayload,
   AnalyticsCoachActionOutcome,
   AnalyticsCoachActionSnapshot,
+  AnalyticsOverview,
   CoachAthleteProfilePayload,
   CoachAthleteSummary,
   PlanBlockInput,
@@ -113,6 +114,14 @@ interface AnalyticsDecisionRow {
   outcome_notes: string;
   created_at: string;
   updated_at: string;
+}
+
+interface AnalyticsOverviewCacheRow {
+  overview_json: AnalyticsOverview;
+}
+
+interface AnalyticsSourceFingerprintRow {
+  source_fingerprint: string;
 }
 
 export interface SaveAnalyticsCoachActionDecisionInput
@@ -774,6 +783,212 @@ export async function listTrainingLoadLogRows(
     actualDurationMinutes:
       row.actual_duration_minutes !== null ? Number(row.actual_duration_minutes) : null,
   }));
+}
+
+export async function buildAnalyticsOverviewSourceFingerprint(
+  athleteId: string,
+  referenceDateText: string,
+  cacheSchemaVersion: string,
+) {
+  const result = await pool.query<AnalyticsSourceFingerprintRow>(
+    `
+      WITH source_versions AS (
+        SELECT 'schema' AS source_name, 1::bigint AS row_count, $3::text AS marker
+        UNION ALL
+        SELECT
+          'athlete_profile',
+          COUNT(*)::bigint,
+          COALESCE(MAX(GREATEST(athletes.updated_at, users.created_at))::text, '')
+        FROM athletes
+        JOIN users ON users.id = athletes.user_id
+        WHERE athletes.id = $1
+        UNION ALL
+        SELECT
+          'readiness_entries',
+          COUNT(*)::bigint,
+          COALESCE(MAX(GREATEST(daily_readiness_entries.created_at, daily_readiness_entries.updated_at))::text, '')
+        FROM daily_readiness_entries
+        WHERE daily_readiness_entries.athlete_id = $1
+          AND daily_readiness_entries.entry_date BETWEEN ($2::date - INTERVAL '28 days') AND $2::date
+        UNION ALL
+        SELECT
+          'readiness_scores',
+          COUNT(*)::bigint,
+          COALESCE(MAX(GREATEST(readiness_scores.created_at, readiness_scores.updated_at))::text, '')
+        FROM daily_readiness_entries
+        JOIN readiness_scores ON readiness_scores.readiness_entry_id = daily_readiness_entries.id
+        WHERE daily_readiness_entries.athlete_id = $1
+          AND daily_readiness_entries.entry_date BETWEEN ($2::date - INTERVAL '28 days') AND $2::date
+        UNION ALL
+        SELECT
+          'weight_logs',
+          COUNT(*)::bigint,
+          COALESCE(MAX(GREATEST(weight_logs.created_at, weight_logs.updated_at))::text, '')
+        FROM weight_logs
+        WHERE weight_logs.athlete_id = $1
+          AND weight_logs.log_date BETWEEN ($2::date - INTERVAL '28 days') AND $2::date
+        UNION ALL
+        SELECT
+          'training_load_logs',
+          COUNT(*)::bigint,
+          COALESCE(MAX(GREATEST(training_load_logs.created_at, training_load_logs.updated_at))::text, '')
+        FROM training_load_logs
+        WHERE training_load_logs.athlete_id = $1
+          AND training_load_logs.log_date BETWEEN ($2::date - INTERVAL '35 days') AND $2::date
+        UNION ALL
+        SELECT
+          'assigned_plans',
+          COUNT(*)::bigint,
+          COALESCE(MAX(assigned_plans.created_at)::text, '')
+        FROM assigned_plans
+        WHERE assigned_plans.athlete_id = $1
+        UNION ALL
+        SELECT
+          'assigned_plan_days',
+          COUNT(*)::bigint,
+          COALESCE(MAX(assigned_plans.created_at)::text, '')
+        FROM assigned_plans
+        JOIN assigned_plan_days ON assigned_plan_days.assigned_plan_id = assigned_plans.id
+        WHERE assigned_plans.athlete_id = $1
+          AND assigned_plan_days.day_date BETWEEN ($2::date - INTERVAL '35 days') AND ($2::date + INTERVAL '14 days')
+        UNION ALL
+        SELECT
+          'assigned_day_blocks',
+          COUNT(*)::bigint,
+          COALESCE(MAX(assigned_plans.created_at)::text, '')
+        FROM assigned_plans
+        JOIN assigned_plan_days ON assigned_plan_days.assigned_plan_id = assigned_plans.id
+        JOIN assigned_day_sessions ON assigned_day_sessions.assigned_day_id = assigned_plan_days.id
+        JOIN assigned_day_blocks ON assigned_day_blocks.assigned_session_id = assigned_day_sessions.id
+        WHERE assigned_plans.athlete_id = $1
+          AND assigned_plan_days.day_date BETWEEN ($2::date - INTERVAL '35 days') AND ($2::date + INTERVAL '14 days')
+        UNION ALL
+        SELECT
+          'assigned_block_exercises',
+          COUNT(*)::bigint,
+          COALESCE(MAX(assigned_plans.created_at)::text, '')
+        FROM assigned_plans
+        JOIN assigned_plan_days ON assigned_plan_days.assigned_plan_id = assigned_plans.id
+        JOIN assigned_day_sessions ON assigned_day_sessions.assigned_day_id = assigned_plan_days.id
+        JOIN assigned_day_blocks ON assigned_day_blocks.assigned_session_id = assigned_day_sessions.id
+        JOIN assigned_block_exercises ON assigned_block_exercises.assigned_block_id = assigned_day_blocks.id
+        WHERE assigned_plans.athlete_id = $1
+          AND assigned_plan_days.day_date BETWEEN ($2::date - INTERVAL '35 days') AND ($2::date + INTERVAL '14 days')
+        UNION ALL
+        SELECT
+          'exercise_results',
+          COUNT(*)::bigint,
+          COALESCE(MAX(GREATEST(exercise_results.created_at, exercise_results.updated_at))::text, '')
+        FROM exercise_results
+        WHERE exercise_results.athlete_id = $1
+        UNION ALL
+        SELECT
+          'exercise_result_exercises',
+          COUNT(*)::bigint,
+          COALESCE(MAX(GREATEST(exercise_result_exercises.created_at, exercise_result_exercises.updated_at))::text, '')
+        FROM exercise_result_exercises
+        WHERE exercise_result_exercises.athlete_id = $1
+        UNION ALL
+        SELECT
+          'seasons',
+          COUNT(*)::bigint,
+          COALESCE(MAX(seasons.created_at)::text, '')
+        FROM seasons
+        WHERE seasons.athlete_id = $1
+        UNION ALL
+        SELECT
+          'mesocycles',
+          COUNT(*)::bigint,
+          COALESCE(MAX(GREATEST(mesocycles.created_at, mesocycles.updated_at))::text, '')
+        FROM mesocycles
+        WHERE mesocycles.athlete_id = $1
+        UNION ALL
+        SELECT
+          'competition_plans',
+          COUNT(*)::bigint,
+          COALESCE(MAX(GREATEST(competition_plans.created_at, competition_plans.updated_at))::text, '')
+        FROM competition_plans
+        WHERE competition_plans.athlete_id = $1
+        UNION ALL
+        SELECT
+          'competition_results',
+          COUNT(*)::bigint,
+          COALESCE(MAX(competition_results.created_at)::text, '')
+        FROM competition_plans
+        JOIN competition_results ON competition_results.competition_plan_id = competition_plans.id
+        WHERE competition_plans.athlete_id = $1
+        UNION ALL
+        SELECT
+          'analytics_action_decisions',
+          COUNT(*)::bigint,
+          COALESCE(MAX(GREATEST(analytics_action_decisions.created_at, analytics_action_decisions.updated_at))::text, '')
+        FROM analytics_action_decisions
+        WHERE analytics_action_decisions.athlete_id = $1
+      )
+      SELECT md5(
+        string_agg(
+          source_name || ':' || row_count::text || ':' || marker,
+          '|'
+          ORDER BY source_name
+        )
+      ) AS source_fingerprint
+      FROM source_versions
+    `,
+    [athleteId, referenceDateText, cacheSchemaVersion],
+  );
+
+  return result.rows[0]?.source_fingerprint ?? "";
+}
+
+export async function getCachedAnalyticsOverview(input: {
+  athleteId: string;
+  referenceDateText: string;
+  sourceFingerprint: string;
+}) {
+  const result = await pool.query<AnalyticsOverviewCacheRow>(
+    `
+      SELECT overview_json
+      FROM analytics_overview_cache
+      WHERE athlete_id = $1
+        AND reference_date = $2::date
+        AND source_fingerprint = $3
+      LIMIT 1
+    `,
+    [input.athleteId, input.referenceDateText, input.sourceFingerprint],
+  );
+
+  return result.rows[0]?.overview_json ?? null;
+}
+
+export async function saveCachedAnalyticsOverview(input: {
+  athleteId: string;
+  referenceDateText: string;
+  sourceFingerprint: string;
+  overview: AnalyticsOverview;
+}) {
+  await pool.query(
+    `
+      INSERT INTO analytics_overview_cache (
+        athlete_id,
+        reference_date,
+        source_fingerprint,
+        overview_json,
+        computed_at
+      )
+      VALUES ($1, $2::date, $3, $4::jsonb, NOW())
+      ON CONFLICT (athlete_id, reference_date)
+      DO UPDATE SET
+        source_fingerprint = EXCLUDED.source_fingerprint,
+        overview_json = EXCLUDED.overview_json,
+        computed_at = NOW()
+    `,
+    [
+      input.athleteId,
+      input.referenceDateText,
+      input.sourceFingerprint,
+      JSON.stringify(input.overview),
+    ],
+  );
 }
 
 export async function listAnalyticsCoachActionDecisions(

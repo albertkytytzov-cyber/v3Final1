@@ -269,7 +269,8 @@ export async function submitReadiness(
         pain_level = EXCLUDED.pain_level,
         illness_flag = EXCLUDED.illness_flag,
         fever_flag = EXCLUDED.fever_flag,
-        client_request_id = COALESCE(EXCLUDED.client_request_id, daily_readiness_entries.client_request_id)
+        client_request_id = COALESCE(EXCLUDED.client_request_id, daily_readiness_entries.client_request_id),
+        updated_at = NOW()
       RETURNING id, created_at::text, entry_date::text
     `,
     [
@@ -298,7 +299,8 @@ export async function submitReadiness(
       DO UPDATE SET
         score = EXCLUDED.score,
         status = EXCLUDED.status,
-        explanation = EXCLUDED.explanation
+        explanation = EXCLUDED.explanation,
+        updated_at = NOW()
     `,
     [
       entry.rows[0].id,

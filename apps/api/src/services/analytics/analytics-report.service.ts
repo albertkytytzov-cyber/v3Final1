@@ -42,11 +42,14 @@ import {
 } from "../competition/mesocycle.service";
 import { listSeasons } from "../competition/season.service";
 import {
+  buildAnalyticsOverviewSourceFingerprint,
+  getCachedAnalyticsOverview,
   getAnalyticsAthlete,
   listAnalyticsCoachActionDecisions,
   listAnalyticsCoachActionDecisionsForWindow,
   listAnalyticsExecutionRows,
   listAnalyticsReadinessRows,
+  saveCachedAnalyticsOverview,
   listTrainingLoadLogRows,
   listWeightLogRows,
 } from "./analytics-query.service";
@@ -55,12 +58,49 @@ export {
   buildAnalyticsCoachActionSnapshotFromOverview,
 } from "../../domain/analytics/analytics-decision.policy";
 
+const ANALYTICS_OVERVIEW_CACHE_SCHEMA_VERSION = "analytics-overview-v1";
+
 export async function buildAnalyticsOverviewForAthlete(
   athleteId: string,
   referenceDate: string | Date = new Date(),
 ): Promise<AnalyticsOverview | null> {
   const referenceDateText = toDateKey(referenceDate);
+  const sourceFingerprint = await buildAnalyticsOverviewSourceFingerprint(
+    athleteId,
+    referenceDateText,
+    ANALYTICS_OVERVIEW_CACHE_SCHEMA_VERSION,
+  );
+  const cachedOverview = await getCachedAnalyticsOverview({
+    athleteId,
+    referenceDateText,
+    sourceFingerprint,
+  });
 
+  if (cachedOverview) {
+    return cachedOverview;
+  }
+
+  const analyticsOverview = await buildAnalyticsOverviewForAthleteFromSources(
+    athleteId,
+    referenceDateText,
+  );
+
+  if (analyticsOverview) {
+    await saveCachedAnalyticsOverview({
+      athleteId,
+      referenceDateText,
+      sourceFingerprint,
+      overview: analyticsOverview,
+    });
+  }
+
+  return analyticsOverview;
+}
+
+async function buildAnalyticsOverviewForAthleteFromSources(
+  athleteId: string,
+  referenceDateText: string,
+): Promise<AnalyticsOverview | null> {
   const [
     athlete,
     readinessRows,
