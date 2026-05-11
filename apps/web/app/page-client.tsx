@@ -85,7 +85,14 @@ import {
   type UwwEventSyncOptionsResponse,
   type UwwEventSyncResponse,
 } from "@training-platform/shared";
-import { startTransition, type ChangeEvent, type FormEvent, useEffect, useState } from "react";
+import {
+  startTransition,
+  type ChangeEvent,
+  type FormEvent,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import {
   LANGUAGE_OPTIONS as I18N_LANGUAGE_OPTIONS,
   type Language as I18nLanguage,
@@ -6700,6 +6707,8 @@ export function PageClient({
     useState<AnalyticsOverview | null>(
       normalizeAnalyticsOverview(previewState?.coachAnalyticsOverview ?? null),
     );
+  const [coachAnalyticsLoading, setCoachAnalyticsLoading] = useState(false);
+  const coachAnalyticsRequestIdRef = useRef(0);
   const [assignedPlanForm, setAssignedPlanForm] =
     useState<AssignedPlanPayload>(() => ({
       ...initialAssignedPlanForm,
@@ -6816,7 +6825,9 @@ export function PageClient({
     setCoachDiaryDraft(emptyCoachDiaryDraft);
     setCoachAiReviews([]);
     setCoachAiReviewMessage("");
+    coachAnalyticsRequestIdRef.current += 1;
     setCoachAnalyticsOverview(null);
+    setCoachAnalyticsLoading(false);
     setCompetitionContext(null);
     setCompetitionReview(null);
     setTemplateRecommendations([]);
@@ -7522,7 +7533,6 @@ export function PageClient({
         loadCoachAdaptedPlan(athleteId),
         loadCoachExecutionReview(athleteId),
         loadCoachDiaryEntries(),
-        loadCoachAnalyticsOverview(athleteId),
         loadCompetitionContext(athleteId),
         loadSeasons(athleteId),
         loadMesocycles(athleteId),
@@ -7942,11 +7952,36 @@ export function PageClient({
     return response.status;
   }
 
+  function shouldLoadCoachAnalyticsNow(athleteId: string) {
+    return Boolean(athleteId) && activeWorkspace === "coach-analytics";
+  }
+
+  async function loadCoachAnalyticsOverviewIfActive(athleteId: string) {
+    if (!shouldLoadCoachAnalyticsNow(athleteId)) {
+      return;
+    }
+
+    await loadCoachAnalyticsOverview(athleteId);
+  }
+
   async function loadCoachAnalyticsOverview(athleteId: string) {
-    const response = await apiRequest<{ analytics: AnalyticsOverview | null }>(
-      `/coach/athletes/${athleteId}/analytics`,
-    );
-    setCoachAnalyticsOverview(normalizeAnalyticsOverview(response.analytics));
+    const requestId = coachAnalyticsRequestIdRef.current + 1;
+    coachAnalyticsRequestIdRef.current = requestId;
+    setCoachAnalyticsLoading(true);
+
+    try {
+      const response = await apiRequest<{ analytics: AnalyticsOverview | null }>(
+        `/coach/athletes/${athleteId}/analytics`,
+      );
+
+      if (coachAnalyticsRequestIdRef.current === requestId) {
+        setCoachAnalyticsOverview(normalizeAnalyticsOverview(response.analytics));
+      }
+    } finally {
+      if (coachAnalyticsRequestIdRef.current === requestId) {
+        setCoachAnalyticsLoading(false);
+      }
+    }
   }
 
   async function saveCoachDiaryEntry(
@@ -8563,6 +8598,9 @@ export function PageClient({
     }
 
     setSelectedAthleteId(athleteId);
+    coachAnalyticsRequestIdRef.current += 1;
+    setCoachAnalyticsOverview(null);
+    setCoachAnalyticsLoading(false);
     setSeasonForm((current) => ({ ...current, athleteId }));
     setCompetitionPlanForm((current) => ({ ...current, athleteId }));
     setMesocycleForm((current) => ({
@@ -8584,7 +8622,6 @@ export function PageClient({
         loadCoachAdaptedPlan(athleteId),
         loadCoachExecutionReview(athleteId),
         loadCoachDiaryEntries(),
-        loadCoachAnalyticsOverview(athleteId),
         loadCompetitionContext(athleteId),
         loadSeasons(athleteId),
         loadCompetitionPlans(athleteId),
@@ -9331,7 +9368,7 @@ export function PageClient({
         await Promise.all([
           loadCoachAdaptedPlan(selectedAthleteId),
           loadCoachExecutionReview(selectedAthleteId),
-          loadCoachAnalyticsOverview(selectedAthleteId),
+          loadCoachAnalyticsOverviewIfActive(selectedAthleteId),
         ]);
       }
     } catch (error) {
@@ -9476,7 +9513,7 @@ export function PageClient({
         await Promise.all([
           loadCoachAdaptedPlan(athleteId),
           loadCoachExecutionReview(athleteId),
-          loadCoachAnalyticsOverview(athleteId),
+          loadCoachAnalyticsOverviewIfActive(athleteId),
           loadTemplatePackRecommendations(athleteId, startDate, coachAthletes),
         ]);
       }
@@ -9606,7 +9643,7 @@ export function PageClient({
         await Promise.all([
           loadCoachAdaptedPlan(athleteId),
           loadCoachExecutionReview(athleteId),
-          loadCoachAnalyticsOverview(athleteId),
+          loadCoachAnalyticsOverviewIfActive(athleteId),
           loadTemplatePackRecommendations(athleteId, assignedPlanForm.startDate, coachAthletes),
         ]);
       }
@@ -10062,7 +10099,7 @@ export function PageClient({
         await Promise.all([
           loadCoachAdaptedPlan(assignedPlanForm.athleteId),
           loadCoachExecutionReview(assignedPlanForm.athleteId),
-          loadCoachAnalyticsOverview(assignedPlanForm.athleteId),
+          loadCoachAnalyticsOverviewIfActive(assignedPlanForm.athleteId),
         ]);
       }
     } catch (error) {
@@ -10628,7 +10665,7 @@ export function PageClient({
           loadCoachAthletes(),
           loadCoachAdaptedPlan(athleteId),
           loadCoachExecutionReview(athleteId),
-          loadCoachAnalyticsOverview(athleteId),
+          loadCoachAnalyticsOverviewIfActive(athleteId),
           loadTemplatePackRecommendations(
             athleteId,
             microcycleForm.startDate,
@@ -11315,6 +11352,36 @@ export function PageClient({
     };
   }, [activeWorkspace, canSeeCoachWorkspace, isPreviewMode, selectedAthleteId, user?.id]);
 
+  useEffect(() => {
+    if (isPreviewMode || !canSeeCoachWorkspace || activeWorkspace !== "coach-analytics") {
+      return;
+    }
+
+    if (!selectedAthleteId) {
+      setCoachAnalyticsOverview(null);
+      setCoachAnalyticsLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    const refreshCoachAnalytics = async () => {
+      try {
+        await loadCoachAnalyticsOverview(selectedAthleteId);
+      } catch {
+        if (!cancelled) {
+          setCoachAnalyticsOverview(null);
+        }
+      }
+    };
+
+    void refreshCoachAnalytics();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeWorkspace, canSeeCoachWorkspace, isPreviewMode, selectedAthleteId, user?.id]);
+
   const activeUserLabel = user ? translateRoleName(user.role, language) : ui("guest");
   const activeAthleteLabel =
     user?.role === "athlete"
@@ -11558,7 +11625,13 @@ export function PageClient({
         {
           id: "coach-analytics",
           label: t("analytics"),
-          meta: coachAnalyticsOverview
+          meta: coachAnalyticsLoading
+            ? copyFor(language, {
+                en: "Loading",
+                ru: "Загрузка",
+                bg: "Зареждане",
+              })
+            : coachAnalyticsOverview
             ? `${coachAnalyticsOverview.insights.length}/${coachAnalyticsOverview.patterns.length}`
             : ui("noAnalyticsYet"),
         },
@@ -16439,7 +16512,13 @@ export function PageClient({
                   <div className="summary-topline">
                     <strong>{t("analytics")}</strong>
                     <span>
-                      {coachAnalyticsOverview
+                      {coachAnalyticsLoading
+                        ? copyFor(language, {
+                            en: "Loading analytics",
+                            ru: "Загружаю аналитику",
+                            bg: "Зареждам анализ",
+                          })
+                        : coachAnalyticsOverview
                         ? `${coachAnalyticsOverview.insights.length} ${copyFor(language, {
                             en: "signals",
                             ru: "сигналов",
@@ -16452,7 +16531,15 @@ export function PageClient({
                         : ui("noAnalyticsYet")}
                     </span>
                   </div>
-                  {coachAnalyticsOverview ? (
+                  {coachAnalyticsLoading ? (
+                    <p className="placeholder-copy">
+                      {copyFor(language, {
+                        en: "Loading analytics for the selected athlete...",
+                        ru: "Загружаю аналитику выбранного спортсмена...",
+                        bg: "Зареждам анализа за избрания спортист...",
+                      })}
+                    </p>
+                  ) : coachAnalyticsOverview ? (
                     <>
                       <p>
                         {ui("coachAnalyticsIntro")} {coachAnalyticsOverview.athleteName}.
