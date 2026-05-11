@@ -124,6 +124,13 @@ interface AnalyticsSourceFingerprintRow {
   source_fingerprint: string;
 }
 
+interface AnalyticsDirtyFlagRow {
+  athlete_id: string;
+  reference_date: string;
+  reason: string;
+  attempts: number;
+}
+
 export interface SaveAnalyticsCoachActionDecisionInput
   extends AnalyticsCoachActionDecisionPayload {
   athleteId: string;
@@ -988,6 +995,133 @@ export async function saveCachedAnalyticsOverview(input: {
       input.sourceFingerprint,
       JSON.stringify(input.overview),
     ],
+  );
+}
+
+export async function markAnalyticsDirty(input: {
+  athleteId: string;
+  referenceDate: string | Date;
+  reason?: string;
+}) {
+  const referenceDateText =
+    input.referenceDate instanceof Date
+      ? input.referenceDate.toISOString().slice(0, 10)
+      : input.referenceDate.slice(0, 10);
+  const currentReferenceDateText = new Date().toISOString().slice(0, 10);
+  const referenceDates = Array.from(
+    new Set([referenceDateText, currentReferenceDateText]),
+  );
+
+  await pool.query(
+    `
+      WITH dirty_dates AS (
+        SELECT DISTINCT unnest($2::date[]) AS reference_date
+      )
+      INSERT INTO analytics_dirty_flags (
+        athlete_id,
+        reference_date,
+        reason,
+        attempts,
+        last_error,
+        marked_at,
+        next_attempt_at,
+        processed_at
+      )
+      SELECT
+        $1,
+        dirty_dates.reference_date,
+        $3,
+        0,
+        NULL,
+        NOW(),
+        NOW(),
+        NULL
+      FROM dirty_dates
+      ON CONFLICT (athlete_id, reference_date)
+      DO UPDATE SET
+        reason = EXCLUDED.reason,
+        attempts = 0,
+        last_error = NULL,
+        marked_at = NOW(),
+        next_attempt_at = NOW(),
+        processed_at = NULL
+    `,
+    [
+      input.athleteId,
+      referenceDates,
+      input.reason ?? "data_changed",
+    ],
+  );
+}
+
+export async function listPendingAnalyticsDirtyFlags(limit = 8) {
+  const result = await pool.query<AnalyticsDirtyFlagRow>(
+    `
+      SELECT
+        athlete_id,
+        reference_date::text,
+        reason,
+        attempts
+      FROM analytics_dirty_flags
+      WHERE processed_at IS NULL
+        AND next_attempt_at <= NOW()
+      ORDER BY next_attempt_at ASC, marked_at ASC
+      LIMIT $1
+    `,
+    [limit],
+  );
+
+  return result.rows.map((row) => ({
+    athleteId: row.athlete_id,
+    referenceDate: row.reference_date,
+    reason: row.reason,
+    attempts: row.attempts,
+  }));
+}
+
+export async function countPendingAnalyticsDirtyFlags() {
+  const result = await pool.query<{ pending_count: string }>(
+    `
+      SELECT COUNT(*)::text AS pending_count
+      FROM analytics_dirty_flags
+      WHERE processed_at IS NULL
+    `,
+  );
+
+  return Number(result.rows[0]?.pending_count ?? 0);
+}
+
+export async function markAnalyticsDirtyProcessed(input: {
+  athleteId: string;
+  referenceDate: string | Date;
+}) {
+  await pool.query(
+    `
+      UPDATE analytics_dirty_flags
+      SET processed_at = NOW(),
+          last_error = NULL
+      WHERE athlete_id = $1
+        AND reference_date = $2::date
+    `,
+    [input.athleteId, input.referenceDate],
+  );
+}
+
+export async function markAnalyticsDirtyFailed(input: {
+  athleteId: string;
+  referenceDate: string | Date;
+  errorMessage: string;
+}) {
+  await pool.query(
+    `
+      UPDATE analytics_dirty_flags
+      SET attempts = attempts + 1,
+          last_error = $3,
+          next_attempt_at = NOW() + INTERVAL '5 minutes'
+      WHERE athlete_id = $1
+        AND reference_date = $2::date
+    `,
+    [input.athleteId, input.referenceDate, input.errorMessage],
   );
 }
 

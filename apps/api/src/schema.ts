@@ -660,6 +660,18 @@ export async function ensureSchema() {
       computed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       PRIMARY KEY (athlete_id, reference_date)
     );
+
+    CREATE TABLE IF NOT EXISTS analytics_dirty_flags (
+      athlete_id UUID NOT NULL REFERENCES athletes(id) ON DELETE CASCADE,
+      reference_date DATE NOT NULL,
+      reason TEXT NOT NULL DEFAULT 'data_changed',
+      attempts INTEGER NOT NULL DEFAULT 0,
+      last_error TEXT,
+      marked_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      processed_at TIMESTAMPTZ,
+      PRIMARY KEY (athlete_id, reference_date)
+    );
   `);
 
   await ensureColumn("users", "password_hash", "TEXT");
@@ -713,6 +725,16 @@ export async function ensureSchema() {
   await ensureUuidDefault("weight_logs");
   await ensureUuidDefault("training_load_logs");
   await ensureUuidDefault("analytics_action_decisions");
+  await ensureColumn("analytics_dirty_flags", "reason", "TEXT NOT NULL DEFAULT 'data_changed'");
+  await ensureColumn("analytics_dirty_flags", "attempts", "INTEGER NOT NULL DEFAULT 0");
+  await ensureColumn("analytics_dirty_flags", "last_error", "TEXT");
+  await ensureColumn("analytics_dirty_flags", "marked_at", "TIMESTAMPTZ NOT NULL DEFAULT NOW()");
+  await ensureColumn(
+    "analytics_dirty_flags",
+    "next_attempt_at",
+    "TIMESTAMPTZ NOT NULL DEFAULT NOW()",
+  );
+  await ensureColumn("analytics_dirty_flags", "processed_at", "TIMESTAMPTZ");
   await ensureColumn("daily_readiness_entries", "client_request_id", "TEXT");
   await ensureColumn("daily_readiness_entries", "updated_at", "TIMESTAMPTZ NOT NULL DEFAULT NOW()");
   await ensureColumn("readiness_scores", "updated_at", "TIMESTAMPTZ NOT NULL DEFAULT NOW()");
@@ -1394,6 +1416,11 @@ export async function ensureSchema() {
       ON training_plan_device_links (device_workout_id);
     CREATE INDEX IF NOT EXISTS idx_analytics_overview_cache_computed
       ON analytics_overview_cache (computed_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_analytics_dirty_flags_pending
+      ON analytics_dirty_flags (next_attempt_at ASC, marked_at ASC)
+      WHERE processed_at IS NULL;
+    CREATE INDEX IF NOT EXISTS idx_analytics_dirty_flags_athlete_date
+      ON analytics_dirty_flags (athlete_id, reference_date DESC);
   `);
 
   await backfillPlanHierarchy();

@@ -9,6 +9,7 @@ import {
 } from "@training-platform/shared";
 import { buildExecutionReviewPlan } from "../domain/execution-review.engine";
 import { pool } from "../db";
+import { markAnalyticsDirty } from "./analytics/analytics-query.service";
 import { loadAssignedPlans } from "./planning/planning-query.service";
 
 interface ExecutionResultRow {
@@ -685,6 +686,12 @@ export async function submitExecutionResult(
     "exercise_results.id = $1 AND exercise_results.athlete_id = $2",
     [executionResultId, input.athleteId],
   );
+
+  await markAnalyticsDirty({
+    athleteId: input.athleteId,
+    referenceDate: blockAccess.rows[0].day_date,
+    reason: "execution",
+  });
 
   return savedResult;
 }

@@ -4,6 +4,7 @@ import type {
 } from "@training-platform/shared";
 import { calculateReadiness } from "../domain/readiness.engine";
 import { pool } from "../db";
+import { markAnalyticsDirty } from "./analytics/analytics-query.service";
 import { getCompetitionContextForAthlete } from "./competition/competition-query.service";
 
 interface ReadinessRow {
@@ -335,6 +336,12 @@ export async function submitReadiness(
       input.values.bodyWeight,
     ],
   );
+
+  await markAnalyticsDirty({
+    athleteId: input.athleteId,
+    referenceDate: entry.rows[0].entry_date,
+    reason: "readiness",
+  });
 
   return {
     id: entry.rows[0].id,

@@ -15,6 +15,7 @@ import {
 import { estimateBlocksLoad } from "../../domain/planning/load-balance.policy";
 import { normalizePlanDeviceWorkoutSessions } from "../../domain/planning/plan-structure-normalization";
 import { pool } from "../../db";
+import { markAnalyticsDirty } from "../analytics/analytics-query.service";
 import { getCompetitionContextForAthlete } from "../competition/competition-query.service";
 import {
   getAssignedPlanById,
@@ -787,12 +788,19 @@ export async function deleteAssignedPlan(input: {
   role: string;
   assignedPlanId: string;
 }) {
-  const assignedPlan = await pool.query<{ id: string }>(
+  const assignedPlan = await pool.query<{
+    id: string;
+    athlete_id: string;
+    day_date: string | null;
+  }>(
     `
-      SELECT id
+      SELECT
+        assigned_plans.id,
+        assigned_plans.athlete_id,
+        assigned_plan_days.day_date::text
       FROM assigned_plans
-      WHERE id = $1 AND (coach_user_id = $2 OR $3 = 'admin')
-      LIMIT 1
+      LEFT JOIN assigned_plan_days ON assigned_plan_days.assigned_plan_id = assigned_plans.id
+      WHERE assigned_plans.id = $1 AND (coach_user_id = $2 OR $3 = 'admin')
     `,
     [input.assignedPlanId, input.coachUserId, input.role],
   );
@@ -805,6 +813,16 @@ export async function deleteAssignedPlan(input: {
   }
 
   await pool.query("DELETE FROM assigned_plans WHERE id = $1", [input.assignedPlanId]);
+
+  await Promise.all(
+    assignedPlan.rows.filter((row) => row.day_date).map((row) =>
+      markAnalyticsDirty({
+        athleteId: row.athlete_id,
+        referenceDate: row.day_date ?? new Date().toISOString().slice(0, 10),
+        reason: "plan_deleted",
+      }),
+    ),
+  );
 
   return {
     deleted: true,
@@ -840,6 +858,11 @@ export async function assignPlan(input: {
   await syncMesocycleWeekTargetsForDates({
     athleteId: input.payload.athleteId,
     dates: [input.payload.startDate],
+  });
+  await markAnalyticsDirty({
+    athleteId: input.payload.athleteId,
+    referenceDate: input.payload.startDate,
+    reason: "plan_assigned",
   });
 
   return {
@@ -897,6 +920,15 @@ export async function autoAssignMicrocycle(input: {
     athleteId: input.payload.athleteId,
     dates: createdPlans.map((plan) => plan.day.dayDate),
   });
+  await Promise.all(
+    createdPlans.map((plan) =>
+      markAnalyticsDirty({
+        athleteId: input.payload.athleteId,
+        referenceDate: plan.day.dayDate,
+        reason: "plan_auto_assigned",
+      }),
+    ),
+  );
 
   return {
     assignedPlans: createdPlans,
