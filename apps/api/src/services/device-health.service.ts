@@ -15,6 +15,7 @@ import type {
 import type { PoolClient } from "pg";
 import { pool } from "../db";
 import { markCoachTeamDayDirtyForAthlete } from "./analytics/coach-team-day.service";
+import { markAnalyticsDirty } from "./analytics/analytics-query.service";
 
 interface DeviceHealthDailySummaryRow {
   id: string;
@@ -608,11 +609,18 @@ export async function syncDeviceWorkouts(input: {
 
   const workouts = await listDeviceWorkoutsForAthlete(input.athleteId, input.payload.entryDate);
 
-  await markCoachTeamDayDirtyForAthlete({
-    athleteId: input.athleteId,
-    entryDate: input.payload.entryDate,
-    reason: "device_workouts",
-  });
+  await Promise.all([
+    markCoachTeamDayDirtyForAthlete({
+      athleteId: input.athleteId,
+      entryDate: input.payload.entryDate,
+      reason: "device_workouts",
+    }),
+    markAnalyticsDirty({
+      athleteId: input.athleteId,
+      referenceDate: input.payload.entryDate,
+      reason: "device_workouts",
+    }),
+  ]);
 
   return workouts;
 }
@@ -699,11 +707,18 @@ export async function linkDeviceWorkoutToPlanBlock(input: {
   );
 
   const [link] = await hydrateDeviceWorkoutLinks(result.rows);
-  await markCoachTeamDayDirtyForAthlete({
-    athleteId: input.athleteId,
-    entryDate: link.workout.entryDate,
-    reason: "device_workout_link",
-  });
+  await Promise.all([
+    markCoachTeamDayDirtyForAthlete({
+      athleteId: input.athleteId,
+      entryDate: link.workout.entryDate,
+      reason: "device_workout_link",
+    }),
+    markAnalyticsDirty({
+      athleteId: input.athleteId,
+      referenceDate: link.workout.entryDate,
+      reason: "device_workout_link",
+    }),
+  ]);
 
   return link;
 }
@@ -730,11 +745,18 @@ export async function deleteDeviceWorkoutLink(input: {
   const entryDate = result.rows[0]?.entry_date;
 
   if (entryDate) {
-    await markCoachTeamDayDirtyForAthlete({
-      athleteId: input.athleteId,
-      entryDate,
-      reason: "device_workout_unlink",
-    });
+    await Promise.all([
+      markCoachTeamDayDirtyForAthlete({
+        athleteId: input.athleteId,
+        entryDate,
+        reason: "device_workout_unlink",
+      }),
+      markAnalyticsDirty({
+        athleteId: input.athleteId,
+        referenceDate: entryDate,
+        reason: "device_workout_unlink",
+      }),
+    ]);
   }
 
   return Boolean(entryDate);

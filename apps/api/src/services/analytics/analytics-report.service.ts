@@ -58,7 +58,7 @@ export {
   buildAnalyticsCoachActionSnapshotFromOverview,
 } from "../../domain/analytics/analytics-decision.policy";
 
-const ANALYTICS_OVERVIEW_CACHE_SCHEMA_VERSION = "analytics-overview-v1";
+const ANALYTICS_OVERVIEW_CACHE_SCHEMA_VERSION = "analytics-overview-v2";
 
 export async function buildAnalyticsOverviewForAthlete(
   athleteId: string,

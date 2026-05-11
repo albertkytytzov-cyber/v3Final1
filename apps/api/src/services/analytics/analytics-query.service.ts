@@ -767,17 +767,77 @@ export async function listTrainingLoadLogRows(
 ) {
   const result = await pool.query<TrainingLoadLogRow>(
     `
+      WITH load_rows AS (
+        SELECT
+          log_date,
+          SUM(planned_load) AS planned_load,
+          SUM(actual_load) AS actual_load,
+          AVG(actual_rpe) AS actual_rpe,
+          SUM(actual_duration_minutes) AS actual_duration_minutes
+        FROM training_load_logs
+        WHERE athlete_id = $1
+          AND log_date BETWEEN ($2::date - INTERVAL '35 days') AND $2::date
+        GROUP BY log_date
+      ),
+      linked_block_loads AS (
+        SELECT DISTINCT
+          device_workouts.entry_date AS log_date,
+          training_plan_device_links.assigned_block_id,
+          COALESCE(training_load_logs.planned_load, 0) AS planned_load
+        FROM training_plan_device_links
+        JOIN device_workouts
+          ON device_workouts.id = training_plan_device_links.device_workout_id
+        JOIN assigned_plans
+          ON assigned_plans.id = training_plan_device_links.assigned_plan_id
+        JOIN assigned_plan_days
+          ON assigned_plan_days.assigned_plan_id = assigned_plans.id
+        JOIN assigned_day_sessions
+          ON assigned_day_sessions.assigned_day_id = assigned_plan_days.id
+        JOIN assigned_day_blocks
+          ON assigned_day_blocks.id = training_plan_device_links.assigned_block_id
+         AND assigned_day_blocks.assigned_session_id = assigned_day_sessions.id
+        LEFT JOIN training_load_logs
+          ON training_load_logs.athlete_id = training_plan_device_links.athlete_id
+         AND training_load_logs.assigned_block_id = training_plan_device_links.assigned_block_id
+         AND training_load_logs.log_date = device_workouts.entry_date
+        WHERE training_plan_device_links.athlete_id = $1
+          AND device_workouts.entry_date BETWEEN ($2::date - INTERVAL '35 days') AND $2::date
+          AND assigned_plan_days.day_date = device_workouts.entry_date
+          AND assigned_plans.status = 'active'
+      ),
+      linked_day AS (
+        SELECT
+          log_date,
+          COUNT(*)::integer AS linked_blocks,
+          SUM(planned_load) AS linked_planned_load
+        FROM linked_block_loads
+        GROUP BY log_date
+      )
       SELECT
-        log_date::text,
-        SUM(planned_load)::text AS planned_load,
-        SUM(actual_load)::text AS actual_load,
-        AVG(actual_rpe)::text AS actual_rpe,
-        SUM(actual_duration_minutes)::text AS actual_duration_minutes
-      FROM training_load_logs
-      WHERE athlete_id = $1
-        AND log_date BETWEEN ($2::date - INTERVAL '35 days') AND $2::date
-      GROUP BY log_date
-      ORDER BY log_date DESC
+        load_rows.log_date::text,
+        load_rows.planned_load::text AS planned_load,
+        (
+          CASE
+            WHEN COALESCE(linked_day.linked_blocks, 0) > 0 THEN
+              GREATEST(
+                load_rows.actual_load,
+                LEAST(
+                  load_rows.planned_load,
+                  CASE
+                    WHEN COALESCE(linked_day.linked_planned_load, 0) > 0
+                      THEN COALESCE(linked_day.linked_planned_load, 0)
+                    ELSE load_rows.planned_load
+                  END
+                )
+              )
+            ELSE load_rows.actual_load
+          END
+        )::text AS actual_load,
+        load_rows.actual_rpe::text AS actual_rpe,
+        load_rows.actual_duration_minutes::text AS actual_duration_minutes
+      FROM load_rows
+      LEFT JOIN linked_day ON linked_day.log_date = load_rows.log_date
+      ORDER BY load_rows.log_date DESC
     `,
     [athleteId, referenceDateText],
   );
@@ -842,6 +902,23 @@ export async function buildAnalyticsOverviewSourceFingerprint(
         FROM training_load_logs
         WHERE training_load_logs.athlete_id = $1
           AND training_load_logs.log_date BETWEEN ($2::date - INTERVAL '35 days') AND $2::date
+        UNION ALL
+        SELECT
+          'device_workouts',
+          COUNT(*)::bigint,
+          COALESCE(MAX(GREATEST(device_workouts.synced_at, device_workouts.updated_at))::text, '')
+        FROM device_workouts
+        WHERE device_workouts.athlete_id = $1
+          AND device_workouts.entry_date BETWEEN ($2::date - INTERVAL '35 days') AND $2::date
+        UNION ALL
+        SELECT
+          'training_plan_device_links',
+          COUNT(*)::bigint,
+          COALESCE(MAX(training_plan_device_links.linked_at)::text, '')
+        FROM training_plan_device_links
+        JOIN device_workouts ON device_workouts.id = training_plan_device_links.device_workout_id
+        WHERE training_plan_device_links.athlete_id = $1
+          AND device_workouts.entry_date BETWEEN ($2::date - INTERVAL '35 days') AND $2::date
         UNION ALL
         SELECT
           'assigned_plans',
