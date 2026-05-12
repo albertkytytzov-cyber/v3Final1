@@ -45,8 +45,47 @@ function defaultExerciseForBlock(block: PlanBlockInput): PlanExerciseInput {
     targetWeightKg: null,
     targetDurationMinutes: block.targetDurationMinutes,
     targetRpe: block.targetRpe,
-    notes: block.notes,
+    notes: "",
   };
+}
+
+function normalizePlanningNote(value: string | null | undefined) {
+  return (value ?? "").replace(/\s+/g, " ").trim();
+}
+
+function splitPlanningNoteParts(value: string | null | undefined) {
+  return normalizePlanningNote(value)
+    .split(/\s*(?:\/|;)\s*/u)
+    .map(normalizePlanningNote)
+    .filter(Boolean);
+}
+
+function mergePlanningNotes(...values: Array<string | null | undefined>) {
+  return values
+    .flatMap(splitPlanningNoteParts)
+    .filter((value, index, items) => items.indexOf(value) === index)
+    .join(" / ");
+}
+
+function normalizeAssignedExerciseNotes(
+  exerciseNotes: string | null | undefined,
+  blockNotes: string | null | undefined,
+  dayNotes: string | null | undefined,
+) {
+  const notes = normalizePlanningNote(exerciseNotes);
+
+  if (!notes) {
+    return "";
+  }
+
+  const commonNotes = new Set([
+    normalizePlanningNote(blockNotes),
+    normalizePlanningNote(dayNotes),
+    ...splitPlanningNoteParts(blockNotes),
+    ...splitPlanningNoteParts(dayNotes),
+  ].filter(Boolean));
+
+  return commonNotes.has(notes) ? "" : notes;
 }
 
 function normalizeBlock(block: PlanBlockInput): PlanBlockInput {
@@ -339,6 +378,25 @@ async function insertAssignedPlanFromTemplate(input: {
     );
   }
 
+  const sessions = templateDay?.sessions?.length
+    ? templateDay.sessions
+    : [
+        {
+          id: "fallback-session",
+          name: "Primary session",
+          notes: "",
+          displayOrder: 0,
+          blocks: templateBlocks,
+          executionMode: "whole_session",
+          deviceLinkMode: "session",
+        },
+      ];
+  const assignedDayNotes = mergePlanningNotes(
+    input.dayNotes,
+    templateDay?.notes,
+    ...sessions.map((session) => session.notes),
+  );
+
   const assignedPlan = await pool.query<{ id: string }>(
     `
       INSERT INTO assigned_plans (
@@ -372,24 +430,11 @@ async function insertAssignedPlanFromTemplate(input: {
       assignedPlan.rows[0].id,
       input.dayLabel || templateDay?.label || "Day 1",
       input.dayDate,
-      input.dayNotes || templateDay?.notes || "",
+      assignedDayNotes,
     ],
   );
 
   const templateBlockToAssignedBlockId = new Map<string, string>();
-  const sessions = templateDay?.sessions?.length
-    ? templateDay.sessions
-    : [
-        {
-          id: "fallback-session",
-          name: "Primary session",
-          notes: "",
-          displayOrder: 0,
-          blocks: templateBlocks,
-          executionMode: "whole_session",
-          deviceLinkMode: "session",
-        },
-      ];
 
   for (const [sessionIndex, session] of sessions.entries()) {
     const assignedSession = await pool.query<{ id: string }>(
@@ -488,7 +533,7 @@ async function insertAssignedPlanFromTemplate(input: {
             exercise.targetWeightKg,
             exercise.targetDurationMinutes,
             exercise.targetRpe,
-            exercise.notes,
+            normalizeAssignedExerciseNotes(exercise.notes, block.notes, assignedDayNotes),
             exercise.displayOrder ?? exerciseIndex,
           ],
         );

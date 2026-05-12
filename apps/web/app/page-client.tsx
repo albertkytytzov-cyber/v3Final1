@@ -3361,7 +3361,7 @@ function createImportedPlanBlock(
           targetWeightKg: null,
           targetDurationMinutes: itemSetDuration?.totalDurationMinutes ?? itemDuration,
           targetRpe: itemRpe,
-          notes,
+          notes: "",
           displayOrder: displayOrder + exerciseIndex,
         };
       })
@@ -3373,7 +3373,7 @@ function createImportedPlanBlock(
           targetWeightKg: null,
           targetDurationMinutes: duration,
           targetRpe: rpe,
-          notes,
+          notes: "",
           displayOrder,
         },
       ];
@@ -3651,7 +3651,7 @@ function createImportedDeviceWorkoutBlock(
         targetWeightKg: null,
         targetDurationMinutes,
         targetRpe,
-        notes: description,
+        notes: "",
         displayOrder,
       },
     ],
@@ -3685,18 +3685,11 @@ function normalizeImportedDeviceWorkoutSession(
     const updatedPrimaryWorkout = {
       ...primaryWorkout,
       notes: mergeImportedNotes(primaryWorkout.notes, mergedDescription),
-      exercises: (primaryWorkout.exercises ?? []).map((exercise, exerciseIndex) =>
-        exerciseIndex === 0
-          ? {
-              ...exercise,
-              notes: mergeImportedNotes(exercise.notes, mergedDescription),
-            }
-          : exercise,
-      ),
     };
 
     return {
       ...session,
+      notes: mergeImportedNotes(session.notes, mergedDescription),
       executionMode: recoveryBlocks.length || otherBlocks.length ? "by_blocks" : session.executionMode ?? "whole_session",
       deviceLinkMode: "block",
       blocks: [updatedPrimaryWorkout, ...extraWorkouts, ...otherBlocks, ...recoveryBlocks]
@@ -3710,6 +3703,7 @@ function normalizeImportedDeviceWorkoutSession(
 
   return {
     ...session,
+    notes: mergeImportedNotes(session.notes, descriptionBlocks.map(formatImportedDescriptionLine).join("; ")),
     executionMode: recoveryBlocks.length || otherBlocks.length ? "by_blocks" : "whole_session",
     deviceLinkMode: "block",
     blocks: [
@@ -3846,6 +3840,10 @@ function parseImportedPlanHtml(
           .filter((session) => session.blocks.length > 0)
       : parseImportedPlanStructuredSessions(card, fallbackSessionName);
     const sessions = normalizeImportedPlanSessions(parsedSessions);
+    const normalizedDayNotes = mergeImportedNotes(
+      dayNotes,
+      ...sessions.map((session) => session.notes),
+    );
 
     if (sessions.length === 0) {
       return;
@@ -3866,14 +3864,14 @@ function parseImportedPlanHtml(
       }),
       phaseFocus: null,
       competitionPriorityFocus: null,
-      templateGoal: dayNotes || dayType || title,
+      templateGoal: normalizedDayNotes || dayType || title,
       microcycleType: "imported-plan",
       competitionSpecific: false,
       blocks,
       days: [
         {
           label: rawLabel,
-          notes: dayNotes,
+          notes: normalizedDayNotes,
           orderIndex: 0,
           sessions,
         },
@@ -6517,6 +6515,47 @@ function formatExerciseTarget(
   return parts.length ? parts.join(" / ") : "-";
 }
 
+function splitPlanDisplayNoteParts(note?: string | null) {
+  return normalizeImportedPlanText(note ?? "")
+    .split(/\s*(?:\/|;)\s*/u)
+    .map(normalizeImportedPlanText)
+    .filter(Boolean);
+}
+
+function getPlanDisplayNote(note?: string | null, ...commonNotes: Array<string | null | undefined>) {
+  const normalizedNote = normalizeImportedPlanText(note ?? "");
+
+  if (!normalizedNote) {
+    return "";
+  }
+
+  const commonParts = new Set(
+    commonNotes.flatMap((commonNote) => {
+      const normalizedCommonNote = normalizeImportedPlanText(commonNote ?? "");
+
+      return normalizedCommonNote ? [normalizedCommonNote, ...splitPlanDisplayNoteParts(commonNote)] : [];
+    }),
+  );
+  const noteParts = splitPlanDisplayNoteParts(normalizedNote);
+  const visibleParts = noteParts.filter((part) => !commonParts.has(part));
+
+  return visibleParts.length ? visibleParts.join(" / ") : "";
+}
+
+function formatExerciseTargetWithoutCommonNotes(
+  exercise: Parameters<typeof formatExerciseTarget>[0],
+  language: Language,
+  ...commonNotes: Array<string | null | undefined>
+) {
+  return formatExerciseTarget(
+    {
+      ...exercise,
+      notes: getPlanDisplayNote(exercise.notes, ...commonNotes),
+    },
+    language,
+  );
+}
+
 function splitExerciseNoteParts(notes?: string | null) {
   return (notes ?? "")
     .split(/\s*\/\s*/u)
@@ -6970,6 +7009,7 @@ export function PageClient({
   );
   const [selectedAssignedPlanIds, setSelectedAssignedPlanIds] = useState<string[]>([]);
   const [selectedAssignedPlanPreviewId, setSelectedAssignedPlanPreviewId] = useState("");
+  const [selectedAthleteTrainingPlanId, setSelectedAthleteTrainingPlanId] = useState("");
   const [competitions, setCompetitions] = useState<CompetitionSummary[]>(
     previewState?.competitions ?? [],
   );
@@ -11891,11 +11931,33 @@ export function PageClient({
     ? assignedPlans.filter((plan) => plan.athleteId === activeAthleteId)
     : assignedPlans;
   const primaryAssignedPlan = selectCurrentAssignedPlan(relevantAssignedPlans);
+  const athleteTrainingPlanOptions = [...relevantAssignedPlans].sort(
+    (left, right) =>
+      left.day.dayDate.localeCompare(right.day.dayDate) ||
+      left.day.label.localeCompare(right.day.label) ||
+      left.createdAt.localeCompare(right.createdAt),
+  );
+  const selectedAthleteTrainingPlan =
+    athleteTrainingPlanOptions.find((plan) => plan.id === selectedAthleteTrainingPlanId) ??
+    primaryAssignedPlan;
+  const activeAthleteAssignedPlan =
+    activeWorkspace === "athlete-training" || activeWorkspace === "athlete-workspace"
+      ? selectedAthleteTrainingPlan
+      : primaryAssignedPlan;
   const activeAthleteTrainingSessions =
-    adaptedPlan?.sessions ?? primaryAssignedPlan?.day.sessions ?? [];
+    activeWorkspace === "athlete-training" || activeWorkspace === "athlete-workspace"
+      ? selectedAthleteTrainingPlan?.day.sessions ?? []
+      : adaptedPlan?.sessions ?? primaryAssignedPlan?.day.sessions ?? [];
   const activeAthleteTrainingDayLabel =
-    adaptedPlan?.dayLabel ?? primaryAssignedPlan?.day.label ?? ui("noActivePlan");
-  const activeAthleteTrainingPlanId = adaptedPlan?.assignedPlanId ?? primaryAssignedPlan?.id ?? "";
+    activeWorkspace === "athlete-training" || activeWorkspace === "athlete-workspace"
+      ? selectedAthleteTrainingPlan?.day.label ?? ui("noActivePlan")
+      : adaptedPlan?.dayLabel ?? primaryAssignedPlan?.day.label ?? ui("noActivePlan");
+  const activeAthleteTrainingDayDate = activeAthleteAssignedPlan?.day.dayDate ?? "";
+  const activeAthleteTrainingDayNotes = getPlanDisplayNote(activeAthleteAssignedPlan?.day.notes);
+  const activeAthleteTrainingPlanId =
+    activeWorkspace === "athlete-training" || activeWorkspace === "athlete-workspace"
+      ? selectedAthleteTrainingPlan?.id ?? ""
+      : adaptedPlan?.assignedPlanId ?? primaryAssignedPlan?.id ?? "";
   const activePhaseLabel =
     competitionContext?.phase ??
     primaryAssignedPlan?.plannedPhase ??
@@ -12216,8 +12278,8 @@ export function PageClient({
       value: ui("noEntriesYet"),
       description: copyFor(language, {
         en: "Sleep, fatigue, soreness, and motivation are collected here before the day is adapted.",
-        ru: "Здесь собираются сон, усталость, soreness и мотивация до адаптации дня.",
-        bg: "Тук се събират сън, умора, soreness и мотивация преди адаптацията на деня.",
+        ru: "Здесь собираются сон, усталость, мышечная болезненность и мотивация перед адаптацией дня.",
+        bg: "Тук се събират сън, умора, мускулна болезненост и мотивация преди адаптацията на деня.",
       }),
     },
     {
@@ -12225,8 +12287,8 @@ export function PageClient({
       value: ui("noActivePlan"),
       description: copyFor(language, {
         en: "The central stage shows the working day, target duration, target RPE, and the next athlete task.",
-        ru: "Центральная сцена показывает рабочий день, target duration, target RPE и следующее действие спортсмена.",
-        bg: "Централната сцена показва работния ден, target duration, target RPE и следващото действие на спортиста.",
+        ru: "Здесь видно тренировочный день, плановую длительность, целевой RPE и следующее задание спортсмена.",
+        bg: "Тук се виждат тренировъчният ден, планираната продължителност, целевият RPE и следващата задача на спортиста.",
       }),
     },
     {
@@ -13107,7 +13169,7 @@ export function PageClient({
         bg: "Назначен ден",
       }),
       value: activeAthleteTrainingDayLabel,
-      note: primaryAssignedPlan?.templateName ?? ui("notGenerated"),
+      note: activeAthleteAssignedPlan?.templateName ?? ui("notGenerated"),
     },
     {
       label: copyFor(language, {
@@ -14398,44 +14460,125 @@ export function PageClient({
               </div>
 
               <div className="athlete-scene-column athlete-scene-column-secondary">
-              <div className="entry-summary athlete-scene-card athlete-plan-card">
-                <div className="summary-topline">
-                  <strong>{t("assignedTrainingDay")}</strong>
-                  <span className={`status-chip ${primaryAssignedPlan ? "synced" : "idle"}`}>
-                    {primaryAssignedPlan
-                      ? copyFor(language, {
-                          en: `${relevantAssignedPlans.length} active`,
-                          ru: `${relevantAssignedPlans.length} активн.`,
-                          bg: `${relevantAssignedPlans.length} активни`,
-                        })
-                      : ui("noActivePlan")}
-                  </span>
-                </div>
-                {primaryAssignedPlan === null ? (
-                  <p className="placeholder-copy">
-                    {copyFor(language, {
-                      en: "No assigned plan is available yet for this athlete.",
-                      ru: "Для этого спортсмена пока нет назначенного плана.",
-                      bg: "За този спортист все още няма назначен план.",
-                    })}
-                  </p>
-                ) : (
-                    <ul>
-                      {activeAthleteTrainingSessions.map((session) => (
-                        <li key={session.id}>
-                          {primaryAssignedPlan.templateName} / {activeAthleteTrainingDayLabel} /{" "}
-                        {session.name}:{" "}
-                        {session.blocks
-                          .map(
-                            (block) =>
-                              `${block.name} (${t("targetDuration")}: ${
-                                block.targetDurationMinutes ?? "-"
-                              }, ${t("targetRpe")}: ${block.targetRpe ?? "-"})`,
-                          )
-                          .join(", ")}
-                        </li>
-                      ))}
-                    </ul>
+                <div className="entry-summary athlete-scene-card athlete-plan-card">
+                  <div className="summary-topline">
+                    <strong>{t("assignedTrainingDay")}</strong>
+                    <span className={`status-chip ${activeAthleteAssignedPlan ? "synced" : "idle"}`}>
+                        {activeAthleteAssignedPlan
+                          ? copyFor(language, {
+                              en: `${relevantAssignedPlans.length} active`,
+                              ru: `${relevantAssignedPlans.length} активн.`,
+                              bg: `${relevantAssignedPlans.length} активни`,
+                            })
+                          : ui("noActivePlan")}
+                    </span>
+                  </div>
+                  {activeAthleteAssignedPlan === null ? (
+                    <p className="placeholder-copy">
+                        {copyFor(language, {
+                          en: "No assigned plan is available yet for this athlete.",
+                          ru: "Для этого спортсмена пока нет назначенного плана.",
+                          bg: "За този спортист все още няма назначен план.",
+                        })}
+                    </p>
+                  ) : (
+                    <div className="athlete-training-plan-summary">
+                      {isAthleteTrainingWorkspace ? (
+                        <label className="field athlete-training-day-picker">
+                          <span>
+                            {copyFor(language, {
+                              en: "Training day",
+                              ru: "День тренировки",
+                              bg: "Тренировъчен ден",
+                            })}
+                          </span>
+                          <select
+                            onChange={(event) => setSelectedAthleteTrainingPlanId(event.target.value)}
+                            value={selectedAthleteTrainingPlan?.id ?? activeAthleteAssignedPlan.id}
+                          >
+                            {athleteTrainingPlanOptions.map((plan) => (
+                              <option key={plan.id} value={plan.id}>
+                                {plan.day.dayDate} /{" "}
+                                {localizedPlannerDayLabel(plan.day.label, language)}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      ) : null}
+                      <div className="athlete-plan-meta">
+                        <strong>
+                          {translateKnownTemplateText(activeAthleteAssignedPlan.templateName, language)}
+                        </strong>
+                        <span>
+                          {activeAthleteTrainingDayDate
+                            ? `${activeAthleteTrainingDayDate} / `
+                            : ""}
+                          {localizedPlannerDayLabel(activeAthleteTrainingDayLabel, language)}
+                        </span>
+                      </div>
+                        {activeAthleteTrainingDayNotes ? (
+                          <p className="assigned-block-note">{activeAthleteTrainingDayNotes}</p>
+                        ) : null}
+                        {activeAthleteTrainingSessions.length ? (
+                      <div className="athlete-training-plan-stack">
+                        {activeAthleteTrainingSessions.map((session) => (
+                          <section className="athlete-plan-session-card" key={session.id}>
+                            <div className="summary-topline">
+                              <strong>{session.name}</strong>
+                              <span>
+                                {session.blocks.length}{" "}
+                                {copyFor(language, { en: "blocks", ru: "блоков", bg: "блока" })}
+                              </span>
+                            </div>
+                            <div className="athlete-plan-block-list">
+                              {session.blocks.map((block) => {
+                                const visibleBlockNote = getPlanDisplayNote(
+                                  block.notes,
+                                  activeAthleteTrainingDayNotes,
+                                );
+
+                                return (
+                                  <article className="athlete-plan-block-row" key={block.id}>
+                                    <div className="summary-topline">
+                                      <strong>{translateKnownTemplateText(block.name, language)}</strong>
+                                    </div>
+                                    {visibleBlockNote ? (
+                                      <p className="assigned-block-note">{visibleBlockNote}</p>
+                                    ) : null}
+                                    {(block.exercises ?? []).length > 0 ? (
+                                      <div className="assigned-exercise-list athlete-plan-exercise-list">
+                                        {(block.exercises ?? []).map((exercise) => (
+                                          <div className="assigned-exercise-row" key={exercise.id}>
+                                            <strong>{exercise.name}</strong>
+                                            <span>
+                                              {formatExerciseTargetWithoutCommonNotes(
+                                                exercise,
+                                                language,
+                                                activeAthleteTrainingDayNotes,
+                                                block.notes,
+                                              )}
+                                            </span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    ) : null}
+                                  </article>
+                                );
+                              })}
+                            </div>
+                          </section>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="placeholder-copy">
+                        {copyFor(language, {
+                          en: "No sessions are attached to this training day.",
+                          ru: "К этому тренировочному дню пока не прикреплены сессии.",
+                          bg: "Към този тренировъчен ден все още няма сесии.",
+                        })}
+                      </p>
+                    )}
+                  </div>
                 )}
               </div>
 
@@ -14624,6 +14767,10 @@ export function PageClient({
                             : savedResult
                               ? "synced"
                               : "idle";
+                          const visibleBlockNote = getPlanDisplayNote(
+                            block.notes,
+                            activeAthleteTrainingDayNotes,
+                          );
 
                           return (
                             <div className="entry-summary athlete-execution-block" key={block.id}>
@@ -14636,15 +14783,22 @@ export function PageClient({
                                 </div>
                                 <span className={`status-chip ${blockSyncTone}`}>{blockSyncLabel}</span>
                               </div>
-                              {block.notes ? (
-                                <p className="assigned-block-note">{block.notes}</p>
+                              {visibleBlockNote ? (
+                                <p className="assigned-block-note">{visibleBlockNote}</p>
                               ) : null}
                               {(block.exercises ?? []).length > 0 ? (
                                 <div className="assigned-exercise-list">
                                   {(block.exercises ?? []).map((exercise) => (
                                     <div className="assigned-exercise-row" key={exercise.id}>
                                       <strong>{exercise.name}</strong>
-                                      <span>{formatExerciseTarget(exercise, language)}</span>
+                                      <span>
+                                        {formatExerciseTargetWithoutCommonNotes(
+                                          exercise,
+                                          language,
+                                          activeAthleteTrainingDayNotes,
+                                          block.notes,
+                                        )}
+                                      </span>
                                     </div>
                                   ))}
                                 </div>
@@ -15077,15 +15231,15 @@ export function PageClient({
                     </li>
                   </ul>
                 </div>
-              ) : (
-                <p className="placeholder-copy">
-                  {copyFor(language, {
-                    en: "Select a pending item to inspect sync details and conflict handling.",
-                    ru: "Выберите pending item, чтобы посмотреть детали синхронизации и обработку конфликта.",
-                    bg: "Изберете pending item, за да видите детайлите по синхронизация и конфликт.",
-                  })}
-                </p>
-              )}
+                ) : (
+                  <p className="placeholder-copy">
+                    {copyFor(language, {
+                      en: "Select a pending item to inspect sync details and conflict handling.",
+                      ru: "Выберите элемент из очереди, чтобы посмотреть детали синхронизации и обработку конфликта.",
+                      bg: "Изберете елемент от опашката, за да видите детайлите по синхронизация и конфликт.",
+                    })}
+                  </p>
+                )}
               <div className="offline-cache-grid">
                 <article className="scene-metric">
                   <span>{ui("readinessCache")}</span>
@@ -22819,5 +22973,3 @@ export function PageClient({
     </main>
   );
 }
-
-

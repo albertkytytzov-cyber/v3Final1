@@ -361,6 +361,7 @@ export async function ensureSchema() {
       athlete_id UUID NOT NULL REFERENCES athletes(id) ON DELETE CASCADE,
       assigned_plan_id UUID NOT NULL REFERENCES assigned_plans(id) ON DELETE CASCADE,
       assigned_block_id UUID NOT NULL REFERENCES assigned_day_blocks(id) ON DELETE CASCADE,
+      training_date DATE NOT NULL DEFAULT CURRENT_DATE,
       completed BOOLEAN NOT NULL DEFAULT FALSE,
       sets_completed INTEGER,
       reps_completed INTEGER,
@@ -789,6 +790,11 @@ export async function ensureSchema() {
     "exercise_results",
     "assigned_block_id",
     "UUID REFERENCES assigned_day_blocks(id) ON DELETE CASCADE",
+  );
+  await ensureColumn(
+    "exercise_results",
+    "training_date",
+    "DATE NOT NULL DEFAULT CURRENT_DATE",
   );
   await ensureColumn("exercise_results", "completed", "BOOLEAN NOT NULL DEFAULT FALSE");
   await ensureColumn("exercise_results", "sets_completed", "INTEGER");
