@@ -30,7 +30,7 @@ import {
   estimateTrainingActualLoad,
   estimateTrainingBlockLoad,
   isDeviceWorkoutLinkablePlanBlock,
-} from "@training-platform/shared";
+} from "../shared-runtime.js";
 import type {
   AssignedBlockExercise,
   AssignedPlanBlock,
@@ -296,7 +296,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
 
   const handleLogin = async (form: HTMLFormElement) => {
     const formData = new FormData(form);
-    const apiBaseUrl = String(formData.get("apiBaseUrl") ?? "");
+    const apiBaseUrl = runtimeConfig.apiBaseUrl || state.session.apiBaseUrl;
     const email = String(formData.get("email") ?? "");
     const password = String(formData.get("password") ?? "");
     const api = new MobileApiClient(apiBaseUrl, null);
@@ -1257,17 +1257,13 @@ function renderLogin(state: MobileAppState) {
         <div class="brand-block">
           <span>PERFORM</span>
           <h1>Мобильная работа тренера и спортсмена</h1>
-          <p>Интерфейс хранится внутри приложения. Сервер используется только для данных.</p>
+          <p>Введите данные для входа.</p>
         </div>
         ${renderStatus(state)}
         <form class="mobile-form" data-login-form>
           <label>
-            <span>API сервера</span>
-            <input name="apiBaseUrl" inputmode="url" required value="${escapeHtml(state.session.apiBaseUrl)}" placeholder="https://example.com/api/v1" />
-          </label>
-          <label>
-            <span>Email</span>
-            <input name="email" type="email" autocomplete="email" required />
+            <span>Логин</span>
+            <input name="email" type="email" autocomplete="username" required />
           </label>
           <label class="password-field">
             <span>Пароль</span>
