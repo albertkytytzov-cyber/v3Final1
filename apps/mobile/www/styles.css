@@ -40,6 +40,23 @@ button {
   -webkit-tap-highlight-color: transparent;
 }
 
+.mobile-shell,
+.mobile-shell * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.mobile-shell :where(h1, h2, h3, h4, p, span, strong, small, em, label, legend, button, summary, li, a) {
+  overflow-wrap: anywhere;
+  word-break: normal;
+  hyphens: auto;
+}
+
+.mobile-shell :where(button, .primary-action, .secondary-action, .inline-action, .icon-button, summary) {
+  white-space: normal;
+  line-height: 1.15;
+}
+
 .mobile-shell {
   width: min(100%, 520px);
   min-height: 100dvh;
@@ -1662,11 +1679,8 @@ button {
 
 .app-header h1 {
   margin: 2px 0;
-  overflow: hidden;
   font-size: 1.22rem;
   line-height: 1.1;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .app-header p {
@@ -3778,32 +3792,40 @@ button.timeline-card:active {
 
 .bottom-nav {
   position: fixed;
-  right: 0;
+  right: auto;
   bottom: 0;
-  left: 0;
+  left: 50%;
   display: grid;
   grid-template-columns: repeat(var(--bottom-nav-count, 5), minmax(0, 1fr));
   gap: 6px;
-  width: min(100%, 520px);
+  width: min(100vw, 520px);
+  max-width: none;
   margin: 0 auto;
   padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
   border-top: 1px solid rgba(255, 255, 255, 0.28);
   background: rgba(17, 34, 31, 0.96);
   box-shadow: 0 -16px 34px rgba(13, 44, 39, 0.2);
+  transform: translateX(-50%);
 }
 
 .bottom-nav button {
   display: grid;
+  align-content: center;
   gap: 2px;
   place-items: center;
+  min-width: 0;
   min-height: 56px;
   padding: 6px 4px;
   background: transparent;
   color: rgba(255, 255, 255, 0.66);
   font-size: 0.72rem;
+  hyphens: none;
+  overflow-wrap: normal;
+  white-space: nowrap;
 }
 
 .bottom-nav button span {
+  max-width: 100%;
   font-size: 1rem;
   line-height: 1;
 }
@@ -3811,6 +3833,117 @@ button.timeline-card:active {
 .bottom-nav button.is-active {
   background: rgba(255, 255, 255, 0.12);
   color: #ffffff;
+}
+
+@media (max-width: 430px) {
+  .mobile-shell {
+    padding-right: 10px;
+    padding-left: 10px;
+  }
+
+  .login-panel,
+  .screen-panel {
+    padding: 14px;
+    border-radius: 20px;
+  }
+
+  .app-header,
+  .coach-day-control-head,
+  .coach-day-status-head,
+  .summary-inline-head,
+  .coach-ai-review-head,
+  .device-health-head,
+  .today-indicators-head,
+  .athlete-day-brief-head,
+  .coach-execution-review-head,
+  .coach-diary-history-card header {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .app-header {
+    align-items: start;
+  }
+
+  .toolbar-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .toolbar-row button {
+    width: 100%;
+  }
+
+  .app-header .icon-button,
+  .coach-ai-review-head button,
+  .coach-team-day-row button {
+    width: 100%;
+  }
+
+  .coach-day-status-head > strong,
+  .summary-inline-head > strong,
+  .today-indicators-head strong,
+  .athlete-day-brief-head strong,
+  .athlete-home-head strong,
+  .coach-execution-review-head .execution-day-status {
+    justify-self: start;
+  }
+
+  .readiness-metrics,
+  .device-health-compact-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .readiness-utility-actions,
+  .device-health-compact-actions,
+  .athlete-day-brief-actions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .summary-inline-head .device-health-actions {
+    display: grid;
+    width: 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    justify-content: stretch;
+  }
+
+  .summary-inline-head .device-health-actions > strong {
+    justify-self: start;
+  }
+
+  .device-health-actions {
+    justify-content: stretch;
+  }
+
+  .device-health-head .secondary-action {
+    flex: 1 1 120px;
+  }
+
+  .coach-team-day-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .coach-team-day-row button {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  .chip-row em,
+  .timeline-card span {
+    text-overflow: clip;
+    white-space: normal;
+  }
+
+  .bottom-nav {
+    gap: 2px;
+    padding-right: 6px;
+    padding-left: 6px;
+  }
+
+  .bottom-nav button {
+    font-size: 0.58rem;
+    min-height: 58px;
+    padding: 6px 2px;
+    line-height: 1.1;
+  }
 }
 
 @media (max-width: 360px) {
@@ -3879,7 +4012,7 @@ button.timeline-card:active {
   }
 
   .bottom-nav button {
-    font-size: 0.66rem;
+    font-size: 0.54rem;
   }
 }
 
