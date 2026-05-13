@@ -1042,7 +1042,14 @@ export function bootstrapMobileApp(root: HTMLElement) {
 
     root.querySelectorAll<HTMLButtonElement>("[data-screen]").forEach((button) => {
       button.addEventListener("click", () => {
-        update({ selectedScreen: button.dataset.screen as MobileScreen });
+        const selectedScreen = button.dataset.screen as MobileScreen;
+
+        if (!getScreensForRole(state.session.user?.role).some((screen) => screen.id === selectedScreen)) {
+          update({ selectedScreen: "dashboard" });
+          return;
+        }
+
+        update({ selectedScreen });
       });
     });
 
@@ -1283,9 +1290,15 @@ function renderLogin(state: MobileAppState) {
 
 function renderAppShell(state: MobileAppState) {
   const user = state.session.user;
+  const screens = getScreensForRole(user?.role);
+  const activeScreen = screens.some((screen) => screen.id === state.selectedScreen)
+    ? state.selectedScreen
+    : "dashboard";
+  const displayState = activeScreen === state.selectedScreen
+    ? state
+    : { ...state, selectedScreen: activeScreen };
   const selectedAthlete = getSelectedAthlete(state);
   const activeAthleteId = getActiveAthleteId(state);
-  const screens = getScreensForRole(user?.role);
 
   return `
     <main class="mobile-shell">
@@ -1302,18 +1315,18 @@ function renderAppShell(state: MobileAppState) {
       ${renderToolbar(state)}
 
       ${
-        isCoachRole(user?.role) && state.selectedScreen !== "athletes"
+        isCoachRole(user?.role) && displayState.selectedScreen !== "athletes"
           ? renderAthletePicker(state)
           : ""
       }
 
       <section class="screen-panel">
-        ${renderScreen(state, activeAthleteId)}
+        ${renderScreen(displayState, activeAthleteId)}
       </section>
 
       <nav class="bottom-nav" aria-label="Разделы">
         ${screens.map((screen) => `
-          <button class="${state.selectedScreen === screen.id ? "is-active" : ""}" data-screen="${screen.id}" type="button">
+          <button class="${displayState.selectedScreen === screen.id ? "is-active" : ""}" data-screen="${screen.id}" type="button">
             <span>${screen.icon}</span>
             ${screen.label}
           </button>
@@ -4729,25 +4742,26 @@ function renderEmpty(title: string, text: string) {
 }
 
 function getScreensForRole(role: string | undefined): Array<{ id: MobileScreen; label: string; icon: string }> {
-  const common: Array<{ id: MobileScreen; label: string; icon: string }> = [
-    { id: "dashboard", label: "Главная", icon: "⌂" },
-    { id: "plans", label: "Планы", icon: "▦" },
-    { id: "calendar", label: "Календарь", icon: "□" },
-    { id: "results", label: "Выполнение", icon: "✓" },
-  ];
+  const dashboard: { id: MobileScreen; label: string; icon: string } = { id: "dashboard", label: "Главная", icon: "⌂" };
+  const plans: { id: MobileScreen; label: string; icon: string } = { id: "plans", label: "Планы", icon: "▦" };
+  const calendar: { id: MobileScreen; label: string; icon: string } = { id: "calendar", label: "Календарь", icon: "□" };
+  const results: { id: MobileScreen; label: string; icon: string } = { id: "results", label: "Выполнение", icon: "✓" };
 
   if (role === "coach" || role === "admin") {
     return [
-      common[0],
+      dashboard,
       { id: "athletes", label: "Спортсмены", icon: "◎" },
-      ...common.slice(1),
+      plans,
+      calendar,
+      results,
     ];
   }
 
   return [
-    common[0],
+    dashboard,
     { id: "readiness", label: "Готовность", icon: "●" },
-    ...common.slice(1),
+    calendar,
+    results,
   ];
 }
 
