@@ -11,6 +11,7 @@ import {
 import type { ApiGuards, HttpErrorFactory } from "./guards";
 import {
   parseDeviceHealthAthleteParams,
+  parseDeviceHealthSummariesQuery,
   parseDeviceHealthSummaryBody,
   parseDeviceWorkoutLinkBody,
   parseDeviceWorkoutLinkParams,
@@ -113,8 +114,10 @@ export function registerDeviceHealthRoutes(
     }
 
     let athleteId: string;
+    let query: { entryDate?: string };
     try {
       athleteId = parseDeviceHealthAthleteParams(request.params).athleteId;
+      query = parseDeviceHealthSummariesQuery(request.query);
     } catch (error) {
       throw dependencies.httpError(400, (error as Error).message);
     }
@@ -122,7 +125,11 @@ export function registerDeviceHealthRoutes(
     await dependencies.guards.assertAthleteAccess(user, athleteId);
 
     return {
-      summaries: await listDeviceHealthDailySummariesForAthlete(athleteId),
+      summaries: await listDeviceHealthDailySummariesForAthlete(
+        athleteId,
+        query.entryDate ? 1 : undefined,
+        query.entryDate,
+      ),
     };
   });
 

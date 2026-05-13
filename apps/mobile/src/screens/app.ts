@@ -98,15 +98,23 @@ export function bootstrapMobileApp(root: HTMLElement) {
     Object.assign(state, patch);
     render();
   };
+  let refreshData: (silent?: boolean) => Promise<void>;
 
   const updateSelectedDayDate = (date: string, selectedScreen?: MobileScreen) => {
     const selectedDayDate = normalizeDateValue(date) ?? todayValue();
+    const shouldReloadDayData = isCoachRole(state.session.user?.role) &&
+      selectedDayDate !== state.selectedDayDate;
+
     update({
       executionDateFilter: selectedDayDate,
       planDateFilter: selectedDayDate,
       ...(selectedScreen ? { selectedScreen } : {}),
       selectedDayDate,
     });
+
+    if (shouldReloadDayData) {
+      void refreshData(true);
+    }
   };
 
   const generateCoachAiReview = async (athleteId: string | null, entryDate: string) => {
@@ -212,7 +220,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
     bindEvents();
   };
 
-  const refreshData = async (silent = false) => {
+  refreshData = async (silent = false) => {
     if (!state.session.user) {
       return;
     }
@@ -224,15 +232,24 @@ export function bootstrapMobileApp(root: HTMLElement) {
     try {
       const api = client();
       const auth = await api.me();
+      const requestedDayDate = state.selectedDayDate;
       const [
         loadedData,
         coachAiStatus,
       ] = await Promise.all([
-        api.loadAppData(auth.user.role, state.selectedDayDate),
+        api.loadAppData(auth.user.role, requestedDayDate),
         isCoachRole(auth.user.role)
           ? api.getCoachAiReviewStatus().catch(() => ({ status: null }))
           : Promise.resolve({ status: null }),
       ]);
+
+      if (isCoachRole(auth.user.role) && state.selectedDayDate !== requestedDayDate) {
+        if (!silent) {
+          update({ isBusy: false });
+        }
+        return;
+      }
+
       const snapshot: MobileDataSnapshot = {
         ...state.data,
         ...loadedData,

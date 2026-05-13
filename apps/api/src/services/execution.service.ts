@@ -305,6 +305,7 @@ function resolveCompletionStatus(input: {
 export async function listExecutionResultsForAthlete(
   athleteId: string,
   assignedPlanId?: string,
+  entryDate?: string,
 ): Promise<ExecutionResult[]> {
   const params: unknown[] = [athleteId];
   let whereSql =
@@ -312,7 +313,12 @@ export async function listExecutionResultsForAthlete(
 
   if (assignedPlanId) {
     params.push(assignedPlanId);
-    whereSql += " AND exercise_results.assigned_plan_id = $2";
+    whereSql += ` AND exercise_results.assigned_plan_id = $${params.length}`;
+  }
+
+  if (entryDate) {
+    params.push(entryDate);
+    whereSql += ` AND exercise_results.training_date = $${params.length}::date`;
   }
 
   return loadExecutionResults(whereSql, params);

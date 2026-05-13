@@ -8,6 +8,7 @@ import {
 import type { ApiGuards, HttpErrorFactory } from "./guards";
 import { readIdempotencyKey } from "./idempotency";
 import {
+  parseOptionalReadinessDateQuery,
   parseReadinessAthleteParams,
   parseReadinessBody,
   parseReadinessDateQuery,
@@ -33,13 +34,22 @@ export function registerReadinessRoutes(
     }
 
     let athleteId: string;
+    let query: { entryDate?: string };
     try {
       athleteId = parseReadinessAthleteParams(request.params).athleteId;
+      query = parseOptionalReadinessDateQuery(request.query);
     } catch (error) {
       throw dependencies.httpError(400, (error as Error).message);
     }
 
     await dependencies.guards.assertAthleteAccess(user, athleteId);
+
+    if (query.entryDate) {
+      const entry = await getReadinessEntryForDate(athleteId, query.entryDate);
+      return {
+        entries: entry ? [entry] : [],
+      };
+    }
 
     return {
       entries: await listRecentReadinessEntries(athleteId),

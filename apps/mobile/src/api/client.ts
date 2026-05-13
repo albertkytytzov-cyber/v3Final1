@@ -171,15 +171,27 @@ export class MobileApiClient {
     ]);
     const executionResults =
       userRole === "coach" || userRole === "admin"
-        ? await this.loadCoachExecutionResults(assignedPlans.assignedPlans, athletes.athletes)
+        ? await this.loadCoachExecutionResults(
+            assignedPlans.assignedPlans,
+            athletes.athletes,
+            selectedEntryDate,
+          )
         : athleteExecution.results;
     const coachReadinessHistory =
       userRole === "coach" || userRole === "admin"
-        ? await this.loadCoachReadinessEntries(assignedPlans.assignedPlans, athletes.athletes)
+        ? await this.loadCoachReadinessEntries(
+            assignedPlans.assignedPlans,
+            athletes.athletes,
+            selectedEntryDate,
+          )
         : readinessHistory.entries;
     const deviceHealthSummaries =
       userRole === "coach" || userRole === "admin"
-        ? await this.loadCoachDeviceHealthSummaries(assignedPlans.assignedPlans, athletes.athletes)
+        ? await this.loadCoachDeviceHealthSummaries(
+            assignedPlans.assignedPlans,
+            athletes.athletes,
+            selectedEntryDate,
+          )
         : deviceHealth.summaries;
     const deviceWorkoutData =
       userRole === "coach" || userRole === "admin"
@@ -209,6 +221,7 @@ export class MobileApiClient {
   private async loadCoachExecutionResults(
     assignedPlans: AssignedPlanSummary[],
     athletes: CoachAthleteSummary[],
+    selectedEntryDate?: string,
   ) {
     const athleteIds = Array.from(new Set([
       ...assignedPlans.map((plan) => plan.athleteId),
@@ -217,7 +230,10 @@ export class MobileApiClient {
     const responses = await Promise.all(
       athleteIds.map((athleteId) =>
         this.request<{ results: ExecutionResult[] }>(
-          `/coach/athletes/${encodeURIComponent(athleteId)}/execution`,
+          withEntryDate(
+            `/coach/athletes/${encodeURIComponent(athleteId)}/execution`,
+            selectedEntryDate,
+          ),
         ).catch(() => ({ results: [] })),
       ),
     );
@@ -228,6 +244,7 @@ export class MobileApiClient {
   private async loadCoachReadinessEntries(
     assignedPlans: AssignedPlanSummary[],
     athletes: CoachAthleteSummary[],
+    selectedEntryDate?: string,
   ) {
     const athleteIds = Array.from(new Set([
       ...assignedPlans.map((plan) => plan.athleteId),
@@ -236,7 +253,10 @@ export class MobileApiClient {
     const responses = await Promise.all(
       athleteIds.map((athleteId) =>
         this.request<{ entries: ReadinessEntry[] }>(
-          `/coach/athletes/${encodeURIComponent(athleteId)}/readiness`,
+          withEntryDate(
+            `/coach/athletes/${encodeURIComponent(athleteId)}/readiness`,
+            selectedEntryDate,
+          ),
         ).catch(() => ({ entries: [] })),
       ),
     );
@@ -247,6 +267,7 @@ export class MobileApiClient {
   private async loadCoachDeviceHealthSummaries(
     assignedPlans: AssignedPlanSummary[],
     athletes: CoachAthleteSummary[],
+    selectedEntryDate?: string,
   ) {
     const athleteIds = Array.from(new Set([
       ...assignedPlans.map((plan) => plan.athleteId),
@@ -255,7 +276,10 @@ export class MobileApiClient {
     const responses = await Promise.all(
       athleteIds.map((athleteId) =>
         this.request<DeviceHealthDailySummariesResponse>(
-          `/coach/athletes/${encodeURIComponent(athleteId)}/device-health`,
+          withEntryDate(
+            `/coach/athletes/${encodeURIComponent(athleteId)}/device-health`,
+            selectedEntryDate,
+          ),
         ).catch(() => ({ summaries: [] })),
       ),
     );
@@ -273,19 +297,10 @@ export class MobileApiClient {
       ...athletes.map((athlete) => athlete.athleteId),
     ].filter(Boolean)));
     const responses = await Promise.all(
-      athleteIds.flatMap((athleteId) => {
+      athleteIds.map((athleteId) => {
         const basePath = `/coach/athletes/${encodeURIComponent(athleteId)}/device-workouts`;
-        const paths = selectedEntryDate
-          ? [
-              basePath,
-              `${basePath}?entryDate=${encodeURIComponent(selectedEntryDate)}`,
-            ]
-          : [basePath];
-
-        return paths.map((path) =>
-          this.request<DeviceWorkoutsResponse>(path)
-            .catch(() => ({ links: [], workouts: [] })),
-        );
+        return this.request<DeviceWorkoutsResponse>(withEntryDate(basePath, selectedEntryDate))
+          .catch(() => ({ links: [], workouts: [] }));
       }),
     );
 
@@ -398,6 +413,10 @@ export class MobileApiClient {
       },
     );
   }
+}
+
+function withEntryDate(path: string, entryDate?: string) {
+  return entryDate ? `${path}?entryDate=${encodeURIComponent(entryDate)}` : path;
 }
 
 async function readErrorMessage(response: Response) {

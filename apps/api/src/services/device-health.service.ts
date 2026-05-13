@@ -293,7 +293,18 @@ function mapDeviceWorkoutLink(
 export async function listDeviceHealthDailySummariesForAthlete(
   athleteId: string,
   limit = 45,
+  entryDate?: string,
 ): Promise<DeviceHealthDailySummary[]> {
+  const params: unknown[] = [athleteId];
+  let whereSql = "athlete_id = $1";
+
+  if (entryDate) {
+    params.push(entryDate);
+    whereSql += ` AND entry_date = $${params.length}::date`;
+  }
+
+  params.push(limit);
+
   const result = await pool.query<DeviceHealthDailySummaryRow>(
     `
       SELECT
@@ -331,11 +342,11 @@ export async function listDeviceHealthDailySummariesForAthlete(
         created_at::text,
         updated_at::text
       FROM device_health_daily_summaries
-      WHERE athlete_id = $1
+      WHERE ${whereSql}
       ORDER BY entry_date DESC, updated_at DESC
-      LIMIT $2
+      LIMIT $${params.length}
     `,
-    [athleteId, limit],
+    params,
   );
 
   return result.rows.map(mapDeviceHealthDailySummary);

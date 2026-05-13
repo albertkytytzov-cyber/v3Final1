@@ -1,6 +1,7 @@
 import type { ExecutionResultInput } from "@training-platform/shared";
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+const datePattern = /^\d{4}-\d{2}-\d{2}$/;
 
 function toNullableNumber(value: unknown) {
   if (value === null || value === undefined || value === "") {
@@ -37,6 +38,20 @@ export function parseExecutionReviewQuery(query: unknown): { assignedPlanId?: st
   }
 
   return { assignedPlanId };
+}
+
+export function parseExecutionListQuery(query: unknown): { entryDate?: string } {
+  const entryDate = (query as { entryDate?: unknown } | null)?.entryDate;
+
+  if (entryDate === undefined || entryDate === null || entryDate === "") {
+    return {};
+  }
+
+  if (typeof entryDate !== "string" || !datePattern.test(entryDate)) {
+    throw new Error("entryDate must be a date in YYYY-MM-DD format");
+  }
+
+  return { entryDate };
 }
 
 export function parseExecutionBody(body: unknown): ExecutionResultInput {

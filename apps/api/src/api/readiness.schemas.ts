@@ -74,3 +74,11 @@ export function parseReadinessDateQuery(query: unknown): { entryDate: string } {
 
   return { entryDate };
 }
+
+export function parseOptionalReadinessDateQuery(query: unknown): { entryDate?: string } {
+  const entryDate = parseReadinessDate(
+    (query as { entryDate?: unknown } | null)?.entryDate,
+  );
+
+  return entryDate ? { entryDate } : {};
+}

@@ -10,6 +10,7 @@ import { readIdempotencyKey } from "./idempotency";
 import {
   parseExecutionAthleteParams,
   parseExecutionBody,
+  parseExecutionListQuery,
   parseExecutionReviewQuery,
 } from "./execution.schemas";
 
@@ -58,8 +59,10 @@ export function registerExecutionRoutes(
     }
 
     let athleteId: string;
+    let query: { entryDate?: string };
     try {
       athleteId = parseExecutionAthleteParams(request.params).athleteId;
+      query = parseExecutionListQuery(request.query);
     } catch (error) {
       throw dependencies.httpError(400, (error as Error).message);
     }
@@ -67,7 +70,7 @@ export function registerExecutionRoutes(
     await dependencies.guards.assertAthleteAccess(user, athleteId);
 
     return {
-      results: await listExecutionResultsForAthlete(athleteId),
+      results: await listExecutionResultsForAthlete(athleteId, undefined, query.entryDate),
     };
   });
 

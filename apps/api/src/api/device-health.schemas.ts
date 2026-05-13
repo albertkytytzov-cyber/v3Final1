@@ -66,7 +66,15 @@ export function parseDeviceHealthSummaryBody(body: unknown): DeviceHealthDailySu
   };
 }
 
+export function parseDeviceHealthSummariesQuery(query: unknown): { entryDate?: string } {
+  return parseDeviceHealthEntryDateQuery(query);
+}
+
 export function parseDeviceWorkoutsQuery(query: unknown): { entryDate?: string } {
+  return parseDeviceHealthEntryDateQuery(query);
+}
+
+function parseDeviceHealthEntryDateQuery(query: unknown): { entryDate?: string } {
   const entryDate = (query as { entryDate?: unknown } | null)?.entryDate;
 
   if (entryDate === undefined || entryDate === null || entryDate === "") {
