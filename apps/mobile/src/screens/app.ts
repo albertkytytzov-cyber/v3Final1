@@ -441,6 +441,75 @@ export function bootstrapMobileApp(root: HTMLElement) {
     }
   };
 
+  const syncDeviceHealth = async (entryDate: string) => {
+    if (state.session.user?.role !== "athlete") {
+      update({
+        error: "Синхронизацию часов выполняет спортсмен в своём приложении.",
+        isBusy: false,
+        message: null,
+      });
+      return;
+    }
+
+    update({ error: null, isBusy: true, message: "Синхронизирую данные часов..." });
+
+    let healthConnectError: unknown = null;
+    try {
+      const payload = await readMiFitnessHealthConnectDailySummary(entryDate);
+      const workoutsPayload = await readMiFitnessHealthConnectDeviceWorkouts(entryDate).catch(() => null);
+      await submitDeviceHealthPayload(payload);
+
+      if (workoutsPayload && workoutsPayload.workouts.length > 0) {
+        await submitDeviceWorkoutsPayload(workoutsPayload);
+      }
+
+      return;
+    } catch (error) {
+      healthConnectError = error;
+    }
+
+    try {
+      const payload = await readHuaweiHealthDailySummary(entryDate);
+      await submitDeviceHealthPayload(payload);
+    } catch (error) {
+      update({
+        error: error instanceof Error
+          ? error.message
+          : healthConnectError instanceof Error
+            ? healthConnectError.message
+            : "Данные часов недоступны.",
+        isBusy: false,
+        message: null,
+      });
+    }
+  };
+
+  const fillReadinessFromDeviceHealth = (entryDate: string) => {
+    const athleteId = state.session.user?.athleteId;
+    const form = root.querySelector<HTMLFormElement>("[data-readiness-form]");
+
+    if (!athleteId || !form) {
+      return;
+    }
+
+    const summary = getDeviceHealthSummaryForDate(state, athleteId, entryDate);
+
+    if (!summary) {
+      return;
+    }
+
+    const sleepHours = getDeviceSleepHoursForReadiness(summary);
+    const restingHr = getDeviceRestingHrForReadiness(summary);
+
+    if (sleepHours !== null) {
+      setFormFieldValue(form, "sleepHours", formatInputValue(sleepHours));
+    }
+
+    if (restingHr !== null) {
+      setFormFieldValue(form, "restingHr", formatInputValue(restingHr));
+    }
+  };
+
   const scanDirectWatch = async () => {
     if (state.session.user?.role !== "athlete") {
       update({
@@ -1172,6 +1241,18 @@ export function bootstrapMobileApp(root: HTMLElement) {
     root.querySelectorAll<HTMLButtonElement>("[data-health-connect-sync]").forEach((button) => {
       button.addEventListener("click", () => {
         void syncMiFitnessHealthConnect(button.dataset.healthConnectDate ?? todayValue());
+      });
+    });
+
+    root.querySelectorAll<HTMLButtonElement>("[data-device-health-sync]").forEach((button) => {
+      button.addEventListener("click", () => {
+        void syncDeviceHealth(button.dataset.deviceHealthDate ?? todayValue());
+      });
+    });
+
+    root.querySelectorAll<HTMLButtonElement>("[data-readiness-fill-watch]").forEach((button) => {
+      button.addEventListener("click", () => {
+        fillReadinessFromDeviceHealth(button.dataset.readinessFillWatch ?? todayValue());
       });
     });
 
@@ -2020,6 +2101,10 @@ function renderDeviceHealthCard(
   const syncLabel = formatDeviceHealthSyncLabel(summary);
   const status = getDeviceHealthStatus(summary);
 
+  if (options.compact) {
+    return renderCompactDeviceHealthCard(state, summary, workouts, canSync, date);
+  }
+
   return `
     <section class="device-health-card ${options.compact ? "is-compact" : ""}">
       <div class="device-health-head">
@@ -2095,6 +2180,70 @@ function renderDeviceHealthCard(
       <p class="device-health-guidance">
         Данные устройства не заменяют отметки выполнения. Они помогают тренеру сопоставить план, факт, сон, пульс и внешнюю активность за выбранный день.
       </p>
+    </section>
+  `;
+}
+
+function renderCompactDeviceHealthCard(
+  state: MobileAppState,
+  summary: DeviceHealthDailySummary | null,
+  workouts: DeviceWorkout[],
+  canSync: boolean,
+  date: string,
+) {
+  const canFill = summary !== null &&
+    (getDeviceSleepHoursForReadiness(summary) !== null || getDeviceRestingHrForReadiness(summary) !== null);
+
+  return `
+    <section class="device-health-card is-compact">
+      <div class="device-health-status ${summary ? "is-connected" : "is-missing"}">
+        <strong>${escapeHtml(formatCompactDeviceHealthStatus(summary))}</strong>
+        <span>${escapeHtml(formatCompactDeviceHealthHint(summary, canSync))}</span>
+      </div>
+      <div class="today-indicators-grid device-health-compact-grid">
+        ${renderTodayIndicator(
+          "Сон",
+          formatDeviceHealthSleepValue(summary),
+          formatDeviceHealthSleepDetail(summary),
+        )}
+        ${renderTodayIndicator(
+          "Пульс покоя",
+          formatDeviceHealthRestingHrValue(summary),
+          formatDeviceHealthHeartRateDetail(summary),
+        )}
+        ${renderTodayIndicator(
+          "Тренировка",
+          formatDeviceHealthWorkoutValue(summary),
+          formatDeviceHealthWorkoutDetail(summary),
+        )}
+        ${hasDeviceOxygenSaturationData(summary)
+          ? renderTodayIndicator(
+            "SpO2",
+            formatDeviceHealthOxygenValue(summary),
+            formatDeviceHealthOxygenDetail(summary),
+          )
+          : ""}
+      </div>
+      ${workouts.length ? `
+        <div class="device-health-compact-workouts">
+          ${workouts.slice(0, 2).map((workout) => `
+            <article>
+              <strong>${escapeHtml(formatDeviceWorkoutTitle(workout))}</strong>
+              <span>${escapeHtml(formatDeviceWorkoutSummary(workout) || "данные тренировки получены")}</span>
+            </article>
+          `).join("")}
+        </div>
+      ` : ""}
+      ${canSync ? `
+        <div class="device-health-actions device-health-compact-actions">
+          <button class="secondary-action" data-device-health-sync data-device-health-date="${escapeHtml(date)}" type="button" ${state.isBusy ? "disabled" : ""}>
+            Синхронизировать часы
+          </button>
+          <button class="secondary-action" data-readiness-fill-watch="${escapeHtml(date)}" type="button" ${canFill ? "" : "disabled"}>
+            Заполнить показатели
+          </button>
+        </div>
+      ` : ""}
     </section>
   `;
 }
@@ -2613,6 +2762,60 @@ function formatDeviceHealthSyncLabel(summary: DeviceHealthDailySummary | null) {
   return summary
     ? `последняя синхронизация: ${formatDateTime(summary.syncedAt)}`
     : "за этот день синхронизации пока нет";
+}
+
+function formatReadinessDeviceHealthSyncLabel(summary: DeviceHealthDailySummary | null) {
+  return summary ? `обновлено ${formatDateTime(summary.syncedAt)}` : "нет данных за сегодня";
+}
+
+function formatCompactDeviceHealthStatus(summary: DeviceHealthDailySummary | null) {
+  return summary ? formatReadinessDeviceHealthSyncLabel(summary) : "Нет данных часов";
+}
+
+function formatCompactDeviceHealthHint(summary: DeviceHealthDailySummary | null, canSync: boolean) {
+  if (!summary) {
+    return canSync
+      ? "Синхронизируй после сна или тренировки."
+      : "Спортсмен ещё не синхронизировал часы.";
+  }
+
+  const status = getDeviceHealthStatus(summary);
+
+  if (status.present.length === 0) {
+    return "Показателей мало, можно заполнить вручную.";
+  }
+
+  if (status.missing.includes("сон") || status.missing.includes("пульс покоя")) {
+    return "Главные показатели частично пришли, недостающее заполни вручную.";
+  }
+
+  return "Можно перенести сон и пульс в показатели готовности.";
+}
+
+function getDeviceSleepHoursForReadiness(summary: DeviceHealthDailySummary | null) {
+  const minutes = summary?.sleep?.durationMinutes;
+
+  if (minutes === null || minutes === undefined) {
+    return null;
+  }
+
+  const hours = minutes / 60;
+
+  if (hours < 2 || hours > 13) {
+    return null;
+  }
+
+  return Math.round(hours * 2) / 2;
+}
+
+function getDeviceRestingHrForReadiness(summary: DeviceHealthDailySummary | null) {
+  const restingHr = summary?.heartRate?.restingBpm;
+
+  if (restingHr === null || restingHr === undefined || restingHr < 30 || restingHr > 140) {
+    return null;
+  }
+
+  return Math.round(restingHr);
 }
 
 function formatDeviceHealthActionText(summary: DeviceHealthDailySummary | null, canSync: boolean) {
@@ -3783,7 +3986,7 @@ function renderReadinessSyncMenu(state: MobileAppState) {
 function renderReadinessDeviceHealthMenu(state: MobileAppState, athleteId: string, date: string) {
   const summary = getDeviceHealthSummaryForDate(state, athleteId, date);
   const status = getDeviceHealthStatus(summary);
-  const syncLabel = formatDeviceHealthSyncLabel(summary);
+  const syncLabel = formatReadinessDeviceHealthSyncLabel(summary);
 
   return `
     <details class="readiness-section readiness-details readiness-utility-menu wide-field">
@@ -3987,6 +4190,14 @@ function applyReadinessPreset(form: HTMLFormElement, preset: string) {
 
 function cssEscape(value: string) {
   return value.replace(/["\\]/g, "\\$&");
+}
+
+function setFormFieldValue(form: HTMLFormElement, name: string, value: string) {
+  const field = form.elements.namedItem(name);
+
+  if (field instanceof HTMLInputElement || field instanceof HTMLSelectElement) {
+    field.value = value;
+  }
 }
 
 function renderReadinessHistory(entries: ReadinessEntry[]) {

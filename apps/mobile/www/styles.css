@@ -2969,6 +2969,45 @@ button {
   flex: 1 1 130px;
 }
 
+.device-health-compact-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.device-health-compact-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.device-health-compact-actions .secondary-action {
+  min-height: 46px;
+}
+
+.device-health-compact-workouts {
+  display: grid;
+  gap: 8px;
+}
+
+.device-health-compact-workouts article {
+  display: grid;
+  gap: 3px;
+  padding: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.74);
+}
+
+.device-health-compact-workouts strong {
+  color: var(--text);
+  font-size: 0.84rem;
+  font-weight: 950;
+}
+
+.device-health-compact-workouts span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 760;
+}
+
 .device-health-status {
   display: grid;
   gap: 4px;
@@ -3562,6 +3601,8 @@ button.timeline-card:active {
   .readiness-indicators-grid,
   .readiness-flags-inline,
   .readiness-flags,
+  .device-health-compact-grid,
+  .device-health-compact-actions,
   .choice-group,
   .coach-day-status-brief-grid {
     grid-template-columns: 1fr;
