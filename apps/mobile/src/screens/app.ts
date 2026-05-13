@@ -764,6 +764,8 @@ export function bootstrapMobileApp(root: HTMLElement) {
     const forms = Array.from(
       group?.querySelectorAll<HTMLFormElement>("[data-execution-form], [data-execution-session-form]") ?? [],
     );
+    const dayNotesInput = group?.querySelector<HTMLTextAreaElement>("[data-execution-day-notes]");
+    const dayNotes = dayNotesInput ? dayNotesInput.value.trim() : null;
 
     if (forms.length === 0) {
       update({ error: "Нет блоков для сохранения." });
@@ -784,7 +786,10 @@ export function bootstrapMobileApp(root: HTMLElement) {
         return;
       }
 
-      payloads.push(...formPayloads);
+      payloads.push(...formPayloads.map((payload) => ({
+        ...payload,
+        notes: dayNotes ?? payload.notes,
+      })));
     }
 
     const userRole = state.session.user?.role ?? null;
@@ -1060,6 +1065,11 @@ export function bootstrapMobileApp(root: HTMLElement) {
         return;
       }
 
+      if (executionDateFilter) {
+        updateSelectedDayDate(executionDateFilter, "results");
+        return;
+      }
+
       update({ executionDateFilter });
     });
 
@@ -1324,7 +1334,7 @@ function renderAppShell(state: MobileAppState) {
         ${renderScreen(displayState, activeAthleteId)}
       </section>
 
-      <nav class="bottom-nav" aria-label="Разделы">
+      <nav class="bottom-nav" aria-label="Разделы" style="--bottom-nav-count: ${screens.length}">
         ${screens.map((screen) => `
           <button class="${displayState.selectedScreen === screen.id ? "is-active" : ""}" data-screen="${screen.id}" type="button">
             <span>${screen.icon}</span>
@@ -3317,12 +3327,14 @@ function renderResultsScreen(state: MobileAppState, athleteId: string | null) {
   const isCoachReview = isCoachRole(state.session.user?.role);
   const selectedDayDate = isCoachReview ? state.selectedDayDate : null;
 
+  if (canSubmitExecution) {
+    return renderAthleteExecutionScreen(state, plans);
+  }
+
   return `
     <div class="screen-head">
-      <h2>${canSubmitExecution ? "Выполнение тренировки" : "Разбор выполнения"}</h2>
-      <p>${canSubmitExecution
-        ? "Тренировка сохраняется локально, если нет интернета."
-        : isCoachReview
+      <h2>Разбор выполнения</h2>
+      <p>${isCoachReview
           ? "Назначенные дни, план/факт, отметки спортсмена и дневник тренера."
           : getSyncActionRestrictionMessage(state.session.user?.role ?? null, "execution")}</p>
     </div>
@@ -3330,6 +3342,56 @@ function renderResultsScreen(state: MobileAppState, athleteId: string | null) {
     ${renderExecutionForm(state, plans)}
     ${renderCoachDiaryHistory(state, athleteId, selectedDayDate)}
     ${renderExecutionHistory(state, athleteId, selectedDayDate)}
+  `;
+}
+
+function renderAthleteExecutionScreen(state: MobileAppState, plans: AssignedPlanSummary[]) {
+  const allPlanGroups = getExecutionPlanGroups(plans);
+  const dateOptions = getExecutionDateOptions(allPlanGroups);
+  const selectedDate = getAthleteExecutionSelectedDate(state, dateOptions);
+  const planGroups = selectedDate
+    ? allPlanGroups.filter((group) => group.plan.day.dayDate === selectedDate)
+    : [];
+  const displayUnitCount = planGroups.reduce(
+    (total, group) => total + countPlanDisplayUnits(group.plan),
+    0,
+  );
+  const exerciseCount = planGroups.reduce(
+    (total, group) =>
+      total + group.blockItems.reduce(
+        (blockTotal, item) => blockTotal + (item.block.exercises?.length ?? 0),
+        0,
+      ),
+    0,
+  );
+
+  if (allPlanGroups.length === 0) {
+    return `
+      <div class="screen-head">
+        <h2>Выполнение</h2>
+        <p>Здесь появится тренировка после обновления данных.</p>
+      </div>
+      ${renderEmpty("Нет тренировки", "Назначенный день появится после обновления данных.")}
+    `;
+  }
+
+  return `
+    <div class="screen-head">
+      <h2>Выполнение</h2>
+      <p>${selectedDate
+        ? `${formatDate(selectedDate)} · ${formatPlanUnitCount(displayUnitCount)} · ${exerciseCount} упражнений`
+        : "Выберите день тренировки"}</p>
+    </div>
+    <section class="execution-panel athlete-execution-panel">
+      ${renderAthleteExecutionDateFilter(dateOptions, selectedDate)}
+      <div class="execution-plan-stack">
+        ${planGroups.length > 0
+          ? planGroups
+              .map((group, index) => renderExecutionPlanGroup(state, group, index === 0, true, { compactAthlete: true }))
+              .join("")
+          : renderEmpty("На выбранную дату нет тренировки", "Выберите другой день из назначенного плана.")}
+      </div>
+    </section>
   `;
 }
 
@@ -3804,6 +3866,10 @@ interface ExecutionDisplayCompletion {
   totalCount: number;
 }
 
+interface ExecutionPlanGroupRenderOptions {
+  compactAthlete?: boolean;
+}
+
 interface CoachTodayDaySummary {
   date: string;
   status: CoachTodayDayStatus;
@@ -3961,6 +4027,46 @@ function renderExecutionDateFilter(
   `;
 }
 
+function getAthleteExecutionSelectedDate(
+  state: MobileAppState,
+  options: Array<{ date: string; label: string }>,
+) {
+  if (options.length === 0) {
+    return "";
+  }
+
+  const selectedDate = state.executionDateFilter ?? state.selectedDayDate;
+
+  if (selectedDate && options.some((option) => option.date === selectedDate)) {
+    return selectedDate;
+  }
+
+  const today = todayValue();
+  return options.find((option) => option.date === today)?.date ?? options[0].date;
+}
+
+function renderAthleteExecutionDateFilter(
+  options: Array<{ date: string; label: string }>,
+  selectedDate: string,
+) {
+  if (options.length === 0) {
+    return "";
+  }
+
+  return `
+    <label class="execution-date-filter athlete-execution-date-filter">
+      <span>День тренировки</span>
+      <select data-execution-date-filter>
+        ${options.map((option) => `
+          <option value="${escapeHtml(option.date)}" ${selectedDate === option.date ? "selected" : ""}>
+            ${escapeHtml(formatDate(option.date))} · ${escapeHtml(option.label)}
+          </option>
+        `).join("")}
+      </select>
+    </label>
+  `;
+}
+
 function isSessionLevelPlanUnit(session: MobileAssignedPlanSession) {
   if (session.executionMode) {
     return session.executionMode === "whole_session";
@@ -4058,7 +4164,9 @@ function renderExecutionPlanGroup(
   group: ExecutionPlanGroup,
   isOpen: boolean,
   canSubmitExecution: boolean,
+  options: ExecutionPlanGroupRenderOptions = {},
 ) {
+  const compactAthlete = options.compactAthlete === true;
   const displayUnitCount = countPlanDisplayUnits(group.plan);
   const canSubmitCoachDiary = state.session.user?.role === "coach" || state.session.user?.role === "admin";
   const diaryEntries = getCoachDiaryEntriesForPlan(state, group.plan.id);
@@ -4070,26 +4178,31 @@ function renderExecutionPlanGroup(
   );
 
   return `
-    <details class="execution-plan-group mobile-plan-day-card mobile-execution-day-card" data-execution-plan-group ${isOpen ? "open" : ""}>
+    <details class="execution-plan-group mobile-plan-day-card mobile-execution-day-card ${compactAthlete ? "is-athlete-compact" : ""}" data-execution-plan-group ${isOpen ? "open" : ""}>
       <summary class="mobile-plan-day-card-head">
         <div>
-          <strong>${formatDate(group.plan.day.dayDate)} · ${escapeHtml(group.plan.day.label)}</strong>
+          <strong>${compactAthlete
+            ? `${escapeHtml(formatDayRelativeLabel(group.plan.day.dayDate))} · ${formatDate(group.plan.day.dayDate)}`
+            : `${formatDate(group.plan.day.dayDate)} · ${escapeHtml(group.plan.day.label)}`}</strong>
           <span>${escapeHtml(group.plan.templateName)} · ${formatPlanUnitCount(displayUnitCount)} · ${exerciseCount} упр.</span>
           <div class="execution-day-meta">
             <span class="execution-day-status is-${daySummary.status}">${escapeHtml(daySummary.statusLabel)}</span>
-            <span>Факт нагрузки: ${formatLoadValue(daySummary.actualLoad)}</span>
-            <span>План: ${formatLoadValue(daySummary.plannedLoad)}</span>
+            <span>${displayCompletion.completedCount}/${displayCompletion.totalCount} отмечено</span>
+            ${compactAthlete ? "" : `
+              <span>Факт нагрузки: ${formatLoadValue(daySummary.actualLoad)}</span>
+              <span>План: ${formatLoadValue(daySummary.plannedLoad)}</span>
+            `}
           </div>
         </div>
         <em>${displayCompletion.completedCount}/${displayCompletion.totalCount}</em>
       </summary>
       <div class="mobile-plan-day-card-body">
-        ${renderExecutionDayAnalyticsCard(daySummary, displayCompletion)}
+        ${compactAthlete ? renderAthleteCoachDayNote(daySummary.latestDiaryEntry) : renderExecutionDayAnalyticsCard(daySummary, displayCompletion)}
         ${group.plan.day.sessions.map((session) => `
           <section class="mobile-plan-session">
             <h4>${escapeHtml(session.name)}</h4>
             ${isSessionLevelPlanUnit(session)
-              ? renderExecutionUnifiedSession(state, group.plan, session, canSubmitExecution)
+              ? renderExecutionUnifiedSession(state, group.plan, session, canSubmitExecution, options)
               : `
                 <div class="mobile-plan-table">
                   <div class="mobile-plan-table-head">
@@ -4107,6 +4220,7 @@ function renderExecutionPlanGroup(
                               sessionName: session.name,
                             },
                             getExecutionResultForBlock(state, group.plan.id, block.id),
+                            options,
                           )
                         : renderExecutionBlockReadonly(
                             {
@@ -4122,6 +4236,7 @@ function renderExecutionPlanGroup(
               `}
           </section>
         `).join("")}
+        ${compactAthlete ? renderExecutionDayNoteField(state, group) : ""}
         ${canSubmitExecution ? `
           <div class="mobile-execution-day-actions">
             <button class="primary-action" type="button" data-execution-save-day ${state.isBusy ? "disabled" : ""}>
@@ -4135,11 +4250,35 @@ function renderExecutionPlanGroup(
   `;
 }
 
+function renderAthleteCoachDayNote(entry: CoachDiaryEntry | null) {
+  if (!entry) {
+    return "";
+  }
+
+  return `
+    <aside class="athlete-coach-day-note">
+      <strong>Комментарий тренера</strong>
+      <p>${escapeHtml(entry.notes)}</p>
+      <small>${escapeHtml(entry.coachName)} · ${formatDateTime(entry.updatedAt)}</small>
+    </aside>
+  `;
+}
+
+function renderExecutionDayNoteField(state: MobileAppState, group: ExecutionPlanGroup) {
+  return `
+    <label class="execution-day-note">
+      <span>Комментарий за день</span>
+      <textarea data-execution-day-notes rows="3" placeholder="Коротко: что получилось, что было тяжело">${escapeHtml(getExecutionDayNote(state, group))}</textarea>
+    </label>
+  `;
+}
+
 function renderExecutionUnifiedSession(
   state: MobileAppState,
   plan: AssignedPlanSummary,
   session: MobileAssignedPlanSession,
   canSubmitExecution: boolean,
+  options: ExecutionPlanGroupRenderOptions = {},
 ) {
   const status = getUnifiedSessionExecutionStatus(state, plan.id, session);
   const results = session.blocks.map((block) => getExecutionResultForBlock(state, plan.id, block.id));
@@ -4171,10 +4310,10 @@ function renderExecutionUnifiedSession(
         </span>
       </label>
       ${renderUnifiedSessionPlanTable(session)}
-      <label class="exercise-note">
+      ${options.compactAthlete ? "" : `<label class="exercise-note">
         <span>Комментарий</span>
         <input name="notes" value="${escapeHtml(latestNote)}" />
-      </label>
+      </label>`}
     </form>
   `;
 }
@@ -4415,7 +4554,11 @@ function renderExecutionExerciseReadonly(
   `;
 }
 
-function renderExecutionBlockForm(item: ExecutionBlockItem, result: ExecutionResult | null) {
+function renderExecutionBlockForm(
+  item: ExecutionBlockItem,
+  result: ExecutionResult | null,
+  options: ExecutionPlanGroupRenderOptions = {},
+) {
   const exercises = item.block.exercises ?? [];
   return `
     <form class="mobile-execution-row-form" data-execution-form>
@@ -4425,9 +4568,9 @@ function renderExecutionBlockForm(item: ExecutionBlockItem, result: ExecutionRes
         ? exercises
             .slice()
             .sort((a, b) => a.orderIndex - b.orderIndex)
-            .map((exercise) => renderExecutionExerciseRow(exercise, getExerciseResult(result, exercise.id), result))
+            .map((exercise) => renderExecutionExerciseRow(exercise, getExerciseResult(result, exercise.id), result, options))
             .join("")
-        : renderExecutionBlockFallbackRow(item.block, result)}
+        : renderExecutionBlockFallbackRow(item.block, result, options)}
     </form>
   `;
 }
@@ -4436,6 +4579,7 @@ function renderExecutionExerciseRow(
   exercise: AssignedBlockExercise,
   result: ExecutionExerciseResult | null,
   blockResult: ExecutionResult | null,
+  options: ExecutionPlanGroupRenderOptions = {},
 ) {
   return `
     <div class="mobile-plan-row mobile-execution-row" data-execution-exercise data-exercise-id="${escapeHtml(exercise.id)}">
@@ -4461,16 +4605,20 @@ function renderExecutionExerciseRow(
           <span>Заметка</span>
           <input name="exerciseNotes:${escapeHtml(exercise.id)}" placeholder="${escapeHtml(exercise.notes || "по упражнению")}" value="${escapeHtml(result?.notes ?? "")}" />
         </label>
-        <label class="exercise-note">
+        ${options.compactAthlete ? "" : `<label class="exercise-note">
           <span>Комментарий</span>
           <input name="notes" value="${escapeHtml(blockResult?.notes ?? "")}" />
-        </label>
+        </label>`}
       </details>
     </div>
   `;
 }
 
-function renderExecutionBlockFallbackRow(block: AssignedPlanBlock, result: ExecutionResult | null) {
+function renderExecutionBlockFallbackRow(
+  block: AssignedPlanBlock,
+  result: ExecutionResult | null,
+  options: ExecutionPlanGroupRenderOptions = {},
+) {
   return `
     <div class="mobile-plan-row mobile-execution-row">
       <label class="execution-exercise-check mobile-plan-exercise-name">
@@ -4485,10 +4633,10 @@ function renderExecutionBlockFallbackRow(block: AssignedPlanBlock, result: Execu
       <details class="mobile-execution-row-details">
         <summary>Факт</summary>
         ${renderBlockFallbackFields(result)}
-        <label class="exercise-note">
+        ${options.compactAthlete ? "" : `<label class="exercise-note">
           <span>Комментарий</span>
           <input name="notes" value="${escapeHtml(result?.notes ?? "")}" />
-        </label>
+        </label>`}
       </details>
     </div>
   `;
@@ -6044,6 +6192,12 @@ function getExecutionResultForBlock(
   return state.data.executionResults.find((result) =>
     result.assignedPlanId === assignedPlanId && result.assignedBlockId === assignedBlockId
   ) ?? null;
+}
+
+function getExecutionDayNote(state: MobileAppState, group: ExecutionPlanGroup) {
+  return group.blockItems
+    .map((item) => getExecutionResultForBlock(state, item.plan.id, item.block.id)?.notes.trim() ?? "")
+    .find(Boolean) ?? "";
 }
 
 function getExerciseResult(

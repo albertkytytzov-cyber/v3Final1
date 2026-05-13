@@ -451,6 +451,15 @@ button {
   font-weight: 850;
 }
 
+.athlete-execution-panel {
+  gap: 12px;
+}
+
+.athlete-execution-date-filter {
+  border-color: rgba(37, 99, 235, 0.18);
+  background: rgba(239, 246, 255, 0.84);
+}
+
 .execution-plan-group {
   display: grid;
   gap: 10px;
@@ -628,6 +637,50 @@ button {
   border: 1px solid rgba(15, 118, 110, 0.16);
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.82);
+}
+
+.athlete-coach-day-note,
+.execution-day-note {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid rgba(15, 118, 110, 0.16);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.athlete-coach-day-note strong,
+.execution-day-note span {
+  color: var(--text);
+  font-size: 0.84rem;
+  font-weight: 950;
+}
+
+.athlete-coach-day-note p {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.86rem;
+  font-weight: 750;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.athlete-coach-day-note small {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.execution-day-note textarea {
+  width: 100%;
+  min-height: 78px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+  color: var(--text);
+  font: inherit;
+  resize: vertical;
 }
 
 .execution-day-analytics-head {
@@ -3224,7 +3277,7 @@ button.timeline-card:active {
   bottom: 0;
   left: 0;
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(var(--bottom-nav-count, 5), minmax(0, 1fr));
   gap: 6px;
   width: min(100%, 520px);
   margin: 0 auto;
