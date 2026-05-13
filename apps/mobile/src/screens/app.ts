@@ -5652,7 +5652,14 @@ function getCoachDaySummary(
       exerciseCount += exercises.length;
 
       for (const exercise of exercises) {
-        const exerciseStatus = getExecutionExerciseStatus(getExerciseResult(result, exercise.id));
+        const exerciseResult = getExerciseResult(result, exercise.id);
+        const exerciseStatus = exerciseResult
+          ? getExecutionExerciseStatus(exerciseResult)
+          : statusForSummary === "completed"
+            ? "completed"
+            : statusForSummary === "partial"
+              ? "partial"
+              : "missed";
 
         if (exerciseStatus === "completed") {
           completedExerciseCount += 1;
@@ -5732,7 +5739,13 @@ function getCoachDayCleanSummary(
         .sort((left, right) => left.orderIndex - right.orderIndex)
         .map((exercise) => {
           const exerciseResult = getExerciseResult(result, exercise.id);
-          const exerciseStatus = getExecutionExerciseStatus(exerciseResult);
+          const exerciseStatus = exerciseResult
+            ? getExecutionExerciseStatus(exerciseResult)
+            : status === "completed"
+              ? "completed"
+              : status === "partial"
+                ? "partial"
+                : "missed";
 
           return {
             actualDetails: formatExerciseActualDetails(exerciseResult),
@@ -5745,8 +5758,10 @@ function getCoachDayCleanSummary(
             plannedWork: formatExerciseWorkCell(exercise),
             sessionName: item.sessionName,
             status: exerciseStatus,
-            statusLabel: formatExerciseResultStatus(exerciseResult),
-            sourceLabel: getMobileExecutionSourceLabel(Boolean(exerciseResult), isDeviceLinked),
+            statusLabel: exerciseResult
+              ? formatExerciseResultStatus(exerciseResult)
+              : getExecutionDayStatusLabel(exerciseStatus).toLowerCase(),
+            sourceLabel: getMobileExecutionSourceLabel(Boolean(exerciseResult || result), isDeviceLinked),
           };
         });
 
