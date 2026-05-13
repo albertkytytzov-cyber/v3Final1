@@ -504,6 +504,17 @@ button {
   background: #dff2ef;
 }
 
+.readiness-preset-grid button:disabled,
+.readiness-indicators-grid input:disabled,
+.readiness-select-field select:disabled,
+.mobile-execution-row input:disabled,
+.mobile-execution-row textarea:disabled,
+.mobile-unified-session-card input:disabled,
+.execution-day-note textarea:disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
 .readiness-preset-grid strong {
   font-size: 0.95rem;
 }

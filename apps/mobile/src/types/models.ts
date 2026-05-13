@@ -206,7 +206,9 @@ export interface MobileAppState {
   selectedAthleteId: string | null;
   selectedDayDate: string;
   executionDateFilter: string | null;
+  executionEditDate: string | null;
   planDateFilter: string | null;
+  readinessEditMode: boolean;
   isOnline: boolean;
   isBusy: boolean;
   isSyncing: boolean;

@@ -84,7 +84,9 @@ export function bootstrapMobileApp(root: HTMLElement) {
     selectedAthleteId: loadSelectedAthleteId(),
     selectedDayDate: todayValue(),
     executionDateFilter: null,
+    executionEditDate: null,
     planDateFilter: null,
+    readinessEditMode: false,
     isOnline: navigator.onLine,
     isBusy: false,
     isSyncing: false,
@@ -378,7 +380,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
         savedAt: new Date().toISOString(),
       };
       saveSnapshot(snapshot);
-      update({ data: snapshot });
+      update({ data: snapshot, readinessEditMode: false });
     });
   };
 
@@ -910,6 +912,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
 
       saveExecutionResultsSnapshot(savedResults);
       update({
+        executionEditDate: null,
         isBusy: false,
         message: "Сохранено выполнение дня.",
         queue: loadQueue(),
@@ -944,6 +947,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
       }
 
       update({
+        executionEditDate: savedResults.length > 0 ? null : state.executionEditDate,
         isBusy: false,
         message:
           savedResults.length > 0
@@ -1232,6 +1236,10 @@ export function bootstrapMobileApp(root: HTMLElement) {
       void submitReadiness(event.currentTarget as HTMLFormElement);
     });
 
+    root.querySelector<HTMLButtonElement>("[data-readiness-edit]")?.addEventListener("click", () => {
+      update({ readinessEditMode: true });
+    });
+
     root.querySelectorAll<HTMLButtonElement>("[data-huawei-health-sync]").forEach((button) => {
       button.addEventListener("click", () => {
         void syncHuaweiHealth(button.dataset.huaweiHealthDate ?? todayValue());
@@ -1300,6 +1308,12 @@ export function bootstrapMobileApp(root: HTMLElement) {
     root.querySelectorAll<HTMLButtonElement>("[data-execution-save-day]").forEach((button) => {
       button.addEventListener("click", () => {
         void submitExecutionDay(button);
+      });
+    });
+
+    root.querySelectorAll<HTMLButtonElement>("[data-execution-edit-day]").forEach((button) => {
+      button.addEventListener("click", () => {
+        update({ executionEditDate: button.dataset.executionEditDay ?? todayValue() });
       });
     });
 
@@ -3659,6 +3673,8 @@ function renderAthleteExecutionScreen(state: MobileAppState, plans: AssignedPlan
     0,
   );
   const displayCompletion = getAthleteExecutionDisplayCompletion(state, planGroups);
+  const hasSavedExecution = planGroups.some((group) => hasExecutionMarksForGroup(state, group));
+  const executionLocked = Boolean(selectedDate && hasSavedExecution && state.executionEditDate !== selectedDate);
 
   if (allPlanGroups.length === 0) {
     return `
@@ -3683,12 +3699,24 @@ function renderAthleteExecutionScreen(state: MobileAppState, plans: AssignedPlan
       <div class="execution-plan-stack">
         ${planGroups.length > 0
           ? planGroups
-              .map((group, index) => renderExecutionPlanGroup(state, group, index === 0, true, { compactAthlete: true }))
+              .map((group, index) =>
+                renderExecutionPlanGroup(state, group, index === 0, true, {
+                  compactAthlete: true,
+                  hasSavedExecution,
+                  isLocked: executionLocked,
+                })
+              )
               .join("")
           : renderEmpty("На выбранную дату нет тренировки", "Выберите другой день из назначенного плана.")}
       </div>
     </section>
   `;
+}
+
+function hasExecutionMarksForGroup(state: MobileAppState, group: ExecutionPlanGroup) {
+  return group.blockItems.some((item) =>
+    Boolean(getExecutionResultForBlock(state, item.plan.id, item.block.id))
+  );
 }
 
 function getAthleteExecutionDisplayCompletion(
@@ -3939,10 +3967,13 @@ function renderReadinessScreen(state: MobileAppState) {
     return renderEmpty("Готовность заполняет спортсмен", "Тренер видит готовность в карточке спортсмена и после обновления данных.");
   }
 
-  const readiness = state.data.readinessEntry;
+  const today = todayValue();
+  const readiness = getReadinessEntryForDate(state, state.session.user.athleteId ?? null, today);
   const readinessHistory = getReadinessHistory(state);
   const values = getReadinessFormDefaults(state, readiness);
-  const entryDate = readiness?.entryDate === todayValue() ? readiness.entryDate : todayValue();
+  const entryDate = readiness?.entryDate ?? today;
+  const readinessLocked = Boolean(readiness) && !state.readinessEditMode;
+  const readinessDisabled = readinessLocked ? "disabled" : "";
 
   return `
     <div class="screen-head readiness-head">
@@ -3957,19 +3988,19 @@ function renderReadinessScreen(state: MobileAppState) {
           <p>Выбери ближайшее состояние и поправь важные пункты ниже.</p>
         </div>
         <div class="readiness-preset-grid">
-          <button data-readiness-preset="good" type="button">
+          <button data-readiness-preset="good" type="button" ${readinessDisabled}>
             <strong>Хорошо</strong>
             <span>готов к нагрузке</span>
           </button>
-          <button data-readiness-preset="normal" type="button">
+          <button data-readiness-preset="normal" type="button" ${readinessDisabled}>
             <strong>Норма</strong>
             <span>обычный день</span>
           </button>
-          <button data-readiness-preset="tired" type="button">
+          <button data-readiness-preset="tired" type="button" ${readinessDisabled}>
             <strong>Усталость</strong>
             <span>снизить объём</span>
           </button>
-          <button data-readiness-preset="risk" type="button">
+          <button data-readiness-preset="risk" type="button" ${readinessDisabled}>
             <strong>Риск</strong>
             <span>нужна осторожность</span>
           </button>
@@ -3983,23 +4014,25 @@ function renderReadinessScreen(state: MobileAppState) {
         </summary>
         <section class="readiness-indicators-grid">
           <input name="sleepQuality" type="hidden" value="4" />
-          <label><span>Пульс покоя</span><input name="restingHr" type="number" min="30" max="140" value="${formatInputValue(values.restingHr)}" /></label>
-          <label><span>Вес</span><input name="bodyWeight" type="number" min="20" max="200" step="0.1" value="${formatInputValue(values.bodyWeight)}" /></label>
-          <label><span>Сон, часов</span><input name="sleepHours" type="number" min="0" max="16" step="0.5" inputmode="decimal" value="${formatInputValue(values.sleepHours)}" /></label>
-          ${renderReadinessSelectField("generalFeeling", "Самочувствие", readinessFeelingOptions, getChoiceDefault(readinessFeelingOptions, values.generalFeeling))}
-          ${renderReadinessSelectField("fatigueLevel", "Усталость", readinessLoadOptions, getChoiceDefault(readinessLoadOptions, values.fatigueLevel))}
-          ${renderReadinessSelectField("painLevel", "Боль", readinessPainOptions, getChoiceDefault(readinessPainOptions, values.painLevel))}
-          ${renderReadinessSelectField("muscleSoreness", "Мышцы", readinessLoadOptions, getChoiceDefault(readinessLoadOptions, values.muscleSoreness))}
-          ${renderReadinessSelectField("motivationLevel", "Мотивация", readinessMotivationOptions, getChoiceDefault(readinessMotivationOptions, values.motivationLevel))}
-          <label><span>Дата</span><input name="entryDate" type="date" value="${escapeHtml(entryDate)}" /></label>
+          <label><span>Пульс покоя</span><input name="restingHr" type="number" min="30" max="140" value="${formatInputValue(values.restingHr)}" ${readinessDisabled} /></label>
+          <label><span>Вес</span><input name="bodyWeight" type="number" min="20" max="200" step="0.1" value="${formatInputValue(values.bodyWeight)}" ${readinessDisabled} /></label>
+          <label><span>Сон, часов</span><input name="sleepHours" type="number" min="0" max="16" step="0.5" inputmode="decimal" value="${formatInputValue(values.sleepHours)}" ${readinessDisabled} /></label>
+          ${renderReadinessSelectField("generalFeeling", "Самочувствие", readinessFeelingOptions, getChoiceDefault(readinessFeelingOptions, values.generalFeeling), readinessLocked)}
+          ${renderReadinessSelectField("fatigueLevel", "Усталость", readinessLoadOptions, getChoiceDefault(readinessLoadOptions, values.fatigueLevel), readinessLocked)}
+          ${renderReadinessSelectField("painLevel", "Боль", readinessPainOptions, getChoiceDefault(readinessPainOptions, values.painLevel), readinessLocked)}
+          ${renderReadinessSelectField("muscleSoreness", "Мышцы", readinessLoadOptions, getChoiceDefault(readinessLoadOptions, values.muscleSoreness), readinessLocked)}
+          ${renderReadinessSelectField("motivationLevel", "Мотивация", readinessMotivationOptions, getChoiceDefault(readinessMotivationOptions, values.motivationLevel), readinessLocked)}
+          <label><span>Дата</span><input name="entryDate" type="date" value="${escapeHtml(entryDate)}" ${readinessDisabled} /></label>
           <div class="readiness-flags-inline">
-            <label class="check-row"><input name="illnessFlag" type="checkbox" ${values.illnessFlag ? "checked" : ""} /> Есть болезнь</label>
-            <label class="check-row"><input name="feverFlag" type="checkbox" ${values.feverFlag ? "checked" : ""} /> Температура</label>
+            <label class="check-row"><input name="illnessFlag" type="checkbox" ${values.illnessFlag ? "checked" : ""} ${readinessDisabled} /> Есть болезнь</label>
+            <label class="check-row"><input name="feverFlag" type="checkbox" ${values.feverFlag ? "checked" : ""} ${readinessDisabled} /> Температура</label>
           </div>
         </section>
       </details>
 
-      <button class="primary-action" type="submit">Сохранить готовность</button>
+      ${readinessLocked
+        ? `<button class="primary-action" data-readiness-edit type="button">Редактировать готовность</button>`
+        : `<button class="primary-action" type="submit">${readiness ? "Сохранить изменения" : "Сохранить готовность"}</button>`}
     </form>
     ${renderReadinessSyncMenu(state)}
     ${state.session.user.athleteId ? renderReadinessDeviceHealthMenu(state, state.session.user.athleteId, todayValue()) : ""}
@@ -4209,11 +4242,12 @@ function renderReadinessSelectField(
   label: string,
   options: ChoiceOption[],
   defaultValue: string,
+  disabled = false,
 ) {
   return `
     <label class="readiness-select-field">
       <span>${escapeHtml(label)}</span>
-      <select name="${escapeHtml(name)}">
+      <select name="${escapeHtml(name)}" ${disabled ? "disabled" : ""}>
         ${options.map((option) => `
           <option value="${escapeHtml(option.value)}" ${option.value === defaultValue ? "selected" : ""}>
             ${escapeHtml(option.label)}
@@ -4372,6 +4406,8 @@ interface ExecutionDisplayCompletion {
 
 interface ExecutionPlanGroupRenderOptions {
   compactAthlete?: boolean;
+  hasSavedExecution?: boolean;
+  isLocked?: boolean;
 }
 
 interface CoachTodayDaySummary {
@@ -4671,6 +4707,7 @@ function renderExecutionPlanGroup(
   options: ExecutionPlanGroupRenderOptions = {},
 ) {
   const compactAthlete = options.compactAthlete === true;
+  const isLocked = options.isLocked === true;
   const displayUnitCount = countPlanDisplayUnits(group.plan);
   const canSubmitCoachDiary = state.session.user?.role === "coach" || state.session.user?.role === "admin";
   const diaryEntries = getCoachDiaryEntriesForPlan(state, group.plan.id);
@@ -4744,12 +4781,14 @@ function renderExecutionPlanGroup(
               `}
           </section>
         `).join("")}
-        ${compactAthlete ? renderExecutionDayNoteField(state, group) : ""}
+        ${compactAthlete ? renderExecutionDayNoteField(state, group, isLocked) : ""}
         ${canSubmitExecution ? `
           <div class="mobile-execution-day-actions">
-            <button class="primary-action" type="button" data-execution-save-day ${state.isBusy ? "disabled" : ""}>
-              ${state.isBusy ? "Сохранение..." : "Сохранить выполнение"}
-            </button>
+            ${isLocked
+              ? `<button class="primary-action" type="button" data-execution-edit-day="${escapeHtml(group.plan.day.dayDate)}">Редактировать выполнение</button>`
+              : `<button class="primary-action" type="button" data-execution-save-day ${state.isBusy ? "disabled" : ""}>
+                  ${state.isBusy ? "Сохранение..." : options.hasSavedExecution ? "Сохранить изменения" : "Сохранить выполнение"}
+                </button>`}
           </div>
         ` : ""}
         ${canSubmitCoachDiary ? renderCoachDiaryForm(group, diaryEntries) : ""}
@@ -4772,11 +4811,11 @@ function renderAthleteCoachDayNote(entry: CoachDiaryEntry | null) {
   `;
 }
 
-function renderExecutionDayNoteField(state: MobileAppState, group: ExecutionPlanGroup) {
+function renderExecutionDayNoteField(state: MobileAppState, group: ExecutionPlanGroup, disabled = false) {
   return `
     <label class="execution-day-note">
       <span>Комментарий за день</span>
-      <textarea data-execution-day-notes rows="3" placeholder="Коротко: что получилось, что было тяжело">${escapeHtml(getExecutionDayNote(state, group))}</textarea>
+      <textarea data-execution-day-notes rows="3" placeholder="Коротко: что получилось, что было тяжело" ${disabled ? "disabled" : ""}>${escapeHtml(getExecutionDayNote(state, group))}</textarea>
     </label>
   `;
 }
@@ -4811,7 +4850,7 @@ function renderExecutionUnifiedSession(
       <input name="assignedPlanId" type="hidden" value="${escapeHtml(plan.id)}" />
       <input name="assignedBlockIds" type="hidden" value="${escapeHtml(blockIds.join(","))}" />
       <label class="execution-session-check">
-        <input name="completed" type="checkbox" ${status === "completed" ? "checked" : ""} />
+        <input name="completed" type="checkbox" ${status === "completed" ? "checked" : ""} ${options.isLocked ? "disabled" : ""} />
         <span>
           <strong>${options.compactAthlete ? "Сессия выполнена" : "Отметить всю сессию"}</strong>
           <small>${options.compactAthlete ? `${session.blocks.length} заданий` : "Все строки этой сессии сохраняются вместе."}</small>
@@ -5092,7 +5131,7 @@ function renderExecutionExerciseRow(
   return `
     <div class="mobile-plan-row mobile-execution-row" data-execution-exercise data-exercise-id="${escapeHtml(exercise.id)}">
       <label class="execution-exercise-check mobile-plan-exercise-name">
-        <input name="exerciseCompleted:${escapeHtml(exercise.id)}" type="checkbox" ${result?.completed ? "checked" : ""} />
+        <input name="exerciseCompleted:${escapeHtml(exercise.id)}" type="checkbox" ${result?.completed ? "checked" : ""} ${options.isLocked ? "disabled" : ""} />
         <span>
           <strong>${escapeHtml(exercise.name)}</strong>
           ${options.compactAthlete ? "" : `<small>${result?.completed ? "выполнено" : "не отмечено"}</small>`}
@@ -5103,19 +5142,19 @@ function renderExecutionExerciseRow(
       <details class="mobile-execution-row-details">
         <summary>Факт</summary>
         <div class="execution-exercise-fields">
-          <label><span>Подх.</span><input inputmode="numeric" name="exerciseSets:${escapeHtml(exercise.id)}" placeholder="${escapeHtml(exercise.targetSets)}" type="number" min="0" value="${formatInputValue(result?.setsCompleted)}" /></label>
-          <label><span>Повт.</span><input inputmode="numeric" name="exerciseReps:${escapeHtml(exercise.id)}" placeholder="${escapeHtml(exercise.targetReps)}" type="number" min="0" value="${formatInputValue(result?.repsCompleted)}" /></label>
-          <label><span>Кг</span><input inputmode="decimal" name="exerciseWeight:${escapeHtml(exercise.id)}" placeholder="${escapeHtml(exercise.targetWeightKg)}" type="number" min="0" step="0.5" value="${formatInputValue(result?.weightKg)}" /></label>
-          <label><span>Мин.</span><input inputmode="numeric" name="exerciseDuration:${escapeHtml(exercise.id)}" placeholder="${escapeHtml(exercise.targetDurationMinutes)}" type="number" min="0" value="${formatInputValue(result?.durationMinutes)}" /></label>
-          <label><span>RPE</span><input inputmode="numeric" name="exerciseRpe:${escapeHtml(exercise.id)}" placeholder="${escapeHtml(exercise.targetRpe)}" type="number" min="1" max="10" value="${formatInputValue(result?.rpe)}" /></label>
+          <label><span>Подх.</span><input inputmode="numeric" name="exerciseSets:${escapeHtml(exercise.id)}" placeholder="${escapeHtml(exercise.targetSets)}" type="number" min="0" value="${formatInputValue(result?.setsCompleted)}" ${options.isLocked ? "disabled" : ""} /></label>
+          <label><span>Повт.</span><input inputmode="numeric" name="exerciseReps:${escapeHtml(exercise.id)}" placeholder="${escapeHtml(exercise.targetReps)}" type="number" min="0" value="${formatInputValue(result?.repsCompleted)}" ${options.isLocked ? "disabled" : ""} /></label>
+          <label><span>Кг</span><input inputmode="decimal" name="exerciseWeight:${escapeHtml(exercise.id)}" placeholder="${escapeHtml(exercise.targetWeightKg)}" type="number" min="0" step="0.5" value="${formatInputValue(result?.weightKg)}" ${options.isLocked ? "disabled" : ""} /></label>
+          <label><span>Мин.</span><input inputmode="numeric" name="exerciseDuration:${escapeHtml(exercise.id)}" placeholder="${escapeHtml(exercise.targetDurationMinutes)}" type="number" min="0" value="${formatInputValue(result?.durationMinutes)}" ${options.isLocked ? "disabled" : ""} /></label>
+          <label><span>RPE</span><input inputmode="numeric" name="exerciseRpe:${escapeHtml(exercise.id)}" placeholder="${escapeHtml(exercise.targetRpe)}" type="number" min="1" max="10" value="${formatInputValue(result?.rpe)}" ${options.isLocked ? "disabled" : ""} /></label>
         </div>
         <label class="exercise-note">
           <span>Заметка</span>
-          <input name="exerciseNotes:${escapeHtml(exercise.id)}" placeholder="${escapeHtml(exercise.notes || "по упражнению")}" value="${escapeHtml(result?.notes ?? "")}" />
+          <input name="exerciseNotes:${escapeHtml(exercise.id)}" placeholder="${escapeHtml(exercise.notes || "по упражнению")}" value="${escapeHtml(result?.notes ?? "")}" ${options.isLocked ? "disabled" : ""} />
         </label>
         ${options.compactAthlete ? "" : `<label class="exercise-note">
           <span>Комментарий</span>
-          <input name="notes" value="${escapeHtml(blockResult?.notes ?? "")}" />
+          <input name="notes" value="${escapeHtml(blockResult?.notes ?? "")}" ${options.isLocked ? "disabled" : ""} />
         </label>`}
       </details>
     </div>
@@ -5130,7 +5169,7 @@ function renderExecutionBlockFallbackRow(
   return `
     <div class="mobile-plan-row mobile-execution-row">
       <label class="execution-exercise-check mobile-plan-exercise-name">
-        <input name="completed" type="checkbox" ${result?.completed !== false ? "checked" : ""} />
+        <input name="completed" type="checkbox" ${result?.completed !== false ? "checked" : ""} ${options.isLocked ? "disabled" : ""} />
         <span>
           <strong>${escapeHtml(block.name)}</strong>
           ${options.compactAthlete ? "" : `<small>${result?.completed ? "выполнено" : "не отмечено"}</small>`}
@@ -5140,24 +5179,26 @@ function renderExecutionBlockFallbackRow(
       <span class="mobile-plan-cell mobile-plan-control">${escapeHtml(block.notes || "-")}</span>
       <details class="mobile-execution-row-details">
         <summary>Факт</summary>
-        ${renderBlockFallbackFields(result)}
+        ${renderBlockFallbackFields(result, options.isLocked === true)}
         ${options.compactAthlete ? "" : `<label class="exercise-note">
           <span>Комментарий</span>
-          <input name="notes" value="${escapeHtml(result?.notes ?? "")}" />
+          <input name="notes" value="${escapeHtml(result?.notes ?? "")}" ${options.isLocked ? "disabled" : ""} />
         </label>`}
       </details>
     </div>
   `;
 }
 
-function renderBlockFallbackFields(result: ExecutionResult | null) {
+function renderBlockFallbackFields(result: ExecutionResult | null, disabled = false) {
+  const disabledAttr = disabled ? "disabled" : "";
+
   return `
-    <label class="check-row"><input name="completed" type="checkbox" ${result?.completed !== false ? "checked" : ""} /> Выполнено</label>
-    <label><span>Подходы</span><input name="setsCompleted" type="number" min="0" value="${formatInputValue(result?.setsCompleted)}" /></label>
-    <label><span>Повторы</span><input name="repsCompleted" type="number" min="0" value="${formatInputValue(result?.repsCompleted)}" /></label>
-    <label><span>Вес, кг</span><input name="weightKg" type="number" min="0" step="0.5" value="${formatInputValue(result?.weightKg)}" /></label>
-    <label><span>Минуты</span><input name="durationMinutes" type="number" min="0" value="${formatInputValue(result?.durationMinutes)}" /></label>
-    <label><span>RPE</span><input name="rpe" type="number" min="1" max="10" value="${formatInputValue(result?.rpe)}" /></label>
+    <label class="check-row"><input name="completed" type="checkbox" ${result?.completed !== false ? "checked" : ""} ${disabledAttr} /> Выполнено</label>
+    <label><span>Подходы</span><input name="setsCompleted" type="number" min="0" value="${formatInputValue(result?.setsCompleted)}" ${disabledAttr} /></label>
+    <label><span>Повторы</span><input name="repsCompleted" type="number" min="0" value="${formatInputValue(result?.repsCompleted)}" ${disabledAttr} /></label>
+    <label><span>Вес, кг</span><input name="weightKg" type="number" min="0" step="0.5" value="${formatInputValue(result?.weightKg)}" ${disabledAttr} /></label>
+    <label><span>Минуты</span><input name="durationMinutes" type="number" min="0" value="${formatInputValue(result?.durationMinutes)}" ${disabledAttr} /></label>
+    <label><span>RPE</span><input name="rpe" type="number" min="1" max="10" value="${formatInputValue(result?.rpe)}" ${disabledAttr} /></label>
   `;
 }
 
