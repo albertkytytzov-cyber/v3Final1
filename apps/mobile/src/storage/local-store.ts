@@ -66,7 +66,40 @@ export function loadSnapshot(): MobileDataSnapshot {
 }
 
 export function saveSnapshot(snapshot: MobileDataSnapshot) {
-  writeJson(SNAPSHOT_KEY, snapshot);
+  try {
+    writeJson(SNAPSHOT_KEY, snapshot);
+  } catch {
+    try {
+      window.localStorage.removeItem(SNAPSHOT_KEY);
+      writeJson(SNAPSHOT_KEY, compactSnapshotForStorage(snapshot));
+    } catch {
+      try {
+        window.localStorage.removeItem(SNAPSHOT_KEY);
+        writeJson(SNAPSHOT_KEY, {
+          ...compactSnapshotForStorage(snapshot),
+          deviceWorkouts: [],
+          deviceWorkoutLinks: [],
+        });
+      } catch {
+        window.localStorage.removeItem(SNAPSHOT_KEY);
+      }
+    }
+  }
+}
+
+function compactSnapshotForStorage(snapshot: MobileDataSnapshot): MobileDataSnapshot {
+  return {
+    ...snapshot,
+    deviceHealthSummaries: snapshot.deviceHealthSummaries.map((summary) => ({
+      ...summary,
+      rawPayload: null,
+    })),
+    deviceWorkouts: snapshot.deviceWorkouts.map((workout) => ({
+      ...workout,
+      rawPayload: null,
+      samples: [],
+    })),
+  };
 }
 
 export function loadQueue(): PendingSyncAction[] {
