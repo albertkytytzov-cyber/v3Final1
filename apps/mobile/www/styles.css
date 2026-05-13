@@ -2471,6 +2471,58 @@ button {
   gap: 12px;
 }
 
+.coach-day-details {
+  display: grid;
+  gap: 10px;
+}
+
+.coach-day-details > summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-height: 46px;
+  padding: 11px 12px;
+  border: 1px solid rgba(15, 118, 110, 0.18);
+  border-radius: 14px;
+  background: #fff;
+  color: var(--accent-dark);
+  cursor: pointer;
+  font-weight: 900;
+  list-style: none;
+}
+
+.coach-day-details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.coach-day-details > summary span::before {
+  content: "▸";
+  display: inline-block;
+  margin-right: 7px;
+  transition: transform 0.16s ease;
+}
+
+.coach-day-details[open] > summary span::before {
+  transform: rotate(90deg);
+}
+
+.coach-day-details > summary strong {
+  min-width: 48px;
+  padding: 7px 9px;
+  border-radius: 12px;
+  background: #dff2ef;
+  color: var(--accent-dark);
+  font-size: 0.9rem;
+  line-height: 1;
+  text-align: center;
+}
+
+.coach-day-details-stack {
+  display: grid;
+  gap: 12px;
+}
+
 .coach-day-status-card,
 .coach-day-quality-card,
 .coach-day-exercise-card,
@@ -2648,9 +2700,12 @@ button {
   background: rgba(255, 255, 255, 0.64);
 }
 
-.coach-day-load-explanation strong {
+.coach-day-load-explanation summary {
   color: var(--text);
+  cursor: pointer;
+  font-weight: 900;
   line-height: 1.25;
+  list-style-position: inside;
 }
 
 .coach-day-load-explanation ul {
@@ -3050,7 +3105,9 @@ button {
 
 .coach-team-day-row {
   display: grid;
-  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 10px;
+  align-items: center;
 }
 
 .coach-team-day-row.is-complete {
@@ -3063,6 +3120,7 @@ button {
 
 .coach-team-day-metrics {
   display: grid;
+  grid-column: 1 / -1;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
 }
@@ -3074,7 +3132,10 @@ button {
 }
 
 .coach-team-day-row button {
+  grid-column: 2;
+  grid-row: 1;
   min-height: 38px;
+  padding: 0 12px;
   border: 1px solid var(--line);
   border-radius: 14px;
   background: #fff;
