@@ -1733,8 +1733,8 @@ function renderCoachDayStatusCard(dayData: CoachDayCleanSummary, aiReview: Coach
             <small>${deviceHealth?.syncedAt ? `синхронизация: ${formatDateTime(deviceHealth.syncedAt)}` : "нет дневной синхронизации"}</small>
           </article>
           <article>
-            <span>ИИ и комментарий</span>
-            <strong>${dayData.latestDiaryEntry ? "комментарий есть" : "нет комментария"}</strong>
+            <span>Комментарии</span>
+            <strong>${dayData.athleteExecutionNote || dayData.latestDiaryEntry ? "есть" : "нет"}</strong>
             <small>${escapeHtml(aiSummary)}</small>
           </article>
         </div>
@@ -1756,10 +1756,7 @@ function renderCoachDayStatusCard(dayData: CoachDayCleanSummary, aiReview: Coach
         ${renderCoachExecutionReviewMetric("Тренировки устройства", formatDeviceHealthWorkoutValue(deviceHealth), formatDeviceHealthWorkoutDetail(deviceHealth))}
         ${renderCoachExecutionReviewMetric("ИИ", formatCoachAiBriefValue(aiReview), formatCoachAiBriefDetail(aiReview))}
       </div>
-      <div class="coach-execution-review-note">
-        <strong>Комментарий тренера</strong>
-        <p>${escapeHtml(dayData.coachNote)}</p>
-      </div>
+      ${renderCoachDayCommentBlocks(dayData)}
     </section>
   `;
 }
@@ -1792,6 +1789,19 @@ function renderCoachDayDataQualityCard(dayData: CoachDayCleanSummary) {
           .join("")}
       </ul>
     </section>
+  `;
+}
+
+function renderCoachDayCommentBlocks(dayData: CoachDayCleanSummary) {
+  return `
+    <div class="coach-execution-review-note">
+      <strong>Комментарий спортсмена</strong>
+      <p>${escapeHtml(dayData.athleteExecutionNote || "Спортсмен не оставил комментарий.")}</p>
+    </div>
+    <div class="coach-execution-review-note">
+      <strong>Комментарий тренера</strong>
+      <p>${escapeHtml(dayData.coachNote)}</p>
+    </div>
   `;
 }
 
@@ -3805,10 +3815,7 @@ function renderCoachExecutionReviewSummary(
         ${renderCoachExecutionReviewMetric("Пульс покоя", formatDeviceHealthRestingHrValue(deviceHealth), formatDeviceHealthHeartRateDetail(deviceHealth))}
         ${renderCoachExecutionReviewMetric("Тренировки устройства", formatDeviceHealthWorkoutValue(deviceHealth), formatDeviceHealthWorkoutDetail(deviceHealth))}
       </div>
-      <div class="coach-execution-review-note">
-        <strong>Комментарий тренера</strong>
-        <p>${escapeHtml(dayData.coachNote)}</p>
-      </div>
+      ${renderCoachDayCommentBlocks(dayData)}
     </section>
     ${renderCoachDayDataQualityCard(dayData)}
     ${renderCoachDeviceWorkoutPanel(dayData, state.isBusy)}
@@ -4480,6 +4487,7 @@ interface CoachDayCleanSummary {
   summary: CoachTodayDaySummary;
   readinessEntry: ReadinessEntry | null;
   latestDiaryEntry: CoachDiaryEntry | null;
+  athleteExecutionNote: string;
   coachNote: string;
   plans: AssignedPlanSummary[];
   blocks: CoachDayBlockCleanSummary[];
@@ -5829,12 +5837,14 @@ function getCoachDayCleanSummary(
     }),
   );
   const latestDiaryEntry = summary.latestDiaryEntry;
+  const athleteExecutionNote = getExecutionDayNoteForGroups(state, groups);
 
   return {
     athlete,
     athleteId,
     athleteName: athlete?.fullName ?? plans[0]?.athleteName ?? "Спортсмен",
     blocks,
+    athleteExecutionNote,
     coachNote: latestDiaryEntry?.notes?.trim() || "Комментария тренера за выбранный день пока нет.",
     date,
     deviceHealthSummary,
@@ -6759,9 +6769,25 @@ function getExecutionResultForBlock(
 }
 
 function getExecutionDayNote(state: MobileAppState, group: ExecutionPlanGroup) {
-  return group.blockItems
-    .map((item) => getExecutionResultForBlock(state, item.plan.id, item.block.id)?.notes.trim() ?? "")
-    .find(Boolean) ?? "";
+  return getExecutionDayNoteForGroups(state, [group]);
+}
+
+function getExecutionDayNoteForGroups(state: MobileAppState, groups: ExecutionPlanGroup[]) {
+  const notes: string[] = [];
+  const seen = new Set<string>();
+
+  groups.forEach((group) => {
+    group.blockItems.forEach((item) => {
+      const note = getExecutionResultForBlock(state, item.plan.id, item.block.id)?.notes.trim() ?? "";
+
+      if (note && !seen.has(note)) {
+        seen.add(note);
+        notes.push(note);
+      }
+    });
+  });
+
+  return notes.join("\n\n");
 }
 
 function getExerciseResult(

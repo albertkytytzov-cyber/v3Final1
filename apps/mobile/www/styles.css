@@ -2122,6 +2122,7 @@ button {
   font-weight: 760;
   line-height: 1.35;
   overflow-wrap: anywhere;
+  white-space: pre-line;
 }
 
 .coach-ai-review-card {
