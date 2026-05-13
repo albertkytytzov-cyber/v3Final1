@@ -3596,24 +3596,21 @@ function renderReadinessScreen(state: MobileAppState) {
 
   const readiness = state.data.readinessEntry;
   const readinessHistory = getReadinessHistory(state);
+  const values = getReadinessFormDefaults(state, readiness);
+  const entryDate = readiness?.entryDate === todayValue() ? readiness.entryDate : todayValue();
 
   return `
     <div class="screen-head readiness-head">
       <h2>Готовность</h2>
-      <p>${readiness ? `Сегодня: ${readiness.score} · ${formatReadinessStatus(readiness.status)}` : "Перед тренировкой"}</p>
+      <p>${readiness ? `Сегодня: ${readiness.score} · ${formatReadinessStatus(readiness.status)}` : "Быстрый чек-ин перед тренировкой"}</p>
     </div>
-    ${readiness ? `
-      <section class="readiness-summary-card">
-        <strong>${readiness.score}</strong>
-        <span>${formatReadinessStatus(readiness.status)}</span>
-        <small>${formatDate(readiness.entryDate)}</small>
-      </section>
-    ` : ""}
+    ${renderReadinessResultCard(readiness)}
     ${state.session.user.athleteId ? renderDeviceHealthCard(state, state.session.user.athleteId, todayValue()) : ""}
     <form class="mobile-form compact-form readiness-form" data-readiness-form>
-      <section class="readiness-section wide-field">
+      <section class="readiness-section readiness-checkin-card wide-field">
         <div class="section-title">
-          <h3>Быстрый выбор</h3>
+          <h3>Как ты сейчас?</h3>
+          <p>Выбери ближайшее состояние и поправь важные пункты ниже.</p>
         </div>
         <div class="readiness-preset-grid">
           <button data-readiness-preset="good" type="button">
@@ -3635,34 +3632,42 @@ function renderReadinessScreen(state: MobileAppState) {
         </div>
       </section>
 
-      <section class="readiness-section readiness-metrics wide-field">
-        <label><span>Дата</span><input name="entryDate" type="date" value="${todayValue()}" /></label>
-        <label><span>Пульс покоя</span><input name="restingHr" type="number" min="30" max="140" value="${state.session.user.baselineRestingHr ?? 60}" /></label>
-        <label><span>Вес</span><input name="bodyWeight" type="number" min="20" max="200" step="0.1" value="${state.session.user.baselineWeightKg ?? 70}" /></label>
-      </section>
-
-      <section class="readiness-section wide-field">
-        ${renderChoiceGroup("sleepHours", "Сон", [
-          { label: "< 6 ч", value: "5.5" },
-          { label: "6-7 ч", value: "6.5" },
-          { label: "7-8 ч", value: "7.5" },
-          { label: "8+ ч", value: "8.5" },
-        ], "8.5")}
-        ${renderChoiceGroup("sleepQuality", "Качество сна", readinessBetterOptions, "4")}
-      </section>
-
-      <section class="readiness-section wide-field">
-        ${renderChoiceGroup("generalFeeling", "Самочувствие", readinessFeelingOptions, "4")}
-        ${renderChoiceGroup("fatigueLevel", "Усталость", readinessLoadOptions, "2")}
-        ${renderChoiceGroup("muscleSoreness", "Мышцы", readinessLoadOptions, "2")}
-        ${renderChoiceGroup("motivationLevel", "Мотивация", readinessMotivationOptions, "4")}
-        ${renderChoiceGroup("painLevel", "Боль", readinessPainOptions, "0")}
+      <section class="readiness-section readiness-main-signals wide-field">
+        ${renderChoiceGroup("sleepHours", "Сон", readinessSleepHourOptions, getChoiceDefault(readinessSleepHourOptions, values.sleepHours))}
+        ${renderChoiceGroup("sleepQuality", "Качество сна", readinessBetterOptions, getChoiceDefault(readinessBetterOptions, values.sleepQuality))}
+        ${renderChoiceGroup("generalFeeling", "Самочувствие", readinessFeelingOptions, getChoiceDefault(readinessFeelingOptions, values.generalFeeling))}
+        ${renderChoiceGroup("fatigueLevel", "Усталость", readinessLoadOptions, getChoiceDefault(readinessLoadOptions, values.fatigueLevel))}
+        ${renderChoiceGroup("painLevel", "Боль", readinessPainOptions, getChoiceDefault(readinessPainOptions, values.painLevel))}
       </section>
 
       <section class="readiness-section readiness-flags wide-field">
-        <label class="check-row"><input name="illnessFlag" type="checkbox" /> Есть болезнь</label>
-        <label class="check-row"><input name="feverFlag" type="checkbox" /> Температура</label>
+        <label class="check-row"><input name="illnessFlag" type="checkbox" ${values.illnessFlag ? "checked" : ""} /> Есть болезнь</label>
+        <label class="check-row"><input name="feverFlag" type="checkbox" ${values.feverFlag ? "checked" : ""} /> Температура</label>
       </section>
+
+      <details class="readiness-section readiness-details wide-field">
+        <summary>
+          <span>Показатели</span>
+          <small>дата, пульс, вес</small>
+        </summary>
+        <section class="readiness-metrics">
+          <label><span>Дата</span><input name="entryDate" type="date" value="${escapeHtml(entryDate)}" /></label>
+          <label><span>Пульс покоя</span><input name="restingHr" type="number" min="30" max="140" value="${formatInputValue(values.restingHr)}" /></label>
+          <label><span>Вес</span><input name="bodyWeight" type="number" min="20" max="200" step="0.1" value="${formatInputValue(values.bodyWeight)}" /></label>
+        </section>
+      </details>
+
+      <details class="readiness-section readiness-details wide-field">
+        <summary>
+          <span>Дополнительно</span>
+          <small>мышцы и мотивация</small>
+        </summary>
+        <section class="readiness-extra-signals">
+          ${renderChoiceGroup("muscleSoreness", "Мышцы", readinessLoadOptions, getChoiceDefault(readinessLoadOptions, values.muscleSoreness))}
+          ${renderChoiceGroup("motivationLevel", "Мотивация", readinessMotivationOptions, getChoiceDefault(readinessMotivationOptions, values.motivationLevel))}
+        </section>
+      </details>
+
       <button class="primary-action" type="submit">Сохранить готовность</button>
     </form>
     ${renderReadinessHistory(readinessHistory)}
@@ -3673,6 +3678,127 @@ interface ChoiceOption {
   label: string;
   value: string;
 }
+
+function getReadinessFormDefaults(
+  state: MobileAppState,
+  readiness: ReadinessEntry | null,
+): Omit<ReadinessSubmissionPayload, "entryDate"> {
+  const todayReadiness = readiness?.entryDate === todayValue() ? readiness : null;
+  const latestEntry = state.data.readinessHistory
+    .slice()
+    .sort((left, right) => right.entryDate.localeCompare(left.entryDate))[0] ?? readiness;
+
+  return {
+    bodyWeight: todayReadiness?.bodyWeight ?? latestEntry?.bodyWeight ?? state.session.user?.baselineWeightKg ?? 70,
+    fatigueLevel: todayReadiness?.fatigueLevel ?? 2,
+    feverFlag: todayReadiness?.feverFlag ?? false,
+    generalFeeling: todayReadiness?.generalFeeling ?? 4,
+    illnessFlag: todayReadiness?.illnessFlag ?? false,
+    motivationLevel: todayReadiness?.motivationLevel ?? 4,
+    muscleSoreness: todayReadiness?.muscleSoreness ?? 2,
+    painLevel: todayReadiness?.painLevel ?? 0,
+    restingHr: todayReadiness?.restingHr ?? latestEntry?.restingHr ?? state.session.user?.baselineRestingHr ?? 60,
+    sleepHours: todayReadiness?.sleepHours ?? 7.5,
+    sleepQuality: todayReadiness?.sleepQuality ?? 4,
+  };
+}
+
+function renderReadinessResultCard(entry: ReadinessEntry | null) {
+  if (!entry) {
+    return `
+      <section class="readiness-result-card is-empty">
+        <div>
+          <span>Сегодня</span>
+          <strong>—</strong>
+        </div>
+        <p>Готовность ещё не отправлена.</p>
+      </section>
+    `;
+  }
+
+  const reasons = getReadinessReasonLabels(entry).slice(0, 3);
+
+  return `
+    <section class="readiness-result-card readiness-${escapeHtml(entry.status)}">
+      <div>
+        <span>${formatDate(entry.entryDate)}</span>
+        <strong>${entry.score}</strong>
+      </div>
+      <article>
+        <h3>${escapeHtml(formatReadinessStatus(entry.status))}</h3>
+        <ul>
+          ${reasons.map((reason) => `<li>${escapeHtml(reason)}</li>`).join("")}
+        </ul>
+      </article>
+    </section>
+  `;
+}
+
+function getReadinessReasonLabels(entry: ReadinessEntry) {
+  const labels = entry.explanation
+    .filter((reason) => reason.impact < 0)
+    .map((reason) => {
+      if (reason.code === "fever") {
+        return "отмечена температура";
+      }
+      if (reason.code === "illness") {
+        return "есть симптомы болезни";
+      }
+      if (reason.code === "sleep_hours") {
+        return `сон ${formatReadinessNumber(entry.sleepHours)} ч`;
+      }
+      if (reason.code === "sleep_quality") {
+        return "низкое качество сна";
+      }
+      if (reason.code === "fatigue") {
+        return `усталость ${entry.fatigueLevel}/5`;
+      }
+      if (reason.code === "soreness") {
+        return `мышцы ${entry.muscleSoreness}/5`;
+      }
+      if (reason.code === "pain") {
+        return `боль ${entry.painLevel}/10`;
+      }
+      if (reason.code === "resting_hr") {
+        return "пульс покоя выше обычного";
+      }
+
+      return reason.label;
+    });
+
+  if (labels.length > 0) {
+    return labels;
+  }
+
+  if (entry.status === "green") {
+    return ["красных флагов нет", `сон ${formatReadinessNumber(entry.sleepHours)} ч`, `пульс ${entry.restingHr}`];
+  }
+
+  return ["общая оценка ниже обычного", `сон ${formatReadinessNumber(entry.sleepHours)} ч`, `самочувствие ${entry.generalFeeling}/5`];
+}
+
+function getChoiceDefault(options: ChoiceOption[], value: number) {
+  const exactValue = String(value);
+
+  if (options.some((option) => option.value === exactValue)) {
+    return exactValue;
+  }
+
+  const numericValue = Number(value);
+  const closest = options
+    .map((option) => ({ option, distance: Math.abs(Number(option.value) - numericValue) }))
+    .filter((item) => Number.isFinite(item.distance))
+    .sort((left, right) => left.distance - right.distance)[0]?.option.value;
+
+  return closest ?? options[0]?.value ?? "";
+}
+
+const readinessSleepHourOptions: ChoiceOption[] = [
+  { label: "< 6 ч", value: "5.5" },
+  { label: "6-7 ч", value: "6.5" },
+  { label: "7-8 ч", value: "7.5" },
+  { label: "8+ ч", value: "8.5" },
+];
 
 const readinessBetterOptions: ChoiceOption[] = [
   { label: "плохо", value: "1" },

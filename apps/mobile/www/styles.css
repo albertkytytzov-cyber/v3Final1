@@ -277,6 +277,79 @@ button {
   font-weight: 750;
 }
 
+.readiness-result-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 10px;
+  padding: 14px;
+  border: 1px solid rgba(15, 118, 110, 0.2);
+  border-radius: 18px;
+  background: #e8f6f3;
+}
+
+.readiness-result-card.is-empty {
+  border-color: rgba(148, 163, 184, 0.22);
+  background: #f8fafc;
+}
+
+.readiness-result-card.readiness-yellow {
+  border-color: rgba(217, 119, 6, 0.24);
+  background: #fff7ed;
+}
+
+.readiness-result-card.readiness-red {
+  border-color: rgba(220, 38, 38, 0.24);
+  background: #fef2f2;
+}
+
+.readiness-result-card > div {
+  display: grid;
+  gap: 4px;
+  justify-items: center;
+}
+
+.readiness-result-card > div span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 850;
+}
+
+.readiness-result-card > div strong {
+  color: var(--accent-dark);
+  font-size: 2.1rem;
+  line-height: 1;
+}
+
+.readiness-result-card article {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.readiness-result-card h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 950;
+}
+
+.readiness-result-card p,
+.readiness-result-card ul {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 780;
+  line-height: 1.3;
+}
+
+.readiness-result-card ul {
+  display: grid;
+  gap: 2px;
+  padding-left: 18px;
+}
+
 .readiness-form {
   background: transparent;
   border: 0;
@@ -292,8 +365,51 @@ button {
   background: var(--surface);
 }
 
+.readiness-checkin-card .section-title p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 750;
+  line-height: 1.3;
+}
+
 .readiness-metrics {
+  display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.readiness-extra-signals {
+  display: grid;
+  gap: 10px;
+}
+
+.readiness-details {
+  padding: 0;
+  overflow: hidden;
+}
+
+.readiness-details summary {
+  display: grid;
+  gap: 2px;
+  padding: 12px;
+  cursor: pointer;
+  list-style-position: inside;
+}
+
+.readiness-details summary span {
+  color: var(--text);
+  font-weight: 950;
+}
+
+.readiness-details summary small {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 780;
+}
+
+.readiness-details > section {
+  padding: 0 12px 12px;
 }
 
 .readiness-preset-grid {
