@@ -18,6 +18,7 @@ interface ExecutionResultRow {
   athlete_id: string;
   assigned_plan_id: string;
   assigned_block_id: string;
+  training_date: string;
   completed: boolean;
   sets_completed: number | null;
   reps_completed: number | null;
@@ -113,6 +114,7 @@ function mapExecutionResults(rows: ExecutionResultRow[]): ExecutionResult[] {
         athleteId: row.athlete_id,
         assignedPlanId: row.assigned_plan_id,
         assignedBlockId: row.assigned_block_id,
+        trainingDate: row.training_date,
         completed: row.completed,
         setsCompleted: row.sets_completed,
         repsCompleted: row.reps_completed,
@@ -162,6 +164,7 @@ async function loadExecutionResults(whereSql: string, params: unknown[]) {
         exercise_results.athlete_id,
         exercise_results.assigned_plan_id,
         exercise_results.assigned_block_id,
+        exercise_results.training_date::text,
         exercise_results.completed,
         exercise_results.sets_completed,
         exercise_results.reps_completed,
@@ -428,6 +431,7 @@ export async function submitExecutionResult(
         athlete_id,
         assigned_plan_id,
         assigned_block_id,
+        training_date::text,
         completed,
         sets_completed,
         reps_completed,

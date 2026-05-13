@@ -4543,11 +4543,13 @@ function renderExecutionHistory(
     <div class="list-stack">
       ${results.slice(0, 10).map((result) => {
         const status = formatExecutionResultStatus(result);
+        const plan = state.data.assignedPlans.find((item) => item.id === result.assignedPlanId);
+        const trainingDate = result.trainingDate ?? plan?.day.dayDate ?? result.updatedAt.slice(0, 10);
 
         return `
           <article class="list-card">
             <strong>${escapeHtml(status)}</strong>
-            <span>${formatDateTime(result.updatedAt)}</span>
+            <span>Тренировка: ${formatDate(trainingDate)} · сохранено ${formatDateTime(result.updatedAt)}</span>
             <small>${escapeHtml(formatExecutionHistoryDetails(result))}</small>
             ${result.exerciseResults?.length && result.notes ? `<small>${escapeHtml(result.notes)}</small>` : ""}
           </article>
