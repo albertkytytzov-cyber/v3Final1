@@ -3661,39 +3661,26 @@ function renderReadinessScreen(state: MobileAppState) {
         </div>
       </section>
 
-      <section class="readiness-section readiness-main-signals wide-field">
-        ${renderChoiceGroup("sleepHours", "Сон", readinessSleepHourOptions, getChoiceDefault(readinessSleepHourOptions, values.sleepHours))}
-        ${renderChoiceGroup("sleepQuality", "Качество сна", readinessBetterOptions, getChoiceDefault(readinessBetterOptions, values.sleepQuality))}
-        ${renderChoiceGroup("generalFeeling", "Самочувствие", readinessFeelingOptions, getChoiceDefault(readinessFeelingOptions, values.generalFeeling))}
-        ${renderChoiceGroup("fatigueLevel", "Усталость", readinessLoadOptions, getChoiceDefault(readinessLoadOptions, values.fatigueLevel))}
-        ${renderChoiceGroup("painLevel", "Боль", readinessPainOptions, getChoiceDefault(readinessPainOptions, values.painLevel))}
-      </section>
-
-      <section class="readiness-section readiness-flags wide-field">
-        <label class="check-row"><input name="illnessFlag" type="checkbox" ${values.illnessFlag ? "checked" : ""} /> Есть болезнь</label>
-        <label class="check-row"><input name="feverFlag" type="checkbox" ${values.feverFlag ? "checked" : ""} /> Температура</label>
-      </section>
-
-      <details class="readiness-section readiness-details wide-field">
+      <details class="readiness-section readiness-details readiness-indicators-menu wide-field" open>
         <summary>
           <span>Показатели</span>
-          <small>дата, пульс, вес</small>
+          <small>пульс, вес, сон и состояние</small>
         </summary>
-        <section class="readiness-metrics">
-          <label><span>Дата</span><input name="entryDate" type="date" value="${escapeHtml(entryDate)}" /></label>
+        <section class="readiness-indicators-grid">
+          <input name="sleepQuality" type="hidden" value="4" />
           <label><span>Пульс покоя</span><input name="restingHr" type="number" min="30" max="140" value="${formatInputValue(values.restingHr)}" /></label>
           <label><span>Вес</span><input name="bodyWeight" type="number" min="20" max="200" step="0.1" value="${formatInputValue(values.bodyWeight)}" /></label>
-        </section>
-      </details>
-
-      <details class="readiness-section readiness-details wide-field">
-        <summary>
-          <span>Дополнительно</span>
-          <small>мышцы и мотивация</small>
-        </summary>
-        <section class="readiness-extra-signals">
-          ${renderChoiceGroup("muscleSoreness", "Мышцы", readinessLoadOptions, getChoiceDefault(readinessLoadOptions, values.muscleSoreness))}
-          ${renderChoiceGroup("motivationLevel", "Мотивация", readinessMotivationOptions, getChoiceDefault(readinessMotivationOptions, values.motivationLevel))}
+          <label><span>Сон, часов</span><input name="sleepHours" type="number" min="0" max="16" step="0.5" inputmode="decimal" value="${formatInputValue(values.sleepHours)}" /></label>
+          ${renderReadinessSelectField("generalFeeling", "Самочувствие", readinessFeelingOptions, getChoiceDefault(readinessFeelingOptions, values.generalFeeling))}
+          ${renderReadinessSelectField("fatigueLevel", "Усталость", readinessLoadOptions, getChoiceDefault(readinessLoadOptions, values.fatigueLevel))}
+          ${renderReadinessSelectField("painLevel", "Боль", readinessPainOptions, getChoiceDefault(readinessPainOptions, values.painLevel))}
+          ${renderReadinessSelectField("muscleSoreness", "Мышцы", readinessLoadOptions, getChoiceDefault(readinessLoadOptions, values.muscleSoreness))}
+          ${renderReadinessSelectField("motivationLevel", "Мотивация", readinessMotivationOptions, getChoiceDefault(readinessMotivationOptions, values.motivationLevel))}
+          <label><span>Дата</span><input name="entryDate" type="date" value="${escapeHtml(entryDate)}" /></label>
+          <div class="readiness-flags-inline">
+            <label class="check-row"><input name="illnessFlag" type="checkbox" ${values.illnessFlag ? "checked" : ""} /> Есть болезнь</label>
+            <label class="check-row"><input name="feverFlag" type="checkbox" ${values.feverFlag ? "checked" : ""} /> Температура</label>
+          </div>
         </section>
       </details>
 
@@ -3870,21 +3857,6 @@ function getChoiceDefault(options: ChoiceOption[], value: number) {
   return closest ?? options[0]?.value ?? "";
 }
 
-const readinessSleepHourOptions: ChoiceOption[] = [
-  { label: "< 6 ч", value: "5.5" },
-  { label: "6-7 ч", value: "6.5" },
-  { label: "7-8 ч", value: "7.5" },
-  { label: "8+ ч", value: "8.5" },
-];
-
-const readinessBetterOptions: ChoiceOption[] = [
-  { label: "плохо", value: "1" },
-  { label: "слабо", value: "2" },
-  { label: "нормально", value: "3" },
-  { label: "хорошо", value: "4" },
-  { label: "отлично", value: "5" },
-];
-
 const readinessFeelingOptions: ChoiceOption[] = [
   { label: "плохо", value: "1" },
   { label: "тяжело", value: "2" },
@@ -3917,24 +3889,23 @@ const readinessPainOptions: ChoiceOption[] = [
   { label: "очень сильная", value: "10" },
 ];
 
-function renderChoiceGroup(
+function renderReadinessSelectField(
   name: string,
   label: string,
   options: ChoiceOption[],
   defaultValue: string,
 ) {
   return `
-    <fieldset class="choice-field">
-      <legend>${escapeHtml(label)}</legend>
-      <div class="choice-group">
+    <label class="readiness-select-field">
+      <span>${escapeHtml(label)}</span>
+      <select name="${escapeHtml(name)}">
         ${options.map((option) => `
-          <label class="choice-option">
-            <input name="${escapeHtml(name)}" type="radio" value="${escapeHtml(option.value)}" ${option.value === defaultValue ? "checked" : ""} />
-            <span>${escapeHtml(option.label)}</span>
-          </label>
+          <option value="${escapeHtml(option.value)}" ${option.value === defaultValue ? "selected" : ""}>
+            ${escapeHtml(option.label)}
+          </option>
         `).join("")}
-      </div>
-    </fieldset>
+      </select>
+    </label>
   `;
 }
 
@@ -4003,6 +3974,13 @@ function applyReadinessPreset(form: HTMLFormElement, preset: string) {
 
     if (radio) {
       radio.checked = true;
+      continue;
+    }
+
+    const field = form.elements.namedItem(name);
+
+    if (field instanceof HTMLInputElement || field instanceof HTMLSelectElement) {
+      field.value = value;
     }
   }
 }

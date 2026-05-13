@@ -379,6 +379,46 @@ button {
   gap: 10px;
 }
 
+.readiness-indicators-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.readiness-indicators-grid > label,
+.readiness-select-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.readiness-indicators-grid > label span,
+.readiness-select-field span {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.readiness-indicators-grid input,
+.readiness-select-field select {
+  width: 100%;
+  min-height: 46px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+  color: var(--text);
+  font: inherit;
+  font-weight: 850;
+}
+
+.readiness-flags-inline {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
 .readiness-extra-signals {
   display: grid;
   gap: 10px;
@@ -3519,6 +3559,8 @@ button.timeline-card:active {
   }
 
   .readiness-metrics,
+  .readiness-indicators-grid,
+  .readiness-flags-inline,
   .readiness-flags,
   .choice-group,
   .coach-day-status-brief-grid {
