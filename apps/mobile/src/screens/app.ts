@@ -1495,15 +1495,10 @@ function renderScreen(state: MobileAppState, athleteId: string | null) {
 }
 
 function renderDashboardScreen(state: MobileAppState, athleteId: string | null) {
-  const plans = getPlansForAthlete(state, athleteId);
   const competitionPlans = getCompetitionPlansForAthlete(state, athleteId);
   const nextStart = getNextCompetitionPlan(competitionPlans);
-  const pendingQueue = getPendingQueueItems(state.queue);
   const isCoachView = isCoachRole(state.session.user?.role);
   const selectedDayDate = isCoachView ? state.selectedDayDate : todayValue();
-  const visiblePlans = isCoachView
-    ? plans.filter((plan) => plan.day.dayDate === selectedDayDate)
-    : plans;
 
   if (isCoachView) {
     return renderCoachDayStatusScreen(state, athleteId, selectedDayDate);
@@ -1511,25 +1506,11 @@ function renderDashboardScreen(state: MobileAppState, athleteId: string | null) 
 
   return `
     <div class="screen-head">
-      <h2>Сегодня</h2>
-      <p>${nextStart ? `До старта ${daysUntil(nextStart.competitionStartDate)} дн.` : "Ближайший старт не выбран"}</p>
+      <h2>Главная</h2>
+      <p>${formatDate(selectedDayDate)}${nextStart ? ` · старт через ${daysUntil(nextStart.competitionStartDate)} дн.` : ""}</p>
     </div>
-    <div class="metric-grid">
-      <article><span>Планы</span><strong>${visiblePlans.length}</strong></article>
-      <article><span>Старты</span><strong>${competitionPlans.length}</strong></article>
-      <article><span>Очередь</span><strong>${pendingQueue.length}</strong></article>
-      <article><span>Связь</span><strong>${state.isOnline ? "Есть" : "Нет"}</strong></article>
-    </div>
-    ${athleteId ? renderAthleteDayIndicators(state, athleteId, selectedDayDate) : ""}
-    ${athleteId ? renderDeviceHealthCard(state, athleteId, selectedDayDate) : ""}
-    ${nextStart ? `
-      <article class="focus-card">
-        <span>Следующий старт</span>
-        <h3>${escapeHtml(nextStart.competitionTitle)}</h3>
-        <p>${formatDate(nextStart.competitionStartDate)} · ${escapeHtml(nextStart.priority)} · ${escapeHtml(nextStart.planType)}</p>
-      </article>
-    ` : ""}
-    ${state.queue.length ? renderQueue(state) : ""}
+    ${athleteId ? renderAthleteHomeCard(state, athleteId, selectedDayDate) : ""}
+    ${nextStart ? renderAthleteNextStartCard(nextStart) : ""}
   `;
 }
 
@@ -1573,6 +1554,90 @@ function renderCoachDayStatusScreen(
       : renderEmpty("Выберите спортсмена", "После выбора спортсмена экран покажет статус выбранного дня.")}
     ${renderCoachTeamDayPanel(state, selectedDayDate)}
   `;
+}
+
+function renderAthleteHomeCard(state: MobileAppState, athleteId: string, date: string) {
+  const dayData = getCoachDayCleanSummary(state, athleteId, date);
+  const entry = dayData.readinessEntry;
+  const summary = dayData.summary;
+  const deviceHealth = dayData.deviceHealthSummary;
+  const cardStateClass = entry ? `readiness-${escapeHtml(entry.status)}` : "is-missing-readiness";
+  const readinessValue = entry ? `${entry.score} · ${formatReadinessStatus(entry.status)}` : "не заполнена";
+  const readinessDetail = entry ? formatReadinessFlags(entry) : "заполни перед тренировкой";
+  const executionValue = formatAthleteExecutionCompletion(summary);
+  const watchLine = formatAthleteWatchLine(deviceHealth);
+
+  return `
+    <section class="athlete-home-card ${cardStateClass}">
+      <div class="athlete-home-head">
+        <div>
+          <span>${escapeHtml(formatDayRelativeLabel(date))}</span>
+          <h3>${escapeHtml(summary.statusLabel)}</h3>
+          <p>${escapeHtml(dayData.latestDiaryEntry ? "есть комментарий тренера" : "спокойная сводка дня")}</p>
+        </div>
+        <strong>${entry ? entry.score : "-"}</strong>
+      </div>
+      <div class="athlete-home-grid">
+        ${renderTodayIndicator("Готовность", readinessValue, readinessDetail)}
+        ${renderTodayIndicator("Выполнение", executionValue, formatAthleteExecutionDetail(summary))}
+        ${renderTodayIndicator("Часы", watchLine, deviceHealth ? formatReadinessDeviceHealthSyncLabel(deviceHealth) : "можно синхронизировать")}
+      </div>
+      ${dayData.latestDiaryEntry ? `
+        <p class="athlete-home-note">${escapeHtml(dayData.latestDiaryEntry.notes)}</p>
+      ` : ""}
+      <div class="athlete-home-actions">
+        <button class="primary-action" data-screen="results" type="button">Открыть выполнение</button>
+        <button class="secondary-action" data-screen="readiness" type="button">Заполнить готовность</button>
+      </div>
+    </section>
+  `;
+}
+
+function renderAthleteNextStartCard(nextStart: CompetitionPlanSummary) {
+  return `
+    <article class="athlete-next-start-card">
+      <span>Следующий старт</span>
+      <h3>${escapeHtml(nextStart.competitionTitle)}</h3>
+      <p>${formatDate(nextStart.competitionStartDate)} · через ${daysUntil(nextStart.competitionStartDate)} дн.</p>
+    </article>
+  `;
+}
+
+function formatAthleteExecutionCompletion(summary: CoachTodayDaySummary) {
+  if (summary.exerciseCount > 0) {
+    return `${summary.completedExerciseCount}/${summary.exerciseCount}`;
+  }
+
+  if (summary.blockCount > 0) {
+    return `${summary.completedBlockCount}/${summary.blockCount}`;
+  }
+
+  return "-";
+}
+
+function formatAthleteExecutionDetail(summary: CoachTodayDaySummary) {
+  if (summary.exerciseCount > 0 || summary.blockCount > 0) {
+    return summary.statusLabel.toLowerCase();
+  }
+
+  return "нет тренировки";
+}
+
+function formatAthleteWatchLine(summary: DeviceHealthDailySummary | null) {
+  if (!summary) {
+    return "нет данных";
+  }
+
+  const sleep = formatDeviceHealthSleepValue(summary);
+  const restingHr = formatDeviceHealthRestingHrValue(summary);
+  const workout = formatDeviceHealthWorkoutValue(summary);
+  const parts = [
+    sleep !== "-" ? `сон ${sleep}` : null,
+    restingHr !== "-" ? `пульс ${restingHr}` : null,
+    workout !== "-" && workout !== "0" ? `трен. ${workout}` : null,
+  ].filter((item): item is string => Boolean(item));
+
+  return parts.length ? parts.join(" · ") : "данных мало";
 }
 
 function renderCoachDayStatusCard(dayData: CoachDayCleanSummary, aiReview: CoachDayAiReview | null) {
@@ -3585,10 +3650,6 @@ function renderAthleteExecutionScreen(state: MobileAppState, plans: AssignedPlan
   const planGroups = selectedDate
     ? allPlanGroups.filter((group) => group.plan.day.dayDate === selectedDate)
     : [];
-  const displayUnitCount = planGroups.reduce(
-    (total, group) => total + countPlanDisplayUnits(group.plan),
-    0,
-  );
   const exerciseCount = planGroups.reduce(
     (total, group) =>
       total + group.blockItems.reduce(
@@ -3597,6 +3658,7 @@ function renderAthleteExecutionScreen(state: MobileAppState, plans: AssignedPlan
       ),
     0,
   );
+  const displayCompletion = getAthleteExecutionDisplayCompletion(state, planGroups);
 
   if (allPlanGroups.length === 0) {
     return `
@@ -3612,11 +3674,12 @@ function renderAthleteExecutionScreen(state: MobileAppState, plans: AssignedPlan
     <div class="screen-head">
       <h2>Выполнение</h2>
       <p>${selectedDate
-        ? `${formatDate(selectedDate)} · ${formatPlanUnitCount(displayUnitCount)} · ${exerciseCount} упражнений`
+        ? `${formatDayRelativeLabel(selectedDate)} · ${formatDate(selectedDate)} · ${formatAthleteExerciseCount(exerciseCount)}`
         : "Выберите день тренировки"}</p>
     </div>
     <section class="execution-panel athlete-execution-panel">
       ${renderAthleteExecutionDateFilter(dateOptions, selectedDate)}
+      ${selectedDate ? renderAthleteExecutionSummary(displayCompletion, exerciseCount) : ""}
       <div class="execution-plan-stack">
         ${planGroups.length > 0
           ? planGroups
@@ -3626,6 +3689,55 @@ function renderAthleteExecutionScreen(state: MobileAppState, plans: AssignedPlan
       </div>
     </section>
   `;
+}
+
+function getAthleteExecutionDisplayCompletion(
+  state: MobileAppState,
+  planGroups: ExecutionPlanGroup[],
+): ExecutionDisplayCompletion {
+  return planGroups.reduce<ExecutionDisplayCompletion>((total, group) => {
+    const completion = getExecutionDisplayCompletion(state, group.plan);
+
+    return {
+      completedCount: total.completedCount + completion.completedCount,
+      missedCount: total.missedCount + completion.missedCount,
+      partialCount: total.partialCount + completion.partialCount,
+      totalCount: total.totalCount + completion.totalCount,
+    };
+  }, {
+    completedCount: 0,
+    missedCount: 0,
+    partialCount: 0,
+    totalCount: 0,
+  });
+}
+
+function renderAthleteExecutionSummary(
+  completion: ExecutionDisplayCompletion,
+  exerciseCount: number,
+) {
+  return `
+    <div class="athlete-execution-summary">
+      <strong>Отмечено ${completion.completedCount}/${completion.totalCount}</strong>
+      <span>${escapeHtml(formatAthleteExerciseCount(exerciseCount))}</span>
+    </div>
+  `;
+}
+
+function formatAthleteExerciseCount(count: number) {
+  if (count === 0) {
+    return "задания без упражнений";
+  }
+
+  const lastDigit = count % 10;
+  const lastTwoDigits = count % 100;
+  const label = lastDigit === 1 && lastTwoDigits !== 11
+    ? "упражнение"
+    : lastDigit >= 2 && lastDigit <= 4 && (lastTwoDigits < 12 || lastTwoDigits > 14)
+      ? "упражнения"
+      : "упражнений";
+
+  return `${count} ${label}`;
 }
 
 function renderCoachExecutionReviewSummary(
@@ -4576,7 +4688,9 @@ function renderExecutionPlanGroup(
           <strong>${compactAthlete
             ? `${escapeHtml(formatDayRelativeLabel(group.plan.day.dayDate))} · ${formatDate(group.plan.day.dayDate)}`
             : `${formatDate(group.plan.day.dayDate)} · ${escapeHtml(group.plan.day.label)}`}</strong>
-          <span>${escapeHtml(group.plan.templateName)} · ${formatPlanUnitCount(displayUnitCount)} · ${exerciseCount} упр.</span>
+          <span>${compactAthlete
+            ? `${formatAthleteExerciseCount(exerciseCount)}`
+            : `${escapeHtml(group.plan.templateName)} · ${formatPlanUnitCount(displayUnitCount)} · ${exerciseCount} упр.`}</span>
           <div class="execution-day-meta">
             <span class="execution-day-status is-${daySummary.status}">${escapeHtml(daySummary.statusLabel)}</span>
             <span>${displayCompletion.completedCount}/${displayCompletion.totalCount} отмечено</span>
@@ -4586,7 +4700,7 @@ function renderExecutionPlanGroup(
             `}
           </div>
         </div>
-        <em>${displayCompletion.completedCount}/${displayCompletion.totalCount}</em>
+        ${compactAthlete ? "" : `<em>${displayCompletion.completedCount}/${displayCompletion.totalCount}</em>`}
       </summary>
       <div class="mobile-plan-day-card-body">
         ${compactAthlete ? renderAthleteCoachDayNote(daySummary.latestDiaryEntry) : renderExecutionDayAnalyticsCard(daySummary, displayCompletion)}
@@ -4596,12 +4710,14 @@ function renderExecutionPlanGroup(
             ${isSessionLevelPlanUnit(session)
               ? renderExecutionUnifiedSession(state, group.plan, session, canSubmitExecution, options)
               : `
-                <div class="mobile-plan-table">
-                  <div class="mobile-plan-table-head">
-                    <span>Упр.</span>
-                    <span>Подходы</span>
-                    <span>Контр.</span>
-                  </div>
+                <div class="mobile-plan-table ${compactAthlete ? "is-athlete-simple" : ""}">
+                  ${compactAthlete ? "" : `
+                    <div class="mobile-plan-table-head">
+                      <span>Упр.</span>
+                      <span>Подходы</span>
+                      <span>Контр.</span>
+                    </div>
+                  `}
                   ${session.blocks
                     .map((block) =>
                       canSubmitExecution
@@ -4697,8 +4813,8 @@ function renderExecutionUnifiedSession(
       <label class="execution-session-check">
         <input name="completed" type="checkbox" ${status === "completed" ? "checked" : ""} />
         <span>
-          <strong>Отметить всю сессию</strong>
-          <small>Все строки этой сессии сохраняются вместе.</small>
+          <strong>${options.compactAthlete ? "Сессия выполнена" : "Отметить всю сессию"}</strong>
+          <small>${options.compactAthlete ? `${session.blocks.length} заданий` : "Все строки этой сессии сохраняются вместе."}</small>
         </span>
       </label>
       ${renderUnifiedSessionPlanTable(session)}
@@ -4979,7 +5095,7 @@ function renderExecutionExerciseRow(
         <input name="exerciseCompleted:${escapeHtml(exercise.id)}" type="checkbox" ${result?.completed ? "checked" : ""} />
         <span>
           <strong>${escapeHtml(exercise.name)}</strong>
-          <small>${result?.completed ? "выполнено" : "не отмечено"}</small>
+          ${options.compactAthlete ? "" : `<small>${result?.completed ? "выполнено" : "не отмечено"}</small>`}
         </span>
       </label>
       <span class="mobile-plan-cell mobile-plan-work">${escapeHtml(formatExerciseWorkCell(exercise))}</span>
@@ -5017,7 +5133,7 @@ function renderExecutionBlockFallbackRow(
         <input name="completed" type="checkbox" ${result?.completed !== false ? "checked" : ""} />
         <span>
           <strong>${escapeHtml(block.name)}</strong>
-          <small>${result?.completed ? "выполнено" : "не отмечено"}</small>
+          ${options.compactAthlete ? "" : `<small>${result?.completed ? "выполнено" : "не отмечено"}</small>`}
         </span>
       </label>
       <span class="mobile-plan-cell mobile-plan-work">${escapeHtml(formatBlockTarget(block))}</span>
