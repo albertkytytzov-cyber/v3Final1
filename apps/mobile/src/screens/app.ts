@@ -35,8 +35,6 @@ import type {
   AssignedBlockExercise,
   AssignedPlanBlock,
   AssignedPlanSummary,
-  CoachAiReviewDiagnosticResponse,
-  CoachAiReviewStatus,
   CoachAthleteSummary,
   CoachDayAiPayload,
   CoachDayAiReview,
@@ -162,7 +160,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
         data: snapshot,
         error: null,
         isBusy: false,
-        message: "Разбор ИИ получен с сервера. План и дневник не изменены.",
+        message: "Разбор дня сформирован. План и дневник не изменены.",
       });
     } catch (error) {
       update({
@@ -1593,13 +1591,11 @@ function renderCoachDayDetails(
         ${renderCoachDayLoadExplanation(dayData)}
         ${renderCoachDayExerciseChecklist(dayData)}
         ${renderCoachDeviceWorkoutPanel(dayData, state.isBusy)}
-        ${renderDeviceHealthCard(state, dayData.athleteId, dayData.date)}
+        ${renderCoachDeviceHealthSummaryCard(dayData)}
         ${renderCoachAiReviewCard(
           dayData,
           aiReview,
           aiReviewHistory,
-          state.coachAiStatus,
-          state.coachAiDiagnostic,
           state.isBusy,
         )}
       </div>
@@ -1914,7 +1910,7 @@ function renderCoachDeviceWorkoutPanel(dayData: CoachDayCleanSummary, isBusy: bo
         </div>
       </div>
       ${workouts.length === 0
-        ? `<p class="muted-copy">Выбор станет активным после того, как спортсмен синхронизирует детальные тренировки Mi Fitness / Health Connect за эту дату.</p>`
+        ? `<p class="muted-copy">Выбор станет активным после того, как спортсмен синхронизирует детальные тренировки часов или приложения здоровья за эту дату.</p>`
         : ""}
       <div class="coach-day-exercise-list">
         ${linkGroups.map((group) => {
@@ -1957,7 +1953,7 @@ function renderCoachDeviceWorkoutPanel(dayData: CoachDayCleanSummary, isBusy: bo
                 <div class="device-workout-summary-card">
                   <strong>${escapeHtml(formatDeviceWorkoutTitle(linkedWorkout))}</strong>
                   ${renderDeviceWorkoutMetrics(linkedWorkout)}
-                  <small>${escapeHtml(linkedWorkout.sourceDevice ?? "Health Connect")} · ${escapeHtml(formatTimeRange(linkedWorkout.startTime, linkedWorkout.endTime))}</small>
+                  <small>устройство · ${escapeHtml(formatTimeRange(linkedWorkout.startTime, linkedWorkout.endTime))}</small>
                   ${renderDeviceWorkoutGraph(linkedWorkout)}
                 </div>
               ` : ""}
@@ -1965,6 +1961,63 @@ function renderCoachDeviceWorkoutPanel(dayData: CoachDayCleanSummary, isBusy: bo
           `;
         }).join("")}
       </div>
+    </section>
+  `;
+}
+
+function renderCoachDeviceHealthSummaryCard(dayData: CoachDayCleanSummary) {
+  const summary = dayData.deviceHealthSummary;
+  const status = getDeviceHealthStatus(summary);
+  const signalTotal = status.present.length + status.missing.length;
+  const workouts = dayData.deviceWorkouts;
+
+  return `
+    <section class="coach-day-exercise-card coach-device-health-summary-card">
+      <div class="summary-inline-head">
+        <div>
+          <span>Данные часов</span>
+          <h3>${summary ? status.statusLabel : "Пока нет данных"}</h3>
+          <p>${summary ? `Обновлено ${formatDateTime(summary.syncedAt)}` : "Синхронизацию выполняет спортсмен в своём приложении."}</p>
+        </div>
+        <strong>${status.present.length}/${signalTotal || 0}</strong>
+      </div>
+      <div class="today-indicators-grid">
+        ${renderTodayIndicator(
+          "Сон",
+          formatDeviceHealthSleepValue(summary),
+          formatDeviceHealthSleepDetail(summary),
+        )}
+        ${renderTodayIndicator(
+          "Пульс покоя",
+          formatDeviceHealthRestingHrValue(summary),
+          formatDeviceHealthHeartRateDetail(summary),
+        )}
+        ${renderTodayIndicator(
+          "SpO2",
+          formatDeviceHealthOxygenValue(summary),
+          formatDeviceHealthOxygenDetail(summary),
+        )}
+        ${renderTodayIndicator(
+          "Тренировки",
+          formatDeviceHealthWorkoutValue(summary),
+          workouts.length
+            ? `${workouts.length} детальных записей за день`
+            : formatDeviceHealthWorkoutDetail(summary),
+        )}
+      </div>
+      <div class="device-health-signal-list">
+        <article>
+          <strong>Есть</strong>
+          <p>${escapeHtml(status.present.length ? status.present.join(", ") : "пока нет ключевых показателей")}</p>
+        </article>
+        <article>
+          <strong>Не хватает</strong>
+          <p>${escapeHtml(status.missing.length ? status.missing.join(", ") : "достаточно для разбора дня")}</p>
+        </article>
+      </div>
+      <p class="device-health-guidance">
+        Тренер видит только итоговые показатели за выбранный день. Подключение и повторную синхронизацию делает спортсмен.
+      </p>
     </section>
   `;
 }
@@ -2972,7 +3025,7 @@ function formatDeviceHealthActionText(summary: DeviceHealthDailySummary | null, 
   if (!summary) {
     return canSync
       ? "Нажмите синхронизацию после сна или тренировки."
-      : "Попросите спортсмена синхронизировать Huawei Health или Mi Fitness за этот день.";
+      : "Попросите спортсмена синхронизировать часы или приложение здоровья за этот день.";
   }
 
   if (status.missing.length > 0) {
@@ -3036,7 +3089,7 @@ function formatDeviceHealthHeartRateDetail(summary: DeviceHealthDailySummary | n
   }
 
   if (restingSource === "health-connect-resting-record") {
-    return "получен напрямую из Health Connect";
+    return "получен напрямую";
   }
 
   const parts = [
@@ -3882,8 +3935,6 @@ function renderCoachExecutionReviewSummary(
       dayData,
       aiReview,
       aiReviewHistory,
-      state.coachAiStatus,
-      state.coachAiDiagnostic,
       state.isBusy,
     )}
   `;
@@ -3903,37 +3954,34 @@ function renderCoachAiReviewCard(
   dayData: CoachDayCleanSummary,
   review: CoachDayAiReview | null,
   reviewHistory: CoachDayAiReview[],
-  status: CoachAiReviewStatus | null,
-  diagnostic: CoachAiReviewDiagnosticResponse | null,
   isBusy: boolean,
 ) {
   const currentPayloadFingerprint = getCoachDayAiPayloadFingerprint(buildCoachDayAiPayload(dayData));
   const isReviewStale = Boolean(
     review && getCoachDayAiPayloadFingerprint(review.dayPayload) !== currentPayloadFingerprint,
   );
-  const actionLabel = review ? "Обновить ИИ-разбор" : "Сформировать ИИ-разбор";
+  const actionLabel = review ? "Обновить разбор" : "Сформировать разбор";
 
   return `
     <section class="coach-ai-review-card">
       <div class="coach-ai-review-head">
         <div>
-          <span>Разбор ИИ</span>
-          <h3>Черновая рекомендация</h3>
-          <p>Онлайн отправляется только карточка дня без email/userId. План и дневник не меняются.</p>
+          <span>Разбор дня</span>
+          <h3>Рекомендация тренеру</h3>
+          <p>Сводка помогает быстро увидеть риски и следующий шаг. План и дневник не меняются.</p>
         </div>
         <button class="secondary-action" data-ai-athlete-id="${escapeHtml(dayData.athleteId)}" data-ai-date="${escapeHtml(dayData.date)}" data-generate-coach-ai-review type="button" ${isBusy ? "disabled" : ""}>
           ${isBusy ? "Формируется..." : actionLabel}
         </button>
       </div>
-      ${renderCoachAiReviewStatus(status, diagnostic, isBusy)}
       ${isReviewStale
-        ? `<p class="coach-ai-stale-warning">Данные дня изменились после последнего разбора. Обновите ИИ-разбор перед решением.</p>`
+        ? `<p class="coach-ai-stale-warning">Данные дня изменились после последнего разбора. Обновите рекомендацию перед решением.</p>`
         : ""}
       ${review
         ? `
           <div class="coach-ai-review-result">
             <article>
-              <span>Что видно</span>
+              <span>Наблюдение</span>
               <p>${escapeHtml(review.observation)}</p>
             </article>
             <article>
@@ -3943,65 +3991,22 @@ function renderCoachAiReviewCard(
               </ul>
             </article>
             <article>
-              <span>Что сделать завтра</span>
+              <span>Следующее действие</span>
               <ul>
                 ${review.tomorrowActions.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
               </ul>
             </article>
           </div>
-          <details class="coach-ai-review-payload">
-            <summary>Данные дня для ИИ</summary>
-            <pre>${escapeHtml(review.dayPayloadJson)}</pre>
-          </details>
           ${renderCoachAiReviewHistory(reviewHistory)}
-          <small>Сформировано: ${formatDateTime(review.generatedAt)} · Источник: ${escapeHtml(formatCoachDayAiReviewSource(review.source))}</small>
+          <small>Сформировано: ${formatDateTime(review.generatedAt)} · ${escapeHtml(formatCoachDayAiReviewSource(review.source))}</small>
         `
         : `
           <p class="coach-ai-review-empty">
-            Нажмите кнопку, чтобы отправить качество данных, готовность, план/факт, выполнение упражнений, устройство и комментарий тренера в серверный разбор.
+            Сформируйте разбор, когда готовы оценить день по плану, факту, готовности, данным часов и комментариям.
           </p>
           ${renderCoachAiReviewHistory(reviewHistory)}
         `}
     </section>
-  `;
-}
-
-function renderCoachAiReviewStatus(
-  status: CoachAiReviewStatus | null,
-  diagnostic: CoachAiReviewDiagnosticResponse | null,
-  isBusy: boolean,
-) {
-  const source = diagnostic?.review.source === "model"
-    ? "model"
-    : status?.source ?? "server-rules";
-  const statusTitle = source === "model"
-    ? "Модель подключена"
-    : "Серверный разбор по правилам";
-  const statusMessage = diagnostic?.message ??
-    status?.message ??
-    "Статус ИИ появится после обновления данных.";
-
-  return `
-    <div class="coach-ai-review-status is-${source}">
-      <div>
-        <span>Статус ИИ</span>
-        <strong>${escapeHtml(statusTitle)}</strong>
-        <small>${escapeHtml(statusMessage)}</small>
-      </div>
-      <button data-test-coach-ai-review type="button" ${isBusy ? "disabled" : ""}>
-        ${isBusy ? "Проверка..." : "Проверить ИИ"}
-      </button>
-      ${status
-        ? `
-          <ul>
-            <li>Режим: ${escapeHtml(status.mode)}</li>
-            <li>Модель: ${status.modelConfigured ? "настроена" : "не настроена"}</li>
-            <li>Ключ: ${status.apiKeyConfigured ? "есть" : "нет"}</li>
-            <li>Fallback: ${status.fallbackEnabled ? "включён" : "выключен"}</li>
-          </ul>
-        `
-        : ""}
-    </div>
   `;
 }
 
@@ -4014,7 +4019,7 @@ function renderCoachAiReviewHistory(reviews: CoachDayAiReview[]) {
 
   return `
     <details class="coach-ai-review-history">
-      <summary>История серверных разборов (${serverReviews.length})</summary>
+      <summary>История разборов (${serverReviews.length})</summary>
       <div>
         ${serverReviews.slice(0, 5).map((review) => `
           <article>
@@ -5990,14 +5995,14 @@ function sortCoachAiReviewsOldestFirst(left: CoachDayAiReview, right: CoachDayAi
 
 function formatCoachDayAiReviewSource(source: CoachDayAiReview["source"]) {
   if (source === "model") {
-    return "ИИ-модель";
+    return "Серверный разбор";
   }
 
   if (source === "server-rules") {
-    return "серверный разбор";
+    return "Разбор по правилам";
   }
 
-  return "локальный черновик, сервер недоступен";
+  return "Локальный разбор";
 }
 
 function buildOfflineCoachDayAiReview(dayData: CoachDayCleanSummary): CoachDayAiReview {
@@ -6160,7 +6165,7 @@ function buildCoachDayDataQuality(dayData: CoachDayCleanSummary): NonNullable<Co
       present: Boolean(dayData.latestDiaryEntry),
     },
     {
-      action: "Попросите спортсмена синхронизировать Huawei Health или Mi Fitness.",
+      action: "Попросите спортсмена синхронизировать часы или приложение здоровья.",
       key: "deviceSync",
       label: "синхронизация устройства",
       present: hasDeviceSync,
@@ -6305,7 +6310,7 @@ function buildOfflineCoachAiObservation(dayData: CoachDayCleanSummary) {
   const summary = dayData.summary;
 
   if (summary.planCount === 0) {
-    return "Офлайн-черновик: на выбранный день нет назначенного плана. Серверный разбор нужен для полной рекомендации.";
+    return "Локальный разбор: на выбранный день нет назначенного плана. Для полной рекомендации нужен серверный разбор.";
   }
 
   const loadLabel = `${formatLoadValue(summary.actualLoad)} из ${formatLoadValue(summary.plannedLoad)}`;
@@ -6315,7 +6320,7 @@ function buildOfflineCoachAiObservation(dayData: CoachDayCleanSummary) {
 
   const deviceLabel = formatOfflineCoachAiDeviceObservation(dayData.deviceHealthSummary);
 
-  return `Офлайн-черновик: день отмечен как «${summary.statusLabel.toLowerCase()}», выполнено ${exerciseLabel}, нагрузка ${loadLabel}.${deviceLabel ? ` ${deviceLabel}` : ""}`;
+  return `Локальный разбор: день отмечен как «${summary.statusLabel.toLowerCase()}», выполнено ${exerciseLabel}, нагрузка ${loadLabel}.${deviceLabel ? ` ${deviceLabel}` : ""}`;
 }
 
 function buildOfflineCoachAiRiskNotes(dayData: CoachDayCleanSummary) {
@@ -6414,7 +6419,7 @@ function addOfflineCoachAiDeviceRisks(risks: string[], dayData: CoachDayCleanSum
   const summary = dayData.deviceHealthSummary;
 
   if (!summary) {
-    risks.push("Нет данных устройства: сон, пульс покоя и внешние тренировки не учитываются в офлайн-черновике.");
+    risks.push("Нет данных устройства: сон, пульс покоя и внешние тренировки не учитываются в локальном разборе.");
     return;
   }
 
@@ -6433,7 +6438,7 @@ function addOfflineCoachAiDeviceRisks(risks: string[], dayData: CoachDayCleanSum
 
 function addOfflineCoachAiDeviceActions(actions: string[], summary: DeviceHealthDailySummary | null) {
   if (!summary) {
-    actions.push("Попросите спортсмена синхронизировать Huawei Health или Mi Fitness перед повторным разбором дня.");
+    actions.push("Попросите спортсмена синхронизировать часы или приложение здоровья перед повторным разбором дня.");
     return;
   }
 
