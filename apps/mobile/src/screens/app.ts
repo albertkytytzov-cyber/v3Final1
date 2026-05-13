@@ -1309,10 +1309,11 @@ function renderAppShell(state: MobileAppState) {
     : { ...state, selectedScreen: activeScreen };
   const selectedAthlete = getSelectedAthlete(state);
   const activeAthleteId = getActiveAthleteId(state);
+  const isAthleteReadiness = user?.role === "athlete" && displayState.selectedScreen === "readiness";
 
   return `
     <main class="mobile-shell">
-      <header class="app-header">
+      <header class="app-header ${isAthleteReadiness ? "is-compact" : ""}">
         <div>
           <span>${state.isOnline ? "онлайн" : "офлайн"}</span>
           <h1>${escapeHtml(user?.fullName ?? "PERFORM")}</h1>
@@ -1322,7 +1323,7 @@ function renderAppShell(state: MobileAppState) {
       </header>
 
       ${renderStatus(state)}
-      ${renderToolbar(state)}
+      ${isAthleteReadiness ? "" : renderToolbar(state)}
 
       ${
         isCoachRole(user?.role) && displayState.selectedScreen !== "athletes"
@@ -2001,7 +2002,17 @@ function renderAthleteDayIndicators(state: MobileAppState, athleteId: string, da
   `;
 }
 
-function renderDeviceHealthCard(state: MobileAppState, athleteId: string, date: string) {
+interface DeviceHealthCardOptions {
+  compact?: boolean;
+  diagnosticsCollapsed?: boolean;
+}
+
+function renderDeviceHealthCard(
+  state: MobileAppState,
+  athleteId: string,
+  date: string,
+  options: DeviceHealthCardOptions = {},
+) {
   const summary = getDeviceHealthSummaryForDate(state, athleteId, date);
   const workouts = getDeviceWorkoutsForDate(state, athleteId, date);
   const canSync = state.session.user?.role === "athlete" &&
@@ -2010,7 +2021,7 @@ function renderDeviceHealthCard(state: MobileAppState, athleteId: string, date: 
   const status = getDeviceHealthStatus(summary);
 
   return `
-    <section class="device-health-card">
+    <section class="device-health-card ${options.compact ? "is-compact" : ""}">
       <div class="device-health-head">
         <div>
           <span>Huawei Health / Health Connect</span>
@@ -2069,7 +2080,7 @@ function renderDeviceHealthCard(state: MobileAppState, athleteId: string, date: 
           <p>${escapeHtml(status.missing.length ? status.missing.join(", ") : "достаточно для разбора дня")}</p>
         </article>
       </div>
-      ${renderHealthConnectDiagnostics(summary)}
+      ${renderHealthConnectDiagnostics(summary, options.diagnosticsCollapsed === true)}
       ${canSync && SHOW_DIRECT_WATCH_DIAGNOSTICS ? renderDirectWatchDiagnostics(state) : ""}
       ${workouts.length ? `
         <div class="device-health-signal-list">
@@ -2321,7 +2332,10 @@ function formatDirectWatchInspectionSummary(
   return parts.join(", ");
 }
 
-function renderHealthConnectDiagnostics(summary: DeviceHealthDailySummary | null) {
+function renderHealthConnectDiagnostics(
+  summary: DeviceHealthDailySummary | null,
+  collapsed = false,
+) {
   if (!summary || summary.provider !== "health-connect") {
     return "";
   }
@@ -2396,14 +2410,7 @@ function renderHealthConnectDiagnostics(summary: DeviceHealthDailySummary | null
         ? "Если разрешения включены, но счётчик Xiaomi/Notify 0, значит приложение-источник не передало этот тип данных в Health Connect за выбранный день."
     : "Health Connect отдал ключевые записи для разбора дня.";
 
-  return `
-    <div class="device-health-diagnostics">
-      <div class="summary-inline-head">
-        <div>
-          <span>Диагностика Health Connect</span>
-          <h3>Что реально отдал Health Connect</h3>
-        </div>
-      </div>
+  const content = `
       <div class="device-health-diagnostics-grid">
         ${items.map((item) => `
           <article>
@@ -2413,6 +2420,29 @@ function renderHealthConnectDiagnostics(summary: DeviceHealthDailySummary | null
         `).join("")}
       </div>
       <p>${escapeHtml(guidance)}</p>
+  `;
+
+  if (collapsed) {
+    return `
+      <details class="device-health-diagnostics is-collapsible">
+        <summary>
+          <span>Диагностика Health Connect</span>
+          <small>источники, счётчики и разрешения</small>
+        </summary>
+        ${content}
+      </details>
+    `;
+  }
+
+  return `
+    <div class="device-health-diagnostics">
+      <div class="summary-inline-head">
+        <div>
+          <span>Диагностика Health Connect</span>
+          <h3>Что реально отдал Health Connect</h3>
+        </div>
+      </div>
+      ${content}
     </div>
   `;
 }
@@ -3605,7 +3635,6 @@ function renderReadinessScreen(state: MobileAppState) {
       <p>${readiness ? `Сегодня: ${readiness.score} · ${formatReadinessStatus(readiness.status)}` : "Быстрый чек-ин перед тренировкой"}</p>
     </div>
     ${renderReadinessResultCard(readiness)}
-    ${state.session.user.athleteId ? renderDeviceHealthCard(state, state.session.user.athleteId, todayValue()) : ""}
     <form class="mobile-form compact-form readiness-form" data-readiness-form>
       <section class="readiness-section readiness-checkin-card wide-field">
         <div class="section-title">
@@ -3670,6 +3699,8 @@ function renderReadinessScreen(state: MobileAppState) {
 
       <button class="primary-action" type="submit">Сохранить готовность</button>
     </form>
+    ${renderReadinessSyncMenu(state)}
+    ${state.session.user.athleteId ? renderReadinessDeviceHealthMenu(state, state.session.user.athleteId, todayValue()) : ""}
     ${renderReadinessHistory(readinessHistory)}
   `;
 }
@@ -3731,6 +3762,52 @@ function renderReadinessResultCard(entry: ReadinessEntry | null) {
         </ul>
       </article>
     </section>
+  `;
+}
+
+function renderReadinessSyncMenu(state: MobileAppState) {
+  const pendingQueue = getPendingQueueItems(state.queue);
+  const invalidQueue = getInvalidQueueItems(state.queue);
+  const savedLabel = state.data.savedAt
+    ? `обновлено ${formatDateTime(state.data.savedAt)}`
+    : "данные ещё не обновлялись";
+  const queueLabel = pendingQueue.length
+    ? `очередь: ${pendingQueue.length}`
+    : invalidQueue.length
+      ? `не отправляется: ${invalidQueue.length}`
+      : "очередь пустая";
+
+  return `
+    <details class="readiness-section readiness-details readiness-utility-menu wide-field">
+      <summary>
+        <span>Обновление</span>
+        <small>${escapeHtml(savedLabel)} · ${escapeHtml(queueLabel)}</small>
+      </summary>
+      <section class="readiness-utility-actions">
+        <button class="secondary-action" data-refresh type="button" ${state.isBusy ? "disabled" : ""}>Обновить данные</button>
+        <button class="secondary-action" data-sync type="button" ${state.isSyncing || pendingQueue.length === 0 ? "disabled" : ""}>
+          Отправить очередь${pendingQueue.length ? ` (${pendingQueue.length})` : ""}
+        </button>
+      </section>
+    </details>
+  `;
+}
+
+function renderReadinessDeviceHealthMenu(state: MobileAppState, athleteId: string, date: string) {
+  const summary = getDeviceHealthSummaryForDate(state, athleteId, date);
+  const status = getDeviceHealthStatus(summary);
+  const syncLabel = formatDeviceHealthSyncLabel(summary);
+
+  return `
+    <details class="readiness-section readiness-details readiness-utility-menu wide-field">
+      <summary>
+        <span>Данные часов</span>
+        <small>${escapeHtml(status.statusLabel)} · ${escapeHtml(syncLabel)}</small>
+      </summary>
+      <section class="readiness-device-health-body">
+        ${renderDeviceHealthCard(state, athleteId, date, { compact: true, diagnosticsCollapsed: true })}
+      </section>
+    </details>
   `;
 }
 

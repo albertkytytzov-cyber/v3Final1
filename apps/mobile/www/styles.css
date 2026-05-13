@@ -412,6 +412,35 @@ button {
   padding: 0 12px 12px;
 }
 
+.readiness-utility-menu {
+  margin-top: 10px;
+}
+
+.readiness-utility-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.readiness-utility-actions .secondary-action {
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+  color: var(--accent-dark);
+  font-weight: 900;
+}
+
+.readiness-utility-actions .secondary-action:disabled {
+  opacity: 0.55;
+}
+
+.readiness-device-health-body {
+  display: grid;
+  min-width: 0;
+}
+
 .readiness-preset-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1568,6 +1597,21 @@ button {
   margin: 0;
   color: var(--muted);
   font-size: 0.86rem;
+}
+
+.app-header.is-compact {
+  margin-bottom: 8px;
+  padding: 9px 10px;
+  border-radius: 16px;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+}
+
+.app-header.is-compact h1 {
+  font-size: 1rem;
+}
+
+.app-header.is-compact p {
+  font-size: 0.78rem;
 }
 
 .icon-button,
@@ -2865,6 +2909,26 @@ button {
   opacity: 0.55;
 }
 
+.device-health-card.is-compact {
+  gap: 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.device-health-card.is-compact .device-health-head {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.device-health-card.is-compact .device-health-actions {
+  justify-content: stretch;
+}
+
+.device-health-card.is-compact .device-health-actions .secondary-action {
+  flex: 1 1 130px;
+}
+
 .device-health-status {
   display: grid;
   gap: 4px;
@@ -2922,6 +2986,25 @@ button {
   border: 1px solid rgba(20, 184, 166, 0.24);
   border-radius: 16px;
   background: rgba(240, 253, 250, 0.82);
+}
+
+.device-health-diagnostics.is-collapsible summary {
+  display: grid;
+  gap: 2px;
+  cursor: pointer;
+  list-style-position: inside;
+}
+
+.device-health-diagnostics.is-collapsible summary span {
+  color: var(--text);
+  font-size: 0.84rem;
+  font-weight: 950;
+}
+
+.device-health-diagnostics.is-collapsible summary small {
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 780;
 }
 
 .device-health-diagnostics-grid {
