@@ -276,7 +276,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
         data: snapshot,
         error: null,
         isBusy: false,
-        message: `Данные обновлены · планов: ${snapshot.assignedPlans.length}`,
+        message: silent ? state.message : null,
         selectedAthleteId,
         session: nextSession,
       });
@@ -299,10 +299,11 @@ export function bootstrapMobileApp(root: HTMLElement) {
     update({ error: null, isSyncing: true });
 
     const result = await flushSyncQueue(client(), state.session.user.id, state.session.user.role);
+    const hasSyncChanges = result.syncedCount > 0 || result.invalidatedCount > 0;
 
     update({
       isSyncing: false,
-      message: formatSyncResultMessage(result.syncedCount, result.invalidatedCount),
+      message: hasSyncChanges ? formatSyncResultMessage(result.syncedCount, result.invalidatedCount) : null,
       queue: result.queue,
     });
 
@@ -1419,21 +1420,12 @@ function renderAppShell(state: MobileAppState) {
     : { ...state, selectedScreen: activeScreen };
   const selectedAthlete = getSelectedAthlete(state);
   const activeAthleteId = getActiveAthleteId(state);
-  const isAthleteReadiness = user?.role === "athlete" && displayState.selectedScreen === "readiness";
 
   return `
     <main class="mobile-shell">
-      <header class="app-header ${isAthleteReadiness ? "is-compact" : ""}">
-        <div>
-          <span>${state.isOnline ? "онлайн" : "офлайн"}</span>
-          <h1>${escapeHtml(user?.fullName ?? "PERFORM")}</h1>
-          <p>${escapeHtml(getRoleLabel(user?.role))}${selectedAthlete ? ` · ${escapeHtml(selectedAthlete.fullName)}` : ""}</p>
-        </div>
-        <button class="icon-button" data-logout type="button">Выйти</button>
-      </header>
+      ${renderAppTopBar(state, selectedAthlete)}
 
       ${renderStatus(state)}
-      ${isAthleteReadiness ? "" : renderToolbar(state)}
 
       ${
         isCoachRole(user?.role) && displayState.selectedScreen !== "athletes"
@@ -1457,22 +1449,52 @@ function renderAppShell(state: MobileAppState) {
   `;
 }
 
-function renderToolbar(state: MobileAppState) {
+function renderAppTopBar(state: MobileAppState, selectedAthlete: CoachAthleteSummary | null) {
   const pendingQueue = getPendingQueueItems(state.queue);
   const invalidQueue = getInvalidQueueItems(state.queue);
   const savedLabel = state.data.savedAt
-    ? `Сохранено: ${formatDateTime(state.data.savedAt)}`
+    ? `сохранено ${formatDateTime(state.data.savedAt)}`
     : "Локальных данных пока нет";
   const invalidLabel = invalidQueue.length ? ` · не отправляется: ${invalidQueue.length}` : "";
+  const roleLabel = getRoleLabel(state.session.user?.role);
+  const athleteLabel = selectedAthlete ? ` · ${selectedAthlete.fullName}` : "";
+  const syncLabel = pendingQueue.length ? `Синхронизировать (${pendingQueue.length})` : "Синхронизация";
+  const summaryLine = `Планов: ${state.data.assignedPlans.length} · ${savedLabel}${invalidLabel}`;
 
   return `
-    <section class="toolbar-row">
-      <button data-refresh type="button" ${state.isBusy ? "disabled" : ""}>Обновить</button>
-      <button data-sync type="button" ${state.isSyncing || pendingQueue.length === 0 ? "disabled" : ""}>
-        Синхронизация ${pendingQueue.length ? `(${pendingQueue.length})` : ""}
-      </button>
-      <small>${savedLabel}${invalidLabel}</small>
-    </section>
+    <header class="app-topbar">
+      <div class="app-topbar-main">
+        <span>${state.isOnline ? "онлайн" : "офлайн"} · ${escapeHtml(roleLabel)}</span>
+        <h1>${escapeHtml(state.session.user?.fullName ?? "PERFORM")}</h1>
+        <p>${escapeHtml(summaryLine)}${escapeHtml(athleteLabel)}</p>
+      </div>
+      <div class="app-topbar-actions" aria-label="Действия приложения">
+        <button
+          aria-label="Обновить данные"
+          class="topbar-action"
+          data-refresh
+          title="Обновить данные"
+          type="button"
+          ${state.isBusy ? "disabled" : ""}
+        >↻</button>
+        <button
+          aria-label="${escapeHtml(syncLabel)}"
+          class="topbar-action"
+          data-sync
+          title="${escapeHtml(syncLabel)}"
+          type="button"
+          ${state.isSyncing || pendingQueue.length === 0 ? "disabled" : ""}
+        >⇄${pendingQueue.length ? `<small>${pendingQueue.length}</small>` : ""}</button>
+        <details class="profile-menu">
+          <summary aria-label="Профиль и выход" title="Профиль и выход">⋯</summary>
+          <div class="profile-menu-panel">
+            <strong>${escapeHtml(roleLabel)}</strong>
+            <span>${state.isOnline ? "Онлайн" : "Офлайн"}</span>
+            <button data-logout type="button">Выйти</button>
+          </div>
+        </details>
+      </div>
+    </header>
   `;
 }
 

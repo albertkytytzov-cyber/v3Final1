@@ -72,8 +72,6 @@ button {
 
 .login-panel,
 .screen-panel,
-.app-header,
-.toolbar-row,
 .athlete-picker,
 .status-message,
 .status-error {
@@ -96,7 +94,6 @@ button {
 }
 
 .brand-block span,
-.app-header span,
 .screen-head p,
 .focus-card span,
 .metric-grid span,
@@ -1646,8 +1643,10 @@ button {
 }
 
 .primary-action,
-.toolbar-row button,
 .icon-button,
+.topbar-action,
+.profile-menu summary,
+.profile-menu-panel button,
 .bottom-nav button {
   min-height: 46px;
   border: 0;
@@ -1662,51 +1661,137 @@ button {
 }
 
 .primary-action:disabled,
-.toolbar-row button:disabled {
+.topbar-action:disabled {
   cursor: not-allowed;
   opacity: 0.55;
 }
 
-.app-header {
+.app-topbar {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 12px;
+  gap: 10px;
   align-items: center;
   margin-bottom: 10px;
-  padding: 12px;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
   border-radius: 20px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: var(--shadow);
 }
 
-.app-header h1 {
-  margin: 2px 0;
-  font-size: 1.22rem;
-  line-height: 1.1;
+.app-topbar-main {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
 }
 
-.app-header p {
+.app-topbar-main span {
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  line-height: 1.15;
+  text-transform: uppercase;
+}
+
+.app-topbar-main h1 {
+  margin: 0;
+  font-size: 1.12rem;
+  line-height: 1.08;
+}
+
+.app-topbar-main p {
   margin: 0;
   color: var(--muted);
-  font-size: 0.86rem;
-}
-
-.app-header.is-compact {
-  margin-bottom: 8px;
-  padding: 9px 10px;
-  border-radius: 16px;
-  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
-}
-
-.app-header.is-compact h1 {
-  font-size: 1rem;
-}
-
-.app-header.is-compact p {
   font-size: 0.78rem;
+  font-weight: 720;
+  line-height: 1.28;
 }
 
-.icon-button,
-.toolbar-row button {
+.app-topbar-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: end;
+}
+
+.topbar-action,
+.profile-menu summary {
+  position: relative;
+  display: grid;
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  min-height: 40px;
+  place-items: center;
+  padding: 0;
+  background: var(--surface-muted);
+  color: var(--text);
+  font-size: 1.02rem;
+  font-weight: 950;
+}
+
+.topbar-action small {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.62rem;
+  line-height: 17px;
+}
+
+.icon-button {
   padding: 0 14px;
+  background: var(--surface-muted);
+  color: var(--text);
+}
+
+.profile-menu {
+  position: relative;
+}
+
+.profile-menu summary {
+  list-style: none;
+}
+
+.profile-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.profile-menu-panel {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 8px);
+  right: 0;
+  display: grid;
+  gap: 3px;
+  min-width: 164px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 18px 34px rgba(13, 44, 39, 0.18);
+}
+
+.profile-menu-panel strong {
+  color: var(--text);
+  font-size: 0.84rem;
+  font-weight: 900;
+}
+
+.profile-menu-panel span {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 760;
+}
+
+.profile-menu-panel button {
+  margin-top: 6px;
   background: var(--surface-muted);
   color: var(--text);
 }
@@ -1732,23 +1817,6 @@ button {
 
 .status-error {
   color: var(--danger);
-}
-
-.toolbar-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  align-items: center;
-  margin-bottom: 10px;
-  padding: 10px;
-  border-radius: 18px;
-}
-
-.toolbar-row small {
-  grid-column: 1 / -1;
-  color: var(--muted);
-  font-size: 0.8rem;
-  font-weight: 700;
 }
 
 .coach-day-control {
@@ -3847,7 +3915,6 @@ button.timeline-card:active {
     border-radius: 20px;
   }
 
-  .app-header,
   .coach-day-control-head,
   .coach-day-status-head,
   .summary-inline-head,
@@ -3860,19 +3927,6 @@ button.timeline-card:active {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .app-header {
-    align-items: start;
-  }
-
-  .toolbar-row {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .toolbar-row button {
-    width: 100%;
-  }
-
-  .app-header .icon-button,
   .coach-ai-review-head button,
   .coach-team-day-row button {
     width: 100%;
