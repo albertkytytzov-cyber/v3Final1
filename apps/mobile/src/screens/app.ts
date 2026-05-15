@@ -1214,12 +1214,16 @@ export function bootstrapMobileApp(root: HTMLElement) {
       });
     });
 
-    root.querySelector<HTMLButtonElement>("[data-sync]")?.addEventListener("click", () => {
-      void tryFlushQueue();
+    root.querySelectorAll<HTMLButtonElement>("[data-sync]").forEach((button) => {
+      button.addEventListener("click", () => {
+        void tryFlushQueue();
+      });
     });
 
-    root.querySelector<HTMLButtonElement>("[data-logout]")?.addEventListener("click", () => {
-      void handleLogout();
+    root.querySelectorAll<HTMLButtonElement>("[data-logout]").forEach((button) => {
+      button.addEventListener("click", () => {
+        void handleLogout();
+      });
     });
 
     root.querySelectorAll<HTMLSelectElement>("[data-athlete-select]").forEach((select) => {
@@ -1458,43 +1462,46 @@ function renderAppTopBar(state: MobileAppState, selectedAthlete: CoachAthleteSum
   const invalidLabel = invalidQueue.length ? ` · не отправляется: ${invalidQueue.length}` : "";
   const roleLabel = getRoleLabel(state.session.user?.role);
   const athleteLabel = selectedAthlete ? ` · ${selectedAthlete.fullName}` : "";
-  const syncLabel = pendingQueue.length ? `Синхронизировать (${pendingQueue.length})` : "Синхронизация";
+  const syncLabel = pendingQueue.length ? `Синхр. (${pendingQueue.length})` : "Синхр.";
   const summaryLine = `Планов: ${state.data.assignedPlans.length} · ${savedLabel}${invalidLabel}`;
 
   return `
-    <header class="app-topbar">
-      <div class="app-topbar-main">
-        <span>${state.isOnline ? "онлайн" : "офлайн"} · ${escapeHtml(roleLabel)}</span>
-        <h1>${escapeHtml(state.session.user?.fullName ?? "PERFORM")}</h1>
-        <p>${escapeHtml(summaryLine)}${escapeHtml(athleteLabel)}</p>
-      </div>
-      <div class="app-topbar-actions" aria-label="Действия приложения">
+    <details class="app-topbar">
+      <summary aria-label="Открыть действия профиля" title="Открыть действия профиля">
+        <div class="app-topbar-main">
+          <span>${state.isOnline ? "онлайн" : "офлайн"} · ${escapeHtml(roleLabel)}</span>
+          <h1>${escapeHtml(state.session.user?.fullName ?? "PERFORM")}</h1>
+          <p>${escapeHtml(summaryLine)}${escapeHtml(athleteLabel)}</p>
+        </div>
+        <span class="app-topbar-toggle" aria-hidden="true">
+          <span class="topbar-toggle-open">⋯</span>
+          <span class="topbar-toggle-close">×</span>
+        </span>
+      </summary>
+      <div class="app-topbar-panel" aria-label="Действия приложения">
+        <div class="app-topbar-panel-actions">
+          <button
+            class="topbar-action-button"
+            data-refresh
+            type="button"
+            ${state.isBusy ? "disabled" : ""}
+          >↻ Обновить</button>
+          <button
+            aria-label="${escapeHtml(syncLabel)}"
+            class="topbar-action-button"
+            data-sync
+            title="${escapeHtml(syncLabel)}"
+            type="button"
+            ${state.isSyncing || pendingQueue.length === 0 ? "disabled" : ""}
+          >⇄ ${escapeHtml(syncLabel)}</button>
+        </div>
         <button
-          aria-label="Обновить данные"
-          class="topbar-action"
-          data-refresh
-          title="Обновить данные"
+          class="topbar-logout-button"
+          data-logout
           type="button"
-          ${state.isBusy ? "disabled" : ""}
-        >↻</button>
-        <button
-          aria-label="${escapeHtml(syncLabel)}"
-          class="topbar-action"
-          data-sync
-          title="${escapeHtml(syncLabel)}"
-          type="button"
-          ${state.isSyncing || pendingQueue.length === 0 ? "disabled" : ""}
-        >⇄${pendingQueue.length ? `<small>${pendingQueue.length}</small>` : ""}</button>
-        <details class="profile-menu">
-          <summary aria-label="Профиль и выход" title="Профиль и выход">⋯</summary>
-          <div class="profile-menu-panel">
-            <strong>${escapeHtml(roleLabel)}</strong>
-            <span>${state.isOnline ? "Онлайн" : "Офлайн"}</span>
-            <button data-logout type="button">Выйти</button>
-          </div>
-        </details>
+        >Выйти</button>
       </div>
-    </header>
+    </details>
   `;
 }
 
