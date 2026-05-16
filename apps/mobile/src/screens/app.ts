@@ -3875,7 +3875,7 @@ function getAthleteExecutionDisplayCompletion(
   planGroups: ExecutionPlanGroup[],
 ): ExecutionDisplayCompletion {
   return planGroups.reduce<ExecutionDisplayCompletion>((total, group) => {
-    const completion = getExecutionDisplayCompletion(state, group.plan);
+    const completion = getExecutionDisplayCompletion(state, group.plan, true);
 
     return {
       completedCount: total.completedCount + completion.completedCount,
@@ -4739,6 +4739,7 @@ function formatPlanUnitCount(count: number) {
 function getExecutionDisplayCompletion(
   state: MobileAppState,
   plan: AssignedPlanSummary,
+  preferExerciseItems = false,
 ): ExecutionDisplayCompletion {
   const completion: ExecutionDisplayCompletion = {
     completedCount: 0,
@@ -4748,7 +4749,7 @@ function getExecutionDisplayCompletion(
   };
 
   for (const session of plan.day.sessions) {
-    if (isSessionLevelPlanUnit(session)) {
+    if (!preferExerciseItems && isSessionLevelPlanUnit(session)) {
       const status = getUnifiedSessionExecutionStatus(state, plan.id, session);
       completion.totalCount += 1;
       if (status === "completed") {
@@ -4762,10 +4763,29 @@ function getExecutionDisplayCompletion(
     }
 
     for (const block of session.blocks) {
-      const status = getExecutionBlockStatus(
-        block,
-        getExecutionResultForBlock(state, plan.id, block.id),
-      );
+      const result = getExecutionResultForBlock(state, plan.id, block.id);
+      const exercises = block.exercises ?? [];
+
+      if (preferExerciseItems && exercises.length > 0) {
+        const shouldInheritBlockCompletion = result?.completed && !(result.exerciseResults?.length);
+
+        for (const exercise of exercises) {
+          const status = shouldInheritBlockCompletion
+            ? "completed"
+            : getExecutionExerciseStatus(getExerciseResult(result, exercise.id));
+          completion.totalCount += 1;
+          if (status === "completed") {
+            completion.completedCount += 1;
+          } else if (status === "partial") {
+            completion.partialCount += 1;
+          } else {
+            completion.missedCount += 1;
+          }
+        }
+        continue;
+      }
+
+      const status = getExecutionBlockStatus(block, result);
       completion.totalCount += 1;
       if (status === "completed") {
         completion.completedCount += 1;
@@ -4813,7 +4833,7 @@ function renderExecutionPlanGroup(
   const canSubmitCoachDiary = state.session.user?.role === "coach" || state.session.user?.role === "admin";
   const diaryEntries = getCoachDiaryEntriesForPlan(state, group.plan.id);
   const daySummary = getExecutionDaySummary(state, group, diaryEntries);
-  const displayCompletion = getExecutionDisplayCompletion(state, group.plan);
+  const displayCompletion = getExecutionDisplayCompletion(state, group.plan, compactAthlete);
   const exerciseCount = group.blockItems.reduce(
     (total, item) => total + (item.block.exercises?.length ?? 0),
     0,
@@ -4845,7 +4865,7 @@ function renderExecutionPlanGroup(
         ${group.plan.day.sessions.map((session) => `
           <section class="mobile-plan-session">
             <h4>${escapeHtml(session.name)}</h4>
-            ${isSessionLevelPlanUnit(session)
+            ${isSessionLevelPlanUnit(session) && !compactAthlete
               ? renderExecutionUnifiedSession(state, group.plan, session, canSubmitExecution, options)
               : `
                 <div class="mobile-plan-table ${compactAthlete ? "is-athlete-simple" : ""}">
@@ -5229,13 +5249,15 @@ function renderExecutionExerciseRow(
   blockResult: ExecutionResult | null,
   options: ExecutionPlanGroupRenderOptions = {},
 ) {
+  const isCompleted = result?.completed ?? (blockResult?.completed && !(blockResult.exerciseResults?.length)) ?? false;
+
   return `
     <div class="mobile-plan-row mobile-execution-row" data-execution-exercise data-exercise-id="${escapeHtml(exercise.id)}">
       <label class="execution-exercise-check mobile-plan-exercise-name">
-        <input name="exerciseCompleted:${escapeHtml(exercise.id)}" type="checkbox" ${result?.completed ? "checked" : ""} ${options.isLocked ? "disabled" : ""} />
+        <input name="exerciseCompleted:${escapeHtml(exercise.id)}" type="checkbox" ${isCompleted ? "checked" : ""} ${options.isLocked ? "disabled" : ""} />
         <span>
           <strong>${escapeHtml(exercise.name)}</strong>
-          ${options.compactAthlete ? "" : `<small>${result?.completed ? "выполнено" : "не отмечено"}</small>`}
+          ${options.compactAthlete ? "" : `<small>${isCompleted ? "выполнено" : "не отмечено"}</small>`}
         </span>
       </label>
       <span class="mobile-plan-cell mobile-plan-work">${escapeHtml(formatExerciseWorkCell(exercise))}</span>
@@ -5270,7 +5292,7 @@ function renderExecutionBlockFallbackRow(
   return `
     <div class="mobile-plan-row mobile-execution-row">
       <label class="execution-exercise-check mobile-plan-exercise-name">
-        <input name="completed" type="checkbox" ${result?.completed !== false ? "checked" : ""} ${options.isLocked ? "disabled" : ""} />
+        <input name="completed" type="checkbox" ${result?.completed ? "checked" : ""} ${options.isLocked ? "disabled" : ""} />
         <span>
           <strong>${escapeHtml(block.name)}</strong>
           ${options.compactAthlete ? "" : `<small>${result?.completed ? "выполнено" : "не отмечено"}</small>`}
@@ -5294,7 +5316,7 @@ function renderBlockFallbackFields(result: ExecutionResult | null, disabled = fa
   const disabledAttr = disabled ? "disabled" : "";
 
   return `
-    <label class="check-row"><input name="completed" type="checkbox" ${result?.completed !== false ? "checked" : ""} ${disabledAttr} /> Выполнено</label>
+    <label class="check-row"><input name="completed" type="checkbox" ${result?.completed ? "checked" : ""} ${disabledAttr} /> Выполнено</label>
     <label><span>Подходы</span><input name="setsCompleted" type="number" min="0" value="${formatInputValue(result?.setsCompleted)}" ${disabledAttr} /></label>
     <label><span>Повторы</span><input name="repsCompleted" type="number" min="0" value="${formatInputValue(result?.repsCompleted)}" ${disabledAttr} /></label>
     <label><span>Вес, кг</span><input name="weightKg" type="number" min="0" step="0.5" value="${formatInputValue(result?.weightKg)}" ${disabledAttr} /></label>

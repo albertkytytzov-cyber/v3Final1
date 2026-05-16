@@ -319,6 +319,8 @@ const UI_TEXT = IMPORTED_UI_TEXT;
 const STORAGE_KEYS = OFFLINE_STORAGE_KEYS;
 
 type ExecutionDraft = Omit<ExecutionResultInput, "assignedPlanId" | "assignedBlockId">;
+type ExecutionExerciseDraft = NonNullable<ExecutionDraft["exercises"]>[number];
+type AthleteExecutionBlock = AssignedPlanSummary["day"]["sessions"][number]["blocks"][number];
 type CoachDiaryDraft = Pick<
   CoachDiaryEntryPayload,
   "scope" | "notes" | "assignedBlockIds" | "assignedExerciseIds"
@@ -6361,7 +6363,60 @@ function toExecutionDraft(result?: ExecutionResult): ExecutionDraft {
     durationMinutes: result.durationMinutes,
     rpe: result.rpe,
     notes: result.notes,
+    exercises: result.exerciseResults?.map((exercise) => ({
+      assignedExerciseId: exercise.assignedExerciseId,
+      completed: exercise.completed,
+      setsCompleted: exercise.setsCompleted,
+      repsCompleted: exercise.repsCompleted,
+      weightKg: exercise.weightKg,
+      durationMinutes: exercise.durationMinutes,
+      rpe: exercise.rpe,
+      notes: exercise.notes,
+    })),
   };
+}
+
+function createEmptyExecutionExerciseDraft(
+  assignedExerciseId: string,
+  completed = false,
+): ExecutionExerciseDraft {
+  return {
+    assignedExerciseId,
+    completed,
+    setsCompleted: null,
+    repsCompleted: null,
+    weightKg: null,
+    durationMinutes: null,
+    rpe: null,
+    notes: "",
+  };
+}
+
+function buildExecutionExerciseDrafts(
+  block: AthleteExecutionBlock,
+  draft: ExecutionDraft,
+): ExecutionExerciseDraft[] {
+  const existingDrafts = draft.exercises ?? [];
+  const existingById = new Map(existingDrafts.map((exercise) => [exercise.assignedExerciseId, exercise]));
+  const shouldInheritBlockCompletion = draft.completed && existingDrafts.length === 0;
+
+  return (block.exercises ?? []).map((exercise) => ({
+    ...createEmptyExecutionExerciseDraft(exercise.id, shouldInheritBlockCompletion),
+    ...existingById.get(exercise.id),
+    assignedExerciseId: exercise.id,
+  }));
+}
+
+function getExecutionExerciseDraft(
+  block: AthleteExecutionBlock,
+  draft: ExecutionDraft,
+  assignedExerciseId: string,
+) {
+  return (
+    buildExecutionExerciseDrafts(block, draft)
+      .find((exercise) => exercise.assignedExerciseId === assignedExerciseId) ??
+    createEmptyExecutionExerciseDraft(assignedExerciseId)
+  );
 }
 
 function normalizeTemplatePackItems(items: TemplatePackDraftItem[]) {
@@ -8726,12 +8781,74 @@ export function PageClient({
     }));
   }
 
+  function updateExecutionBlockCompleted(block: AthleteExecutionBlock, completed: boolean) {
+    setExecutionDrafts((current) => {
+      const currentDraft = current[block.id] ?? emptyExecutionDraft;
+      const exercises = (block.exercises ?? []).length
+        ? buildExecutionExerciseDrafts(block, currentDraft).map((exercise) => ({
+            ...exercise,
+            completed,
+          }))
+        : currentDraft.exercises;
+
+      return {
+        ...current,
+        [block.id]: {
+          ...currentDraft,
+          completed,
+          exercises,
+        },
+      };
+    });
+  }
+
+  function updateExecutionExerciseDraft(
+    block: AthleteExecutionBlock,
+    assignedExerciseId: string,
+    patch: Partial<ExecutionExerciseDraft>,
+  ) {
+    setExecutionDrafts((current) => {
+      const currentDraft = current[block.id] ?? emptyExecutionDraft;
+      const exercises = buildExecutionExerciseDrafts(block, currentDraft).map((exercise) =>
+        exercise.assignedExerciseId === assignedExerciseId
+          ? { ...exercise, ...patch, assignedExerciseId }
+          : exercise,
+      );
+
+      return {
+        ...current,
+        [block.id]: {
+          ...currentDraft,
+          completed: exercises.length > 0 ? exercises.every((exercise) => exercise.completed) : currentDraft.completed,
+          exercises,
+        },
+      };
+    });
+  }
+
+  function getExecutionPayloadDraft(block: AthleteExecutionBlock): ExecutionDraft {
+    const draft = getExecutionDraft(block.id);
+
+    if (!(block.exercises ?? []).length) {
+      return draft;
+    }
+
+    const exercises = buildExecutionExerciseDrafts(block, draft);
+
+    return {
+      ...draft,
+      completed: exercises.length > 0 ? exercises.every((exercise) => exercise.completed) : draft.completed,
+      exercises,
+    };
+  }
+
   async function saveExecutionResult(
     assignedPlanId: string,
     assignedBlockId: string,
     clientRequestId?: string,
+    draftOverride?: ExecutionDraft,
   ) {
-    const draft = getExecutionDraft(assignedBlockId);
+    const draft = draftOverride ?? getExecutionDraft(assignedBlockId);
     const response = await apiRequest<{ result: ExecutionResult }>("/execution", {
       method: "POST",
       headers: clientRequestId ? { "X-Idempotency-Key": clientRequestId } : undefined,
@@ -8918,10 +9035,11 @@ export function PageClient({
     void loadReadiness(entryDate);
   }
 
-  async function handleExecutionSave(assignedPlanId: string, assignedBlockId: string) {
+  async function handleExecutionSave(assignedPlanId: string, block: AthleteExecutionBlock) {
+    const assignedBlockId = block.id;
     setBusy(true);
     setErrorMessage("");
-    const draft = getExecutionDraft(assignedBlockId);
+    const draft = getExecutionPayloadDraft(block);
     const queueItem = importedCreateQueueItem({
       type: "execution",
       payload: { assignedPlanId, assignedBlockId, ...draft },
@@ -8932,6 +9050,7 @@ export function PageClient({
         assignedPlanId,
         assignedBlockId,
         queueItem.clientRequestId,
+        draft,
       );
       await loadAnalyticsOverview();
       setStatusMessage(ui("executionSaved"));
@@ -8950,6 +9069,15 @@ export function PageClient({
         notes: draft.notes,
         completedAt: draft.completed ? new Date().toISOString() : null,
         updatedAt: new Date().toISOString(),
+        exerciseResults: draft.exercises?.map((exercise) => ({
+          ...exercise,
+          id: `offline-${assignedBlockId}-${exercise.assignedExerciseId}`,
+          executionResultId: `offline-${assignedBlockId}`,
+          athleteId: user?.athleteId ?? "",
+          assignedPlanId,
+          assignedBlockId,
+          updatedAt: new Date().toISOString(),
+        })),
       };
 
       setExecutionResults((current) => {
@@ -14788,19 +14916,40 @@ export function PageClient({
                               ) : null}
                               {(block.exercises ?? []).length > 0 ? (
                                 <div className="assigned-exercise-list">
-                                  {(block.exercises ?? []).map((exercise) => (
-                                    <div className="assigned-exercise-row" key={exercise.id}>
-                                      <strong>{exercise.name}</strong>
-                                      <span>
-                                        {formatExerciseTargetWithoutCommonNotes(
-                                          exercise,
-                                          language,
-                                          activeAthleteTrainingDayNotes,
-                                          block.notes,
-                                        )}
-                                      </span>
-                                    </div>
-                                  ))}
+                                  {(block.exercises ?? []).map((exercise) => {
+                                    const exerciseDraft = getExecutionExerciseDraft(
+                                      block,
+                                      draft,
+                                      exercise.id,
+                                    );
+
+                                    return (
+                                      <div className="assigned-exercise-row" key={exercise.id}>
+                                        <label className="exercise-completion-toggle">
+                                          <input
+                                            checked={exerciseDraft.completed}
+                                            onChange={(event) =>
+                                              updateExecutionExerciseDraft(block, exercise.id, {
+                                                completed: event.target.checked,
+                                              })
+                                            }
+                                            type="checkbox"
+                                          />
+                                          <span>
+                                            <strong>{exercise.name}</strong>
+                                            <small>
+                                              {formatExerciseTargetWithoutCommonNotes(
+                                                exercise,
+                                                language,
+                                                activeAthleteTrainingDayNotes,
+                                                block.notes,
+                                              )}
+                                            </small>
+                                          </span>
+                                        </label>
+                                      </div>
+                                    );
+                                  })}
                                 </div>
                               ) : null}
                               <div className="context-chip-grid athlete-execution-target-grid">
@@ -14840,9 +14989,7 @@ export function PageClient({
                                   <input
                                     checked={draft.completed}
                                     onChange={(event) =>
-                                      updateExecutionDraft(block.id, {
-                                        completed: event.target.checked,
-                                      })
+                                      updateExecutionBlockCompleted(block, event.target.checked)
                                     }
                                     type="checkbox"
                                   />
@@ -14949,7 +15096,7 @@ export function PageClient({
                               <button
                                 className="primary-button"
                                 disabled={busy}
-                                onClick={() => void handleExecutionSave(activeAthleteTrainingPlanId, block.id)}
+                                onClick={() => void handleExecutionSave(activeAthleteTrainingPlanId, block)}
                                 type="button"
                               >
                                 {busy ? ui("syncingNow") : t("saveExecution")}
