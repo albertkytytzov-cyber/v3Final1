@@ -91,6 +91,7 @@ import {
   startTransition,
   type ChangeEvent,
   type FormEvent,
+  type ReactNode,
   useEffect,
   useRef,
   useState,
@@ -504,6 +505,81 @@ const translateExecutionStatus = importedTranslateExecutionStatus;
 const translateBlockAction = importedTranslateBlockAction;
 const translateReadinessReason = importedTranslateReadinessReason;
 const translateAdaptationText = importedTranslateAdaptationText;
+
+const TRAINING_ABBREVIATION_EXPLANATIONS: Record<string, string> = {
+  "АНП": "анаэробный порог: интенсивность на границе устойчивой и тяжёлой работы",
+  "HR": "heart rate: пульс",
+  "RPE": "субъективная тяжесть нагрузки по шкале 1-10",
+  "ИТ": "интервальная тренировка: работа отрезками с заданным отдыхом",
+  "ЛМВ": "локальная мышечная выносливость",
+  "ПАНО": "порог анаэробного обмена",
+  "СДР": "статодинамический режим: медленная силовая работа без полного расслабления мышцы",
+  "ТР": "тренировочный режим",
+};
+
+const TRAINING_ABBREVIATION_PATTERN =
+  /(^|[^\p{L}\p{N}])(АНП|HR|RPE|ИТ|ЛМВ|ПАНО|СДР|ТР)(?=$|[^\p{L}\p{N}])/giu;
+
+function getTrainingAbbreviationExplanation(value: string) {
+  return TRAINING_ABBREVIATION_EXPLANATIONS[value.toLocaleUpperCase("ru-RU")] ?? null;
+}
+
+function renderTrainingTextWithTooltips(value: string | number | null | undefined): ReactNode {
+  const text = value === null || value === undefined ? "" : String(value);
+
+  if (!text) {
+    return text;
+  }
+
+  const parts: ReactNode[] = [];
+  let lastIndex = 0;
+
+  text.replace(
+    TRAINING_ABBREVIATION_PATTERN,
+    (match: string, prefix: string, abbreviation: string, offset: number) => {
+      const abbreviationStart = offset + prefix.length;
+      const abbreviationEnd = abbreviationStart + abbreviation.length;
+      const explanation = getTrainingAbbreviationExplanation(abbreviation);
+
+      if (!explanation) {
+        return match;
+      }
+
+      if (abbreviationStart > lastIndex) {
+        parts.push(text.slice(lastIndex, abbreviationStart));
+      }
+
+      const original = text.slice(abbreviationStart, abbreviationEnd);
+      const tooltip = `${original}: ${explanation}`;
+
+      parts.push(
+        <span
+          aria-label={tooltip}
+          className="training-abbreviation"
+          data-explanation={explanation}
+          key={`${original}-${abbreviationStart}-${parts.length}`}
+          tabIndex={0}
+          title={tooltip}
+        >
+          {original}
+        </span>,
+      );
+      lastIndex = abbreviationEnd;
+
+      return match;
+    },
+  );
+
+  if (parts.length === 0) {
+    return text;
+  }
+
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex));
+  }
+
+  return parts;
+}
 
 async function apiRequest<T>(path: string, options?: RequestInit): Promise<T> {
   const headers = new Headers(options?.headers ?? {});
@@ -14641,7 +14717,7 @@ export function PageClient({
                         {activeAthleteTrainingSessions.map((session) => (
                           <section className="athlete-plan-session-card" key={session.id}>
                             <div className="summary-topline">
-                              <strong>{session.name}</strong>
+                              <strong>{renderTrainingTextWithTooltips(session.name)}</strong>
                               <span>
                                 {session.blocks.length}{" "}
                                 {copyFor(language, { en: "blocks", ru: "блоков", bg: "блока" })}
@@ -14657,22 +14733,30 @@ export function PageClient({
                                 return (
                                   <article className="athlete-plan-block-row" key={block.id}>
                                     <div className="summary-topline">
-                                      <strong>{translateKnownTemplateText(block.name, language)}</strong>
+                                      <strong>
+                                        {renderTrainingTextWithTooltips(
+                                          translateKnownTemplateText(block.name, language),
+                                        )}
+                                      </strong>
                                     </div>
                                     {visibleBlockNote ? (
-                                      <p className="assigned-block-note">{visibleBlockNote}</p>
+                                      <p className="assigned-block-note">
+                                        {renderTrainingTextWithTooltips(visibleBlockNote)}
+                                      </p>
                                     ) : null}
                                     {(block.exercises ?? []).length > 0 ? (
                                       <div className="assigned-exercise-list athlete-plan-exercise-list">
                                         {(block.exercises ?? []).map((exercise) => (
                                           <div className="assigned-exercise-row" key={exercise.id}>
-                                            <strong>{exercise.name}</strong>
+                                            <strong>{renderTrainingTextWithTooltips(exercise.name)}</strong>
                                             <span>
-                                              {formatExerciseTargetWithoutCommonNotes(
-                                                exercise,
-                                                language,
-                                                activeAthleteTrainingDayNotes,
-                                                block.notes,
+                                              {renderTrainingTextWithTooltips(
+                                                formatExerciseTargetWithoutCommonNotes(
+                                                  exercise,
+                                                  language,
+                                                  activeAthleteTrainingDayNotes,
+                                                  block.notes,
+                                                ),
                                               )}
                                             </span>
                                           </div>
@@ -14734,7 +14818,9 @@ export function PageClient({
                       {adaptedPlan.sessions.flatMap((session) =>
                         session.blocks.map((block) => (
                           <li key={block.id}>
-                            {session.name}: {block.name} [{translateBlockAction(block.action, language)}] -{" "}
+                            {renderTrainingTextWithTooltips(session.name)}:{" "}
+                            {renderTrainingTextWithTooltips(block.name)} [
+                            {translateBlockAction(block.action, language)}] -{" "}
                             {translateAdaptationText(block.adaptationReason, language)}
                           </li>
                         )),
@@ -14867,7 +14953,7 @@ export function PageClient({
                   <div className="stack athlete-execution-stack">
                     {activeAthleteTrainingSessions.map((session) => (
                       <div className="session-card" key={session.id}>
-                        <strong>{session.name}</strong>
+                        <strong>{renderTrainingTextWithTooltips(session.name)}</strong>
                         <span>{activeAthleteTrainingDayLabel}</span>
                         {session.blocks.map((block) => {
                           const draft = getExecutionDraft(block.id);
@@ -14893,7 +14979,7 @@ export function PageClient({
                             <div className="entry-summary athlete-execution-block" key={block.id}>
                               <div className="summary-topline">
                                 <div>
-                                  <strong>{block.name}</strong>
+                                  <strong>{renderTrainingTextWithTooltips(block.name)}</strong>
                                   {"action" in block && typeof block.action === "string" ? (
                                     <small>{translateBlockAction(block.action, language)}</small>
                                   ) : null}
@@ -14901,7 +14987,9 @@ export function PageClient({
                                 <span className={`status-chip ${blockSyncTone}`}>{blockSyncLabel}</span>
                               </div>
                               {visibleBlockNote ? (
-                                <p className="assigned-block-note">{visibleBlockNote}</p>
+                                <p className="assigned-block-note">
+                                  {renderTrainingTextWithTooltips(visibleBlockNote)}
+                                </p>
                               ) : null}
                               {(block.exercises ?? []).length > 0 ? (
                                 <div className="assigned-exercise-list">
@@ -14925,13 +15013,15 @@ export function PageClient({
                                             type="checkbox"
                                           />
                                           <span>
-                                            <strong>{exercise.name}</strong>
+                                            <strong>{renderTrainingTextWithTooltips(exercise.name)}</strong>
                                             <small>
-                                              {formatExerciseTargetWithoutCommonNotes(
-                                                exercise,
-                                                language,
-                                                activeAthleteTrainingDayNotes,
-                                                block.notes,
+                                              {renderTrainingTextWithTooltips(
+                                                formatExerciseTargetWithoutCommonNotes(
+                                                  exercise,
+                                                  language,
+                                                  activeAthleteTrainingDayNotes,
+                                                  block.notes,
+                                                ),
                                               )}
                                             </small>
                                           </span>
@@ -16120,14 +16210,20 @@ export function PageClient({
                         {coachAdaptedPlan.sessions.flatMap((session) =>
                           session.blocks.map((block) => (
                             <li key={block.id}>
-                              {session.name}: {block.name} [{translateBlockAction(block.action, language)}] -{" "}
+                              {renderTrainingTextWithTooltips(session.name)}:{" "}
+                              {renderTrainingTextWithTooltips(block.name)} [
+                              {translateBlockAction(block.action, language)}] -{" "}
                               {translateAdaptationText(block.adaptationReason, language)}
                               {(block.exercises ?? []).length > 0 ? (
                                 <div className="assigned-exercise-list">
                                   {(block.exercises ?? []).map((exercise) => (
                                     <div className="assigned-exercise-row" key={exercise.id}>
-                                      <strong>{exercise.name}</strong>
-                                      <span>{formatExerciseTarget(exercise, language)}</span>
+                                      <strong>{renderTrainingTextWithTooltips(exercise.name)}</strong>
+                                      <span>
+                                        {renderTrainingTextWithTooltips(
+                                          formatExerciseTarget(exercise, language),
+                                        )}
+                                      </span>
                                     </div>
                                   ))}
                                 </div>
@@ -17082,9 +17178,11 @@ export function PageClient({
                                   key={exercise.id}
                                 >
                                   <span>{translateExecutionStatus(exercise.executionStatus, language)}</span>
-                                  <strong>{exercise.name}</strong>
+                                  <strong>{renderTrainingTextWithTooltips(exercise.name)}</strong>
                                   <small>
-                                    {session.name} / {block.name} / {formatExerciseTarget(exercise, language)} /{" "}
+                                    {renderTrainingTextWithTooltips(session.name)} /{" "}
+                                    {renderTrainingTextWithTooltips(block.name)} /{" "}
+                                    {renderTrainingTextWithTooltips(formatExerciseTarget(exercise, language))} /{" "}
                                     {getCoachExerciseExecutionSourceLabel({
                                       block,
                                       deviceWorkoutLinks: selectedCoachDeviceWorkoutLinks,
@@ -17102,9 +17200,10 @@ export function PageClient({
                           session.blocks.map((block) => (
                             <article className="coach-review-block-item" key={block.id}>
                               <div className="coach-review-block-main">
-                                <strong>{block.name}</strong>
+                                <strong>{renderTrainingTextWithTooltips(block.name)}</strong>
                                 <span>
-                                  {session.name} / {translateExecutionStatus(block.executionStatus, language)} /{" "}
+                                  {renderTrainingTextWithTooltips(session.name)} /{" "}
+                                  {translateExecutionStatus(block.executionStatus, language)} /{" "}
                                   {getCoachBlockExecutionSourceLabel({
                                     block,
                                     deviceWorkoutLinks: selectedCoachDeviceWorkoutLinks,
@@ -20546,7 +20645,7 @@ export function PageClient({
                                 className="planning-template-import-session-preview"
                                 key={`${session.name}-${sessionIndex}`}
                               >
-                                <strong>{session.name}</strong>
+                                <strong>{renderTrainingTextWithTooltips(session.name)}</strong>
                                 <div className="planning-template-import-session-table">
                                   <div>
                                     <span>
@@ -20580,8 +20679,12 @@ export function PageClient({
                                             PLAN_BLOCK_ROW_KIND_LABELS,
                                           )}
                                         </span>
-                                        <span>{block.name}</span>
-                                        <span>{formatExerciseWorkCell(exercise, language)}</span>
+                                        <span>{renderTrainingTextWithTooltips(block.name)}</span>
+                                        <span>
+                                          {renderTrainingTextWithTooltips(
+                                            formatExerciseWorkCell(exercise, language),
+                                          )}
+                                        </span>
                                       </div>
                                     );
                                   })}
@@ -21244,7 +21347,7 @@ export function PageClient({
                     >
                       <summary className="summary-topline planning-template-block-summary">
                         <div>
-                          <strong>{block.name}</strong>
+                          <strong>{renderTrainingTextWithTooltips(block.name)}</strong>
                           <small>
                             {localizedOptionLabel(block.blockType, language, BLOCK_TYPE_LABELS)} /{" "}
                             {block.targetDurationMinutes ?? "-"} {copyFor(language, {
@@ -21918,7 +22021,7 @@ export function PageClient({
                               key={`${template.id}-${session.name}-${sessionIndex}`}
                             >
                               <strong>
-                                {session.name ||
+                                {renderTrainingTextWithTooltips(session.name) ||
                                   copyFor(language, {
                                     en: "Template",
                                     ru: "Шаблон",
@@ -21930,7 +22033,11 @@ export function PageClient({
                                   className="planning-template-exercise-block"
                                   key={`${block.name}-${blockIndex}`}
                                 >
-                                  <span>{translateKnownTemplateText(block.name, language)}</span>
+                                  <span>
+                                    {renderTrainingTextWithTooltips(
+                                      translateKnownTemplateText(block.name, language),
+                                    )}
+                                  </span>
                                   {(block.exercises ?? []).length ? (
                                     <div className="assigned-exercise-list">
                                       {(block.exercises ?? []).map((exercise, exerciseIndex) => (
@@ -21938,8 +22045,12 @@ export function PageClient({
                                           className="assigned-exercise-row"
                                           key={`${exercise.name}-${exerciseIndex}`}
                                         >
-                                          <strong>{exercise.name}</strong>
-                                          <span>{formatExerciseTarget(exercise, language)}</span>
+                                          <strong>{renderTrainingTextWithTooltips(exercise.name)}</strong>
+                                          <span>
+                                            {renderTrainingTextWithTooltips(
+                                              formatExerciseTarget(exercise, language),
+                                            )}
+                                          </span>
                                         </div>
                                       ))}
                                     </div>
@@ -22912,24 +23023,34 @@ export function PageClient({
                       <div className="planning-assigned-session-list">
                         {selectedAssignedPlanPreview.day.sessions.map((session) => (
                           <section className="planning-assigned-session" key={session.id}>
-                            <strong>{session.name}</strong>
+                            <strong>{renderTrainingTextWithTooltips(session.name)}</strong>
                             {session.blocks.map((block) => (
                               <div className="planning-assigned-block" key={block.id}>
                                 <div>
-                                  <strong>{translateKnownTemplateText(block.name, language)}</strong>
+                                  <strong>
+                                    {renderTrainingTextWithTooltips(
+                                      translateKnownTemplateText(block.name, language),
+                                    )}
+                                  </strong>
                                   <small>
                                     {localizedOptionLabel(block.blockType, language, BLOCK_TYPE_LABELS)} /{" "}
                                     {t("targetDuration")} {block.targetDurationMinutes ?? "-"} / RPE{" "}
                                     {block.targetRpe ?? "-"}
                                   </small>
                                 </div>
-                                {block.notes ? <p>{block.notes}</p> : null}
+                                {block.notes ? (
+                                  <p>{renderTrainingTextWithTooltips(block.notes)}</p>
+                                ) : null}
                                 {(block.exercises ?? []).length > 0 ? (
                                   <div className="assigned-exercise-list">
                                     {(block.exercises ?? []).map((exercise) => (
                                       <div className="assigned-exercise-row" key={exercise.id}>
-                                        <strong>{exercise.name}</strong>
-                                        <span>{formatExerciseTarget(exercise, language)}</span>
+                                        <strong>{renderTrainingTextWithTooltips(exercise.name)}</strong>
+                                        <span>
+                                          {renderTrainingTextWithTooltips(
+                                            formatExerciseTarget(exercise, language),
+                                          )}
+                                        </span>
                                       </div>
                                     ))}
                                   </div>

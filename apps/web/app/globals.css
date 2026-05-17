@@ -90,6 +90,67 @@ table {
   max-width: 100%;
 }
 
+.training-abbreviation {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  border-bottom: 1px dotted var(--accent-strong);
+  color: inherit;
+  cursor: help;
+  font-weight: 900;
+  outline: none;
+}
+
+.training-abbreviation::after {
+  content: attr(data-explanation);
+  position: absolute;
+  z-index: 80;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  width: max-content;
+  max-width: min(320px, 78vw);
+  padding: 8px 10px;
+  border: 1px solid rgba(15, 118, 110, 0.18);
+  border-radius: 8px;
+  background: #102a2b;
+  box-shadow: var(--shadow-soft);
+  color: #ffffff;
+  font-size: 0.78rem;
+  font-weight: 750;
+  line-height: 1.35;
+  opacity: 0;
+  pointer-events: none;
+  text-align: left;
+  text-transform: none;
+  transform: translate(-50%, 4px);
+  transition: opacity 140ms ease, transform 140ms ease;
+  white-space: normal;
+}
+
+.training-abbreviation::before {
+  content: "";
+  position: absolute;
+  z-index: 81;
+  left: 50%;
+  bottom: calc(100% + 3px);
+  width: 8px;
+  height: 8px;
+  background: #102a2b;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 4px) rotate(45deg);
+  transition: opacity 140ms ease, transform 140ms ease;
+}
+
+.training-abbreviation:hover::after,
+.training-abbreviation:focus-visible::after,
+.training-abbreviation:hover::before,
+.training-abbreviation:focus-visible::before {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
 th,
 td {
   min-width: 0;
