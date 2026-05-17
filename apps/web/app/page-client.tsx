@@ -559,7 +559,6 @@ function renderTrainingTextWithTooltips(value: string | number | null | undefine
           data-explanation={explanation}
           key={`${original}-${abbreviationStart}-${parts.length}`}
           tabIndex={0}
-          title={tooltip}
         >
           {original}
         </span>,
