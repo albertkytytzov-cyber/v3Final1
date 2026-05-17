@@ -5987,6 +5987,26 @@ td {
   width: 8%;
 }
 
+.planning-template-exercise-table.is-imported-template th:nth-child(1),
+.planning-template-exercise-table.is-imported-template td:nth-child(1) {
+  width: 20%;
+}
+
+.planning-template-exercise-table.is-imported-template th:nth-child(2),
+.planning-template-exercise-table.is-imported-template td:nth-child(2) {
+  width: 38%;
+}
+
+.planning-template-exercise-table.is-imported-template th:nth-child(3),
+.planning-template-exercise-table.is-imported-template td:nth-child(3) {
+  width: 34%;
+}
+
+.planning-template-exercise-table.is-imported-template th:nth-child(4),
+.planning-template-exercise-table.is-imported-template td:nth-child(4) {
+  width: 8%;
+}
+
 .planning-template-exercise-table input,
 .planning-template-exercise-table select {
   min-height: 36px;

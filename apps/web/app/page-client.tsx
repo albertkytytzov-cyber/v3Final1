@@ -3306,7 +3306,7 @@ function inferImportedRowKind(name: string, volume: string, control: string): Pl
     return "recovery";
   }
 
-  if (/^(?:пульс|чсс|hr|rpe|темп|зона|контроль)/u.test(normalizedName)) {
+  if (/^(?:пульс|чсс|hr|rpe|темп|зона)/u.test(normalizedName)) {
     return "control";
   }
 
@@ -3415,8 +3415,12 @@ function isEmptyImportedTableValue(value: string) {
   return !value || /^[-–—]+$/u.test(value);
 }
 
-function isImportedExerciseCommentColumn(header: string) {
-  return /(?:контроль|примеч|коммент|note|comment|control)/iu.test(header.toLowerCase());
+function isImportedServiceTableRow(name: string) {
+  const normalized = normalizeImportedPlanText(name).toLowerCase().replace(/[.:;]+$/u, "").trim();
+
+  return /^(?:контроль|пульс|чсс|hr|rpe|темп|зона|критерии?|комментарий|примечание|note|comment)$/iu.test(
+    normalized,
+  );
 }
 
 function getImportedTableHeaders(table: HTMLTableElement) {
@@ -3472,18 +3476,6 @@ function getImportedTableColumnIndexes(headers: string[], firstDataCellCount: nu
   };
 }
 
-function formatImportedControlCell(header: string, value: string) {
-  if (isEmptyImportedTableValue(value) || isImportedExerciseCommentColumn(header)) {
-    return "";
-  }
-
-  if (!header) {
-    return value;
-  }
-
-  return `${header}: ${value}`;
-}
-
 function parseImportedPlanTableBlocks(table: HTMLTableElement, startOrderIndex: number) {
   const blocks: PlanTemplatePayload["blocks"] = [];
   const rows = Array.from(table.querySelectorAll("tr"));
@@ -3509,29 +3501,12 @@ function parseImportedPlanTableBlocks(table: HTMLTableElement, startOrderIndex: 
 
     const name = cells[indexes.nameIndex] ?? "";
     const volume = indexes.volumeIndex >= 0 ? cells[indexes.volumeIndex] ?? "" : "";
-    const controlCells = cells
-      .map((cell, cellIndex) => ({ cell, cellIndex }))
-      .filter(
-        ({ cellIndex }) =>
-          cellIndex !== indexes!.nameIndex &&
-          cellIndex !== indexes!.volumeIndex &&
-          cellIndex !== indexes!.orderIndex,
-      )
-      .map(({ cell, cellIndex }) => formatImportedControlCell(headers[cellIndex] ?? "", cell))
-      .filter(Boolean);
 
-    if (!name) {
+    if (!name || isImportedServiceTableRow(name)) {
       return;
     }
 
-    blocks.push(
-      createImportedPlanBlock(
-        name,
-        volume ?? "",
-        controlCells.join(" / "),
-        startOrderIndex + blocks.length,
-      ),
-    );
+    blocks.push(createImportedPlanBlock(name, volume ?? "", "", startOrderIndex + blocks.length));
   });
 
   return blocks;
@@ -9423,7 +9398,7 @@ export function PageClient({
         const parsedBlock = createImportedPlanBlock(
           nextName,
           patch.work ?? formatTemplateBlockWorkCell(block, blockIndex),
-          patch.control ?? formatTemplateBlockControlCell(block, blockIndex),
+          patch.control ?? (importedPlanDraft ? "" : formatTemplateBlockControlCell(block, blockIndex)),
           blockIndex,
         );
 
@@ -20955,7 +20930,11 @@ export function PageClient({
                                         </select>
                                       </label>
                                     </div>
-                                    <table className="planning-template-exercise-table">
+                                    <table
+                                      className={`planning-template-exercise-table ${
+                                        importedPlanDraft ? "is-imported-template" : ""
+                                      }`}
+                                    >
                                       <thead>
                                         <tr>
                                           <th>
@@ -20967,9 +20946,11 @@ export function PageClient({
                                           <th>
                                             {copyFor(language, { en: "Sets", ru: "Подходы", bg: "Серии" })}
                                           </th>
-                                          <th>
-                                            {copyFor(language, { en: "Control", ru: "Контроль", bg: "Контрол" })}
-                                          </th>
+                                          {importedPlanDraft ? null : (
+                                            <th>
+                                              {copyFor(language, { en: "Control", ru: "Контроль", bg: "Контрол" })}
+                                            </th>
+                                          )}
                                           <th aria-label={copyFor(language, { en: "Actions", ru: "Действия", bg: "Действия" })} />
                                         </tr>
                                       </thead>
@@ -21025,19 +21006,21 @@ export function PageClient({
                                                 }
                                               />
                                             </td>
-                                            <td>
-                                              <input
-                                                value={formatTemplateBlockControlCell(block, blockIndex)}
-                                                onChange={(event) =>
-                                                  updateTemplateBlockRow(
-                                                    normalizedSelectedTemplateDayIndex,
-                                                    sessionIndex,
-                                                    blockIndex,
-                                                    { control: event.target.value },
-                                                  )
-                                                }
-                                              />
-                                            </td>
+                                            {importedPlanDraft ? null : (
+                                              <td>
+                                                <input
+                                                  value={formatTemplateBlockControlCell(block, blockIndex)}
+                                                  onChange={(event) =>
+                                                    updateTemplateBlockRow(
+                                                      normalizedSelectedTemplateDayIndex,
+                                                      sessionIndex,
+                                                      blockIndex,
+                                                      { control: event.target.value },
+                                                    )
+                                                  }
+                                                />
+                                              </td>
+                                            )}
                                             <td className="planning-template-exercise-action-cell">
                                               <button
                                                 aria-label={copyFor(language, {
