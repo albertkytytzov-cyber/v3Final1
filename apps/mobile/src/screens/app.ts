@@ -1933,13 +1933,22 @@ function renderCoachDayExerciseChecklist(dayData: CoachDayCleanSummary) {
         <strong>${dayData.summary.completedExerciseCount}/${dayData.summary.exerciseCount || 0}</strong>
       </div>
       <div class="coach-day-exercise-list">
-        ${exercises.map(({ block, exercise }) => `
-          <article class="is-${exercise.status}">
-            <span>${escapeHtml(exercise.statusLabel)}</span>
-            <strong>${renderTrainingTextWithAbbreviationHints(exercise.name)}</strong>
-            <p>${escapeHtml(block.sessionName)} · ${renderTrainingTextWithAbbreviationHints(block.name)} · ${renderTrainingTextWithAbbreviationHints(exercise.plannedWork || "-")} · ${escapeHtml(exercise.sourceLabel)}</p>
-          </article>
-        `).join("")}
+        ${exercises.map(({ block, exercise }) => {
+          const detailParts = [
+            escapeHtml(block.sessionName),
+            isRepeatedSingleExerciseBlock(block) ? "" : renderTrainingTextWithAbbreviationHints(block.name),
+            renderTrainingTextWithAbbreviationHints(exercise.plannedWork || "-"),
+            escapeHtml(exercise.sourceLabel),
+          ].filter(Boolean);
+
+          return `
+            <article class="is-${exercise.status}">
+              <span>${escapeHtml(exercise.statusLabel)}</span>
+              <strong>${renderTrainingTextWithAbbreviationHints(exercise.name)}</strong>
+              <p>${detailParts.join(" · ")}</p>
+            </article>
+          `;
+        }).join("")}
       </div>
     </section>
   `;
@@ -5033,6 +5042,30 @@ function getSortedBlockExercises(block: AssignedPlanBlock) {
   return (block.exercises ?? []).slice().sort((a, b) => a.orderIndex - b.orderIndex);
 }
 
+function normalizeRepeatedExerciseName(value: string) {
+  return value.replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+function getRepeatedSingleExerciseBlock<TExercise extends { name: string }>(
+  block: { name: string; exercises?: TExercise[] | null },
+) {
+  const exercises = block.exercises ?? [];
+
+  if (exercises.length !== 1) {
+    return null;
+  }
+
+  const [exercise] = exercises;
+  const blockName = normalizeRepeatedExerciseName(block.name);
+  const exerciseName = normalizeRepeatedExerciseName(exercise.name);
+
+  return blockName && blockName === exerciseName ? exercise : null;
+}
+
+function isRepeatedSingleExerciseBlock(block: { name: string; exercises?: Array<{ name: string }> | null }) {
+  return Boolean(getRepeatedSingleExerciseBlock(block));
+}
+
 function formatUnifiedSessionBlockTarget(block: AssignedPlanBlock) {
   const exercises = getSortedBlockExercises(block);
 
@@ -5122,6 +5155,8 @@ function renderCoachDiaryForm(group: ExecutionPlanGroup, entries: CoachDiaryEntr
 
 function renderExecutionBlockReadonly(item: ExecutionBlockItem, result: ExecutionResult | null) {
   const exercises = item.block.exercises ?? [];
+  const repeatedExercise = getRepeatedSingleExerciseBlock(item.block);
+  const visibleExercises = repeatedExercise ? [] : exercises;
   const plannedLoad = getExecutionBlockPlannedLoad(item.block, result);
   const actualLoad = getExecutionBlockActualLoad(item.block, result, plannedLoad);
 
@@ -5133,15 +5168,17 @@ function renderExecutionBlockReadonly(item: ExecutionBlockItem, result: Executio
           <small>${escapeHtml(formatExecutionResultStatus(result))}</small>
         </span>
       </div>
-      <span class="mobile-plan-cell mobile-plan-work">${renderTrainingTextWithAbbreviationHints(formatBlockTarget(item.block))}</span>
+      <span class="mobile-plan-cell mobile-plan-work">${renderTrainingTextWithAbbreviationHints(
+        repeatedExercise ? formatExerciseWorkCell(repeatedExercise) : formatBlockTarget(item.block),
+      )}</span>
       <div class="execution-block-load">
         <span>Нагрузка блока</span>
         <strong>Факт ${formatLoadValue(actualLoad)} / план ${formatLoadValue(plannedLoad)}</strong>
         <small>${escapeHtml(formatExecutionBlockLoadDelta(actualLoad, plannedLoad))}</small>
       </div>
-      ${exercises.length > 0 ? `
+      ${visibleExercises.length > 0 ? `
         <div class="execution-readonly-exercises">
-          ${exercises
+          ${visibleExercises
             .slice()
             .sort((a, b) => a.orderIndex - b.orderIndex)
             .map((exercise) => renderExecutionExerciseReadonly(exercise, getExerciseResult(result, exercise.id)))

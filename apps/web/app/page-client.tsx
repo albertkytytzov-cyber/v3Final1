@@ -6676,6 +6676,22 @@ function formatExerciseTargetWithoutCommonNotes(
   );
 }
 
+function getRepeatedSingleExerciseBlock(
+  block: Pick<AthleteExecutionBlock, "name" | "exercises">,
+) {
+  const exercises = block.exercises ?? [];
+
+  if (exercises.length !== 1) {
+    return null;
+  }
+
+  const [exercise] = exercises;
+  const blockName = normalizeImportedPlanText(block.name).toLowerCase();
+  const exerciseName = normalizeImportedPlanText(exercise.name).toLowerCase();
+
+  return blockName && blockName === exerciseName ? exercise : null;
+}
+
 function splitExerciseNoteParts(notes?: string | null) {
   return (notes ?? "")
     .split(/\s*\/\s*/u)
@@ -14729,22 +14745,38 @@ export function PageClient({
                                   block.notes,
                                   activeAthleteTrainingDayNotes,
                                 );
+                                const repeatedExercise = getRepeatedSingleExerciseBlock(block);
+                                const repeatedExerciseTarget = repeatedExercise
+                                  ? formatExerciseTargetWithoutCommonNotes(
+                                      repeatedExercise,
+                                      language,
+                                      activeAthleteTrainingDayNotes,
+                                      block.notes,
+                                    )
+                                  : "";
 
                                 return (
                                   <article className="athlete-plan-block-row" key={block.id}>
                                     <div className="summary-topline">
-                                      <strong>
-                                        {renderTrainingTextWithTooltips(
-                                          translateKnownTemplateText(block.name, language),
-                                        )}
-                                      </strong>
+                                      <div>
+                                        <strong>
+                                          {renderTrainingTextWithTooltips(
+                                            translateKnownTemplateText(block.name, language),
+                                          )}
+                                        </strong>
+                                        {repeatedExerciseTarget ? (
+                                          <small>
+                                            {renderTrainingTextWithTooltips(repeatedExerciseTarget)}
+                                          </small>
+                                        ) : null}
+                                      </div>
                                     </div>
                                     {visibleBlockNote ? (
                                       <p className="assigned-block-note">
                                         {renderTrainingTextWithTooltips(visibleBlockNote)}
                                       </p>
                                     ) : null}
-                                    {(block.exercises ?? []).length > 0 ? (
+                                    {!repeatedExercise && (block.exercises ?? []).length > 0 ? (
                                       <div className="assigned-exercise-list athlete-plan-exercise-list">
                                         {(block.exercises ?? []).map((exercise) => (
                                           <div className="assigned-exercise-row" key={exercise.id}>
@@ -14974,12 +15006,26 @@ export function PageClient({
                             block.notes,
                             activeAthleteTrainingDayNotes,
                           );
+                          const repeatedExercise = getRepeatedSingleExerciseBlock(block);
+                          const repeatedExerciseTarget = repeatedExercise
+                            ? formatExerciseTargetWithoutCommonNotes(
+                                repeatedExercise,
+                                language,
+                                activeAthleteTrainingDayNotes,
+                                block.notes,
+                              )
+                            : "";
 
                           return (
                             <div className="entry-summary athlete-execution-block" key={block.id}>
                               <div className="summary-topline">
                                 <div>
                                   <strong>{renderTrainingTextWithTooltips(block.name)}</strong>
+                                  {repeatedExerciseTarget ? (
+                                    <small>
+                                      {renderTrainingTextWithTooltips(repeatedExerciseTarget)}
+                                    </small>
+                                  ) : null}
                                   {"action" in block && typeof block.action === "string" ? (
                                     <small>{translateBlockAction(block.action, language)}</small>
                                   ) : null}
@@ -14991,7 +15037,7 @@ export function PageClient({
                                   {renderTrainingTextWithTooltips(visibleBlockNote)}
                                 </p>
                               ) : null}
-                              {(block.exercises ?? []).length > 0 ? (
+                              {!repeatedExercise && (block.exercises ?? []).length > 0 ? (
                                 <div className="assigned-exercise-list">
                                   {(block.exercises ?? []).map((exercise) => {
                                     const exerciseDraft = getExecutionExerciseDraft(
@@ -16208,28 +16254,42 @@ export function PageClient({
                       </p>
                       <ul>
                         {coachAdaptedPlan.sessions.flatMap((session) =>
-                          session.blocks.map((block) => (
-                            <li key={block.id}>
-                              {renderTrainingTextWithTooltips(session.name)}:{" "}
-                              {renderTrainingTextWithTooltips(block.name)} [
-                              {translateBlockAction(block.action, language)}] -{" "}
-                              {translateAdaptationText(block.adaptationReason, language)}
-                              {(block.exercises ?? []).length > 0 ? (
-                                <div className="assigned-exercise-list">
-                                  {(block.exercises ?? []).map((exercise) => (
-                                    <div className="assigned-exercise-row" key={exercise.id}>
-                                      <strong>{renderTrainingTextWithTooltips(exercise.name)}</strong>
+                          session.blocks.map((block) => {
+                            const repeatedExercise = getRepeatedSingleExerciseBlock(block);
+
+                            return (
+                              <li key={block.id}>
+                                {renderTrainingTextWithTooltips(session.name)}:{" "}
+                                {renderTrainingTextWithTooltips(block.name)} [
+                                {translateBlockAction(block.action, language)}] -{" "}
+                                {translateAdaptationText(block.adaptationReason, language)}
+                                {repeatedExercise ? (
+                                  <div className="assigned-exercise-list">
+                                    <div className="assigned-exercise-row">
                                       <span>
                                         {renderTrainingTextWithTooltips(
-                                          formatExerciseTarget(exercise, language),
+                                          formatExerciseTarget(repeatedExercise, language),
                                         )}
                                       </span>
                                     </div>
-                                  ))}
-                                </div>
-                              ) : null}
-                            </li>
-                          )),
+                                  </div>
+                                ) : (block.exercises ?? []).length > 0 ? (
+                                  <div className="assigned-exercise-list">
+                                    {(block.exercises ?? []).map((exercise) => (
+                                      <div className="assigned-exercise-row" key={exercise.id}>
+                                        <strong>{renderTrainingTextWithTooltips(exercise.name)}</strong>
+                                        <span>
+                                          {renderTrainingTextWithTooltips(
+                                            formatExerciseTarget(exercise, language),
+                                          )}
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : null}
+                              </li>
+                            );
+                          }),
                         )}
                       </ul>
                     </>
@@ -23024,39 +23084,45 @@ export function PageClient({
                         {selectedAssignedPlanPreview.day.sessions.map((session) => (
                           <section className="planning-assigned-session" key={session.id}>
                             <strong>{renderTrainingTextWithTooltips(session.name)}</strong>
-                            {session.blocks.map((block) => (
-                              <div className="planning-assigned-block" key={block.id}>
-                                <div>
-                                  <strong>
-                                    {renderTrainingTextWithTooltips(
-                                      translateKnownTemplateText(block.name, language),
-                                    )}
-                                  </strong>
-                                  <small>
-                                    {localizedOptionLabel(block.blockType, language, BLOCK_TYPE_LABELS)} /{" "}
-                                    {t("targetDuration")} {block.targetDurationMinutes ?? "-"} / RPE{" "}
-                                    {block.targetRpe ?? "-"}
-                                  </small>
-                                </div>
-                                {block.notes ? (
-                                  <p>{renderTrainingTextWithTooltips(block.notes)}</p>
-                                ) : null}
-                                {(block.exercises ?? []).length > 0 ? (
-                                  <div className="assigned-exercise-list">
-                                    {(block.exercises ?? []).map((exercise) => (
-                                      <div className="assigned-exercise-row" key={exercise.id}>
-                                        <strong>{renderTrainingTextWithTooltips(exercise.name)}</strong>
-                                        <span>
-                                          {renderTrainingTextWithTooltips(
-                                            formatExerciseTarget(exercise, language),
-                                          )}
-                                        </span>
-                                      </div>
-                                    ))}
+                            {session.blocks.map((block) => {
+                              const repeatedExercise = getRepeatedSingleExerciseBlock(block);
+
+                              return (
+                                <div className="planning-assigned-block" key={block.id}>
+                                  <div>
+                                    <strong>
+                                      {renderTrainingTextWithTooltips(
+                                        translateKnownTemplateText(block.name, language),
+                                      )}
+                                    </strong>
+                                    <small>
+                                      {repeatedExercise
+                                        ? renderTrainingTextWithTooltips(
+                                            formatExerciseTarget(repeatedExercise, language),
+                                          )
+                                        : `${localizedOptionLabel(block.blockType, language, BLOCK_TYPE_LABELS)} / ${t("targetDuration")} ${block.targetDurationMinutes ?? "-"} / RPE ${block.targetRpe ?? "-"}`}
+                                    </small>
                                   </div>
-                                ) : null}
-                              </div>
-                            ))}
+                                  {block.notes ? (
+                                    <p>{renderTrainingTextWithTooltips(block.notes)}</p>
+                                  ) : null}
+                                  {!repeatedExercise && (block.exercises ?? []).length > 0 ? (
+                                    <div className="assigned-exercise-list">
+                                      {(block.exercises ?? []).map((exercise) => (
+                                        <div className="assigned-exercise-row" key={exercise.id}>
+                                          <strong>{renderTrainingTextWithTooltips(exercise.name)}</strong>
+                                          <span>
+                                            {renderTrainingTextWithTooltips(
+                                              formatExerciseTarget(exercise, language),
+                                            )}
+                                          </span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  ) : null}
+                                </div>
+                              );
+                            })}
                           </section>
                         ))}
                       </div>
