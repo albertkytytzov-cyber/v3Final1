@@ -533,13 +533,41 @@ interface TrainingAbbreviationTooltipState {
   anchorCenterX: number;
   anchorTop: number;
   left: number;
+  maxWidth: number | null;
   measured: boolean;
   placement: TrainingAbbreviationTooltipPlacement;
   top: number;
 }
 
 function clampTooltipPosition(value: number, min: number, max: number) {
+  if (max < min) {
+    return min;
+  }
+
   return Math.min(Math.max(value, min), max);
+}
+
+function getTrainingTooltipViewportBounds(viewportWidth: number) {
+  const viewportMargin = 12;
+  const rail = document.querySelector<HTMLElement>(".workspace-rail");
+  const railRect = rail?.getBoundingClientRect();
+  const isDesktopLeftRail =
+    railRect &&
+    railRect.width >= 160 &&
+    railRect.height >= 180 &&
+    railRect.left <= 40 &&
+    railRect.top <= 80 &&
+    railRect.right < viewportWidth * 0.45;
+  const railSafeLeft = isDesktopLeftRail ? railRect.right + 14 : viewportMargin;
+  const minLeft =
+    railSafeLeft + 240 + viewportMargin <= viewportWidth
+      ? Math.max(viewportMargin, railSafeLeft)
+      : viewportMargin;
+
+  return {
+    maxRight: viewportWidth - viewportMargin,
+    minLeft,
+  };
 }
 
 function TrainingAbbreviation({
@@ -565,6 +593,7 @@ function TrainingAbbreviation({
       anchorCenterX: rect.left + rect.width / 2,
       anchorTop: rect.top,
       left: rect.left,
+      maxWidth: null,
       measured: false,
       placement: "bottom",
       top: rect.bottom + 10,
@@ -598,13 +627,16 @@ function TrainingAbbreviation({
     const viewportMargin = 12;
     const viewportWidth = window.innerWidth;
     const viewportHeight = window.innerHeight;
-    const width = Math.min(popoverRect.width, viewportWidth - viewportMargin * 2);
+    const tooltipBounds = getTrainingTooltipViewportBounds(viewportWidth);
+    const availableWidth = Math.max(180, tooltipBounds.maxRight - tooltipBounds.minLeft);
+    const nextMaxWidth = Math.min(420, availableWidth);
+    const width = Math.min(popoverRect.width, nextMaxWidth);
     const height = popoverRect.height;
-    const maxLeft = Math.max(viewportMargin, viewportWidth - width - viewportMargin);
+    const maxLeft = Math.max(tooltipBounds.minLeft, tooltipBounds.maxRight - width);
     const maxTop = Math.max(viewportMargin, viewportHeight - height - viewportMargin);
     const nextLeft = clampTooltipPosition(
       tooltip.anchorCenterX - width / 2,
-      viewportMargin,
+      tooltipBounds.minLeft,
       maxLeft,
     );
     const hasTopSpace = tooltip.anchorTop >= height + viewportMargin + 10;
@@ -617,6 +649,7 @@ function TrainingAbbreviation({
       tooltip.measured &&
       Math.abs(tooltip.left - nextLeft) < 0.5 &&
       Math.abs(tooltip.top - nextTop) < 0.5 &&
+      tooltip.maxWidth === nextMaxWidth &&
       tooltip.placement === nextPlacement
     ) {
       return;
@@ -627,6 +660,7 @@ function TrainingAbbreviation({
         ? {
             ...current,
             left: nextLeft,
+            maxWidth: nextMaxWidth,
             measured: true,
             placement: nextPlacement,
             top: nextTop,
@@ -662,6 +696,7 @@ function TrainingAbbreviation({
               role="tooltip"
               style={{
                 left: tooltip.left,
+                maxWidth: tooltip.maxWidth ?? undefined,
                 top: tooltip.top,
                 visibility: tooltip.measured ? "visible" : "hidden",
               }}
