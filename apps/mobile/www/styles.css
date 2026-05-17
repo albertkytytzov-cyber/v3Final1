@@ -4086,7 +4086,7 @@ button.timeline-card:active {
 }
 
 .mobile-plan-work::before {
-  content: "Подходы";
+  content: "Объём";
 }
 
 .mobile-plan-volume::before {
@@ -4094,5 +4094,5 @@ button.timeline-card:active {
 }
 
 .mobile-plan-control::before {
-  content: "Контроль";
+  content: "Детали";
 }

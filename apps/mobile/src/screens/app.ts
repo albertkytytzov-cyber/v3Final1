@@ -4872,8 +4872,8 @@ function renderExecutionPlanGroup(
                   ${compactAthlete ? "" : `
                     <div class="mobile-plan-table-head">
                       <span>Упр.</span>
-                      <span>Подходы</span>
-                      <span>Контр.</span>
+                      <span>Объём</span>
+                      <span>Детали</span>
                     </div>
                   `}
                   ${session.blocks
@@ -4992,7 +4992,7 @@ function renderUnifiedSessionPlanTable(session: MobileAssignedPlanSession) {
       <div class="mobile-plan-table-head">
         <span>Блок</span>
         <span>Объём</span>
-        <span>Контроль</span>
+        <span>Детали</span>
       </div>
       ${session.blocks.map((block) => `
         <div class="mobile-plan-row mobile-unified-plan-row">
@@ -5455,8 +5455,8 @@ function renderPlanCard(plan: AssignedPlanSummary, isCoachView = false) {
                 <div class="mobile-plan-table">
                   <div class="mobile-plan-table-head">
                     <span>Упр.</span>
-                    <span>Подходы</span>
-                    <span>Контр.</span>
+                    <span>Объём</span>
+                    <span>Детали</span>
                   </div>
                   ${session.blocks.map((block) => renderPlanBlock(block)).join("")}
                 </div>
