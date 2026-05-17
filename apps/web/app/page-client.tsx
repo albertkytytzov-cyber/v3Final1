@@ -3415,6 +3415,10 @@ function isEmptyImportedTableValue(value: string) {
   return !value || /^[-–—]+$/u.test(value);
 }
 
+function isImportedExerciseCommentColumn(header: string) {
+  return /(?:контроль|примеч|коммент|note|comment|control)/iu.test(header.toLowerCase());
+}
+
 function getImportedTableHeaders(table: HTMLTableElement) {
   const headerRow = Array.from(table.querySelectorAll("tr")).find(
     (row) => row.querySelectorAll("th").length > 0,
@@ -3469,13 +3473,11 @@ function getImportedTableColumnIndexes(headers: string[], firstDataCellCount: nu
 }
 
 function formatImportedControlCell(header: string, value: string) {
-  const normalizedHeader = header.toLowerCase();
-
-  if (isEmptyImportedTableValue(value)) {
+  if (isEmptyImportedTableValue(value) || isImportedExerciseCommentColumn(header)) {
     return "";
   }
 
-  if (!header || /(?:контроль|примеч|коммент|note|comment|control)/iu.test(normalizedHeader)) {
+  if (!header) {
     return value;
   }
 
