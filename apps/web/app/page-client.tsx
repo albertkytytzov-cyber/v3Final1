@@ -93,9 +93,11 @@ import {
   type FormEvent,
   type ReactNode,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 import {
   LANGUAGE_OPTIONS as I18N_LANGUAGE_OPTIONS,
   type Language as I18nLanguage,
@@ -524,6 +526,156 @@ function getTrainingAbbreviationExplanation(value: string) {
   return TRAINING_ABBREVIATION_EXPLANATIONS[value.toLocaleUpperCase("ru-RU")] ?? null;
 }
 
+type TrainingAbbreviationTooltipPlacement = "top" | "bottom";
+
+interface TrainingAbbreviationTooltipState {
+  anchorBottom: number;
+  anchorCenterX: number;
+  anchorTop: number;
+  left: number;
+  measured: boolean;
+  placement: TrainingAbbreviationTooltipPlacement;
+  top: number;
+}
+
+function clampTooltipPosition(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function TrainingAbbreviation({
+  explanation,
+  label,
+}: {
+  explanation: string;
+  label: string;
+}) {
+  const anchorRef = useRef<HTMLSpanElement | null>(null);
+  const popoverRef = useRef<HTMLDivElement | null>(null);
+  const [tooltip, setTooltip] = useState<TrainingAbbreviationTooltipState | null>(null);
+
+  function openTooltip() {
+    const rect = anchorRef.current?.getBoundingClientRect();
+
+    if (!rect) {
+      return;
+    }
+
+    setTooltip({
+      anchorBottom: rect.bottom,
+      anchorCenterX: rect.left + rect.width / 2,
+      anchorTop: rect.top,
+      left: rect.left,
+      measured: false,
+      placement: "bottom",
+      top: rect.bottom + 10,
+    });
+  }
+
+  function closeTooltip() {
+    setTooltip(null);
+  }
+
+  useEffect(() => {
+    if (!tooltip) {
+      return undefined;
+    }
+
+    window.addEventListener("resize", closeTooltip);
+    window.addEventListener("scroll", closeTooltip, true);
+
+    return () => {
+      window.removeEventListener("resize", closeTooltip);
+      window.removeEventListener("scroll", closeTooltip, true);
+    };
+  }, [tooltip]);
+
+  useLayoutEffect(() => {
+    if (!tooltip || !popoverRef.current || typeof window === "undefined") {
+      return;
+    }
+
+    const popoverRect = popoverRef.current.getBoundingClientRect();
+    const viewportMargin = 12;
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const width = Math.min(popoverRect.width, viewportWidth - viewportMargin * 2);
+    const height = popoverRect.height;
+    const maxLeft = Math.max(viewportMargin, viewportWidth - width - viewportMargin);
+    const maxTop = Math.max(viewportMargin, viewportHeight - height - viewportMargin);
+    const nextLeft = clampTooltipPosition(
+      tooltip.anchorCenterX - width / 2,
+      viewportMargin,
+      maxLeft,
+    );
+    const hasTopSpace = tooltip.anchorTop >= height + viewportMargin + 10;
+    const nextTop = hasTopSpace
+      ? Math.max(viewportMargin, tooltip.anchorTop - height - 10)
+      : clampTooltipPosition(tooltip.anchorBottom + 10, viewportMargin, maxTop);
+    const nextPlacement: TrainingAbbreviationTooltipPlacement = hasTopSpace ? "top" : "bottom";
+
+    if (
+      tooltip.measured &&
+      Math.abs(tooltip.left - nextLeft) < 0.5 &&
+      Math.abs(tooltip.top - nextTop) < 0.5 &&
+      tooltip.placement === nextPlacement
+    ) {
+      return;
+    }
+
+    setTooltip((current) =>
+      current
+        ? {
+            ...current,
+            left: nextLeft,
+            measured: true,
+            placement: nextPlacement,
+            top: nextTop,
+          }
+        : current,
+    );
+  }, [tooltip]);
+
+  return (
+    <>
+      <span
+        aria-label={`${label}: ${explanation}`}
+        className="training-abbreviation"
+        onBlur={closeTooltip}
+        onFocus={openTooltip}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            closeTooltip();
+          }
+        }}
+        onMouseEnter={openTooltip}
+        onMouseLeave={closeTooltip}
+        ref={anchorRef}
+        tabIndex={0}
+      >
+        {label}
+      </span>
+      {tooltip && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              className={`training-abbreviation-popover training-abbreviation-popover-${tooltip.placement}`}
+              ref={popoverRef}
+              role="tooltip"
+              style={{
+                left: tooltip.left,
+                top: tooltip.top,
+                visibility: tooltip.measured ? "visible" : "hidden",
+              }}
+            >
+              <strong>{label}</strong>
+              <span>{explanation}</span>
+            </div>,
+            document.body,
+          )
+        : null}
+    </>
+  );
+}
+
 function renderTrainingTextWithTooltips(value: string | number | null | undefined): ReactNode {
   const text = value === null || value === undefined ? "" : String(value);
 
@@ -550,18 +702,13 @@ function renderTrainingTextWithTooltips(value: string | number | null | undefine
       }
 
       const original = text.slice(abbreviationStart, abbreviationEnd);
-      const tooltip = `${original}: ${explanation}`;
 
       parts.push(
-        <span
-          aria-label={tooltip}
-          className="training-abbreviation"
-          data-explanation={explanation}
+        <TrainingAbbreviation
+          explanation={explanation}
           key={`${original}-${abbreviationStart}-${parts.length}`}
-          tabIndex={0}
-        >
-          {original}
-        </span>,
+          label={original}
+        />,
       );
       lastIndex = abbreviationEnd;
 
