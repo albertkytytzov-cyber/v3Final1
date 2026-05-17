@@ -5612,8 +5612,8 @@ td {
 
 .planning-template-import-session-table > div {
   display: grid;
-  grid-template-columns: minmax(100px, 0.7fr) minmax(120px, 0.8fr) minmax(150px, 1fr) minmax(160px, 1.2fr);
-  min-width: 640px;
+  grid-template-columns: minmax(100px, 0.7fr) minmax(160px, 1fr) minmax(220px, 1.4fr);
+  min-width: 520px;
   border-bottom: 1px solid rgba(148, 163, 184, 0.16);
 }
 

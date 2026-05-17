@@ -20583,9 +20583,6 @@ export function PageClient({
                                     <span>
                                       {copyFor(language, { en: "Volume", ru: "Объём", bg: "Обем" })}
                                     </span>
-                                    <span>
-                                      {copyFor(language, { en: "Control", ru: "Контроль", bg: "Контрол" })}
-                                    </span>
                                   </div>
                                   {session.blocks.map((block, blockIndex) => {
                                     const exercise =
@@ -20610,7 +20607,6 @@ export function PageClient({
                                         </span>
                                         <span>{block.name}</span>
                                         <span>{formatExerciseWorkCell(exercise, language)}</span>
-                                        <span>{formatExerciseControlCell(exercise, language)}</span>
                                       </div>
                                     );
                                   })}
