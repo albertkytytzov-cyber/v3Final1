@@ -5209,16 +5209,18 @@ function renderExecutionExerciseRow(
         </span>
       </label>
       <span class="mobile-plan-cell mobile-plan-work">${renderTrainingTextWithAbbreviationHints(formatExerciseWorkCell(exercise))}</span>
-      <details class="mobile-execution-row-details">
-        <summary>Факт</summary>
-        <div class="execution-exercise-fields">
-          <label><span>Подх.</span><input inputmode="numeric" name="exerciseSets:${escapeHtml(exercise.id)}" placeholder="${escapeHtml(exercise.targetSets)}" type="number" min="0" value="${formatInputValue(result?.setsCompleted)}" ${options.isLocked ? "disabled" : ""} /></label>
-          <label><span>Повт.</span><input inputmode="numeric" name="exerciseReps:${escapeHtml(exercise.id)}" placeholder="${escapeHtml(exercise.targetReps)}" type="number" min="0" value="${formatInputValue(result?.repsCompleted)}" ${options.isLocked ? "disabled" : ""} /></label>
-          <label><span>Кг</span><input inputmode="decimal" name="exerciseWeight:${escapeHtml(exercise.id)}" placeholder="${escapeHtml(exercise.targetWeightKg)}" type="number" min="0" step="0.5" value="${formatInputValue(result?.weightKg)}" ${options.isLocked ? "disabled" : ""} /></label>
-          <label><span>Мин.</span><input inputmode="numeric" name="exerciseDuration:${escapeHtml(exercise.id)}" placeholder="${escapeHtml(exercise.targetDurationMinutes)}" type="number" min="0" value="${formatInputValue(result?.durationMinutes)}" ${options.isLocked ? "disabled" : ""} /></label>
-          <label><span>RPE</span><input inputmode="numeric" name="exerciseRpe:${escapeHtml(exercise.id)}" placeholder="${escapeHtml(exercise.targetRpe)}" type="number" min="1" max="10" value="${formatInputValue(result?.rpe)}" ${options.isLocked ? "disabled" : ""} /></label>
-        </div>
-      </details>
+      ${options.compactAthlete ? "" : `
+        <details class="mobile-execution-row-details">
+          <summary>Факт</summary>
+          <div class="execution-exercise-fields">
+            <label><span>Подх.</span><input inputmode="numeric" name="exerciseSets:${escapeHtml(exercise.id)}" placeholder="${escapeHtml(exercise.targetSets)}" type="number" min="0" value="${formatInputValue(result?.setsCompleted)}" ${options.isLocked ? "disabled" : ""} /></label>
+            <label><span>Повт.</span><input inputmode="numeric" name="exerciseReps:${escapeHtml(exercise.id)}" placeholder="${escapeHtml(exercise.targetReps)}" type="number" min="0" value="${formatInputValue(result?.repsCompleted)}" ${options.isLocked ? "disabled" : ""} /></label>
+            <label><span>Кг</span><input inputmode="decimal" name="exerciseWeight:${escapeHtml(exercise.id)}" placeholder="${escapeHtml(exercise.targetWeightKg)}" type="number" min="0" step="0.5" value="${formatInputValue(result?.weightKg)}" ${options.isLocked ? "disabled" : ""} /></label>
+            <label><span>Мин.</span><input inputmode="numeric" name="exerciseDuration:${escapeHtml(exercise.id)}" placeholder="${escapeHtml(exercise.targetDurationMinutes)}" type="number" min="0" value="${formatInputValue(result?.durationMinutes)}" ${options.isLocked ? "disabled" : ""} /></label>
+            <label><span>RPE</span><input inputmode="numeric" name="exerciseRpe:${escapeHtml(exercise.id)}" placeholder="${escapeHtml(exercise.targetRpe)}" type="number" min="1" max="10" value="${formatInputValue(result?.rpe)}" ${options.isLocked ? "disabled" : ""} /></label>
+          </div>
+        </details>
+      `}
     </div>
   `;
 }
@@ -5238,10 +5240,12 @@ function renderExecutionBlockFallbackRow(
         </span>
       </label>
       <span class="mobile-plan-cell mobile-plan-work">${renderTrainingTextWithAbbreviationHints(formatBlockTarget(block))}</span>
-      <details class="mobile-execution-row-details">
-        <summary>Факт</summary>
-        ${renderBlockFallbackFields(result, options.isLocked === true)}
-      </details>
+      ${options.compactAthlete ? "" : `
+        <details class="mobile-execution-row-details">
+          <summary>Факт</summary>
+          ${renderBlockFallbackFields(result, options.isLocked === true)}
+        </details>
+      `}
     </div>
   `;
 }
