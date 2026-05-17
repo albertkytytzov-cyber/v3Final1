@@ -61,6 +61,18 @@ import type {
 
 const runtimeConfig = readRuntimeConfig();
 const SHOW_DIRECT_WATCH_DIAGNOSTICS = false;
+const TRAINING_ABBREVIATION_EXPLANATIONS: Record<string, string> = {
+  "АНП": "анаэробный порог: интенсивность на границе устойчивой и тяжёлой работы",
+  "HR": "heart rate: пульс",
+  "RPE": "субъективная тяжесть нагрузки по шкале 1-10",
+  "ИТ": "интервальная тренировка: работа отрезками с заданным отдыхом",
+  "ЛМВ": "локальная мышечная выносливость",
+  "ПАНО": "порог анаэробного обмена",
+  "СДР": "статодинамический режим: медленная силовая работа без полного расслабления мышцы",
+  "ТР": "тренировочный режим",
+};
+const TRAINING_ABBREVIATION_PATTERN =
+  /(^|[^\p{L}\p{N}])(АНП|HR|RPE|ИТ|ЛМВ|ПАНО|СДР|ТР)(?=$|[^\p{L}\p{N}])/giu;
 type MobileAssignedPlanSession = AssignedPlanSummary["day"]["sessions"][number];
 
 export function bootstrapMobileApp(root: HTMLElement) {
@@ -1147,6 +1159,25 @@ export function bootstrapMobileApp(root: HTMLElement) {
       });
     });
 
+    root.querySelectorAll<HTMLElement>("[data-training-abbreviation]").forEach((element) => {
+      const showHint = (event: Event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        element.setAttribute("aria-expanded", "true");
+        element.focus({ preventScroll: true });
+      };
+
+      element.addEventListener("click", showHint);
+      element.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          showHint(event);
+        }
+      });
+      element.addEventListener("blur", () => {
+        element.setAttribute("aria-expanded", "false");
+      });
+    });
+
     root.querySelector<HTMLSelectElement>("[data-execution-date-filter]")?.addEventListener("change", (event) => {
       const executionDateFilter = (event.currentTarget as HTMLSelectElement).value || null;
       if (isCoachRole(state.session.user?.role)) {
@@ -1905,8 +1936,8 @@ function renderCoachDayExerciseChecklist(dayData: CoachDayCleanSummary) {
         ${exercises.map(({ block, exercise }) => `
           <article class="is-${exercise.status}">
             <span>${escapeHtml(exercise.statusLabel)}</span>
-            <strong>${escapeHtml(exercise.name)}</strong>
-            <p>${escapeHtml(block.sessionName)} · ${escapeHtml(block.name)} · ${escapeHtml(exercise.plannedWork || "-")} · ${escapeHtml(exercise.sourceLabel)}</p>
+            <strong>${renderTrainingTextWithAbbreviationHints(exercise.name)}</strong>
+            <p>${escapeHtml(block.sessionName)} · ${renderTrainingTextWithAbbreviationHints(block.name)} · ${renderTrainingTextWithAbbreviationHints(exercise.plannedWork || "-")} · ${escapeHtml(exercise.sourceLabel)}</p>
           </article>
         `).join("")}
       </div>
@@ -4990,8 +5021,8 @@ function renderUnifiedSessionPlanTable(session: MobileAssignedPlanSession) {
       </div>
       ${session.blocks.map((block) => `
         <div class="mobile-plan-row mobile-unified-plan-row">
-          <span class="mobile-plan-exercise-name-static">${escapeHtml(block.name)}</span>
-          <span class="mobile-plan-cell mobile-plan-volume">${escapeHtml(formatUnifiedSessionBlockTarget(block))}</span>
+          <span class="mobile-plan-exercise-name-static">${renderTrainingTextWithAbbreviationHints(block.name)}</span>
+          <span class="mobile-plan-cell mobile-plan-volume">${renderTrainingTextWithAbbreviationHints(formatUnifiedSessionBlockTarget(block))}</span>
         </div>
       `).join("")}
     </div>
@@ -5098,11 +5129,11 @@ function renderExecutionBlockReadonly(item: ExecutionBlockItem, result: Executio
     <article class="mobile-plan-row mobile-execution-row execution-readonly-row">
       <div class="mobile-plan-exercise-name">
         <span>
-          <strong>${escapeHtml(item.block.name)}</strong>
+          <strong>${renderTrainingTextWithAbbreviationHints(item.block.name)}</strong>
           <small>${escapeHtml(formatExecutionResultStatus(result))}</small>
         </span>
       </div>
-      <span class="mobile-plan-cell mobile-plan-work">${escapeHtml(formatBlockTarget(item.block))}</span>
+      <span class="mobile-plan-cell mobile-plan-work">${renderTrainingTextWithAbbreviationHints(formatBlockTarget(item.block))}</span>
       <div class="execution-block-load">
         <span>Нагрузка блока</span>
         <strong>Факт ${formatLoadValue(actualLoad)} / план ${formatLoadValue(plannedLoad)}</strong>
@@ -5130,9 +5161,9 @@ function renderExecutionExerciseReadonly(
   return `
     <div class="execution-readonly-exercise is-${status}">
       <span>
-        <strong>${escapeHtml(exercise.name)}</strong>
-        <small>Факт: ${escapeHtml(formatExerciseActualDetails(result))}</small>
-        <small>План: ${escapeHtml(formatExerciseWorkCell(exercise))}</small>
+        <strong>${renderTrainingTextWithAbbreviationHints(exercise.name)}</strong>
+        <small>Факт: ${renderTrainingTextWithAbbreviationHints(formatExerciseActualDetails(result))}</small>
+        <small>План: ${renderTrainingTextWithAbbreviationHints(formatExerciseWorkCell(exercise))}</small>
       </span>
       <em>${escapeHtml(formatExerciseResultStatus(result))}</em>
     </div>
@@ -5173,11 +5204,11 @@ function renderExecutionExerciseRow(
       <label class="execution-exercise-check mobile-plan-exercise-name">
         <input name="exerciseCompleted:${escapeHtml(exercise.id)}" type="checkbox" ${isCompleted ? "checked" : ""} ${options.isLocked ? "disabled" : ""} />
         <span>
-          <strong>${escapeHtml(exercise.name)}</strong>
+          <strong>${renderTrainingTextWithAbbreviationHints(exercise.name)}</strong>
           ${options.compactAthlete ? "" : `<small>${isCompleted ? "выполнено" : "не отмечено"}</small>`}
         </span>
       </label>
-      <span class="mobile-plan-cell mobile-plan-work">${escapeHtml(formatExerciseWorkCell(exercise))}</span>
+      <span class="mobile-plan-cell mobile-plan-work">${renderTrainingTextWithAbbreviationHints(formatExerciseWorkCell(exercise))}</span>
       <details class="mobile-execution-row-details">
         <summary>Факт</summary>
         <div class="execution-exercise-fields">
@@ -5202,11 +5233,11 @@ function renderExecutionBlockFallbackRow(
       <label class="execution-exercise-check mobile-plan-exercise-name">
         <input name="completed" type="checkbox" ${result?.completed ? "checked" : ""} ${options.isLocked ? "disabled" : ""} />
         <span>
-          <strong>${escapeHtml(block.name)}</strong>
+          <strong>${renderTrainingTextWithAbbreviationHints(block.name)}</strong>
           ${options.compactAthlete ? "" : `<small>${result?.completed ? "выполнено" : "не отмечено"}</small>`}
         </span>
       </label>
-      <span class="mobile-plan-cell mobile-plan-work">${escapeHtml(formatBlockTarget(block))}</span>
+      <span class="mobile-plan-cell mobile-plan-work">${renderTrainingTextWithAbbreviationHints(formatBlockTarget(block))}</span>
       <details class="mobile-execution-row-details">
         <summary>Факт</summary>
         ${renderBlockFallbackFields(result, options.isLocked === true)}
@@ -5376,13 +5407,13 @@ function renderPlanBlock(block: AssignedPlanBlock) {
   return `
     ${exercises.length > 0 ? exercises.map((exercise) => `
       <div class="mobile-plan-row">
-        <span class="mobile-plan-exercise-name-static">${escapeHtml(exercise.name)}</span>
-        <span class="mobile-plan-cell mobile-plan-work">${escapeHtml(formatExerciseWorkCell(exercise))}</span>
+        <span class="mobile-plan-exercise-name-static">${renderTrainingTextWithAbbreviationHints(exercise.name)}</span>
+        <span class="mobile-plan-cell mobile-plan-work">${renderTrainingTextWithAbbreviationHints(formatExerciseWorkCell(exercise))}</span>
       </div>
     `).join("") : `
       <div class="mobile-plan-row">
-        <span class="mobile-plan-exercise-name-static">${escapeHtml(block.name)}</span>
-        <span class="mobile-plan-cell mobile-plan-work">${escapeHtml(formatBlockTarget(block))}</span>
+        <span class="mobile-plan-exercise-name-static">${renderTrainingTextWithAbbreviationHints(block.name)}</span>
+        <span class="mobile-plan-cell mobile-plan-work">${renderTrainingTextWithAbbreviationHints(formatBlockTarget(block))}</span>
       </div>
     `}
   `;
@@ -7537,4 +7568,51 @@ function escapeHtml(value: string | number | null | undefined) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+function getTrainingAbbreviationExplanation(value: string) {
+  return TRAINING_ABBREVIATION_EXPLANATIONS[value.toLocaleUpperCase("ru-RU")] ?? null;
+}
+
+function renderTrainingTextWithAbbreviationHints(value: string | number | null | undefined) {
+  const text = String(value ?? "");
+
+  if (!text) {
+    return "";
+  }
+
+  let html = "";
+  let lastIndex = 0;
+  let hasAbbreviation = false;
+
+  text.replace(
+    TRAINING_ABBREVIATION_PATTERN,
+    (match: string, prefix: string, abbreviation: string, offset: number) => {
+      const abbreviationStart = offset + prefix.length;
+      const abbreviationEnd = abbreviationStart + abbreviation.length;
+      const explanation = getTrainingAbbreviationExplanation(abbreviation);
+
+      if (!explanation) {
+        return match;
+      }
+
+      html += escapeHtml(text.slice(lastIndex, abbreviationStart));
+
+      const original = text.slice(abbreviationStart, abbreviationEnd);
+      const tooltip = `${original}: ${explanation}`;
+
+      html += `<span class="mobile-training-abbreviation" role="button" tabindex="0" aria-expanded="false" aria-label="${escapeHtml(tooltip)}" data-explanation="${escapeHtml(explanation)}" data-training-abbreviation>${escapeHtml(original)}</span>`;
+      lastIndex = abbreviationEnd;
+      hasAbbreviation = true;
+
+      return match;
+    },
+  );
+
+  if (!hasAbbreviation) {
+    return escapeHtml(text);
+  }
+
+  html += escapeHtml(text.slice(lastIndex));
+  return html;
 }

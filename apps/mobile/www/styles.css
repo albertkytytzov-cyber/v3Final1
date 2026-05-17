@@ -4091,3 +4091,64 @@ button.timeline-card:active {
 .mobile-plan-volume::before {
   content: "Объём";
 }
+
+.mobile-training-abbreviation {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  border-bottom: 1px dotted var(--accent-dark);
+  color: inherit;
+  cursor: help;
+  font-weight: 950;
+  outline: none;
+}
+
+.mobile-training-abbreviation::after {
+  content: attr(data-explanation);
+  position: absolute;
+  z-index: 90;
+  left: 0;
+  bottom: calc(100% + 8px);
+  width: max-content;
+  max-width: min(280px, 78vw);
+  padding: 8px 10px;
+  border: 1px solid rgba(15, 118, 110, 0.18);
+  border-radius: 8px;
+  background: #102a2b;
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.2);
+  color: #ffffff;
+  font-size: 0.78rem;
+  font-weight: 750;
+  line-height: 1.35;
+  opacity: 0;
+  pointer-events: none;
+  text-align: left;
+  text-transform: none;
+  transform: translateY(4px);
+  transition: opacity 140ms ease, transform 140ms ease;
+  white-space: normal;
+}
+
+.mobile-training-abbreviation::before {
+  content: "";
+  position: absolute;
+  z-index: 91;
+  left: 10px;
+  bottom: calc(100% + 3px);
+  width: 8px;
+  height: 8px;
+  background: #102a2b;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(4px) rotate(45deg);
+  transition: opacity 140ms ease, transform 140ms ease;
+}
+
+.mobile-training-abbreviation:focus-visible::after,
+.mobile-training-abbreviation:focus-visible::before,
+.mobile-training-abbreviation[aria-expanded="true"]::after,
+.mobile-training-abbreviation[aria-expanded="true"]::before {
+  opacity: 1;
+  transform: translateY(0);
+}
