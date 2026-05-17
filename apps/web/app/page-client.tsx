@@ -3172,6 +3172,14 @@ function normalizeImportedVolumeText(
   );
 }
 
+function formatImportedVolumeNotePart(value: string) {
+  return normalizeImportedPlanText(value)
+    .split(/\s*\/\s*/u)
+    .map(normalizeImportedPlanText)
+    .filter(Boolean)
+    .join("; ");
+}
+
 function extractImportedSetDuration(value: string, inferredUnit: ImportedSetDurationUnit | null = null) {
   const normalized = value.toLowerCase();
   const explicitMatch = normalized.match(
@@ -3336,8 +3344,12 @@ function createImportedPlanBlock(
     detachedSetDurationUnit,
   );
   const normalizedControl = removeDetachedImportedSetDurationUnit(control, detachedSetDurationUnit);
-  const notes = normalizeImportedPlanText([normalizedVolume, normalizedControl].filter(Boolean).join(" / "));
-  const details = normalizeImportedPlanText(`${name} ${notes}`);
+  const volumeNote = formatImportedVolumeNotePart(normalizedVolume);
+  const blockNotes = normalizedControl;
+  const exerciseNotes = normalizeImportedPlanText(
+    [volumeNote, normalizedControl].filter(Boolean).join(" / "),
+  );
+  const details = normalizeImportedPlanText(`${name} ${volumeNote || normalizedVolume} ${normalizedControl}`);
   const inferredSetDurationUnit = inferImportedSetDurationUnit(details, blockType);
   const setDuration = extractImportedSetDuration(details, inferredSetDurationUnit);
   const duration = setDuration?.totalDurationMinutes ?? extractImportedDurationMinutes(details);
@@ -3352,7 +3364,7 @@ function createImportedPlanBlock(
         const itemSetDuration =
           extractImportedSetDuration(
             item,
-            inferImportedSetDurationUnit(`${name} ${item} ${notes}`, blockType),
+            inferImportedSetDurationUnit(`${name} ${item} ${exerciseNotes}`, blockType),
           ) ?? setDuration;
         const itemSetsReps = extractImportedSetsReps(item);
 
@@ -3363,7 +3375,7 @@ function createImportedPlanBlock(
           targetWeightKg: null,
           targetDurationMinutes: itemSetDuration?.totalDurationMinutes ?? itemDuration,
           targetRpe: itemRpe,
-          notes: "",
+          notes: exerciseNotes,
           displayOrder: displayOrder + exerciseIndex,
         };
       })
@@ -3375,7 +3387,7 @@ function createImportedPlanBlock(
           targetWeightKg: null,
           targetDurationMinutes: duration,
           targetRpe: rpe,
-          notes: "",
+          notes: exerciseNotes,
           displayOrder,
         },
       ];
@@ -3394,7 +3406,7 @@ function createImportedPlanBlock(
     targetRpe: rpe,
     targetSets: setDuration?.sets ?? sets,
     targetReps: setDuration ? null : reps,
-    notes,
+    notes: blockNotes,
     exercises,
   };
 }
