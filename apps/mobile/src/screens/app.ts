@@ -4873,7 +4873,6 @@ function renderExecutionPlanGroup(
                     <div class="mobile-plan-table-head">
                       <span>Упр.</span>
                       <span>Объём</span>
-                      <span>Детали</span>
                     </div>
                   `}
                   ${session.blocks
@@ -4978,10 +4977,6 @@ function renderExecutionUnifiedSession(
         </span>
       </label>
       ${renderUnifiedSessionPlanTable(session)}
-      ${options.compactAthlete ? "" : `<label class="exercise-note">
-        <span>Комментарий</span>
-        <input name="notes" value="${escapeHtml(latestNote)}" />
-      </label>`}
     </form>
   `;
 }
@@ -4992,13 +4987,11 @@ function renderUnifiedSessionPlanTable(session: MobileAssignedPlanSession) {
       <div class="mobile-plan-table-head">
         <span>Блок</span>
         <span>Объём</span>
-        <span>Детали</span>
       </div>
       ${session.blocks.map((block) => `
         <div class="mobile-plan-row mobile-unified-plan-row">
           <span class="mobile-plan-exercise-name-static">${escapeHtml(block.name)}</span>
           <span class="mobile-plan-cell mobile-plan-volume">${escapeHtml(formatUnifiedSessionBlockTarget(block))}</span>
-          <span class="mobile-plan-cell mobile-plan-control">${escapeHtml(formatUnifiedSessionBlockControl(block))}</span>
         </div>
       `).join("")}
     </div>
@@ -5022,26 +5015,6 @@ function formatUnifiedSessionBlockTarget(block: AssignedPlanBlock) {
 
   return exercises
     .map((exercise) => `${exercise.name}: ${formatExerciseWorkCell(exercise)}`)
-    .join("; ");
-}
-
-function formatUnifiedSessionBlockControl(block: AssignedPlanBlock) {
-  const exercises = getSortedBlockExercises(block);
-
-  if (block.notes) {
-    return block.notes;
-  }
-
-  if (exercises.length === 0) {
-    return "-";
-  }
-
-  if (exercises.length === 1) {
-    return formatExerciseControlCell(exercises[0]);
-  }
-
-  return exercises
-    .map((exercise) => `${exercise.name}: ${formatExerciseControlCell(exercise)}`)
     .join("; ");
 }
 
@@ -5091,7 +5064,6 @@ function renderExecutionDayAnalyticsCard(
 }
 
 function renderCoachDiaryForm(group: ExecutionPlanGroup, entries: CoachDiaryEntry[]) {
-  const taskChoices = getCoachDiaryTaskChoices(group);
   const latestEntry = entries[0] ?? null;
 
   return `
@@ -5101,36 +5073,13 @@ function renderCoachDiaryForm(group: ExecutionPlanGroup, entries: CoachDiaryEntr
       <div class="coach-diary-head">
         <div>
           <strong>Запись тренера за день</strong>
-          <span>${latestEntry ? `Последняя: ${formatDateTime(latestEntry.updatedAt)}` : "Комментарий к дню или заданиям"}</span>
+          <span>${latestEntry ? `Последняя: ${formatDateTime(latestEntry.updatedAt)}` : "Общий комментарий к дню"}</span>
         </div>
       </div>
       <label class="coach-diary-date">
         <span>Дата записи</span>
         <input name="entryDate" type="date" value="${escapeHtml(group.plan.day.dayDate)}" readonly />
       </label>
-      <fieldset class="coach-diary-scope">
-        <label>
-          <input name="scope" type="radio" value="day" checked />
-          <span>Весь день</span>
-        </label>
-        <label>
-          <input name="scope" type="radio" value="tasks" />
-          <span>По заданиям</span>
-        </label>
-      </fieldset>
-      ${taskChoices.length ? `
-        <div class="coach-diary-tasks" aria-label="Задания для записи">
-          ${taskChoices.map((choice) => `
-            <label class="coach-diary-task">
-              <input name="${choice.kind === "exercise" ? "assignedExerciseIds" : "assignedBlockIds"}" type="checkbox" value="${escapeHtml(choice.id)}" />
-              <span>
-                <strong>${escapeHtml(choice.label)}</strong>
-                <small>${escapeHtml(choice.meta)}</small>
-              </span>
-            </label>
-          `).join("")}
-        </div>
-      ` : ""}
       <label class="coach-diary-note">
         <span>Комментарий</span>
         <textarea name="notes" rows="3" placeholder="Наблюдение, решение или рекомендация на этот день"></textarea>
@@ -5138,37 +5087,6 @@ function renderCoachDiaryForm(group: ExecutionPlanGroup, entries: CoachDiaryEntr
       <button class="primary-action" type="submit">Сохранить запись</button>
     </form>
   `;
-}
-
-interface CoachDiaryTaskChoice {
-  id: string;
-  kind: "block" | "exercise";
-  label: string;
-  meta: string;
-}
-
-function getCoachDiaryTaskChoices(group: ExecutionPlanGroup): CoachDiaryTaskChoice[] {
-  return group.blockItems.flatMap<CoachDiaryTaskChoice>((item) => {
-    const exercises = (item.block.exercises ?? [])
-      .slice()
-      .sort((a, b) => a.orderIndex - b.orderIndex);
-
-    if (exercises.length === 0) {
-      return [{
-        id: item.block.id,
-        kind: "block" as const,
-        label: item.block.name,
-        meta: formatBlockTarget(item.block),
-      }];
-    }
-
-    return exercises.map((exercise) => ({
-      id: exercise.id,
-      kind: "exercise" as const,
-      label: exercise.name,
-      meta: `${item.block.name} · ${formatExerciseTarget(exercise)}`,
-    }));
-  });
 }
 
 function renderExecutionBlockReadonly(item: ExecutionBlockItem, result: ExecutionResult | null) {
@@ -5185,7 +5103,6 @@ function renderExecutionBlockReadonly(item: ExecutionBlockItem, result: Executio
         </span>
       </div>
       <span class="mobile-plan-cell mobile-plan-work">${escapeHtml(formatBlockTarget(item.block))}</span>
-      <span class="mobile-plan-cell mobile-plan-control">${escapeHtml(item.block.notes || item.sessionName)}</span>
       <div class="execution-block-load">
         <span>Нагрузка блока</span>
         <strong>Факт ${formatLoadValue(actualLoad)} / план ${formatLoadValue(plannedLoad)}</strong>
@@ -5215,7 +5132,7 @@ function renderExecutionExerciseReadonly(
       <span>
         <strong>${escapeHtml(exercise.name)}</strong>
         <small>Факт: ${escapeHtml(formatExerciseActualDetails(result))}</small>
-        <small>План: ${escapeHtml(formatExerciseWorkCell(exercise))} · ${escapeHtml(formatExerciseControlCell(exercise))}</small>
+        <small>План: ${escapeHtml(formatExerciseWorkCell(exercise))}</small>
       </span>
       <em>${escapeHtml(formatExerciseResultStatus(result))}</em>
     </div>
@@ -5261,7 +5178,6 @@ function renderExecutionExerciseRow(
         </span>
       </label>
       <span class="mobile-plan-cell mobile-plan-work">${escapeHtml(formatExerciseWorkCell(exercise))}</span>
-      <span class="mobile-plan-cell mobile-plan-control">${escapeHtml(formatExerciseControlCell(exercise))}</span>
       <details class="mobile-execution-row-details">
         <summary>Факт</summary>
         <div class="execution-exercise-fields">
@@ -5271,14 +5187,6 @@ function renderExecutionExerciseRow(
           <label><span>Мин.</span><input inputmode="numeric" name="exerciseDuration:${escapeHtml(exercise.id)}" placeholder="${escapeHtml(exercise.targetDurationMinutes)}" type="number" min="0" value="${formatInputValue(result?.durationMinutes)}" ${options.isLocked ? "disabled" : ""} /></label>
           <label><span>RPE</span><input inputmode="numeric" name="exerciseRpe:${escapeHtml(exercise.id)}" placeholder="${escapeHtml(exercise.targetRpe)}" type="number" min="1" max="10" value="${formatInputValue(result?.rpe)}" ${options.isLocked ? "disabled" : ""} /></label>
         </div>
-        <label class="exercise-note">
-          <span>Заметка</span>
-          <input name="exerciseNotes:${escapeHtml(exercise.id)}" placeholder="${escapeHtml(exercise.notes || "по упражнению")}" value="${escapeHtml(result?.notes ?? "")}" ${options.isLocked ? "disabled" : ""} />
-        </label>
-        ${options.compactAthlete ? "" : `<label class="exercise-note">
-          <span>Комментарий</span>
-          <input name="notes" value="${escapeHtml(blockResult?.notes ?? "")}" ${options.isLocked ? "disabled" : ""} />
-        </label>`}
       </details>
     </div>
   `;
@@ -5299,14 +5207,9 @@ function renderExecutionBlockFallbackRow(
         </span>
       </label>
       <span class="mobile-plan-cell mobile-plan-work">${escapeHtml(formatBlockTarget(block))}</span>
-      <span class="mobile-plan-cell mobile-plan-control">${escapeHtml(block.notes || "-")}</span>
       <details class="mobile-execution-row-details">
         <summary>Факт</summary>
         ${renderBlockFallbackFields(result, options.isLocked === true)}
-        ${options.compactAthlete ? "" : `<label class="exercise-note">
-          <span>Комментарий</span>
-          <input name="notes" value="${escapeHtml(result?.notes ?? "")}" ${options.isLocked ? "disabled" : ""} />
-        </label>`}
       </details>
     </div>
   `;
@@ -5456,7 +5359,6 @@ function renderPlanCard(plan: AssignedPlanSummary, isCoachView = false) {
                   <div class="mobile-plan-table-head">
                     <span>Упр.</span>
                     <span>Объём</span>
-                    <span>Детали</span>
                   </div>
                   ${session.blocks.map((block) => renderPlanBlock(block)).join("")}
                 </div>
@@ -5476,13 +5378,11 @@ function renderPlanBlock(block: AssignedPlanBlock) {
       <div class="mobile-plan-row">
         <span class="mobile-plan-exercise-name-static">${escapeHtml(exercise.name)}</span>
         <span class="mobile-plan-cell mobile-plan-work">${escapeHtml(formatExerciseWorkCell(exercise))}</span>
-        <span class="mobile-plan-cell mobile-plan-control">${escapeHtml(formatExerciseControlCell(exercise))}</span>
       </div>
     `).join("") : `
       <div class="mobile-plan-row">
         <span class="mobile-plan-exercise-name-static">${escapeHtml(block.name)}</span>
         <span class="mobile-plan-cell mobile-plan-work">${escapeHtml(formatBlockTarget(block))}</span>
-        <span class="mobile-plan-cell mobile-plan-control">-</span>
       </div>
     `}
   `;
@@ -7170,32 +7070,6 @@ function formatBlockTarget(block: AssignedPlanBlock) {
   return parts.join(" · ") || "без целевых значений";
 }
 
-function formatExerciseTarget(exercise: AssignedBlockExercise) {
-  const noteParts = splitExerciseNoteParts(exercise.notes);
-  const workNotePart = getExerciseWorkNotePart(exercise, noteParts);
-  const workNoteSource = workNotePart ? noteParts[0] : null;
-  const structuredSetDuration = formatStructuredSetDurationWork(exercise);
-  const inferredWorkUnit =
-    workNotePart && workNotePart !== workNoteSource
-      ? inferExerciseWorkDisplayUnit(exercise.name, workNoteSource ?? "")
-      : null;
-  const parts = [
-    workNotePart || structuredSetDuration || (exercise.targetSets ? `${exercise.targetSets} подх.` : ""),
-    workNotePart || !exercise.targetReps ? "" : `${exercise.targetReps} повт.`,
-    exercise.targetWeightKg ? `${exercise.targetWeightKg} кг` : "",
-    exercise.targetDurationMinutes && !workNotePart && !structuredSetDuration ? `${exercise.targetDurationMinutes} мин.` : "",
-    exercise.targetRpe ? `RPE ${exercise.targetRpe}` : "",
-    ...noteParts.filter(
-      (part) =>
-        part !== workNoteSource &&
-        part !== workNotePart &&
-        (!inferredWorkUnit || getExerciseStandaloneDurationUnit(part) !== inferredWorkUnit),
-    ),
-  ].filter(Boolean);
-
-  return parts.join(" · ") || "плановые значения не заданы";
-}
-
 function formatReadinessStatus(status: string) {
   if (status === "green") {
     return "готов";
@@ -7341,7 +7215,6 @@ function formatExerciseActualDetails(result: ExecutionExerciseResult | null) {
     result.weightKg !== null ? `${result.weightKg} кг` : "",
     result.durationMinutes !== null ? `${result.durationMinutes} мин.` : "",
     result.rpe !== null ? `RPE ${result.rpe}` : "",
-    result.notes.trim() ? result.notes.trim() : "",
   ].filter(Boolean);
 
   return parts.length ? parts.join(" · ") : "есть строка, но факт не заполнен";

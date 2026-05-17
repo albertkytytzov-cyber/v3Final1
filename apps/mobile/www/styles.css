@@ -1030,7 +1030,7 @@ button {
 .mobile-plan-table-head,
 .mobile-plan-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 50px 58px;
+  grid-template-columns: minmax(0, 1fr) minmax(88px, 0.45fr);
   gap: 6px;
   align-items: center;
 }
@@ -4053,7 +4053,7 @@ button.timeline-card:active {
 }
 
 .mobile-plan-row {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 7px 8px;
   align-items: stretch;
   padding: 10px 0;
@@ -4077,8 +4077,7 @@ button.timeline-card:active {
 }
 
 .mobile-plan-work::before,
-.mobile-plan-volume::before,
-.mobile-plan-control::before {
+.mobile-plan-volume::before {
   color: var(--muted);
   font-size: 0.68rem;
   font-weight: 850;
@@ -4091,8 +4090,4 @@ button.timeline-card:active {
 
 .mobile-plan-volume::before {
   content: "Объём";
-}
-
-.mobile-plan-control::before {
-  content: "Детали";
 }
