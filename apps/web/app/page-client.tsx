@@ -801,6 +801,21 @@ function copyFor(language: Language, values: Record<Language, string>) {
   return values[language];
 }
 
+function renderAssignedExerciseVolume(value: string, language: Language): ReactNode {
+  if (!value.trim()) {
+    return null;
+  }
+
+  return (
+    <span className="assigned-volume-line">
+      <span className="assigned-volume-label">
+        {copyFor(language, { en: "Volume", ru: "Объём", bg: "Обем" })}
+      </span>
+      <span className="assigned-volume-value">{renderTrainingTextWithTooltips(value)}</span>
+    </span>
+  );
+}
+
 function coachDiaryTargetKey(entry: Pick<
   CoachDiaryEntryPayload,
   "athleteId" | "assignedPlanId" | "entryDate" | "scope" | "assignedBlockIds" | "assignedExerciseIds"
@@ -14945,11 +14960,7 @@ export function PageClient({
                                             translateKnownTemplateText(block.name, language),
                                           )}
                                         </strong>
-                                        {repeatedExerciseTarget ? (
-                                          <small>
-                                            {renderTrainingTextWithTooltips(repeatedExerciseTarget)}
-                                          </small>
-                                        ) : null}
+                                        {renderAssignedExerciseVolume(repeatedExerciseTarget, language)}
                                       </div>
                                     </div>
                                     {visibleBlockNote ? (
@@ -15202,11 +15213,7 @@ export function PageClient({
                               <div className="summary-topline">
                                 <div>
                                   <strong>{renderTrainingTextWithTooltips(block.name)}</strong>
-                                  {repeatedExerciseTarget ? (
-                                    <small>
-                                      {renderTrainingTextWithTooltips(repeatedExerciseTarget)}
-                                    </small>
-                                  ) : null}
+                                  {renderAssignedExerciseVolume(repeatedExerciseTarget, language)}
                                   {"action" in block && typeof block.action === "string" ? (
                                     <small>{translateBlockAction(block.action, language)}</small>
                                   ) : null}
@@ -23276,13 +23283,16 @@ export function PageClient({
                                         translateKnownTemplateText(block.name, language),
                                       )}
                                     </strong>
-                                    <small>
-                                      {repeatedExercise
-                                        ? renderTrainingTextWithTooltips(
-                                            formatExerciseTarget(repeatedExercise, language),
-                                          )
-                                        : `${localizedOptionLabel(block.blockType, language, BLOCK_TYPE_LABELS)} / ${t("targetDuration")} ${block.targetDurationMinutes ?? "-"} / RPE ${block.targetRpe ?? "-"}`}
-                                    </small>
+                                    {repeatedExercise ? (
+                                      renderAssignedExerciseVolume(
+                                        formatExerciseTarget(repeatedExercise, language),
+                                        language,
+                                      )
+                                    ) : (
+                                      <small>
+                                        {`${localizedOptionLabel(block.blockType, language, BLOCK_TYPE_LABELS)} / ${t("targetDuration")} ${block.targetDurationMinutes ?? "-"} / RPE ${block.targetRpe ?? "-"}`}
+                                      </small>
+                                    )}
                                   </div>
                                   {block.notes ? (
                                     <p>{renderTrainingTextWithTooltips(block.notes)}</p>
