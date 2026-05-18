@@ -801,21 +801,6 @@ function copyFor(language: Language, values: Record<Language, string>) {
   return values[language];
 }
 
-function renderAssignedExerciseVolume(value: string, language: Language): ReactNode {
-  if (!value.trim()) {
-    return null;
-  }
-
-  return (
-    <span className="assigned-volume-line">
-      <span className="assigned-volume-label">
-        {copyFor(language, { en: "Volume", ru: "Объём", bg: "Обем" })}
-      </span>
-      <span className="assigned-volume-value">{renderTrainingTextWithTooltips(value)}</span>
-    </span>
-  );
-}
-
 function coachDiaryTargetKey(entry: Pick<
   CoachDiaryEntryPayload,
   "athleteId" | "assignedPlanId" | "entryDate" | "scope" | "assignedBlockIds" | "assignedExerciseIds"
@@ -6870,6 +6855,20 @@ function formatExerciseTargetWithoutCommonNotes(
     },
     language,
   );
+}
+
+function formatAssignedExerciseVolume(
+  exercise: Parameters<typeof formatExerciseTarget>[0],
+  language: Language,
+  ...commonNotes: Array<string | null | undefined>
+) {
+  const exerciseWithVisibleNotes = {
+    ...exercise,
+    notes: getPlanDisplayNote(exercise.notes, ...commonNotes),
+  };
+  const work = formatExerciseWorkCell(exerciseWithVisibleNotes, language).replace(/^-$/u, "");
+
+  return work || formatExerciseTarget(exerciseWithVisibleNotes, language);
 }
 
 function getRepeatedSingleExerciseBlock(
@@ -14942,8 +14941,8 @@ export function PageClient({
                                   activeAthleteTrainingDayNotes,
                                 );
                                 const repeatedExercise = getRepeatedSingleExerciseBlock(block);
-                                const repeatedExerciseTarget = repeatedExercise
-                                  ? formatExerciseTargetWithoutCommonNotes(
+                                const repeatedExerciseVolume = repeatedExercise
+                                  ? formatAssignedExerciseVolume(
                                       repeatedExercise,
                                       language,
                                       activeAthleteTrainingDayNotes,
@@ -14953,16 +14952,26 @@ export function PageClient({
 
                                 return (
                                   <article className="athlete-plan-block-row" key={block.id}>
-                                    <div className="summary-topline">
-                                      <div>
-                                        <strong>
-                                          {renderTrainingTextWithTooltips(
-                                            translateKnownTemplateText(block.name, language),
-                                          )}
-                                        </strong>
-                                        {renderAssignedExerciseVolume(repeatedExerciseTarget, language)}
+                                    {repeatedExercise ? (
+                                      <div className="assigned-exercise-list athlete-plan-exercise-list">
+                                        <div className="assigned-exercise-row assigned-exercise-row-primary">
+                                          <strong>{renderTrainingTextWithTooltips(repeatedExercise.name)}</strong>
+                                          <span>
+                                            {renderTrainingTextWithTooltips(repeatedExerciseVolume || "-")}
+                                          </span>
+                                        </div>
                                       </div>
-                                    </div>
+                                    ) : (
+                                      <div className="summary-topline">
+                                        <div>
+                                          <strong>
+                                            {renderTrainingTextWithTooltips(
+                                              translateKnownTemplateText(block.name, language),
+                                            )}
+                                          </strong>
+                                        </div>
+                                      </div>
+                                    )}
                                     {visibleBlockNote ? (
                                       <p className="assigned-block-note">
                                         {renderTrainingTextWithTooltips(visibleBlockNote)}
@@ -14975,7 +14984,7 @@ export function PageClient({
                                             <strong>{renderTrainingTextWithTooltips(exercise.name)}</strong>
                                             <span>
                                               {renderTrainingTextWithTooltips(
-                                                formatExerciseTargetWithoutCommonNotes(
+                                                formatAssignedExerciseVolume(
                                                   exercise,
                                                   language,
                                                   activeAthleteTrainingDayNotes,
@@ -15199,8 +15208,8 @@ export function PageClient({
                             activeAthleteTrainingDayNotes,
                           );
                           const repeatedExercise = getRepeatedSingleExerciseBlock(block);
-                          const repeatedExerciseTarget = repeatedExercise
-                            ? formatExerciseTargetWithoutCommonNotes(
+                          const repeatedExerciseVolume = repeatedExercise
+                            ? formatAssignedExerciseVolume(
                                 repeatedExercise,
                                 language,
                                 activeAthleteTrainingDayNotes,
@@ -15213,7 +15222,9 @@ export function PageClient({
                               <div className="summary-topline">
                                 <div>
                                   <strong>{renderTrainingTextWithTooltips(block.name)}</strong>
-                                  {renderAssignedExerciseVolume(repeatedExerciseTarget, language)}
+                                  {repeatedExerciseVolume ? (
+                                    <small>{renderTrainingTextWithTooltips(repeatedExerciseVolume)}</small>
+                                  ) : null}
                                   {"action" in block && typeof block.action === "string" ? (
                                     <small>{translateBlockAction(block.action, language)}</small>
                                   ) : null}
@@ -15250,7 +15261,7 @@ export function PageClient({
                                             <strong>{renderTrainingTextWithTooltips(exercise.name)}</strong>
                                             <small>
                                               {renderTrainingTextWithTooltips(
-                                                formatExerciseTargetWithoutCommonNotes(
+                                                formatAssignedExerciseVolume(
                                                   exercise,
                                                   language,
                                                   activeAthleteTrainingDayNotes,
@@ -16453,10 +16464,15 @@ export function PageClient({
                                 {translateAdaptationText(block.adaptationReason, language)}
                                 {repeatedExercise ? (
                                   <div className="assigned-exercise-list">
-                                    <div className="assigned-exercise-row">
+                                    <div className="assigned-exercise-row assigned-exercise-row-primary">
+                                      <strong>{renderTrainingTextWithTooltips(repeatedExercise.name)}</strong>
                                       <span>
                                         {renderTrainingTextWithTooltips(
-                                          formatExerciseTarget(repeatedExercise, language),
+                                          formatAssignedExerciseVolume(
+                                            repeatedExercise,
+                                            language,
+                                            block.notes,
+                                          ),
                                         )}
                                       </span>
                                     </div>
@@ -16468,7 +16484,7 @@ export function PageClient({
                                         <strong>{renderTrainingTextWithTooltips(exercise.name)}</strong>
                                         <span>
                                           {renderTrainingTextWithTooltips(
-                                            formatExerciseTarget(exercise, language),
+                                            formatAssignedExerciseVolume(exercise, language, block.notes),
                                           )}
                                         </span>
                                       </div>
@@ -23274,26 +23290,35 @@ export function PageClient({
                             <strong>{renderTrainingTextWithTooltips(session.name)}</strong>
                             {session.blocks.map((block) => {
                               const repeatedExercise = getRepeatedSingleExerciseBlock(block);
+                              const repeatedExerciseVolume = repeatedExercise
+                                ? formatAssignedExerciseVolume(repeatedExercise, language, block.notes)
+                                : "";
 
                               return (
                                 <div className="planning-assigned-block" key={block.id}>
-                                  <div>
-                                    <strong>
-                                      {renderTrainingTextWithTooltips(
-                                        translateKnownTemplateText(block.name, language),
-                                      )}
-                                    </strong>
-                                    {repeatedExercise ? (
-                                      renderAssignedExerciseVolume(
-                                        formatExerciseTarget(repeatedExercise, language),
-                                        language,
-                                      )
-                                    ) : (
+                                  {repeatedExercise ? (
+                                    <div className="assigned-exercise-list">
+                                      <div className="assigned-exercise-row assigned-exercise-row-primary">
+                                        <strong>{renderTrainingTextWithTooltips(repeatedExercise.name)}</strong>
+                                        <span>
+                                          {renderTrainingTextWithTooltips(
+                                            repeatedExerciseVolume || "-",
+                                          )}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div>
+                                      <strong>
+                                        {renderTrainingTextWithTooltips(
+                                          translateKnownTemplateText(block.name, language),
+                                        )}
+                                      </strong>
                                       <small>
                                         {`${localizedOptionLabel(block.blockType, language, BLOCK_TYPE_LABELS)} / ${t("targetDuration")} ${block.targetDurationMinutes ?? "-"} / RPE ${block.targetRpe ?? "-"}`}
                                       </small>
-                                    )}
-                                  </div>
+                                    </div>
+                                  )}
                                   {block.notes ? (
                                     <p>{renderTrainingTextWithTooltips(block.notes)}</p>
                                   ) : null}
@@ -23304,7 +23329,7 @@ export function PageClient({
                                           <strong>{renderTrainingTextWithTooltips(exercise.name)}</strong>
                                           <span>
                                             {renderTrainingTextWithTooltips(
-                                              formatExerciseTarget(exercise, language),
+                                              formatAssignedExerciseVolume(exercise, language, block.notes),
                                             )}
                                           </span>
                                         </div>
