@@ -91,9 +91,7 @@ table {
 }
 
 .training-abbreviation {
-  display: inline-flex;
-  align-items: center;
-  min-width: 0;
+  display: inline;
   border-bottom: 1px dotted var(--accent-strong);
   color: inherit;
   cursor: help;
@@ -6530,6 +6528,20 @@ td {
   font-size: 0.82rem;
 }
 
+.planning-assigned-plan-summary-copy em {
+  justify-self: start;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(15, 118, 110, 0.42);
+  background: rgba(240, 253, 250, 0.86);
+  color: var(--accent-strong);
+  font-size: 0.82rem;
+  font-style: normal;
+  font-weight: 850;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
 @media (max-width: 720px) {
   .planning-template-import-audit-grid,
   .planning-template-import-review {
@@ -6818,6 +6830,58 @@ td {
 .planning-assigned-session {
   display: grid;
   gap: 8px;
+}
+
+.planning-assigned-table-session {
+  gap: 10px;
+  padding-top: 4px;
+}
+
+.planning-assigned-table-session > strong {
+  color: #9a4f17;
+  font-size: 1rem;
+  font-weight: 900;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.planning-assigned-table {
+  display: grid;
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.planning-assigned-table-head,
+.planning-assigned-table-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.8fr) minmax(260px, 1.2fr);
+  min-width: 560px;
+}
+
+.planning-assigned-table-head {
+  border-bottom: 2px solid var(--accent);
+  background: rgba(248, 250, 252, 0.92);
+}
+
+.planning-assigned-table-row {
+  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.planning-assigned-table span {
+  min-width: 0;
+  padding: 10px 12px;
+  color: var(--text);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.planning-assigned-table-head span {
+  font-weight: 900;
+}
+
+.planning-assigned-table-row span {
+  font-size: 0.92rem;
+  font-weight: 720;
 }
 
 .planning-assigned-block {

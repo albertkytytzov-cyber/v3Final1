@@ -3152,19 +3152,54 @@ function buildTemplateAssignmentItems(input: {
     input.selectedDayIndexes,
   );
   const firstIndex = selectedIndexes.length ? Math.min(...selectedIndexes) : 0;
+  const importedFallbackYear = parseImportedPlanYear(
+    input.template.name,
+    input.template.description,
+    input.template.templateGoal,
+  );
+  const selectedDates = selectedIndexes.map((dayIndex) =>
+    parseImportedPlanDate(input.days[dayIndex]?.label ?? "", importedFallbackYear),
+  );
+  const usesImportedDates =
+    input.template.microcycleType === "imported-plan" &&
+    selectedDates.length > 0 &&
+    selectedDates.every((date): date is string => Boolean(date));
+  const firstImportedDate = usesImportedDates ? [...selectedDates].sort()[0] : null;
 
   return selectedIndexes.map((dayIndex) => {
     const day = input.days[dayIndex];
+    const importedDate = usesImportedDates
+      ? parseImportedPlanDate(day?.label ?? "", importedFallbackYear)
+      : null;
+    const importedOffset =
+      firstImportedDate && importedDate ? diffDateInputDays(firstImportedDate, importedDate) : null;
 
     return {
       templateId: input.template.id,
       templateDayIndex: dayIndex,
-      dayOffset: dayIndex - firstIndex,
+      dayOffset: importedOffset ?? dayIndex - firstIndex,
       dayLabel: day?.label || `Day ${dayIndex + 1}`,
       microcycleType:
         day?.notes || input.template.templateGoal || input.template.microcycleType || input.template.name,
     } satisfies TemplatePackItem;
   });
+}
+
+function getImportedTemplateAssignmentStartDate(
+  template: PlanTemplateSummary,
+  items: TemplatePackItem[],
+) {
+  if (template.microcycleType !== "imported-plan") {
+    return null;
+  }
+
+  const fallbackYear = parseImportedPlanYear(template.name, template.description, template.templateGoal);
+  const dates = items
+    .map((item) => parseImportedPlanDate(item.dayLabel, fallbackYear))
+    .filter((date): date is string => Boolean(date))
+    .sort();
+
+  return dates[0] ?? null;
 }
 
 function normalizeImportedPlanText(value: string) {
@@ -6840,7 +6875,17 @@ function getPlanDisplayNote(note?: string | null, ...commonNotes: Array<string |
   const noteParts = splitPlanDisplayNoteParts(normalizedNote);
   const visibleParts = noteParts.filter((part) => !commonParts.has(part));
 
+  if (visibleParts.length === noteParts.length) {
+    return normalizedNote;
+  }
+
   return visibleParts.length ? visibleParts.join(" / ") : "";
+}
+
+function getAssignedPlanDayType(note?: string | null) {
+  return splitPlanDisplayNoteParts(note)
+    .filter((part) => !/^назначено(?:\s|$)/iu.test(part))
+    .join(" / ");
 }
 
 function formatExerciseTargetWithoutCommonNotes(
@@ -6866,6 +6911,30 @@ function formatAssignedExerciseVolume(
     {
       ...exercise,
       notes: getPlanDisplayNote(exercise.notes, ...commonNotes),
+    },
+    language,
+  );
+}
+
+function formatAssignedPlanTableVolume(
+  exercise: Parameters<typeof formatExerciseTarget>[0],
+  language: Language,
+  ...commonNotes: Array<string | null | undefined>
+) {
+  return getPlanDisplayNote(exercise.notes, ...commonNotes) ||
+    formatAssignedExerciseVolume(exercise, language, ...commonNotes);
+}
+
+function formatAssignedPlanBlockVolume(block: AthleteExecutionBlock, language: Language) {
+  return formatExerciseTarget(
+    {
+      name: block.name,
+      targetSets: block.targetSets,
+      targetReps: block.targetReps,
+      targetWeightKg: null,
+      targetDurationMinutes: block.targetDurationMinutes,
+      targetRpe: block.targetRpe,
+      notes: block.notes,
     },
     language,
   );
@@ -10394,9 +10463,11 @@ export function PageClient({
       }
 
       const maxOffset = Math.max(...items.map((item) => item.dayOffset), 0);
+      const importedStartDate =
+        getImportedTemplateAssignmentStartDate(sourceTemplate, items);
       const payload: AutoAssignMicrocyclePayload = {
         athleteId,
-        startDate: assignedPlanForm.startDate,
+        startDate: importedStartDate ?? assignedPlanForm.startDate,
         daysCount: maxOffset + 1,
         notes:
           assignedPlanForm.notes ||
@@ -23263,82 +23334,43 @@ export function PageClient({
                         </label>
                         <div className="planning-assigned-plan-summary-copy">
                           <strong>
-                            {selectedAssignedPlanPreview.athleteName}:{" "}
-                            {translateKnownTemplateText(selectedAssignedPlanPreview.templateName, language)}
+                            {localizedPlannerDayLabel(selectedAssignedPlanPreview.day.label, language)}
                           </strong>
                           <span>
-                            {selectedAssignedPlanPreview.day.dayDate} /{" "}
-                            {localizedPlannerDayLabel(selectedAssignedPlanPreview.day.label, language)} /{" "}
-                            {t("phase")}{" "}
-                            {selectedAssignedPlanPreview.plannedPhase
-                              ? localizedOptionLabel(
-                                  selectedAssignedPlanPreview.plannedPhase,
-                                  language,
-                                  PREPARATION_PHASE_LABELS,
-                                )
-                              : copyFor(language, {
-                                  en: "Auto",
-                                  ru: "Авто",
-                                  bg: "Авто",
-                                })}
+                            {selectedAssignedPlanPreview.athleteName}:{" "}
+                            {translateKnownTemplateText(selectedAssignedPlanPreview.templateName, language)}
                           </span>
+                          {getAssignedPlanDayType(selectedAssignedPlanPreview.day.notes) ? (
+                            <em>{getAssignedPlanDayType(selectedAssignedPlanPreview.day.notes)}</em>
+                          ) : null}
                         </div>
                       </summary>
                       <div className="planning-assigned-session-list">
                         {selectedAssignedPlanPreview.day.sessions.map((session) => (
-                          <section className="planning-assigned-session" key={session.id}>
+                          <section className="planning-assigned-session planning-assigned-table-session" key={session.id}>
                             <strong>{renderTrainingTextWithTooltips(session.name)}</strong>
-                            {session.blocks.map((block) => {
-                              const repeatedExercise = getRepeatedSingleExerciseBlock(block);
-                              const repeatedExerciseVolume = repeatedExercise
-                                ? formatAssignedExerciseVolume(repeatedExercise, language, block.notes)
-                                : "";
+                            <div className="planning-assigned-table">
+                              <div className="planning-assigned-table-head">
+                                <span>{copyFor(language, { en: "Block", ru: "Блок", bg: "Блок" })}</span>
+                                <span>{copyFor(language, { en: "Volume", ru: "Объём", bg: "Обем" })}</span>
+                              </div>
+                              {session.blocks.map((block) => {
+                                const repeatedExercise = getRepeatedSingleExerciseBlock(block);
+                                const primaryExercise =
+                                  repeatedExercise ?? [...(block.exercises ?? [])].sort((left, right) => left.orderIndex - right.orderIndex)[0] ?? null;
+                                const rowName = primaryExercise?.name ?? block.name;
+                                const rowVolume = primaryExercise
+                                  ? formatAssignedPlanTableVolume(primaryExercise, language, block.notes)
+                                  : formatAssignedPlanBlockVolume(block, language);
 
-                              return (
-                                <div className="planning-assigned-block" key={block.id}>
-                                  {repeatedExercise ? (
-                                    <div className="assigned-exercise-list">
-                                      <div className="assigned-exercise-row assigned-exercise-row-primary">
-                                        <strong>{renderTrainingTextWithTooltips(repeatedExercise.name)}</strong>
-                                        <span>
-                                          {renderTrainingTextWithTooltips(
-                                            repeatedExerciseVolume || "-",
-                                          )}
-                                        </span>
-                                      </div>
-                                    </div>
-                                  ) : (
-                                    <div>
-                                      <strong>
-                                        {renderTrainingTextWithTooltips(
-                                          translateKnownTemplateText(block.name, language),
-                                        )}
-                                      </strong>
-                                      <small>
-                                        {`${localizedOptionLabel(block.blockType, language, BLOCK_TYPE_LABELS)} / ${t("targetDuration")} ${block.targetDurationMinutes ?? "-"} / RPE ${block.targetRpe ?? "-"}`}
-                                      </small>
-                                    </div>
-                                  )}
-                                  {block.notes ? (
-                                    <p>{renderTrainingTextWithTooltips(block.notes)}</p>
-                                  ) : null}
-                                  {!repeatedExercise && (block.exercises ?? []).length > 0 ? (
-                                    <div className="assigned-exercise-list">
-                                      {(block.exercises ?? []).map((exercise) => (
-                                        <div className="assigned-exercise-row" key={exercise.id}>
-                                          <strong>{renderTrainingTextWithTooltips(exercise.name)}</strong>
-                                          <span>
-                                            {renderTrainingTextWithTooltips(
-                                              formatAssignedExerciseVolume(exercise, language, block.notes),
-                                            )}
-                                          </span>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  ) : null}
-                                </div>
-                              );
-                            })}
+                                return (
+                                  <div className="planning-assigned-table-row" key={block.id}>
+                                    <span>{renderTrainingTextWithTooltips(rowName)}</span>
+                                    <span>{renderTrainingTextWithTooltips(rowVolume || "-")}</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
                           </section>
                         ))}
                       </div>
