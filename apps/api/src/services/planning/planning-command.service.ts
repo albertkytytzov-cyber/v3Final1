@@ -13,7 +13,6 @@ import {
   resolvePlannedPhase,
 } from "../../domain/planning/auto-assign.policy";
 import { estimateBlocksLoad } from "../../domain/planning/load-balance.policy";
-import { normalizePlanDeviceWorkoutSessions } from "../../domain/planning/plan-structure-normalization";
 import { pool } from "../../db";
 import { markAnalyticsDirty } from "../analytics/analytics-query.service";
 import { markCoachTeamDayDirtyForAthlete } from "../analytics/coach-team-day.service";
@@ -109,16 +108,14 @@ function normalizeTemplateDays(payload: PlanTemplatePayload): PlanDayInput[] {
       ...day,
       notes: day.notes ?? "",
       orderIndex: day.orderIndex ?? dayIndex,
-      sessions: normalizePlanDeviceWorkoutSessions(
-        day.sessions.map((session, sessionIndex) => ({
-          ...session,
-          notes: session.notes ?? "",
-          orderIndex: session.orderIndex ?? sessionIndex,
-          executionMode: session.executionMode ?? "whole_session",
-          deviceLinkMode: session.deviceLinkMode ?? "session",
-          blocks: session.blocks.map(normalizeBlock),
-        })),
-      ),
+      sessions: day.sessions.map((session, sessionIndex) => ({
+        ...session,
+        notes: session.notes ?? "",
+        orderIndex: session.orderIndex ?? sessionIndex,
+        executionMode: session.executionMode ?? "whole_session",
+        deviceLinkMode: session.deviceLinkMode ?? "session",
+        blocks: session.blocks.map(normalizeBlock),
+      })),
     }));
   }
 
@@ -127,7 +124,7 @@ function normalizeTemplateDays(payload: PlanTemplatePayload): PlanDayInput[] {
       label: "Day 1",
       notes: "",
       orderIndex: 0,
-      sessions: normalizePlanDeviceWorkoutSessions([
+      sessions: [
         {
           name: "Primary session",
           notes: "",
@@ -136,7 +133,7 @@ function normalizeTemplateDays(payload: PlanTemplatePayload): PlanDayInput[] {
           deviceLinkMode: "session",
           blocks: payload.blocks.map(normalizeBlock),
         },
-      ]),
+      ],
     },
   ];
 }

@@ -9,7 +9,6 @@ import type {
 } from "@training-platform/shared";
 import { pool } from "../../db";
 import { estimateBlocksLoad } from "../../domain/planning/load-balance.policy";
-import { normalizePlanDeviceWorkoutSessions } from "../../domain/planning/plan-structure-normalization";
 
 interface PlanTemplateRow {
   template_id: string;
@@ -364,7 +363,6 @@ function buildPlanTemplateStructureMap(rows: PlanTemplateRow[]) {
     template.days?.sort((left, right) => (left.orderIndex ?? 0) - (right.orderIndex ?? 0));
     for (const day of template.days ?? []) {
       day.sessions.sort((left, right) => (left.orderIndex ?? 0) - (right.orderIndex ?? 0));
-      day.sessions = normalizePlanDeviceWorkoutSessions(day.sessions);
     }
   }
 
@@ -372,7 +370,6 @@ function buildPlanTemplateStructureMap(rows: PlanTemplateRow[]) {
     structure.days.sort((left, right) => left.displayOrder - right.displayOrder);
     for (const day of structure.days) {
       day.sessions.sort((left, right) => left.displayOrder - right.displayOrder);
-      day.sessions = normalizePlanDeviceWorkoutSessions(day.sessions);
     }
   }
 
@@ -491,7 +488,6 @@ function mapAssignedPlans(rows: AssignedPlanRow[]): AssignedPlanSummary[] {
 
   for (const assigned of grouped.values()) {
     assigned.day.sessions.sort((left, right) => left.orderIndex - right.orderIndex);
-    assigned.day.sessions = normalizePlanDeviceWorkoutSessions(assigned.day.sessions);
   }
 
   return Array.from(grouped.values());

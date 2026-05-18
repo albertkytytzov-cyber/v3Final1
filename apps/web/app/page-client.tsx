@@ -3821,8 +3821,8 @@ function parseImportedPlanStructuredSessions(
         name: sessionName,
         notes: getImportedNoteTexts(source).join(" / "),
         orderIndex: sourceIndex,
-        executionMode: "whole_session",
-        deviceLinkMode: "session",
+        executionMode: "by_blocks",
+        deviceLinkMode: "block",
         blocks,
       } satisfies PlanTemplateSessionInput;
     })
@@ -4080,14 +4080,14 @@ function parseImportedPlanHtml(
               name: sessionName,
               notes: getImportedNoteTexts(session).join(" / "),
               orderIndex: sessionIndex,
-              executionMode: "whole_session",
-              deviceLinkMode: "session",
+              executionMode: "by_blocks",
+              deviceLinkMode: "block",
               blocks,
             } satisfies PlanTemplateSessionInput;
           })
           .filter((session) => session.blocks.length > 0)
       : parseImportedPlanStructuredSessions(card, fallbackSessionName);
-    const sessions = normalizeImportedPlanSessions(parsedSessions);
+    const sessions = parsedSessions;
     const normalizedDayNotes = mergeImportedNotes(
       dayNotes,
       ...sessions.map((session) => session.notes),
