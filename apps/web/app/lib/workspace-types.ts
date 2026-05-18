@@ -1,4 +1,5 @@
 export type CoachDashboardView =
+  | "overview"
   | "readiness"
   | "adaptation"
   | "execution"

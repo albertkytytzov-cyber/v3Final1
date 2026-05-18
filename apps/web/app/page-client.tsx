@@ -958,6 +958,60 @@ function getCoachTeamDayExecutionStatusLabel(
   return copyFor(language, { en: "Partially completed", ru: "Частично выполнено", bg: "Частично изпълнено" });
 }
 
+function getCoachTeamDayAttentionLabel(input: {
+  executionStatus: CoachTeamDaySummary["executionStatus"];
+  plannedBlocks: number;
+  readinessEntry: ReadinessEntry | null;
+  dataQualityStatus: "complete" | "partial" | "insufficient";
+  language: Language;
+}) {
+  if (input.executionStatus === "no_plan" || input.plannedBlocks === 0) {
+    return copyFor(input.language, {
+      en: "Assign a plan for the day.",
+      ru: "Назначить план на день.",
+      bg: "Назначете план за деня.",
+    });
+  }
+
+  if (!input.readinessEntry) {
+    return copyFor(input.language, {
+      en: "Waiting for readiness.",
+      ru: "Ждём готовность.",
+      bg: "Очаква се готовност.",
+    });
+  }
+
+  if (input.executionStatus === "no_execution") {
+    return copyFor(input.language, {
+      en: "Waiting for execution marks.",
+      ru: "Ждём отметки выполнения.",
+      bg: "Очакват се отметки за изпълнение.",
+    });
+  }
+
+  if (input.executionStatus === "partial") {
+    return copyFor(input.language, {
+      en: "Check partial execution.",
+      ru: "Проверить частичное выполнение.",
+      bg: "Проверете частичното изпълнение.",
+    });
+  }
+
+  if (input.dataQualityStatus === "insufficient") {
+    return copyFor(input.language, {
+      en: "Open the day and check missing data.",
+      ru: "Открыть день и проверить недостающие данные.",
+      bg: "Отворете деня и проверете липсващите данни.",
+    });
+  }
+
+  return copyFor(input.language, {
+    en: "No urgent action.",
+    ru: "Срочных действий нет.",
+    bg: "Няма спешни действия.",
+  });
+}
+
 function getCoachAiExecutionStatusFromTeamDay(
   status: CoachTeamDaySummary["executionStatus"],
 ): CoachDayAiPayload["execution"]["status"] {
@@ -7538,7 +7592,7 @@ export function PageClient({
     previewState?.selectedOfflineItemId ?? "",
   );
   const [coachView, setCoachView] = useState<CoachDashboardView>(
-    previewState?.coachView ?? "readiness",
+    previewState?.coachView ?? "overview",
   );
   const [planningView, setPlanningView] = useState<PlanningStudioView>(
     previewState?.planningView ?? "weekly",
@@ -11898,9 +11952,10 @@ export function PageClient({
   const shouldRenderCoachReviewSurface =
     isCoachReviewWorkspace || (isCoachDashboardWorkspace && coachView === "execution");
   const shouldRenderCoachTeamDayPanel =
-    (isCoachDashboardWorkspace || isCoachReviewWorkspace) && !selectedAthleteId;
+    (isCoachDashboardWorkspace && coachView === "overview") ||
+    (isCoachReviewWorkspace && !selectedAthleteId);
   const showCoachRosterColumn = false;
-  const showCoachInspectorColumn = isCoachDashboardWorkspace;
+  const showCoachInspectorColumn = isCoachDashboardWorkspace && coachView !== "overview";
   const showAthleteProfileEditor = isAthleteProfileEditorOpen;
   const coachAiStatusSourceLabel = coachAiStatus?.source === "model"
     ? copyFor(language, { en: "Model", ru: "Модель", bg: "Модел" })
@@ -12495,8 +12550,8 @@ export function PageClient({
     ? [
         {
           id: "coach-dashboard",
-          label: "Dashboard",
-          meta: selectedCoachAthlete?.fullName ?? ui("selectAthlete"),
+          label: copyFor(language, { en: "Dashboard", ru: "Главная", bg: "Табло" }),
+          meta: copyFor(language, { en: "Team today", ru: "Команда сегодня", bg: "Отборът днес" }),
         },
         {
           id: "coach-athletes",
@@ -12636,6 +12691,14 @@ export function PageClient({
     },
   ];
   const coachTabs: Array<{ id: CoachDashboardView; label: string }> = [
+    {
+      id: "overview",
+      label: copyFor(language, {
+        en: "Today",
+        ru: "Сегодня",
+        bg: "Днес",
+      }),
+    },
     { id: "readiness", label: ui("athleteReadinessHistory") },
     { id: "adaptation", label: ui("coachAdaptationTitle") },
     { id: "execution", label: t("executionReview") },
@@ -12834,7 +12897,7 @@ export function PageClient({
             ? "Състезания"
             : "Competitions"
       : activeWorkspace === "coach-dashboard"
-        ? "Dashboard"
+        ? copyFor(language, { en: "Dashboard", ru: "Главная", bg: "Табло" })
       : activeWorkspace === "coach-athletes"
         ? language === "ru"
           ? "Спортсмены"
@@ -13235,11 +13298,22 @@ export function PageClient({
         actualLoad: teamDaySummary.actualLoad,
         aiReview,
         aiReviewStale,
+        attentionLabel: getCoachTeamDayAttentionLabel({
+          dataQualityStatus: dataQuality.status,
+          executionStatus: teamDaySummary.executionStatus,
+          language,
+          plannedBlocks: teamDaySummary.plannedBlocks,
+          readinessEntry: teamDaySummary.readinessEntry,
+        }),
         athlete,
+        completedBlocks: teamDaySummary.completedBlocks,
         dataQuality,
         deviceHealthSummary: teamDaySummary.deviceHealthSummary,
         deviceWorkoutCount: teamDaySummary.deviceWorkoutCount,
         deviceWorkoutLinkedCount: teamDaySummary.deviceWorkoutLinkedCount,
+        executionStatus: teamDaySummary.executionStatus,
+        partialBlocks: teamDaySummary.partialBlocks,
+        plannedBlocks: teamDaySummary.plannedBlocks,
         plannedLoad: teamDaySummary.plannedLoad,
         readinessEntry: teamDaySummary.readinessEntry,
         statusLabel: getCoachTeamDayExecutionStatusLabel(teamDaySummary.executionStatus, language),
@@ -13294,6 +13368,15 @@ export function PageClient({
     const actualLoad = roundCoachAiLoad(
       dayResults.reduce((total, result) => total + (result.actualLoad ?? 0), 0),
     );
+    const partialBlocks = Math.max(dayResults.length - completedBlocks, 0);
+    const executionStatus: CoachTeamDaySummary["executionStatus"] =
+      plansForDay.length === 0
+        ? "no_plan"
+        : dayResults.length === 0
+          ? "no_execution"
+          : plannedBlocks > 0 && completedBlocks >= plannedBlocks
+            ? "completed"
+            : "partial";
     const dataQuality = buildCoachDayDataQuality({
       coachComment:
         coachDiaryEntries.find(
@@ -13332,22 +13415,39 @@ export function PageClient({
       actualLoad,
       aiReview,
       aiReviewStale,
+      attentionLabel: getCoachTeamDayAttentionLabel({
+        dataQualityStatus: dataQuality.status,
+        executionStatus,
+        language,
+        plannedBlocks,
+        readinessEntry,
+      }),
       athlete,
+      completedBlocks,
       dataQuality,
       deviceHealthSummary,
       deviceWorkoutCount: deviceWorkoutsForDay.length,
       deviceWorkoutLinkedCount: deviceWorkoutLinksForDay.length,
+      executionStatus,
+      partialBlocks,
+      plannedBlocks,
       plannedLoad,
       readinessEntry,
-      statusLabel: plansForDay.length === 0
-        ? copyFor(language, { en: "No plan", ru: "Нет плана", bg: "Няма план" })
-        : dayResults.length === 0
-          ? copyFor(language, { en: "No execution", ru: "Нет отметок", bg: "Няма изпълнение" })
-          : plannedBlocks > 0 && completedBlocks >= plannedBlocks
-            ? copyFor(language, { en: "Completed", ru: "Выполнено", bg: "Изпълнено" })
-            : copyFor(language, { en: "Partial", ru: "Частично", bg: "Частично" }),
+      statusLabel: getCoachTeamDayExecutionStatusLabel(executionStatus, language),
     };
   }) : [];
+  const coachTeamRowsTotal = coachTeamDayRows.length;
+  const coachTeamReadinessSubmitted = coachTeamDayRows.filter((row) => row.readinessEntry).length;
+  const coachTeamPlannedAthletes = coachTeamDayRows.filter((row) => row.plannedBlocks > 0).length;
+  const coachTeamCompletedAthletes = coachTeamDayRows.filter(
+    (row) => row.executionStatus === "completed",
+  ).length;
+  const coachTeamAttentionCount = coachTeamDayRows.filter(
+    (row) =>
+      row.executionStatus !== "completed" ||
+      !row.readinessEntry ||
+      row.dataQuality.status === "insufficient",
+  ).length;
   const athleteChangedToday = adaptedPlan
     ? [
         ...adaptedPlan.reducedBlocks.map((name) => ({
@@ -13424,7 +13524,13 @@ export function PageClient({
   const coachViewLabel =
     coachTabs.find((tab) => tab.id === coachView)?.label ?? coachTabs[0]?.label ?? "";
   const coachViewDescription =
-    coachView === "readiness"
+    coachView === "overview"
+      ? copyFor(language, {
+          en: "Team summary for the selected day: readiness, plan, execution, load, and the next coaching action.",
+          ru: "Сводка команды на выбранный день: готовность, план, выполнение, нагрузка и следующий тренерский шаг.",
+          bg: "Обобщение на отбора за избрания ден: готовност, план, изпълнение, натоварване и следваща треньорска стъпка.",
+        })
+      : coachView === "readiness"
       ? copyFor(language, {
           en: "Monitor the last readiness entries, recovery drift, and current daily state.",
         ru: "Следите за последними записями готовности, динамикой восстановления и текущим состоянием дня.",
@@ -13684,35 +13790,59 @@ export function PageClient({
           : ui("noActivePlan"),
     },
   ];
-  const coachSceneMetrics = [
-    {
-      label: ui("latestReadiness"),
-      value: latestVisibleReadiness,
-      note: selectedCoachAthlete?.email ?? ui("selectAthlete"),
-    },
-    {
-      label: t("executionReview"),
-      value: coachExecutionReview ? `${coachExecutionReview.summary.completionRate}%` : ui("noReviewYet"),
-      note:
-        coachExecutionReview
-          ? `${coachExecutionReview.summary.completedBlocks}/${coachExecutionReview.summary.plannedBlocks}`
-          : ui("coachReviewNeedsPlan"),
-    },
-    {
-      label: copyFor(language, {
-        en: "Competition phase",
-        ru: "Соревновательная фаза",
-        bg: "Състезателна фаза",
-      }),
-      value: competitionContext?.phase ?? ui("notGenerated"),
-      note: competitionContext?.competitionPriority ?? "-",
-    },
-    {
-      label: t("analytics"),
-      value: coachAnalyticsOverview ? String(coachAnalyticsOverview.loadTrend.length) : "0",
-      note: coachViewLabel,
-    },
-  ];
+  const coachSceneMetrics =
+    coachView === "overview"
+      ? [
+          {
+            label: copyFor(language, { en: "Readiness", ru: "Готовность", bg: "Готовност" }),
+            value: `${coachTeamReadinessSubmitted}/${coachTeamRowsTotal || coachAthletes.length}`,
+            note: coachTeamDayDate,
+          },
+          {
+            label: copyFor(language, { en: "Plans", ru: "Планы", bg: "Планове" }),
+            value: `${coachTeamPlannedAthletes}/${coachTeamRowsTotal || coachAthletes.length}`,
+            note: copyFor(language, { en: "assigned today", ru: "назначено сегодня", bg: "назначено днес" }),
+          },
+          {
+            label: copyFor(language, { en: "Execution", ru: "Выполнение", bg: "Изпълнение" }),
+            value: `${coachTeamCompletedAthletes}/${coachTeamPlannedAthletes || coachTeamRowsTotal || 0}`,
+            note: copyFor(language, { en: "completed days", ru: "закрытые дни", bg: "завършени дни" }),
+          },
+          {
+            label: copyFor(language, { en: "Attention", ru: "Внимание", bg: "Внимание" }),
+            value: String(coachTeamAttentionCount),
+            note: copyFor(language, { en: "open items", ru: "что требует действий", bg: "за действие" }),
+          },
+        ]
+      : [
+          {
+            label: ui("latestReadiness"),
+            value: latestVisibleReadiness,
+            note: selectedCoachAthlete?.email ?? ui("selectAthlete"),
+          },
+          {
+            label: t("executionReview"),
+            value: coachExecutionReview ? `${coachExecutionReview.summary.completionRate}%` : ui("noReviewYet"),
+            note:
+              coachExecutionReview
+                ? `${coachExecutionReview.summary.completedBlocks}/${coachExecutionReview.summary.plannedBlocks}`
+                : ui("coachReviewNeedsPlan"),
+          },
+          {
+            label: copyFor(language, {
+              en: "Competition phase",
+              ru: "Соревновательная фаза",
+              bg: "Състезателна фаза",
+            }),
+            value: competitionContext?.phase ?? ui("notGenerated"),
+            note: competitionContext?.competitionPriority ?? "-",
+          },
+          {
+            label: t("analytics"),
+            value: coachAnalyticsOverview ? String(coachAnalyticsOverview.loadTrend.length) : "0",
+            note: coachViewLabel,
+          },
+        ];
   const planningSceneMetrics = [
     {
       label: copyFor(language, {
@@ -14102,7 +14232,7 @@ export function PageClient({
 
   useEffect(() => {
     if (activeWorkspace === "coach-dashboard") {
-      setCoachView("readiness");
+      setCoachView("overview");
       return;
     }
 
@@ -15844,7 +15974,11 @@ export function PageClient({
                   className={`coach-dashboard-grid coach-dashboard-grid-${activeWorkspace.replace(
                     "coach-",
                     "",
-                  )}`}
+                  )} ${
+                    isCoachDashboardWorkspace && coachView === "overview"
+                      ? "coach-dashboard-grid-overview"
+                      : ""
+                  }`.trim()}
                 >
                   {isCoachAthletesWorkspace ? availableAthleteAttachmentPanel : null}
                   {showCoachRosterColumn ? (
@@ -17590,9 +17724,9 @@ export function PageClient({
                   <div className="summary-topline">
                     <strong>
                       {copyFor(language, {
-                        en: "Team day panel",
-                        ru: "Панель команды",
-                        bg: "Панел на отбора",
+                        en: "Team today",
+                        ru: "Команда сегодня",
+                        bg: "Отборът днес",
                       })}
                     </strong>
                     <label className="coach-team-day-date-control">
@@ -17604,17 +17738,14 @@ export function PageClient({
                       />
                     </label>
                   </div>
-                  <div className="coach-team-day-table">
+                  <div className="coach-team-day-table coach-team-day-table-compact">
                     <div className="coach-team-day-header" aria-hidden="true">
                       <span>{copyFor(language, { en: "Athlete", ru: "Спортсмен", bg: "Спортист" })}</span>
                       <span>{copyFor(language, { en: "Readiness", ru: "Готовн.", bg: "Готовн." })}</span>
+                      <span>{copyFor(language, { en: "Plan", ru: "План", bg: "План" })}</span>
+                      <span>{copyFor(language, { en: "Execution", ru: "Выполнение", bg: "Изпълнение" })}</span>
                       <span>{copyFor(language, { en: "Load", ru: "Нагрузка", bg: "Натовар." })}</span>
-                      <span>{copyFor(language, { en: "Sleep", ru: "Сон", bg: "Сън" })}</span>
-                      <span>{copyFor(language, { en: "Rest HR", ru: "Пульс", bg: "Пулс" })}</span>
-                      <span>SpO2</span>
-                      <span>{copyFor(language, { en: "Device", ru: "Устройство", bg: "Устройство" })}</span>
-                      <span>{copyFor(language, { en: "Data", ru: "Данные", bg: "Данни" })}</span>
-                      <span>{copyFor(language, { en: "AI", ru: "ИИ", bg: "AI" })}</span>
+                      <span>{copyFor(language, { en: "Next step", ru: "Следующий шаг", bg: "Следваща стъпка" })}</span>
                       <span />
                     </div>
                     {coachTeamDayRows.map((row) => (
@@ -17623,35 +17754,38 @@ export function PageClient({
                           <strong>{row.athlete.fullName}</strong>
                           <span>{row.statusLabel}</span>
                         </div>
-                        <span>{row.readinessEntry ? row.readinessEntry.score : "-"}</span>
+                        <span>
+                          {row.readinessEntry
+                            ? `${row.readinessEntry.score} · ${readinessMeta[row.readinessEntry.status].label}`
+                            : copyFor(language, { en: "Not submitted", ru: "Не отправлена", bg: "Не е подадена" })}
+                        </span>
+                        <span>
+                          {row.plannedBlocks > 0
+                            ? `${row.plannedBlocks} ${copyFor(language, {
+                                en: "blocks",
+                                ru: "блоков",
+                                bg: "блока",
+                              })}`
+                            : copyFor(language, { en: "No plan", ru: "Нет плана", bg: "Няма план" })}
+                        </span>
+                        <span>
+                          {row.plannedBlocks > 0
+                            ? `${row.completedBlocks}/${row.plannedBlocks}${
+                                row.partialBlocks > 0
+                                  ? ` · ${row.partialBlocks} ${copyFor(language, {
+                                      en: "partial",
+                                      ru: "частично",
+                                      bg: "частично",
+                                    })}`
+                                  : ""
+                              }`
+                            : "-"}
+                        </span>
                         <span>
                           {formatCoachDayLoadValue(row.actualLoad)} / {formatCoachDayLoadValue(row.plannedLoad)}
                         </span>
-                        <span>{formatDeviceSleepValue(row.deviceHealthSummary, language)}</span>
-                        <span>{formatDeviceRestingHrValue(row.deviceHealthSummary)}</span>
-                        <span>{formatDeviceOxygenValue(row.deviceHealthSummary)}</span>
-                        <span>
-                          {row.deviceWorkoutCount > 0
-                            ? `${row.deviceWorkoutLinkedCount}/${row.deviceWorkoutCount} ${copyFor(language, {
-                                en: "linked",
-                                ru: "связано",
-                                bg: "свързани",
-                              })}`
-                            : copyFor(language, { en: "No workout", ru: "Нет трен.", bg: "Няма трен." })}
-                        </span>
-                        <span>{row.dataQuality.statusLabel}</span>
                         <p>
-                          {row.aiReviewStale
-                            ? copyFor(language, {
-                                en: "Review is stale: update AI review.",
-                                ru: "Разбор устарел: обновите ИИ-разбор.",
-                                bg: "Анализът е остарял: обновете AI анализа.",
-                              })
-                            : row.aiReview?.riskNotes[0] ?? row.aiReview?.observation ?? copyFor(language, {
-                                en: "No AI review",
-                                ru: "Нет ИИ-разбора",
-                                bg: "Няма AI анализ",
-                              })}
+                          {row.attentionLabel}
                         </p>
                         <button
                           className="secondary-button"

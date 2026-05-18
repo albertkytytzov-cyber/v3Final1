@@ -2631,6 +2631,14 @@ td {
   gap: 14px;
 }
 
+.coach-dashboard-grid-overview {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.coach-dashboard-grid-overview .coach-main-column {
+  grid-column: 1 / -1;
+}
+
 .coach-dashboard-grid-dashboard .coach-inspector-card {
   min-height: 0;
   padding: 14px;
@@ -4135,6 +4143,19 @@ td {
   min-width: 980px;
 }
 
+.coach-team-day-table-compact .coach-team-day-header,
+.coach-team-day-table-compact .coach-team-day-row {
+  grid-template-columns:
+    minmax(180px, 1.1fr)
+    minmax(132px, 0.8fr)
+    minmax(110px, 0.62fr)
+    minmax(132px, 0.8fr)
+    minmax(110px, 0.62fr)
+    minmax(220px, 1.4fr)
+    minmax(112px, auto);
+  min-width: 920px;
+}
+
 .coach-team-day-header {
   padding: 0 12px 2px;
   color: var(--muted);
@@ -4171,6 +4192,11 @@ td {
   color: var(--muted);
   font-size: 0.82rem;
   line-height: 1.35;
+}
+
+.coach-team-day-table-compact .coach-team-day-row p {
+  color: var(--text);
+  font-weight: 720;
 }
 
 .analytics-mini-grid {
