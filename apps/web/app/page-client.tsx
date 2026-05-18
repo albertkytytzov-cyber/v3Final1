@@ -6862,13 +6862,13 @@ function formatAssignedExerciseVolume(
   language: Language,
   ...commonNotes: Array<string | null | undefined>
 ) {
-  const exerciseWithVisibleNotes = {
-    ...exercise,
-    notes: getPlanDisplayNote(exercise.notes, ...commonNotes),
-  };
-  const work = formatExerciseWorkCell(exerciseWithVisibleNotes, language).replace(/^-$/u, "");
-
-  return work || formatExerciseTarget(exerciseWithVisibleNotes, language);
+  return formatExerciseTarget(
+    {
+      ...exercise,
+      notes: getPlanDisplayNote(exercise.notes, ...commonNotes),
+    },
+    language,
+  );
 }
 
 function getRepeatedSingleExerciseBlock(
