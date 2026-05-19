@@ -9029,6 +9029,70 @@ export function PageClient({
     }
   }
 
+  async function handleOpenCoachTeamDay(athleteId: string) {
+    const assignedPlan = assignedPlans.find(
+      (plan) => plan.athleteId === athleteId && plan.day.dayDate === coachTeamDayDate,
+    );
+
+    setSelectedAthleteId(athleteId);
+    setCoachTeamDayDateFilter(coachTeamDayDate);
+
+    if (!assignedPlan) {
+      setAssignedPlanForm((current) => ({
+        ...current,
+        athleteId,
+        startDate: coachTeamDayDate,
+      }));
+      startTransition(() => {
+        setActiveWorkspace("planning-studio");
+        setPlanningView("weekly");
+      });
+      setStatusMessage(
+        copyFor(language, {
+          en: "No plan for this date yet. Assign a plan for the selected athlete.",
+          ru: "На эту дату ещё нет плана. Назначьте план выбранному спортсмену.",
+          bg: "За тази дата още няма план. Назначете план на избрания спортист.",
+        }),
+      );
+      scrollViewportToTop();
+      return;
+    }
+
+    setBusy(true);
+    setErrorMessage("");
+    setCoachExecutionReview(null);
+    setSelectedAssignedPlanPreviewId(assignedPlan.id);
+    setCoachDiaryDraft((current) => ({
+      ...current,
+      assignedBlockIds: [],
+      assignedExerciseIds: [],
+    }));
+    startTransition(() => {
+      setActiveWorkspace("coach-review");
+      setCoachView("execution");
+    });
+    scrollViewportToTop();
+
+    try {
+      await Promise.all([
+        loadCoachAthleteReadiness(athleteId),
+        loadCoachExecutionReview(athleteId, assignedPlan.id),
+      ]);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : copyFor(language, {
+              en: "Could not open the selected day.",
+              ru: "Не удалось открыть выбранный день.",
+              bg: "Избраният ден не можа да се отвори.",
+            }),
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function handleSetDeviceWorkoutForBlocks(input: {
     assignedBlockIds: string[];
     assignedPlanId: string;
@@ -17831,19 +17895,7 @@ export function PageClient({
                         <button
                           className="secondary-button"
                           disabled={busy}
-                          onClick={() => {
-                            setSelectedAthleteId(row.athlete.athleteId);
-                            setCoachTeamDayDateFilter(coachTeamDayDate);
-                            const assignedPlanId = assignedPlans.find(
-                              (plan) =>
-                                plan.athleteId === row.athlete.athleteId &&
-                                plan.day.dayDate === coachTeamDayDate,
-                            )?.id;
-                            void Promise.all([
-                              loadCoachAthleteReadiness(row.athlete.athleteId),
-                              loadCoachExecutionReview(row.athlete.athleteId, assignedPlanId),
-                            ]);
-                          }}
+                          onClick={() => void handleOpenCoachTeamDay(row.athlete.athleteId)}
                           type="button"
                         >
                           {copyFor(language, { en: "Open day", ru: "Открыть день", bg: "Отвори деня" })}
