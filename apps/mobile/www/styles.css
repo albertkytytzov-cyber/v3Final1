@@ -1152,6 +1152,19 @@ button {
   font-weight: 950;
 }
 
+.execution-day-note small {
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 760;
+  line-height: 1.25;
+}
+
+.execution-day-note.is-athlete-diary {
+  margin-top: 4px;
+  border-color: rgba(15, 118, 110, 0.22);
+  background: #f6fbfa;
+}
+
 .athlete-coach-day-note p {
   margin: 0;
   color: var(--text);

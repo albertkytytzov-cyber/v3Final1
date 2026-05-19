@@ -5202,7 +5202,9 @@ function renderExecutionPlanGroup(
               `}
           </section>
         `).join("")}
-        ${compactAthlete ? "" : renderExecutionDayNoteField(state, group, isLocked)}
+        ${canSubmitExecution || !compactAthlete
+          ? renderExecutionDayNoteField(state, group, isLocked, compactAthlete)
+          : ""}
         ${canSubmitExecution ? `
           <div class="mobile-execution-day-actions">
             ${isLocked
@@ -5232,11 +5234,25 @@ function renderAthleteCoachDayNote(entry: CoachDiaryEntry | null) {
   `;
 }
 
-function renderExecutionDayNoteField(state: MobileAppState, group: ExecutionPlanGroup, disabled = false) {
+function renderExecutionDayNoteField(
+  state: MobileAppState,
+  group: ExecutionPlanGroup,
+  disabled = false,
+  athleteDiary = false,
+) {
+  const label = athleteDiary ? "Дневник тренировки" : "Комментарий за день";
+  const hint = athleteDiary
+    ? "Одна общая заметка после тренировки. Она сохраняется ко всему дню и видна тренеру."
+    : "Одна общая заметка ко всему дню, без комментариев под каждым упражнением.";
+  const placeholder = athleteDiary
+    ? "Как прошла тренировка: что получилось, что было тяжело, самочувствие после"
+    : "Коротко: что получилось, что было тяжело";
+
   return `
-    <label class="execution-day-note">
-      <span>Комментарий за день</span>
-      <textarea data-execution-day-notes rows="3" placeholder="Коротко: что получилось, что было тяжело" ${disabled ? "disabled" : ""}>${escapeHtml(getExecutionDayNote(state, group))}</textarea>
+    <label class="execution-day-note ${athleteDiary ? "is-athlete-diary" : ""}">
+      <span>${label}</span>
+      <small>${hint}</small>
+      <textarea data-execution-day-notes rows="3" placeholder="${placeholder}" ${disabled ? "disabled" : ""}>${escapeHtml(getExecutionDayNote(state, group))}</textarea>
     </label>
   `;
 }

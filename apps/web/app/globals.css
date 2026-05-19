@@ -2426,6 +2426,40 @@ td {
   cursor: pointer;
 }
 
+.athlete-execution-diary {
+  display: grid;
+  gap: 7px;
+  padding: 14px;
+  border: 1px solid rgba(15, 118, 110, 0.2);
+  border-radius: 16px;
+  background: rgba(240, 253, 250, 0.76);
+}
+
+.athlete-execution-diary span {
+  color: var(--text);
+  font-size: 0.95rem;
+  font-weight: 900;
+}
+
+.athlete-execution-diary small {
+  color: var(--muted-strong);
+  font-size: 0.82rem;
+  font-weight: 760;
+  line-height: 1.35;
+}
+
+.athlete-execution-diary textarea {
+  width: 100%;
+  min-height: 96px;
+  padding: 12px 13px;
+  border: 1px solid rgba(15, 118, 110, 0.18);
+  border-radius: 14px;
+  background: #fff;
+  color: var(--text);
+  font: inherit;
+  resize: vertical;
+}
+
 .athlete-execution-actions {
   display: flex;
   justify-content: flex-end;
