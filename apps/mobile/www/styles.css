@@ -364,6 +364,271 @@ button {
   padding-left: 18px;
 }
 
+.readiness-trend-card {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 14px;
+  border: 1px solid rgba(15, 118, 110, 0.2);
+  border-radius: 18px;
+  background: #f6fbfa;
+}
+
+.readiness-trend-card.readiness-green {
+  border-color: rgba(15, 118, 110, 0.24);
+  background: #ecfdf5;
+}
+
+.readiness-trend-card.readiness-yellow {
+  border-color: rgba(201, 121, 43, 0.24);
+  background: #fff7ed;
+}
+
+.readiness-trend-card.readiness-red {
+  border-color: rgba(185, 28, 28, 0.22);
+  background: #fef2f2;
+}
+
+.readiness-trend-card.is-empty {
+  border-color: rgba(148, 163, 184, 0.22);
+  background: #f8fafc;
+}
+
+.readiness-trend-head,
+.readiness-trend-chart-meta,
+.coach-readiness-analytics-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+}
+
+.readiness-trend-head span,
+.readiness-trend-chart-meta span,
+.coach-readiness-analytics-head span,
+.athlete-today-main span,
+.readiness-factor-row span {
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 850;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.readiness-trend-head h3,
+.readiness-trend-head p,
+.readiness-trend-chart-meta em,
+.coach-readiness-analytics-head strong,
+.coach-readiness-analytics-head small,
+.athlete-today-main strong,
+.athlete-today-main small,
+.athlete-today-recommendation {
+  margin: 0;
+}
+
+.readiness-trend-head h3 {
+  color: var(--text);
+  font-size: 1.1rem;
+  line-height: 1.15;
+}
+
+.readiness-trend-head p,
+.coach-readiness-analytics-head small,
+.athlete-today-main small,
+.athlete-today-recommendation {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 760;
+  line-height: 1.35;
+}
+
+.readiness-trend-head strong {
+  min-width: 58px;
+  padding: 9px 10px;
+  border-radius: 15px;
+  background: #dff2ef;
+  color: var(--accent-dark);
+  font-size: 1.7rem;
+  line-height: 1;
+  text-align: center;
+}
+
+.readiness-trend-chart {
+  display: grid;
+  gap: 8px;
+}
+
+.readiness-trend-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 0.76rem;
+  font-style: normal;
+  font-weight: 900;
+  line-height: 1.15;
+  text-align: center;
+}
+
+.readiness-trend-chip.is-good {
+  background: #dff2ef;
+  color: var(--accent-dark);
+}
+
+.readiness-trend-chip.is-watch {
+  background: #fff7ed;
+  color: var(--warning);
+}
+
+.readiness-trend-chip.is-risk {
+  background: #fef2f2;
+  color: var(--danger);
+}
+
+.readiness-trend-svg {
+  display: block;
+  width: 100%;
+  height: 118px;
+  overflow: visible;
+}
+
+.readiness-trend-svg line {
+  stroke: rgba(101, 115, 111, 0.18);
+  stroke-dasharray: 4 8;
+  stroke-width: 1;
+}
+
+.readiness-trend-svg polyline {
+  fill: none;
+  stroke: var(--accent);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 4;
+}
+
+.readiness-trend-svg circle {
+  fill: #fff;
+  stroke: var(--accent);
+  stroke-width: 3;
+}
+
+.readiness-trend-svg circle.readiness-yellow {
+  stroke: #c9792b;
+}
+
+.readiness-trend-svg circle.readiness-red {
+  stroke: var(--danger);
+}
+
+.readiness-trend-svg.is-mini {
+  height: 86px;
+}
+
+.readiness-trend-svg.is-coach {
+  height: 96px;
+}
+
+.readiness-trend-dots {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.readiness-trend-dots span {
+  display: grid;
+  gap: 2px;
+  justify-items: center;
+  min-height: 45px;
+  padding: 6px 4px;
+  border: 1px solid rgba(15, 118, 110, 0.16);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.64);
+}
+
+.readiness-trend-dots i {
+  color: var(--accent-dark);
+  font-size: 0.84rem;
+  font-style: normal;
+  font-weight: 950;
+  line-height: 1;
+}
+
+.readiness-trend-dots small {
+  color: var(--muted);
+  font-size: 0.64rem;
+  font-weight: 800;
+  line-height: 1.1;
+  text-align: center;
+}
+
+.readiness-trend-dots .readiness-yellow {
+  border-color: rgba(201, 121, 43, 0.26);
+  background: rgba(255, 247, 237, 0.72);
+}
+
+.readiness-trend-dots .readiness-yellow i {
+  color: var(--warning);
+}
+
+.readiness-trend-dots .readiness-red {
+  border-color: rgba(185, 28, 28, 0.24);
+  background: rgba(254, 242, 242, 0.74);
+}
+
+.readiness-trend-dots .readiness-red i {
+  color: var(--danger);
+}
+
+.readiness-factor-list {
+  display: grid;
+  gap: 8px;
+}
+
+.readiness-factor-list.is-compact {
+  gap: 6px;
+}
+
+.readiness-factor-row {
+  display: grid;
+  grid-template-columns: minmax(76px, 0.8fr) minmax(54px, auto) minmax(0, 1.4fr);
+  gap: 8px;
+  align-items: center;
+  padding: 9px 10px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.readiness-factor-row strong {
+  color: var(--text);
+  font-size: 0.9rem;
+  font-weight: 950;
+  line-height: 1.1;
+}
+
+.readiness-factor-row small {
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 740;
+  line-height: 1.25;
+}
+
+.readiness-factor-row.is-good {
+  border-color: rgba(15, 118, 110, 0.15);
+}
+
+.readiness-factor-row.is-watch {
+  border-color: rgba(201, 121, 43, 0.22);
+  background: rgba(255, 247, 237, 0.65);
+}
+
+.readiness-factor-row.is-risk {
+  border-color: rgba(185, 28, 28, 0.2);
+  background: rgba(254, 242, 242, 0.72);
+}
+
 .readiness-form {
   background: transparent;
   border: 0;
@@ -2044,6 +2309,44 @@ button {
   line-height: 1.25;
 }
 
+.athlete-today-overview {
+  display: grid;
+  gap: 10px;
+}
+
+.athlete-today-main {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.athlete-today-main > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px 0;
+  border-top: 1px solid rgba(148, 163, 184, 0.22);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.22);
+}
+
+.athlete-today-main strong {
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 950;
+  line-height: 1.15;
+}
+
+.mobile-readiness-mini-chart {
+  display: grid;
+  gap: 7px;
+  padding: 8px 0 2px;
+}
+
+.athlete-today-recommendation {
+  padding: 10px 0 0;
+  border-top: 1px solid rgba(148, 163, 184, 0.22);
+}
+
 .athlete-home-card.readiness-green {
   border-color: rgba(15, 118, 110, 0.24);
   background: #ecfdf5;
@@ -2749,6 +3052,46 @@ button {
   border: 1px solid rgba(148, 163, 184, 0.16);
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.72);
+}
+
+.coach-readiness-analytics {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(15, 118, 110, 0.16);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.coach-readiness-analytics.readiness-green {
+  border-color: rgba(15, 118, 110, 0.22);
+  background: #ecfdf5;
+}
+
+.coach-readiness-analytics.readiness-yellow {
+  border-color: rgba(201, 121, 43, 0.24);
+  background: #fff7ed;
+}
+
+.coach-readiness-analytics.readiness-red {
+  border-color: rgba(185, 28, 28, 0.22);
+  background: #fef2f2;
+}
+
+.coach-readiness-analytics.is-missing-readiness {
+  background: rgba(248, 250, 252, 0.86);
+}
+
+.coach-readiness-analytics-head strong {
+  display: block;
+  color: var(--text);
+  font-size: 1.05rem;
+  font-weight: 950;
+  line-height: 1.15;
+}
+
+.coach-readiness-analytics .readiness-factor-row {
+  grid-template-columns: minmax(70px, 0.78fr) minmax(45px, auto) minmax(0, 1.35fr);
 }
 
 .coach-day-load-explanation {
@@ -3899,6 +4242,9 @@ button.timeline-card:active {
   .coach-ai-review-head,
   .device-health-head,
   .today-indicators-head,
+  .readiness-trend-head,
+  .readiness-trend-chart-meta,
+  .coach-readiness-analytics-head,
   .athlete-day-brief-head,
   .coach-execution-review-head,
   .coach-diary-history-card header {
@@ -3913,6 +4259,7 @@ button.timeline-card:active {
   .coach-day-status-head > strong,
   .summary-inline-head > strong,
   .today-indicators-head strong,
+  .readiness-trend-head strong,
   .athlete-day-brief-head strong,
   .athlete-home-head strong,
   .coach-execution-review-head .execution-day-status {
@@ -3993,6 +4340,9 @@ button.timeline-card:active {
   .readiness-indicators-grid,
   .readiness-flags-inline,
   .readiness-flags,
+  .athlete-today-main,
+  .readiness-factor-row,
+  .coach-readiness-analytics .readiness-factor-row,
   .athlete-home-actions,
   .device-health-compact-grid,
   .device-health-compact-actions,
@@ -4008,6 +4358,10 @@ button.timeline-card:active {
   .mobile-plan-day-card-head em {
     max-width: 100%;
     width: fit-content;
+  }
+
+  .readiness-trend-dots {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
   .execution-block-head,

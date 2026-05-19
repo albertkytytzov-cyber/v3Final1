@@ -1625,7 +1625,7 @@ function renderCoachDayStatusScreen(
     ${dayData
       ? `
         <div class="coach-day-status-stack">
-          ${renderCoachDayStatusCard(dayData, aiReview)}
+          ${renderCoachDayStatusCard(state, dayData, aiReview)}
           ${renderCoachDayDetails(dayData, aiReview, aiReviewHistory, state)}
         </div>
       `
@@ -1667,12 +1667,9 @@ function renderAthleteHomeCard(state: MobileAppState, athleteId: string, date: s
   const dayData = getCoachDayCleanSummary(state, athleteId, date);
   const entry = dayData.readinessEntry;
   const summary = dayData.summary;
-  const deviceHealth = dayData.deviceHealthSummary;
+  const readinessEntries = getRecentReadinessEntriesForAthlete(state, athleteId, 7);
   const cardStateClass = entry ? `readiness-${escapeHtml(entry.status)}` : "is-missing-readiness";
-  const readinessValue = entry ? `${entry.score} · ${formatReadinessStatus(entry.status)}` : "не заполнена";
-  const readinessDetail = entry ? formatReadinessFlags(entry) : "заполни перед тренировкой";
   const executionValue = formatAthleteExecutionCompletion(summary);
-  const watchLine = formatAthleteWatchLine(deviceHealth);
 
   return `
     <section class="athlete-home-card ${cardStateClass}">
@@ -1680,15 +1677,11 @@ function renderAthleteHomeCard(state: MobileAppState, athleteId: string, date: s
         <div>
           <span>${escapeHtml(formatDayRelativeLabel(date))}</span>
           <h3>${escapeHtml(summary.statusLabel)}</h3>
-          <p>${escapeHtml(dayData.latestDiaryEntry ? "есть комментарий тренера" : "спокойная сводка дня")}</p>
+          <p>${formatDate(date)} · выполнение ${escapeHtml(executionValue)}</p>
         </div>
         <strong>${entry ? entry.score : "-"}</strong>
       </div>
-      <div class="athlete-home-grid">
-        ${renderTodayIndicator("Готовность", readinessValue, readinessDetail)}
-        ${renderTodayIndicator("Выполнение", executionValue, formatAthleteExecutionDetail(summary))}
-        ${renderTodayIndicator("Часы", watchLine, deviceHealth ? formatReadinessDeviceHealthSyncLabel(deviceHealth) : "можно синхронизировать")}
-      </div>
+      ${renderAthleteTodayReadinessOverview(dayData, readinessEntries)}
       ${dayData.latestDiaryEntry ? `
         <p class="athlete-home-note">${escapeHtml(dayData.latestDiaryEntry.notes)}</p>
       ` : ""}
@@ -1697,6 +1690,46 @@ function renderAthleteHomeCard(state: MobileAppState, athleteId: string, date: s
         <button class="secondary-action" data-screen="readiness" type="button">Заполнить готовность</button>
       </div>
     </section>
+  `;
+}
+
+function renderAthleteTodayReadinessOverview(dayData: CoachDayCleanSummary, readinessEntries: ReadinessEntry[]) {
+  const entry = dayData.readinessEntry;
+  const summary = dayData.summary;
+  const reasonRows = entry ? getReadinessPriorityRows(entry).slice(0, 3) : [];
+  const recommendation = formatAthleteTodayRecommendation(entry, summary);
+
+  return `
+    <div class="athlete-today-overview">
+      <div class="athlete-today-main">
+        <div>
+          <span>Сегодня</span>
+          <strong>${entry ? `${entry.score} · ${formatReadinessStatus(entry.status)}` : "готовность не заполнена"}</strong>
+          <small>${escapeHtml(entry ? formatReadinessFlags(entry) : "заполни готовность до тренировки")}</small>
+        </div>
+        <div>
+          <span>Выполнение</span>
+          <strong>${escapeHtml(formatAthleteExecutionCompletion(summary))}</strong>
+          <small>${escapeHtml(formatAthleteExecutionDetail(summary))}</small>
+        </div>
+      </div>
+      ${readinessEntries.length ? `
+        <div class="mobile-readiness-mini-chart">
+          ${renderReadinessTrendSvg(readinessEntries, "readiness-trend-svg is-mini")}
+          ${renderReadinessTrendDots(readinessEntries)}
+        </div>
+      ` : ""}
+      <div class="readiness-factor-list is-compact">
+        ${reasonRows.length
+          ? reasonRows.map(renderReadinessFactorRow).join("")
+          : `<article class="readiness-factor-row is-watch">
+              <span>Готовность</span>
+              <strong>нет записи</strong>
+              <small>данные появятся после сохранения чек-ина</small>
+            </article>`}
+      </div>
+      <p class="athlete-today-recommendation">${escapeHtml(recommendation)}</p>
+    </div>
   `;
 }
 
@@ -1730,24 +1763,11 @@ function formatAthleteExecutionDetail(summary: CoachTodayDaySummary) {
   return "нет тренировки";
 }
 
-function formatAthleteWatchLine(summary: DeviceHealthDailySummary | null) {
-  if (!summary) {
-    return "нет данных";
-  }
-
-  const sleep = formatDeviceHealthSleepValue(summary);
-  const restingHr = formatDeviceHealthRestingHrValue(summary);
-  const workout = formatDeviceHealthWorkoutValue(summary);
-  const parts = [
-    sleep !== "-" ? `сон ${sleep}` : null,
-    restingHr !== "-" ? `пульс ${restingHr}` : null,
-    workout !== "-" && workout !== "0" ? `трен. ${workout}` : null,
-  ].filter((item): item is string => Boolean(item));
-
-  return parts.length ? parts.join(" · ") : "данных мало";
-}
-
-function renderCoachDayStatusCard(dayData: CoachDayCleanSummary, aiReview: CoachDayAiReview | null) {
+function renderCoachDayStatusCard(
+  state: MobileAppState,
+  dayData: CoachDayCleanSummary,
+  aiReview: CoachDayAiReview | null,
+) {
   const summary = dayData.summary;
   const readiness = dayData.readinessEntry;
   const deviceHealth = dayData.deviceHealthSummary;
@@ -1770,6 +1790,7 @@ function renderCoachDayStatusCard(dayData: CoachDayCleanSummary, aiReview: Coach
   const executionValue = summary.exerciseCount > 0
     ? `${summary.completedExerciseCount}/${summary.exerciseCount}`
     : `${summary.completedBlockCount}/${summary.blockCount || 0}`;
+  const readinessEntries = getRecentReadinessEntriesForAthlete(state, dayData.athleteId, 7, dayData.date);
 
   return `
     <section class="coach-day-status-card">
@@ -1781,6 +1802,7 @@ function renderCoachDayStatusCard(dayData: CoachDayCleanSummary, aiReview: Coach
         </div>
         <strong>${readiness ? readiness.score : "-"}</strong>
       </div>
+      ${renderCoachReadinessAnalytics(dayData, readinessEntries, aiReview)}
       <div class="coach-day-status-brief is-${dataQuality.status}">
         <div class="coach-day-status-brief-main">
           <span>Рабочая сводка тренера</span>
@@ -1799,11 +1821,6 @@ function renderCoachDayStatusCard(dayData: CoachDayCleanSummary, aiReview: Coach
             <small>${escapeHtml(formatCoachTodayLoadDelta(summary))}</small>
           </article>
           <article>
-            <span>Готовность</span>
-            <strong>${readiness ? `${readiness.score} · ${formatReadinessStatus(readiness.status)}` : "нет данных"}</strong>
-            <small>${escapeHtml(readiness ? formatReadinessFlags(readiness) : "спортсмен не отправил")}</small>
-          </article>
-          <article>
             <span>Восстановление</span>
             <strong>${escapeHtml(formatDeviceHealthBriefValue(deviceHealth))}</strong>
             <small>${escapeHtml(recoverySummary)}</small>
@@ -1812,6 +1829,41 @@ function renderCoachDayStatusCard(dayData: CoachDayCleanSummary, aiReview: Coach
       </div>
       ${renderCoachDayCommentBlocks(dayData)}
     </section>
+  `;
+}
+
+function renderCoachReadinessAnalytics(
+  dayData: CoachDayCleanSummary,
+  readinessEntries: ReadinessEntry[],
+  aiReview: CoachDayAiReview | null,
+) {
+  const readiness = dayData.readinessEntry;
+  const reasonRows = readiness ? getReadinessPriorityRows(readiness).slice(0, 4) : [];
+  const trend = getReadinessTrendDelta(readinessEntries);
+  const trendLabel = formatReadinessTrendDelta(trend);
+  const trendClass = getReadinessTrendClass(trend);
+
+  return `
+    <div class="coach-readiness-analytics ${readiness ? `readiness-${escapeHtml(readiness.status)}` : "is-missing-readiness"}">
+      <div class="coach-readiness-analytics-head">
+        <div>
+          <span>Готовность и риск</span>
+          <strong>${readiness ? `${readiness.score} · ${formatReadinessStatus(readiness.status)}` : "нет готовности"}</strong>
+          <small>${escapeHtml(trendLabel)}</small>
+        </div>
+        <em class="readiness-trend-chip is-${trendClass}">${escapeHtml(formatCoachReadinessDecision(dayData, aiReview))}</em>
+      </div>
+      ${readinessEntries.length ? renderReadinessTrendSvg(readinessEntries, "readiness-trend-svg is-coach") : ""}
+      <div class="readiness-factor-list is-coach">
+        ${reasonRows.length
+          ? reasonRows.map(renderReadinessFactorRow).join("")
+          : `<article class="readiness-factor-row is-watch">
+              <span>Готовность</span>
+              <strong>нет записи</strong>
+              <small>сначала нужна отметка спортсмена</small>
+            </article>`}
+      </div>
+    </div>
   `;
 }
 
@@ -4094,8 +4146,10 @@ function renderReadinessScreen(state: MobileAppState) {
   }
 
   const today = todayValue();
-  const readiness = getReadinessEntryForDate(state, state.session.user.athleteId ?? null, today);
-  const readinessHistory = getReadinessHistory(state);
+  const athleteId = state.session.user.athleteId ?? null;
+  const readiness = getReadinessEntryForDate(state, athleteId, today);
+  const readinessHistory = getReadinessHistory(state, athleteId);
+  const readinessTrendEntries = getRecentReadinessEntriesForAthlete(state, athleteId, 10);
   const values = getReadinessFormDefaults(state, readiness);
   const entryDate = readiness?.entryDate ?? today;
   const readinessLocked = Boolean(readiness) && !state.readinessEditMode;
@@ -4106,7 +4160,7 @@ function renderReadinessScreen(state: MobileAppState) {
       <h2>Готовность</h2>
       <p>${readiness ? `Сегодня: ${readiness.score} · ${formatReadinessStatus(readiness.status)}` : "Быстрый чек-ин перед тренировкой"}</p>
     </div>
-    ${renderReadinessResultCard(readiness)}
+    ${renderAthleteReadinessTrendCard(readinessTrendEntries, readiness)}
     <form class="mobile-form compact-form readiness-form" data-readiness-form>
       <section class="readiness-section readiness-checkin-card wide-field">
         <div class="section-title">
@@ -4226,6 +4280,115 @@ function renderReadinessResultCard(entry: ReadinessEntry | null) {
   `;
 }
 
+function renderAthleteReadinessTrendCard(entries: ReadinessEntry[], todayEntry: ReadinessEntry | null) {
+  const latestEntry = todayEntry ?? entries[entries.length - 1] ?? null;
+  const trend = getReadinessTrendDelta(entries);
+  const trendClass = getReadinessTrendClass(trend);
+  const reasonRows = latestEntry ? getReadinessPriorityRows(latestEntry).slice(0, 5) : [];
+
+  if (!latestEntry) {
+    return `
+      <section class="readiness-trend-card is-empty">
+        <div class="readiness-trend-head">
+          <div>
+            <span>Тренд готовности</span>
+            <h3>Пока нет данных</h3>
+            <p>Сохрани первый чек-ин, и здесь появится динамика состояния.</p>
+          </div>
+          <strong>—</strong>
+        </div>
+      </section>
+    `;
+  }
+
+  return `
+    <section class="readiness-trend-card readiness-${escapeHtml(latestEntry.status)}">
+      <div class="readiness-trend-head">
+        <div>
+          <span>Тренд готовности</span>
+          <h3>${escapeHtml(formatReadinessStatus(latestEntry.status))}</h3>
+          <p>${formatDate(latestEntry.entryDate)} · ${escapeHtml(formatReadinessFlags(latestEntry))}</p>
+        </div>
+        <strong>${latestEntry.score}</strong>
+      </div>
+      <div class="readiness-trend-chart">
+        <div class="readiness-trend-chart-meta">
+          <span>Последние дни</span>
+          <em class="readiness-trend-chip is-${trendClass}">${escapeHtml(formatReadinessTrendDelta(trend))}</em>
+        </div>
+        ${renderReadinessTrendSvg(entries, "readiness-trend-svg")}
+        ${renderReadinessTrendDots(entries)}
+      </div>
+      <div class="readiness-factor-list">
+        ${reasonRows.map(renderReadinessFactorRow).join("")}
+      </div>
+    </section>
+  `;
+}
+
+interface ReadinessFactorRow {
+  detail: string;
+  label: string;
+  severity: "good" | "risk" | "watch";
+  value: string;
+}
+
+function renderReadinessFactorRow(row: ReadinessFactorRow) {
+  return `
+    <article class="readiness-factor-row is-${row.severity}">
+      <span>${escapeHtml(row.label)}</span>
+      <strong>${escapeHtml(row.value)}</strong>
+      <small>${escapeHtml(row.detail)}</small>
+    </article>
+  `;
+}
+
+function renderReadinessTrendSvg(entries: ReadinessEntry[], className: string) {
+  const chartEntries = entries.slice(-10);
+
+  if (chartEntries.length === 0) {
+    return "";
+  }
+
+  const width = 280;
+  const height = 96;
+  const horizontalPadding = 10;
+  const verticalPadding = 12;
+  const denominator = Math.max(chartEntries.length - 1, 1);
+  const points = chartEntries.map((entry, index) => {
+    const x = horizontalPadding + ((width - horizontalPadding * 2) * index) / denominator;
+    const normalizedScore = Math.max(0, Math.min(100, entry.score));
+    const y = height - verticalPadding - ((height - verticalPadding * 2) * normalizedScore) / 100;
+    return { entry, x, y };
+  });
+  const polyline = points.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ");
+
+  return `
+    <svg class="${escapeHtml(className)}" viewBox="0 0 ${width} ${height}" role="img" aria-label="График готовности">
+      <line x1="10" y1="22" x2="270" y2="22"></line>
+      <line x1="10" y1="48" x2="270" y2="48"></line>
+      <line x1="10" y1="74" x2="270" y2="74"></line>
+      <polyline points="${polyline}"></polyline>
+      ${points.map((point) => `
+        <circle class="readiness-${escapeHtml(point.entry.status)}" cx="${point.x.toFixed(1)}" cy="${point.y.toFixed(1)}" r="4.2"></circle>
+      `).join("")}
+    </svg>
+  `;
+}
+
+function renderReadinessTrendDots(entries: ReadinessEntry[]) {
+  return `
+    <div class="readiness-trend-dots">
+      ${entries.slice(-7).map((entry) => `
+        <span class="readiness-${escapeHtml(entry.status)}">
+          <i>${entry.score}</i>
+          <small>${formatShortDate(entry.entryDate)}</small>
+        </span>
+      `).join("")}
+    </div>
+  `;
+}
+
 function renderReadinessSyncMenu(state: MobileAppState) {
   const pendingQueue = getPendingQueueItems(state.queue);
   const invalidQueue = getInvalidQueueItems(state.queue);
@@ -4313,6 +4476,118 @@ function getReadinessReasonLabels(entry: ReadinessEntry) {
   }
 
   return ["общая оценка ниже обычного", `сон ${formatReadinessNumber(entry.sleepHours)} ч`, `самочувствие ${entry.generalFeeling}/5`];
+}
+
+function getReadinessPriorityRows(entry: ReadinessEntry): ReadinessFactorRow[] {
+  const rows = buildReadinessFactorRows(entry);
+  const rank: Record<ReadinessFactorRow["severity"], number> = {
+    good: 0,
+    watch: 1,
+    risk: 2,
+  };
+
+  return rows.slice().sort((left, right) => rank[right.severity] - rank[left.severity]);
+}
+
+function buildReadinessFactorRows(entry: ReadinessEntry): ReadinessFactorRow[] {
+  const rows: ReadinessFactorRow[] = [];
+
+  if (entry.feverFlag) {
+    rows.push({
+      detail: "тренировку лучше согласовать с тренером",
+      label: "Температура",
+      severity: "risk",
+      value: "отмечена",
+    });
+  }
+
+  if (entry.illnessFlag) {
+    rows.push({
+      detail: "есть симптомы, нагрузку надо пересмотреть",
+      label: "Болезнь",
+      severity: "risk",
+      value: "да",
+    });
+  }
+
+  rows.push(
+    {
+      detail: getRestingHrReadinessDetail(entry),
+      label: "Пульс",
+      severity: getRestingHrReadinessSeverity(entry),
+      value: `${entry.restingHr}`,
+    },
+    {
+      detail: entry.sleepHours < 6.5 ? "мало сна, восстановление под вопросом" : "сон в рабочем диапазоне",
+      label: "Сон",
+      severity: entry.sleepHours < 6 ? "risk" : entry.sleepHours < 7 ? "watch" : "good",
+      value: `${formatReadinessNumber(entry.sleepHours)} ч`,
+    },
+    {
+      detail: entry.fatigueLevel >= 4 ? "снизить интенсивность или объём" : "усталость приемлемая",
+      label: "Усталость",
+      severity: entry.fatigueLevel >= 4 ? "risk" : entry.fatigueLevel >= 3 ? "watch" : "good",
+      value: `${entry.fatigueLevel}/5`,
+    },
+    {
+      detail: entry.painLevel >= 5 ? "нужна ручная проверка зоны боли" : entry.painLevel > 0 ? "контролировать по ходу тренировки" : "боли нет",
+      label: "Боль",
+      severity: entry.painLevel >= 5 ? "risk" : entry.painLevel > 0 ? "watch" : "good",
+      value: `${entry.painLevel}/10`,
+    },
+    {
+      detail: entry.muscleSoreness >= 4 ? "мышцы перегружены, осторожнее с тяжёлой работой" : "мышцы в рабочем состоянии",
+      label: "Мышцы",
+      severity: entry.muscleSoreness >= 4 ? "risk" : entry.muscleSoreness >= 3 ? "watch" : "good",
+      value: `${entry.muscleSoreness}/5`,
+    },
+    {
+      detail: entry.generalFeeling <= 2 ? "самочувствие низкое, нужен контроль" : "самочувствие без острого риска",
+      label: "Самочувствие",
+      severity: entry.generalFeeling <= 2 ? "risk" : entry.generalFeeling <= 3 ? "watch" : "good",
+      value: `${entry.generalFeeling}/5`,
+    },
+    {
+      detail: entry.motivationLevel <= 2 ? "низкая мотивация, лучше держать простые задачи" : "мотивация достаточная",
+      label: "Мотивация",
+      severity: entry.motivationLevel <= 2 ? "watch" : "good",
+      value: `${entry.motivationLevel}/5`,
+    },
+  );
+
+  return rows;
+}
+
+function getRestingHrReadinessSeverity(entry: ReadinessEntry): ReadinessFactorRow["severity"] {
+  const hasNegativeRestingHrReason = entry.explanation.some((reason) =>
+    reason.code === "resting_hr" && reason.impact < 0
+  );
+
+  if (hasNegativeRestingHrReason || entry.restingHr >= 82) {
+    return "risk";
+  }
+
+  if (entry.restingHr >= 74) {
+    return "watch";
+  }
+
+  return "good";
+}
+
+function getRestingHrReadinessDetail(entry: ReadinessEntry) {
+  const hasNegativeRestingHrReason = entry.explanation.some((reason) =>
+    reason.code === "resting_hr" && reason.impact < 0
+  );
+
+  if (hasNegativeRestingHrReason || entry.restingHr >= 82) {
+    return "выше обычного, проверь восстановление";
+  }
+
+  if (entry.restingHr >= 74) {
+    return "слегка повышен, наблюдать в разминке";
+  }
+
+  return "в спокойном диапазоне";
 }
 
 function getChoiceDefault(options: ChoiceOption[], value: number) {
@@ -7189,6 +7464,83 @@ function formatReadinessFlags(entry: ReadinessEntry) {
   return flags.length ? flags.join(" · ") : "без красных флагов";
 }
 
+function getReadinessTrendDelta(entries: ReadinessEntry[]) {
+  const trendEntries = entries.slice(-7);
+
+  if (trendEntries.length < 2) {
+    return null;
+  }
+
+  return trendEntries[trendEntries.length - 1].score - trendEntries[0].score;
+}
+
+function formatReadinessTrendDelta(delta: number | null) {
+  if (delta === null) {
+    return "нужны ещё замеры";
+  }
+
+  if (delta === 0) {
+    return "без изменений";
+  }
+
+  return delta > 0 ? `+${delta} за период` : `${delta} за период`;
+}
+
+function getReadinessTrendClass(delta: number | null): "good" | "risk" | "watch" {
+  if (delta === null || Math.abs(delta) < 4) {
+    return "watch";
+  }
+
+  return delta > 0 ? "good" : "risk";
+}
+
+function formatAthleteTodayRecommendation(entry: ReadinessEntry | null, summary: CoachTodayDaySummary) {
+  if (!entry) {
+    return summary.planCount > 0
+      ? "Перед выполнением плана сохрани готовность, чтобы тренер видел состояние перед нагрузкой."
+      : "На сегодня нет плана, но готовность всё равно можно сохранить для истории состояния.";
+  }
+
+  if (entry.status === "red") {
+    return "Сегодня не гони нагрузку: сначала проверь самочувствие и согласуй тяжёлую работу с тренером.";
+  }
+
+  if (entry.status === "yellow") {
+    return "Работай по плану аккуратно: следи за разминкой, болью и усталостью, без добавления лишнего объёма.";
+  }
+
+  if (summary.status === "completed") {
+    return "День закрыт. Если состояние изменилось после тренировки, обнови готовность или оставь заметку.";
+  }
+
+  return summary.planCount > 0
+    ? "Готовность нормальная: выполняй назначенный план и отметь сделанные задания."
+    : "Готовность нормальная. Планов на сегодня нет, можно держать лёгкое восстановление.";
+}
+
+function formatCoachReadinessDecision(dayData: CoachDayCleanSummary, aiReview: CoachDayAiReview | null) {
+  const entry = dayData.readinessEntry;
+  const summary = dayData.summary;
+
+  if (!entry) {
+    return "сначала получить чек-ин";
+  }
+
+  if (entry.status === "red") {
+    return "проверить перед нагрузкой";
+  }
+
+  if (entry.status === "yellow") {
+    return "держать план без добавления";
+  }
+
+  if (summary.planCount > 0 && summary.actualLoad > summary.plannedLoad) {
+    return "факт выше плана";
+  }
+
+  return aiReview?.tomorrowActions[0] ? "есть рекомендация" : "можно вести по плану";
+}
+
 function formatReadinessNumber(value: number) {
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
@@ -7360,12 +7712,32 @@ function getCompetitionPlansForAthlete(state: MobileAppState, athleteId: string 
   return state.data.competitionPlans.filter((plan) => !athleteId || plan.athleteId === athleteId);
 }
 
-function getReadinessHistory(state: MobileAppState) {
+function getReadinessEntriesForAthlete(state: MobileAppState, athleteId: string | null) {
   const entries = state.data.readinessHistory.length
     ? state.data.readinessHistory
     : state.data.readinessEntry
       ? [state.data.readinessEntry]
       : [];
+
+  return entries
+    .filter((entry) => !athleteId || entry.athleteId === athleteId)
+    .slice()
+    .sort((left, right) => left.entryDate.localeCompare(right.entryDate));
+}
+
+function getRecentReadinessEntriesForAthlete(
+  state: MobileAppState,
+  athleteId: string | null,
+  limit = 7,
+  maxDate?: string,
+) {
+  return getReadinessEntriesForAthlete(state, athleteId)
+    .filter((entry) => !maxDate || entry.entryDate <= maxDate)
+    .slice(-limit);
+}
+
+function getReadinessHistory(state: MobileAppState, athleteId: string | null = null) {
+  const entries = getReadinessEntriesForAthlete(state, athleteId);
 
   return entries
     .slice()
