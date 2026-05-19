@@ -3194,11 +3194,79 @@ td {
   background: rgba(240, 253, 250, 0.78);
 }
 
+.coach-day-status-panel > .summary-topline > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.coach-day-status-panel > .summary-topline > div > span {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .coach-day-status-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 145px), 1fr));
   gap: 8px;
   min-width: 0;
+}
+
+.coach-review-details-panel {
+  display: grid;
+  gap: 0;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.coach-review-details-panel summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  padding: 11px 13px;
+  color: var(--text);
+  cursor: pointer;
+  font-weight: 900;
+  line-height: 1.25;
+  list-style: none;
+  overflow-wrap: anywhere;
+}
+
+.coach-review-details-panel summary::-webkit-details-marker {
+  display: none;
+}
+
+.coach-review-details-panel summary::after {
+  content: "";
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  margin-right: 2px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  opacity: 0.56;
+  transform: rotate(45deg);
+  transition: transform 0.16s ease, opacity 0.16s ease;
+}
+
+.coach-review-details-panel[open] summary::after {
+  opacity: 0.82;
+  transform: rotate(225deg);
+}
+
+.coach-review-details-panel > :not(summary) {
+  margin: 0 12px 12px;
+}
+
+.coach-day-status-brief .coach-review-details-panel {
+  border-color: rgba(15, 118, 110, 0.14);
+  background: rgba(255, 255, 255, 0.58);
 }
 
 .coach-day-status-brief {
@@ -3745,6 +3813,18 @@ td {
   border-radius: 16px;
   border: 1px solid rgba(14, 116, 144, 0.18);
   background: rgba(236, 254, 255, 0.68);
+}
+
+.device-workout-link-panel > .summary-topline > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.device-workout-link-panel > .summary-topline > div > span {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .device-workout-block-list {

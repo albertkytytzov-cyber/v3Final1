@@ -17014,95 +17014,106 @@ export function PageClient({
                               <small>{selectedCoachAiSummary}</small>
                             </article>
                           </div>
-                          <div className="coach-day-load-explanation">
-                            <strong>
+                          <details className="coach-review-details-panel coach-review-load-details">
+                            <summary>
                               {copyFor(language, {
                                 en: "How load was calculated",
                                 ru: "Как посчитана нагрузка",
                                 bg: "Как е изчислено натоварването",
                               })}
-                            </strong>
-                            <ul>
-                              {selectedCoachLoadExplanation.map((item) => (
-                                <li key={item}>{item}</li>
-                              ))}
-                            </ul>
+                            </summary>
+                            <div className="coach-day-load-explanation">
+                              <ul>
+                                {selectedCoachLoadExplanation.map((item) => (
+                                  <li key={item}>{item}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          </details>
+                        </div>
+                        <details className="coach-review-details-panel">
+                          <summary>
+                            {copyFor(language, {
+                              en: "Day indicators",
+                              ru: "Показатели дня",
+                              bg: "Показатели за деня",
+                            })}
+                          </summary>
+                          <div className="coach-day-status-grid">
+                            {[
+                              {
+                                label: copyFor(language, { en: "Readiness", ru: "Готовность", bg: "Готовност" }),
+                                value: selectedCoachReadinessEntry ? selectedCoachReadinessEntry.score : "-",
+                                detail: selectedCoachReadinessEntry
+                                  ? formatCoachAiReadinessStatus(selectedCoachReadinessEntry.status, language)
+                                  : copyFor(language, { en: "not submitted", ru: "не отправлена", bg: "не е подадена" }),
+                              },
+                              {
+                                label: copyFor(language, { en: "Planned load", ru: "Плановая нагрузка", bg: "Планово натоварване" }),
+                                value: formatCoachDayLoadValue(selectedCoachPlannedLoad),
+                                detail: `${coachExecutionReview.summary.plannedBlocks} ${copyFor(language, {
+                                  en: "blocks",
+                                  ru: "блоков",
+                                  bg: "блока",
+                                })}`,
+                              },
+                              {
+                                label: copyFor(language, { en: "Actual load", ru: "Фактическая нагрузка", bg: "Реално натоварване" }),
+                                value: formatCoachDayLoadValue(selectedCoachActualLoad),
+                                detail: `${copyFor(language, { en: "manual", ru: "отметки", bg: "отметки" })} ${formatCoachDayLoadValue(selectedCoachManualActualLoad)} · ${copyFor(language, { en: "device", ru: "устройство", bg: "устройство" })} ${formatCoachDayLoadValue(selectedCoachDeviceConfirmedLoad)}`,
+                              },
+                              {
+                                label: copyFor(language, { en: "Execution", ru: "Выполнение", bg: "Изпълнение" }),
+                                value: `${coachExecutionReview.summary.completedBlocks}/${coachExecutionReview.summary.plannedBlocks}`,
+                                detail: `${coachExecutionReview.summary.partialBlocks} ${copyFor(language, {
+                                  en: "partial",
+                                  ru: "частично",
+                                  bg: "частично",
+                                })}`,
+                              },
+                              {
+                                label: copyFor(language, { en: "Sleep", ru: "Сон", bg: "Сън" }),
+                                value: formatDeviceSleepValue(selectedCoachDeviceHealthSummary, language),
+                                detail: selectedCoachDeviceHealthSummary?.sleep?.score !== null &&
+                                  selectedCoachDeviceHealthSummary?.sleep?.score !== undefined
+                                  ? `${copyFor(language, { en: "score", ru: "оценка", bg: "оценка" })} ${selectedCoachDeviceHealthSummary.sleep.score}`
+                                  : copyFor(language, { en: "device data", ru: "данные устройства", bg: "данни от устройство" }),
+                              },
+                              {
+                                label: copyFor(language, { en: "Resting HR", ru: "Пульс покоя", bg: "Пулс в покой" }),
+                                value: formatDeviceRestingHrValue(selectedCoachDeviceHealthSummary),
+                                detail: formatDeviceRestingHrDetail(selectedCoachDeviceHealthSummary, language),
+                              },
+                              {
+                                label: "SpO2",
+                                value: formatDeviceOxygenValue(selectedCoachDeviceHealthSummary),
+                                detail: formatDeviceOxygenDetail(selectedCoachDeviceHealthSummary, language),
+                              },
+                              {
+                                label: copyFor(language, { en: "Device workouts", ru: "Тренировки устройства", bg: "Тренировки от устройство" }),
+                                value: formatDeviceWorkoutValue(selectedCoachDeviceHealthSummary),
+                                detail: selectedCoachDeviceHealthSummary?.workout?.totalDurationMinutes
+                                  ? formatDeviceDuration(selectedCoachDeviceHealthSummary.workout.totalDurationMinutes, language)
+                                  : copyFor(language, { en: "not received", ru: "не пришли", bg: "не са получени" }),
+                              },
+                              {
+                                label: copyFor(language, { en: "AI", ru: "ИИ", bg: "AI" }),
+                                value: latestCoachAiReview
+                                  ? formatCoachAiReviewSource(latestCoachAiReview.source, language)
+                                  : "-",
+                                detail: latestCoachAiReview
+                                  ? latestCoachAiReview.riskNotes[0] ?? latestCoachAiReview.observation
+                                  : copyFor(language, { en: "not generated", ru: "не сформирован", bg: "не е генериран" }),
+                              },
+                            ].map((item) => (
+                              <article className="coach-day-status-metric" key={item.label}>
+                                <span>{item.label}</span>
+                                <strong>{item.value}</strong>
+                                <small>{item.detail}</small>
+                              </article>
+                            ))}
                           </div>
-                        </div>
-                        <div className="coach-day-status-grid">
-                          {[
-                            {
-                              label: copyFor(language, { en: "Readiness", ru: "Готовность", bg: "Готовност" }),
-                              value: selectedCoachReadinessEntry ? selectedCoachReadinessEntry.score : "-",
-                              detail: selectedCoachReadinessEntry
-                                ? formatCoachAiReadinessStatus(selectedCoachReadinessEntry.status, language)
-                                : copyFor(language, { en: "not submitted", ru: "не отправлена", bg: "не е подадена" }),
-                            },
-                            {
-                              label: copyFor(language, { en: "Planned load", ru: "Плановая нагрузка", bg: "Планово натоварване" }),
-                              value: formatCoachDayLoadValue(selectedCoachPlannedLoad),
-                              detail: `${coachExecutionReview.summary.plannedBlocks} ${copyFor(language, {
-                                en: "blocks",
-                                ru: "блоков",
-                                bg: "блока",
-                              })}`,
-                            },
-                            {
-                              label: copyFor(language, { en: "Actual load", ru: "Фактическая нагрузка", bg: "Реално натоварване" }),
-                              value: formatCoachDayLoadValue(selectedCoachActualLoad),
-                              detail: `${copyFor(language, { en: "manual", ru: "отметки", bg: "отметки" })} ${formatCoachDayLoadValue(selectedCoachManualActualLoad)} · ${copyFor(language, { en: "device", ru: "устройство", bg: "устройство" })} ${formatCoachDayLoadValue(selectedCoachDeviceConfirmedLoad)}`,
-                            },
-                            {
-                              label: copyFor(language, { en: "Execution", ru: "Выполнение", bg: "Изпълнение" }),
-                              value: `${coachExecutionReview.summary.completedBlocks}/${coachExecutionReview.summary.plannedBlocks}`,
-                              detail: `${coachExecutionReview.summary.partialBlocks} ${copyFor(language, {
-                                en: "partial",
-                                ru: "частично",
-                                bg: "частично",
-                              })}`,
-                            },
-                            {
-                              label: copyFor(language, { en: "Sleep", ru: "Сон", bg: "Сън" }),
-                              value: formatDeviceSleepValue(selectedCoachDeviceHealthSummary, language),
-                              detail: selectedCoachDeviceHealthSummary?.sleep?.score !== null &&
-                                selectedCoachDeviceHealthSummary?.sleep?.score !== undefined
-                                ? `${copyFor(language, { en: "score", ru: "оценка", bg: "оценка" })} ${selectedCoachDeviceHealthSummary.sleep.score}`
-                                : copyFor(language, { en: "device data", ru: "данные устройства", bg: "данни от устройство" }),
-                            },
-                            {
-                              label: copyFor(language, { en: "Resting HR", ru: "Пульс покоя", bg: "Пулс в покой" }),
-                              value: formatDeviceRestingHrValue(selectedCoachDeviceHealthSummary),
-                              detail: formatDeviceRestingHrDetail(selectedCoachDeviceHealthSummary, language),
-                            },
-                            {
-                              label: "SpO2",
-                              value: formatDeviceOxygenValue(selectedCoachDeviceHealthSummary),
-                              detail: formatDeviceOxygenDetail(selectedCoachDeviceHealthSummary, language),
-                            },
-                            {
-                              label: copyFor(language, { en: "Device workouts", ru: "Тренировки устройства", bg: "Тренировки от устройство" }),
-                              value: formatDeviceWorkoutValue(selectedCoachDeviceHealthSummary),
-                              detail: selectedCoachDeviceHealthSummary?.workout?.totalDurationMinutes
-                                ? formatDeviceDuration(selectedCoachDeviceHealthSummary.workout.totalDurationMinutes, language)
-                                : copyFor(language, { en: "not received", ru: "не пришли", bg: "не са получени" }),
-                            },
-                            {
-                              label: copyFor(language, { en: "AI", ru: "ИИ", bg: "AI" }),
-                              value: latestCoachAiReview
-                                ? formatCoachAiReviewSource(latestCoachAiReview.source, language)
-                                : "-",
-                              detail: latestCoachAiReview
-                                ? latestCoachAiReview.riskNotes[0] ?? latestCoachAiReview.observation
-                                : copyFor(language, { en: "not generated", ru: "не сформирован", bg: "не е генериран" }),
-                            },
-                          ].map((item) => (
-                            <article className="coach-day-status-metric" key={item.label}>
-                              <span>{item.label}</span>
-                              <strong>{item.value}</strong>
-                              <small>{item.detail}</small>
-                            </article>
-                          ))}
-                        </div>
+                        </details>
                         {selectedCoachDayDataQuality ? (
                           <div className="coach-day-quality-panel">
                             <article>
@@ -17140,145 +17151,154 @@ export function PageClient({
                             </ul>
                           </div>
                         ) : null}
-                        <div className="device-workout-link-panel">
-                          <div className="summary-topline">
-                            <div>
-                              <strong>
-                                {copyFor(language, {
-                                  en: "Device workout data",
-                                  ru: "Данные тренировки с устройства",
-                                  bg: "Данни за тренировка от устройство",
-                                })}
-                              </strong>
-                              <span>
-                                {selectedCoachDeviceWorkouts.length
-                                  ? `${selectedCoachDeviceWorkouts.length} ${copyFor(language, {
-                                      en: "workouts received",
-                                      ru: "тренировок пришло",
-                                      bg: "получени тренировки",
-                                    })}`
-                                  : copyFor(language, {
-                                      en: "No device workouts for this day",
-                                      ru: "За этот день тренировок устройства нет",
-                                      bg: "Няма тренировки от устройство за този ден",
-                                    })}
-                              </span>
-                            </div>
-                            <button
-                              className="secondary-button"
-                              disabled={busy || !selectedAthleteId}
-                              onClick={() => void handleRefreshCoachDeviceWorkouts()}
-                              type="button"
-                            >
-                              {copyFor(language, {
-                                en: "Refresh",
-                                ru: "Обновить",
-                                bg: "Обнови",
-                              })}
-                            </button>
-                          </div>
-                          {selectedCoachDeviceWorkouts.length === 0 ? (
-                            <p className="device-workout-empty">
-                              {copyFor(language, {
-                                en: "The selector becomes active after the athlete syncs detailed Mi Fitness / Health Connect workouts for this date.",
-                                ru: "Выбор станет активным после того, как спортсмен синхронизирует детальные тренировки Mi Fitness / Health Connect за эту дату.",
-                                bg: "Изборът става активен след като спортистът синхронизира детайлни тренировки Mi Fitness / Health Connect за тази дата.",
-                              })}
-                            </p>
-                          ) : null}
-                          <div className="device-workout-block-list">
-                            {selectedCoachDeviceLinkTargets.map((target) => {
-                              const assignedBlockIds = target.assignedBlockIds;
-                              const linkGroup = getDeviceWorkoutLinkGroupForBlocks(
-                                selectedCoachDeviceWorkoutLinks,
-                                assignedBlockIds,
-                              );
-                              const linkedWorkout = linkGroup.linkedWorkout;
-                              const statusClass = linkedWorkout && linkGroup.isFullyLinked
-                                ? "complete"
-                                : linkGroup.isPartiallyLinked || selectedCoachDeviceWorkouts.length
-                                  ? "partial"
-                                  : "pending";
-                              const statusLabel = linkedWorkout && linkGroup.isFullyLinked
-                                ? copyFor(language, {
-                                    en: "linked to device",
-                                    ru: "связано с устройством",
-                                    bg: "свързано с устройство",
-                                  })
-                                : linkGroup.isPartiallyLinked || linkGroup.hasMixedWorkouts
-                                  ? copyFor(language, {
-                                      en: "partly linked",
-                                      ru: "частично связано",
-                                      bg: "частично свързано",
-                                    })
-                                  : selectedCoachDeviceWorkouts.length
-                                    ? copyFor(language, {
-                                        en: "not linked",
-                                        ru: "не связано",
-                                        bg: "не е свързано",
-                                      })
-                                    : copyFor(language, {
-                                        en: "no device data",
-                                        ru: "нет данных устройства",
-                                        bg: "няма данни от устройство",
-                                      });
-
-                              return (
-                                <article className="device-workout-block-card" key={target.id}>
-                                  <div>
-                                    <strong>{target.label}</strong>
-                                    <span>
-                                      {copyFor(language, {
-                                        en: "Plan",
-                                        ru: "План",
-                                        bg: "План",
-                                      })}: {target.description}
-                                    </span>
-                                  </div>
-                                  <span className={`status-chip ${statusClass}`}>
-                                    {statusLabel}
-                                  </span>
-                                    <select
-                                      disabled={busy || selectedCoachDeviceWorkouts.length === 0}
-                                      value={linkGroup.hasMixedWorkouts ? "" : linkedWorkout?.id ?? ""}
-                                      onChange={(event) => {
-                                        const deviceWorkoutId = event.currentTarget.value;
-                                        void handleSetDeviceWorkoutForBlocks({
-                                          assignedBlockIds,
-                                          assignedPlanId: coachExecutionReview.assignedPlanId,
-                                          deviceWorkoutId,
-                                          existingLinks: linkGroup.links,
-                                        });
-                                      }}
-                                    >
-                                      <option value="">
-                                        {copyFor(language, {
-                                          en: "Select device workout",
-                                          ru: "Выбрать тренировку устройства",
-                                          bg: "Изберете тренировка от устройство",
-                                        })}
-                                      </option>
-                                      {selectedCoachDeviceWorkouts.map((workout) => (
-                                        <option key={workout.id} value={workout.id}>
-                                          {formatDeviceWorkoutOptionLabel(workout, language)}
-                                        </option>
-                                      ))}
-                                    </select>
-                                    {linkedWorkout ? (
-                                      <div className="device-workout-linked-summary">
-                                        <strong>{formatDeviceWorkoutTitle(linkedWorkout, language)}</strong>
-                                        <DeviceWorkoutMetricGrid language={language} workout={linkedWorkout} />
-                                        <small>
-                                          {linkedWorkout.sourceDevice ?? "Health Connect"} · {formatDeviceWorkoutTimeRange(linkedWorkout, language)}
-                                        </small>
-                                        <DeviceWorkoutMiniGraph language={language} workout={linkedWorkout} />
-                                      </div>
-                                    ) : null}
-                                  </article>
-                              );
+                        <details className="coach-review-details-panel coach-review-device-details">
+                          <summary>
+                            {copyFor(language, {
+                              en: "Device data",
+                              ru: "Данные устройства",
+                              bg: "Данни от устройство",
                             })}
+                          </summary>
+                          <div className="device-workout-link-panel">
+                            <div className="summary-topline">
+                              <div>
+                                <strong>
+                                  {copyFor(language, {
+                                    en: "Device workout data",
+                                    ru: "Данные тренировки с устройства",
+                                    bg: "Данни за тренировка от устройство",
+                                  })}
+                                </strong>
+                                <span>
+                                  {selectedCoachDeviceWorkouts.length
+                                    ? `${selectedCoachDeviceWorkouts.length} ${copyFor(language, {
+                                        en: "workouts received",
+                                        ru: "тренировок пришло",
+                                        bg: "получени тренировки",
+                                      })}`
+                                    : copyFor(language, {
+                                        en: "No device workouts for this day",
+                                        ru: "За этот день тренировок устройства нет",
+                                        bg: "Няма тренировки от устройство за този ден",
+                                      })}
+                                </span>
+                              </div>
+                              <button
+                                className="secondary-button"
+                                disabled={busy || !selectedAthleteId}
+                                onClick={() => void handleRefreshCoachDeviceWorkouts()}
+                                type="button"
+                              >
+                                {copyFor(language, {
+                                  en: "Refresh",
+                                  ru: "Обновить",
+                                  bg: "Обнови",
+                                })}
+                              </button>
+                            </div>
+                            {selectedCoachDeviceWorkouts.length === 0 ? (
+                              <p className="device-workout-empty">
+                                {copyFor(language, {
+                                  en: "The selector becomes active after the athlete syncs detailed Mi Fitness / Health Connect workouts for this date.",
+                                  ru: "Выбор станет активным после того, как спортсмен синхронизирует детальные тренировки Mi Fitness / Health Connect за эту дату.",
+                                  bg: "Изборът става активен след като спортистът синхронизира детайлни тренировки Mi Fitness / Health Connect за тази дата.",
+                                })}
+                              </p>
+                            ) : null}
+                            <div className="device-workout-block-list">
+                              {selectedCoachDeviceLinkTargets.map((target) => {
+                                const assignedBlockIds = target.assignedBlockIds;
+                                const linkGroup = getDeviceWorkoutLinkGroupForBlocks(
+                                  selectedCoachDeviceWorkoutLinks,
+                                  assignedBlockIds,
+                                );
+                                const linkedWorkout = linkGroup.linkedWorkout;
+                                const statusClass = linkedWorkout && linkGroup.isFullyLinked
+                                  ? "complete"
+                                  : linkGroup.isPartiallyLinked || selectedCoachDeviceWorkouts.length
+                                    ? "partial"
+                                    : "pending";
+                                const statusLabel = linkedWorkout && linkGroup.isFullyLinked
+                                  ? copyFor(language, {
+                                      en: "linked to device",
+                                      ru: "связано с устройством",
+                                      bg: "свързано с устройство",
+                                    })
+                                  : linkGroup.isPartiallyLinked || linkGroup.hasMixedWorkouts
+                                    ? copyFor(language, {
+                                        en: "partly linked",
+                                        ru: "частично связано",
+                                        bg: "частично свързано",
+                                      })
+                                    : selectedCoachDeviceWorkouts.length
+                                      ? copyFor(language, {
+                                          en: "not linked",
+                                          ru: "не связано",
+                                          bg: "не е свързано",
+                                        })
+                                      : copyFor(language, {
+                                          en: "no device data",
+                                          ru: "нет данных устройства",
+                                          bg: "няма данни от устройство",
+                                        });
+
+                                return (
+                                  <article className="device-workout-block-card" key={target.id}>
+                                    <div>
+                                      <strong>{target.label}</strong>
+                                      <span>
+                                        {copyFor(language, {
+                                          en: "Plan",
+                                          ru: "План",
+                                          bg: "План",
+                                        })}: {target.description}
+                                      </span>
+                                    </div>
+                                    <span className={`status-chip ${statusClass}`}>
+                                      {statusLabel}
+                                    </span>
+                                      <select
+                                        disabled={busy || selectedCoachDeviceWorkouts.length === 0}
+                                        value={linkGroup.hasMixedWorkouts ? "" : linkedWorkout?.id ?? ""}
+                                        onChange={(event) => {
+                                          const deviceWorkoutId = event.currentTarget.value;
+                                          void handleSetDeviceWorkoutForBlocks({
+                                            assignedBlockIds,
+                                            assignedPlanId: coachExecutionReview.assignedPlanId,
+                                            deviceWorkoutId,
+                                            existingLinks: linkGroup.links,
+                                          });
+                                        }}
+                                      >
+                                        <option value="">
+                                          {copyFor(language, {
+                                            en: "Select device workout",
+                                            ru: "Выбрать тренировку устройства",
+                                            bg: "Изберете тренировка от устройство",
+                                          })}
+                                        </option>
+                                        {selectedCoachDeviceWorkouts.map((workout) => (
+                                          <option key={workout.id} value={workout.id}>
+                                            {formatDeviceWorkoutOptionLabel(workout, language)}
+                                          </option>
+                                        ))}
+                                      </select>
+                                      {linkedWorkout ? (
+                                        <div className="device-workout-linked-summary">
+                                          <strong>{formatDeviceWorkoutTitle(linkedWorkout, language)}</strong>
+                                          <DeviceWorkoutMetricGrid language={language} workout={linkedWorkout} />
+                                          <small>
+                                            {linkedWorkout.sourceDevice ?? "Health Connect"} · {formatDeviceWorkoutTimeRange(linkedWorkout, language)}
+                                          </small>
+                                          <DeviceWorkoutMiniGraph language={language} workout={linkedWorkout} />
+                                        </div>
+                                      ) : null}
+                                    </article>
+                                );
+                              })}
+                            </div>
                           </div>
-                        </div>
+                        </details>
                       </section>
                       <div className="coach-review-summary-grid">
                         {[
@@ -17484,337 +17504,355 @@ export function PageClient({
                           })}
                         </div>
                       ) : null}
-                      <div className="coach-ai-status-panel">
-                        <div className="summary-topline">
-                          <div className="coach-ai-status-heading">
-                            <strong>
-                              {copyFor(language, {
-                                en: "AI review check",
-                                ru: "Проверка ИИ-разбора",
-                                bg: "Проверка на AI анализа",
-                              })}
-                            </strong>
-                            <small>
-                              {copyFor(language, {
-                                en: "Service check only: plans, diary, and history are not changed.",
-                                ru: "Только служебная проверка: план, дневник и история не меняются.",
-                                bg: "Само служебна проверка: планът, дневникът и историята не се променят.",
-                              })}
-                            </small>
-                          </div>
-                          <span className={`status-chip ${coachAiStatusChipClass}`}>
-                            {coachAiStatusSourceLabel}
-                          </span>
-                        </div>
-
-                        {coachAiStatus ? (
-                          <>
-                            <div className="coach-ai-status-grid">
-                              <span>
-                                <small>
-                                  {copyFor(language, { en: "Mode", ru: "Режим", bg: "Режим" })}
-                                </small>
-                                <strong>{coachAiStatusModeLabel}</strong>
-                              </span>
-                              <span>
-                                <small>
-                                  {copyFor(language, { en: "Model", ru: "Модель", bg: "Модел" })}
-                                </small>
-                                <strong>
-                                  {coachAiStatus.modelConfigured
-                                    ? copyFor(language, { en: "configured", ru: "настроена", bg: "настроен" })
-                                    : copyFor(language, { en: "not set", ru: "не задана", bg: "не е зададен" })}
-                                </strong>
-                              </span>
-                              <span>
-                                <small>
-                                  {copyFor(language, { en: "API key", ru: "Ключ API", bg: "API ключ" })}
-                                </small>
-                                <strong>
-                                  {coachAiStatus.apiKeyConfigured
-                                    ? copyFor(language, { en: "configured", ru: "настроен", bg: "настроен" })
-                                    : copyFor(language, { en: "not set", ru: "не задан", bg: "не е зададен" })}
-                                </strong>
-                              </span>
-                              <span>
-                                <small>Fallback</small>
-                                <strong>
-                                  {coachAiStatus.fallbackEnabled
-                                    ? copyFor(language, { en: "enabled", ru: "включён", bg: "включен" })
-                                    : copyFor(language, { en: "disabled", ru: "выключен", bg: "изключен" })}
-                                </strong>
-                              </span>
-                            </div>
-                            <p>{coachAiStatus.message}</p>
-                          </>
-                        ) : (
-                          <p>
-                            {copyFor(language, {
-                              en: "AI status will load after sign-in.",
-                              ru: "Статус ИИ загрузится после входа в аккаунт.",
-                              bg: "Статусът на AI ще се зареди след вход.",
-                            })}
-                          </p>
-                        )}
-
-                        <div className="coach-ai-status-actions">
-                          <button
-                            className="secondary-button"
-                            disabled={coachAiDiagnosticBusy}
-                            onClick={() => void handleCoachAiDiagnosticClick()}
-                            type="button"
-                          >
-                            {coachAiDiagnosticBusy
-                              ? copyFor(language, {
-                                  en: "Checking...",
-                                  ru: "Проверяю...",
-                                  bg: "Проверявам...",
-                                })
-                              : copyFor(language, {
-                                  en: "Test AI",
-                                  ru: "Проверить ИИ",
-                                  bg: "Провери AI",
-                                })}
-                          </button>
-                          {coachAiDiagnosticMessage ? <span>{coachAiDiagnosticMessage}</span> : null}
-                        </div>
-
-                        {coachAiDiagnostic ? (
-                          <article className="coach-ai-diagnostic-result">
-                            <div className="summary-topline">
+                      <details className="coach-review-details-panel coach-review-ai-details">
+                        <summary>
+                          {copyFor(language, {
+                            en: "AI review and diagnostics",
+                            ru: "ИИ-разбор и диагностика",
+                            bg: "AI анализ и диагностика",
+                          })}
+                        </summary>
+                        <div className="coach-ai-status-panel">
+                          <div className="summary-topline">
+                            <div className="coach-ai-status-heading">
                               <strong>
                                 {copyFor(language, {
-                                  en: "Last test result",
-                                  ru: "Последняя проверка",
-                                  bg: "Последна проверка",
+                                  en: "AI review check",
+                                  ru: "Проверка ИИ-разбора",
+                                  bg: "Проверка на AI анализа",
                                 })}
                               </strong>
-                              <span>
-                                {coachAiDiagnostic.checkedAt.slice(0, 16)} /{" "}
-                                {coachAiDiagnostic.review.source === "model"
-                                  ? copyFor(language, { en: "model", ru: "модель", bg: "модел" })
-                                  : copyFor(language, {
-                                      en: "server rules",
-                                      ru: "серверные правила",
-                                      bg: "сървърни правила",
-                                    })}
-                              </span>
-                            </div>
-                            <p>{coachAiDiagnostic.review.observation}</p>
-                            {coachAiDiagnostic.fallbackUsed ? (
                               <small>
                                 {copyFor(language, {
-                                  en: "Fallback was used; real AI model did not return the final review.",
-                                  ru: "Использован fallback: реальная модель не вернула итоговый разбор.",
-                                  bg: "Използван е fallback: реалният модел не върна финалния анализ.",
+                                  en: "Service check only: plans, diary, and history are not changed.",
+                                  ru: "Только служебная проверка: план, дневник и история не меняются.",
+                                  bg: "Само служебна проверка: планът, дневникът и историята не се променят.",
                                 })}
                               </small>
-                            ) : null}
-                          </article>
-                        ) : null}
-                      </div>
-                      <div className="coach-ai-day-review-panel">
-                        <div className="summary-topline">
-                          <div className="coach-ai-status-heading">
-                            <strong>
-                              {copyFor(language, {
-                                en: "AI review for this day",
-                                ru: "Разбор ИИ по этому дню",
-                                bg: "AI анализ за този ден",
-                              })}
-                            </strong>
-                            <small>
-                              {copyFor(language, {
-                                en: "Uses the selected day: data quality, readiness, plan, execution, device data, and coach note.",
-                                ru: "Используется выбранный день: качество данных, готовность, план, выполнение, устройство и запись тренера.",
-                                bg: "Използва избрания ден: качество на данните, готовност, план, изпълнение, устройство и запис на треньора.",
-                              })}
-                            </small>
+                            </div>
+                            <span className={`status-chip ${coachAiStatusChipClass}`}>
+                              {coachAiStatusSourceLabel}
+                            </span>
                           </div>
-                          <button
-                            className="secondary-button"
-                            disabled={coachAiReviewBusy}
-                            onClick={() => void handleGenerateCoachAiReviewClick()}
-                            type="button"
-                          >
-                            {coachAiReviewBusy
-                              ? copyFor(language, {
-                                  en: "Generating...",
-                                  ru: "Формирую...",
-                                  bg: "Генерирам...",
-                                })
-                              : copyFor(language, {
-                                  en: latestCoachAiReview ? "Update AI review" : "Generate AI review",
-                                  ru: latestCoachAiReview ? "Обновить ИИ-разбор" : "Сформировать ИИ-разбор",
-                                  bg: latestCoachAiReview ? "Обнови AI анализа" : "Генерирай AI анализ",
-                                })}
-                          </button>
-                        </div>
 
-                        <p>
-                          {coachAiReviewMessage ||
-                            copyFor(language, {
-                              en: "The server saves only the recommendation history. Plan and diary stay unchanged.",
-                              ru: "Сервер сохраняет только историю рекомендации. План и дневник не меняются.",
-                              bg: "Сървърът запазва само историята на препоръката. Планът и дневникът не се променят.",
-                            })}
-                        </p>
-                        {isLatestCoachAiReviewStale ? (
-                          <p className="coach-ai-stale-warning">
-                            {copyFor(language, {
-                              en: "The day data has changed after the last review. Update the AI review before making a decision.",
-                              ru: "Данные дня изменились после последнего разбора. Обновите ИИ-разбор перед решением.",
-                              bg: "Данните за деня са променени след последния анализ. Обновете AI анализа преди решение.",
-                            })}
-                          </p>
-                        ) : null}
-
-                        {latestCoachAiReview ? (
-                          <div className="coach-ai-day-review-result">
-                            <article>
-                              <span>
-                                {copyFor(language, { en: "What is visible", ru: "Что видно", bg: "Какво се вижда" })}
-                              </span>
-                              <p>{latestCoachAiReview.observation}</p>
-                            </article>
-                            <article>
-                              <span>{copyFor(language, { en: "Risks", ru: "Риски", bg: "Рискове" })}</span>
-                              <ul>
-                                {latestCoachAiReview.riskNotes.map((item) => (
-                                  <li key={item}>{item}</li>
-                                ))}
-                              </ul>
-                            </article>
-                            <article>
-                              <span>
-                                {copyFor(language, {
-                                  en: "What to do tomorrow",
-                                  ru: "Что сделать завтра",
-                                  bg: "Какво да се направи утре",
-                                })}
-                              </span>
-                              <ul>
-                                {latestCoachAiReview.tomorrowActions.map((item) => (
-                                  <li key={item}>{item}</li>
-                                ))}
-                              </ul>
-                            </article>
-                            <small>
-                              {latestCoachAiReview.generatedAt.slice(0, 16)} /{" "}
-                              {formatCoachAiReviewSource(latestCoachAiReview.source, language)}
-                            </small>
-                          </div>
-                        ) : (
-                          <p className="placeholder-copy">
-                            {copyFor(language, {
-                              en: "There is no AI review history for this day yet.",
-                              ru: "Истории разбора ИИ за этот день пока нет.",
-                              bg: "Все още няма история на AI анализ за този ден.",
-                            })}
-                          </p>
-                        )}
-
-                        {selectedCoachAiReviewHistory.length > 1 ? (
-                          <div className="coach-ai-review-history">
-                            {selectedCoachAiReviewHistory.slice(1, 4).map((review) => (
-                              <article key={`${review.generatedAt}-${review.source}`}>
-                                <strong>{review.observation}</strong>
+                          {coachAiStatus ? (
+                            <>
+                              <div className="coach-ai-status-grid">
                                 <span>
-                                  {review.generatedAt.slice(0, 16)} /{" "}
-                                  {formatCoachAiReviewSource(review.source, language)}
-                                </span>
-                              </article>
-                            ))}
-                          </div>
-                        ) : null}
-                      </div>
-                      <div className="coach-day-exercise-status-list">
-                        <div className="summary-topline">
-                          <strong>
-                            {copyFor(language, {
-                              en: "Exercises by status",
-                              ru: "Упражнения по статусу",
-                              bg: "Упражнения по статус",
-                            })}
-                          </strong>
-                          <span>
-                            {coachExecutionReview.summary.completedExercises}/
-                            {coachExecutionReview.summary.plannedExercises}
-                          </span>
-                        </div>
-                        {coachExecutionReview.sessions.flatMap((session) =>
-                          session.blocks.flatMap((block) =>
-                            [...(block.exercises ?? [])]
-                              .sort((left, right) => left.orderIndex - right.orderIndex)
-                              .map((exercise) => (
-                                <article
-                                  className={`coach-day-exercise-status-item ${getCoachAiExerciseStatus(exercise)}`}
-                                  key={exercise.id}
-                                >
-                                  <span>{translateExecutionStatus(exercise.executionStatus, language)}</span>
-                                  <strong>{renderTrainingTextWithTooltips(exercise.name)}</strong>
                                   <small>
-                                    {renderTrainingTextWithTooltips(session.name)} /{" "}
-                                    {renderTrainingTextWithTooltips(block.name)} /{" "}
-                                    {renderTrainingTextWithTooltips(formatExerciseTarget(exercise, language))} /{" "}
-                                    {getCoachExerciseExecutionSourceLabel({
-                                      block,
-                                      deviceWorkoutLinks: selectedCoachDeviceWorkoutLinks,
-                                      exercise,
-                                      language,
-                                    })}
+                                    {copyFor(language, { en: "Mode", ru: "Режим", bg: "Режим" })}
                                   </small>
-                                </article>
-                              )),
-                          ),
-                        )}
-                      </div>
-                      <div className="coach-review-block-list">
-                        {coachExecutionReview.sessions.flatMap((session) =>
-                          session.blocks.map((block) => (
-                            <article className="coach-review-block-item" key={block.id}>
-                              <div className="coach-review-block-main">
-                                <strong>{renderTrainingTextWithTooltips(block.name)}</strong>
+                                  <strong>{coachAiStatusModeLabel}</strong>
+                                </span>
                                 <span>
-                                  {renderTrainingTextWithTooltips(session.name)} /{" "}
-                                  {translateExecutionStatus(block.executionStatus, language)} /{" "}
-                                  {getCoachBlockExecutionSourceLabel({
-                                    block,
-                                    deviceWorkoutLinks: selectedCoachDeviceWorkoutLinks,
-                                    language,
+                                  <small>
+                                    {copyFor(language, { en: "Model", ru: "Модель", bg: "Модел" })}
+                                  </small>
+                                  <strong>
+                                    {coachAiStatus.modelConfigured
+                                      ? copyFor(language, { en: "configured", ru: "настроена", bg: "настроен" })
+                                      : copyFor(language, { en: "not set", ru: "не задана", bg: "не е зададен" })}
+                                  </strong>
+                                </span>
+                                <span>
+                                  <small>
+                                    {copyFor(language, { en: "API key", ru: "Ключ API", bg: "API ключ" })}
+                                  </small>
+                                  <strong>
+                                    {coachAiStatus.apiKeyConfigured
+                                      ? copyFor(language, { en: "configured", ru: "настроен", bg: "настроен" })
+                                      : copyFor(language, { en: "not set", ru: "не задан", bg: "не е зададен" })}
+                                  </strong>
+                                </span>
+                                <span>
+                                  <small>Fallback</small>
+                                  <strong>
+                                    {coachAiStatus.fallbackEnabled
+                                      ? copyFor(language, { en: "enabled", ru: "включён", bg: "включен" })
+                                      : copyFor(language, { en: "disabled", ru: "выключен", bg: "изключен" })}
+                                  </strong>
+                                </span>
+                              </div>
+                              <p>{coachAiStatus.message}</p>
+                            </>
+                          ) : (
+                            <p>
+                              {copyFor(language, {
+                                en: "AI status will load after sign-in.",
+                                ru: "Статус ИИ загрузится после входа в аккаунт.",
+                                bg: "Статусът на AI ще се зареди след вход.",
+                              })}
+                            </p>
+                          )}
+
+                          <div className="coach-ai-status-actions">
+                            <button
+                              className="secondary-button"
+                              disabled={coachAiDiagnosticBusy}
+                              onClick={() => void handleCoachAiDiagnosticClick()}
+                              type="button"
+                            >
+                              {coachAiDiagnosticBusy
+                                ? copyFor(language, {
+                                    en: "Checking...",
+                                    ru: "Проверяю...",
+                                    bg: "Проверявам...",
+                                  })
+                                : copyFor(language, {
+                                    en: "Test AI",
+                                    ru: "Проверить ИИ",
+                                    bg: "Провери AI",
+                                  })}
+                            </button>
+                            {coachAiDiagnosticMessage ? <span>{coachAiDiagnosticMessage}</span> : null}
+                          </div>
+
+                          {coachAiDiagnostic ? (
+                            <article className="coach-ai-diagnostic-result">
+                              <div className="summary-topline">
+                                <strong>
+                                  {copyFor(language, {
+                                    en: "Last test result",
+                                    ru: "Последняя проверка",
+                                    bg: "Последна проверка",
+                                  })}
+                                </strong>
+                                <span>
+                                  {coachAiDiagnostic.checkedAt.slice(0, 16)} /{" "}
+                                  {coachAiDiagnostic.review.source === "model"
+                                    ? copyFor(language, { en: "model", ru: "модель", bg: "модел" })
+                                    : copyFor(language, {
+                                        en: "server rules",
+                                        ru: "серверные правила",
+                                        bg: "сървърни правила",
+                                      })}
+                                </span>
+                              </div>
+                              <p>{coachAiDiagnostic.review.observation}</p>
+                              {coachAiDiagnostic.fallbackUsed ? (
+                                <small>
+                                  {copyFor(language, {
+                                    en: "Fallback was used; real AI model did not return the final review.",
+                                    ru: "Использован fallback: реальная модель не вернула итоговый разбор.",
+                                    bg: "Използван е fallback: реалният модел не върна финалния анализ.",
+                                  })}
+                                </small>
+                              ) : null}
+                            </article>
+                          ) : null}
+                        </div>
+                        <div className="coach-ai-day-review-panel">
+                          <div className="summary-topline">
+                            <div className="coach-ai-status-heading">
+                              <strong>
+                                {copyFor(language, {
+                                  en: "AI review for this day",
+                                  ru: "Разбор ИИ по этому дню",
+                                  bg: "AI анализ за този ден",
+                                })}
+                              </strong>
+                              <small>
+                                {copyFor(language, {
+                                  en: "Uses the selected day: data quality, readiness, plan, execution, device data, and coach note.",
+                                  ru: "Используется выбранный день: качество данных, готовность, план, выполнение, устройство и запись тренера.",
+                                  bg: "Използва избрания ден: качество на данните, готовност, план, изпълнение, устройство и запис на треньора.",
+                                })}
+                              </small>
+                            </div>
+                            <button
+                              className="secondary-button"
+                              disabled={coachAiReviewBusy}
+                              onClick={() => void handleGenerateCoachAiReviewClick()}
+                              type="button"
+                            >
+                              {coachAiReviewBusy
+                                ? copyFor(language, {
+                                    en: "Generating...",
+                                    ru: "Формирую...",
+                                    bg: "Генерирам...",
+                                  })
+                                : copyFor(language, {
+                                    en: latestCoachAiReview ? "Update AI review" : "Generate AI review",
+                                    ru: latestCoachAiReview ? "Обновить ИИ-разбор" : "Сформировать ИИ-разбор",
+                                    bg: latestCoachAiReview ? "Обнови AI анализа" : "Генерирай AI анализ",
+                                  })}
+                            </button>
+                          </div>
+
+                          <p>
+                            {coachAiReviewMessage ||
+                              copyFor(language, {
+                                en: "The server saves only the recommendation history. Plan and diary stay unchanged.",
+                                ru: "Сервер сохраняет только историю рекомендации. План и дневник не меняются.",
+                                bg: "Сървърът запазва само историята на препоръката. Планът и дневникът не се променят.",
+                              })}
+                          </p>
+                          {isLatestCoachAiReviewStale ? (
+                            <p className="coach-ai-stale-warning">
+                              {copyFor(language, {
+                                en: "The day data has changed after the last review. Update the AI review before making a decision.",
+                                ru: "Данные дня изменились после последнего разбора. Обновите ИИ-разбор перед решением.",
+                                bg: "Данните за деня са променени след последния анализ. Обновете AI анализа преди решение.",
+                              })}
+                            </p>
+                          ) : null}
+
+                          {latestCoachAiReview ? (
+                            <div className="coach-ai-day-review-result">
+                              <article>
+                                <span>
+                                  {copyFor(language, { en: "What is visible", ru: "Что видно", bg: "Какво се вижда" })}
+                                </span>
+                                <p>{latestCoachAiReview.observation}</p>
+                              </article>
+                              <article>
+                                <span>{copyFor(language, { en: "Risks", ru: "Риски", bg: "Рискове" })}</span>
+                                <ul>
+                                  {latestCoachAiReview.riskNotes.map((item) => (
+                                    <li key={item}>{item}</li>
+                                  ))}
+                                </ul>
+                              </article>
+                              <article>
+                                <span>
+                                  {copyFor(language, {
+                                    en: "What to do tomorrow",
+                                    ru: "Что сделать завтра",
+                                    bg: "Какво да се направи утре",
                                   })}
                                 </span>
-                              </div>
-                              <div className="coach-review-block-values">
-                                <span>
-                                  <small>{copyFor(language, { en: "Sets", ru: "Подходы", bg: "Серии" })}</small>
-                                  <strong>
-                                    {block.targetSets ?? "-"} / {block.actualResult?.setsCompleted ?? "-"}
-                                  </strong>
-                                </span>
-                                <span>
-                                  <small>{copyFor(language, { en: "Reps", ru: "Повторы", bg: "Повт." })}</small>
-                                  <strong>
-                                    {block.targetReps ?? "-"} / {block.actualResult?.repsCompleted ?? "-"}
-                                  </strong>
-                                </span>
-                                <span>
-                                  <small>{copyFor(language, { en: "Duration", ru: "Длит.", bg: "Време" })}</small>
-                                  <strong>
-                                    {block.targetDurationMinutes ?? "-"} / {block.actualResult?.durationMinutes ?? "-"}
-                                  </strong>
-                                </span>
-                                <span>
-                                  <small>RPE</small>
-                                  <strong>
-                                    {block.targetRpe ?? "-"} / {block.actualResult?.rpe ?? "-"}
-                                  </strong>
-                                </span>
-                              </div>
-                            </article>
-                          )),
-                        )}
-                      </div>
+                                <ul>
+                                  {latestCoachAiReview.tomorrowActions.map((item) => (
+                                    <li key={item}>{item}</li>
+                                  ))}
+                                </ul>
+                              </article>
+                              <small>
+                                {latestCoachAiReview.generatedAt.slice(0, 16)} /{" "}
+                                {formatCoachAiReviewSource(latestCoachAiReview.source, language)}
+                              </small>
+                            </div>
+                          ) : (
+                            <p className="placeholder-copy">
+                              {copyFor(language, {
+                                en: "There is no AI review history for this day yet.",
+                                ru: "Истории разбора ИИ за этот день пока нет.",
+                                bg: "Все още няма история на AI анализ за този ден.",
+                              })}
+                            </p>
+                          )}
+
+                          {selectedCoachAiReviewHistory.length > 1 ? (
+                            <div className="coach-ai-review-history">
+                              {selectedCoachAiReviewHistory.slice(1, 4).map((review) => (
+                                <article key={`${review.generatedAt}-${review.source}`}>
+                                  <strong>{review.observation}</strong>
+                                  <span>
+                                    {review.generatedAt.slice(0, 16)} /{" "}
+                                    {formatCoachAiReviewSource(review.source, language)}
+                                  </span>
+                                </article>
+                              ))}
+                            </div>
+                          ) : null}
+                        </div>
+                      </details>
+                      <details className="coach-review-details-panel coach-review-exercise-details">
+                        <summary>
+                          {copyFor(language, {
+                            en: "Exercises and blocks",
+                            ru: "Упражнения и блоки",
+                            bg: "Упражнения и блокове",
+                          })}
+                        </summary>
+                        <div className="coach-day-exercise-status-list">
+                          <div className="summary-topline">
+                            <strong>
+                              {copyFor(language, {
+                                en: "Exercises by status",
+                                ru: "Упражнения по статусу",
+                                bg: "Упражнения по статус",
+                              })}
+                            </strong>
+                            <span>
+                              {coachExecutionReview.summary.completedExercises}/
+                              {coachExecutionReview.summary.plannedExercises}
+                            </span>
+                          </div>
+                          {coachExecutionReview.sessions.flatMap((session) =>
+                            session.blocks.flatMap((block) =>
+                              [...(block.exercises ?? [])]
+                                .sort((left, right) => left.orderIndex - right.orderIndex)
+                                .map((exercise) => (
+                                  <article
+                                    className={`coach-day-exercise-status-item ${getCoachAiExerciseStatus(exercise)}`}
+                                    key={exercise.id}
+                                  >
+                                    <span>{translateExecutionStatus(exercise.executionStatus, language)}</span>
+                                    <strong>{renderTrainingTextWithTooltips(exercise.name)}</strong>
+                                    <small>
+                                      {renderTrainingTextWithTooltips(session.name)} /{" "}
+                                      {renderTrainingTextWithTooltips(block.name)} /{" "}
+                                      {renderTrainingTextWithTooltips(formatExerciseTarget(exercise, language))} /{" "}
+                                      {getCoachExerciseExecutionSourceLabel({
+                                        block,
+                                        deviceWorkoutLinks: selectedCoachDeviceWorkoutLinks,
+                                        exercise,
+                                        language,
+                                      })}
+                                    </small>
+                                  </article>
+                                )),
+                            ),
+                          )}
+                        </div>
+                        <div className="coach-review-block-list">
+                          {coachExecutionReview.sessions.flatMap((session) =>
+                            session.blocks.map((block) => (
+                              <article className="coach-review-block-item" key={block.id}>
+                                <div className="coach-review-block-main">
+                                  <strong>{renderTrainingTextWithTooltips(block.name)}</strong>
+                                  <span>
+                                    {renderTrainingTextWithTooltips(session.name)} /{" "}
+                                    {translateExecutionStatus(block.executionStatus, language)} /{" "}
+                                    {getCoachBlockExecutionSourceLabel({
+                                      block,
+                                      deviceWorkoutLinks: selectedCoachDeviceWorkoutLinks,
+                                      language,
+                                    })}
+                                  </span>
+                                </div>
+                                <div className="coach-review-block-values">
+                                  <span>
+                                    <small>{copyFor(language, { en: "Sets", ru: "Подходы", bg: "Серии" })}</small>
+                                    <strong>
+                                      {block.targetSets ?? "-"} / {block.actualResult?.setsCompleted ?? "-"}
+                                    </strong>
+                                  </span>
+                                  <span>
+                                    <small>{copyFor(language, { en: "Reps", ru: "Повторы", bg: "Повт." })}</small>
+                                    <strong>
+                                      {block.targetReps ?? "-"} / {block.actualResult?.repsCompleted ?? "-"}
+                                    </strong>
+                                  </span>
+                                  <span>
+                                    <small>{copyFor(language, { en: "Duration", ru: "Длит.", bg: "Време" })}</small>
+                                    <strong>
+                                      {block.targetDurationMinutes ?? "-"} / {block.actualResult?.durationMinutes ?? "-"}
+                                    </strong>
+                                  </span>
+                                  <span>
+                                    <small>RPE</small>
+                                    <strong>
+                                      {block.targetRpe ?? "-"} / {block.actualResult?.rpe ?? "-"}
+                                    </strong>
+                                  </span>
+                                </div>
+                              </article>
+                            )),
+                          )}
+                        </div>
+                      </details>
                     </>
                   ) : (
                     <p className="placeholder-copy">
