@@ -3863,14 +3863,13 @@ function renderAthleteExecutionScreen(state: MobileAppState, plans: AssignedPlan
       ),
     0,
   );
-  const displayCompletion = getAthleteExecutionDisplayCompletion(state, planGroups);
   const hasSavedExecution = planGroups.some((group) => hasExecutionMarksForGroup(state, group));
   const executionLocked = Boolean(selectedDate && hasSavedExecution && state.executionEditDate !== selectedDate);
 
   if (allPlanGroups.length === 0) {
     return `
       <div class="screen-head">
-        <h2>Выполнение</h2>
+        <h2>Выполнение заданий</h2>
         <p>Здесь появится тренировка после обновления данных.</p>
       </div>
       ${renderEmpty("Нет тренировки", "Назначенный день появится после обновления данных.")}
@@ -3879,14 +3878,13 @@ function renderAthleteExecutionScreen(state: MobileAppState, plans: AssignedPlan
 
   return `
     <div class="screen-head">
-      <h2>Выполнение</h2>
+      <h2>Выполнение заданий</h2>
       <p>${selectedDate
         ? `${formatDayRelativeLabel(selectedDate)} · ${formatDate(selectedDate)} · ${formatAthleteExerciseCount(exerciseCount)}`
         : "Выберите день тренировки"}</p>
     </div>
     <section class="execution-panel athlete-execution-panel">
       ${renderAthleteExecutionDateFilter(dateOptions, selectedDate)}
-      ${selectedDate ? renderAthleteExecutionSummary(displayCompletion, exerciseCount) : ""}
       <div class="execution-plan-stack">
         ${planGroups.length > 0
           ? planGroups
@@ -3929,18 +3927,6 @@ function getAthleteExecutionDisplayCompletion(
     partialCount: 0,
     totalCount: 0,
   });
-}
-
-function renderAthleteExecutionSummary(
-  completion: ExecutionDisplayCompletion,
-  exerciseCount: number,
-) {
-  return `
-    <div class="athlete-execution-summary">
-      <strong>Отмечено ${completion.completedCount}/${completion.totalCount}</strong>
-      <span>${escapeHtml(formatAthleteExerciseCount(exerciseCount))}</span>
-    </div>
-  `;
 }
 
 function formatAthleteExerciseCount(count: number) {
@@ -4941,7 +4927,7 @@ function renderExecutionPlanGroup(
               `}
           </section>
         `).join("")}
-        ${compactAthlete ? renderExecutionDayNoteField(state, group, isLocked) : ""}
+        ${compactAthlete ? "" : renderExecutionDayNoteField(state, group, isLocked)}
         ${canSubmitExecution ? `
           <div class="mobile-execution-day-actions">
             ${isLocked
@@ -5070,15 +5056,15 @@ function formatUnifiedSessionBlockTarget(block: AssignedPlanBlock) {
   const exercises = getSortedBlockExercises(block);
 
   if (exercises.length === 0) {
-    return formatBlockTarget(block);
+    return formatAssignedPlanBlockVolume(block);
   }
 
   if (exercises.length === 1) {
-    return formatExerciseWorkCell(exercises[0]);
+    return formatAssignedPlanExerciseVolume(exercises[0]);
   }
 
   return exercises
-    .map((exercise) => `${exercise.name}: ${formatExerciseWorkCell(exercise)}`)
+    .map((exercise) => `${exercise.name}: ${formatAssignedPlanExerciseVolume(exercise)}`)
     .join("; ");
 }
 
@@ -5235,6 +5221,9 @@ function renderExecutionExerciseRow(
   options: ExecutionPlanGroupRenderOptions = {},
 ) {
   const isCompleted = result?.completed ?? (blockResult?.completed && !(blockResult.exerciseResults?.length)) ?? false;
+  const plannedWork = options.compactAthlete
+    ? formatAssignedPlanExerciseVolume(exercise)
+    : formatExerciseWorkCell(exercise);
 
   return `
     <div class="mobile-plan-row mobile-execution-row" data-execution-exercise data-exercise-id="${escapeHtml(exercise.id)}">
@@ -5245,7 +5234,7 @@ function renderExecutionExerciseRow(
           ${options.compactAthlete ? "" : `<small>${isCompleted ? "выполнено" : "не отмечено"}</small>`}
         </span>
       </label>
-      <span class="mobile-plan-cell mobile-plan-work">${renderTrainingTextWithAbbreviationHints(formatExerciseWorkCell(exercise))}</span>
+      <span class="mobile-plan-cell mobile-plan-work">${renderTrainingTextWithAbbreviationHints(plannedWork)}</span>
       ${options.compactAthlete ? "" : `
         <details class="mobile-execution-row-details">
           <summary>Факт</summary>
@@ -5267,6 +5256,10 @@ function renderExecutionBlockFallbackRow(
   result: ExecutionResult | null,
   options: ExecutionPlanGroupRenderOptions = {},
 ) {
+  const plannedWork = options.compactAthlete
+    ? formatAssignedPlanBlockVolume(block)
+    : formatBlockTarget(block);
+
   return `
     <div class="mobile-plan-row mobile-execution-row">
       <label class="execution-exercise-check mobile-plan-exercise-name">
@@ -5276,7 +5269,7 @@ function renderExecutionBlockFallbackRow(
           ${options.compactAthlete ? "" : `<small>${result?.completed ? "выполнено" : "не отмечено"}</small>`}
         </span>
       </label>
-      <span class="mobile-plan-cell mobile-plan-work">${renderTrainingTextWithAbbreviationHints(formatBlockTarget(block))}</span>
+      <span class="mobile-plan-cell mobile-plan-work">${renderTrainingTextWithAbbreviationHints(plannedWork)}</span>
       ${options.compactAthlete ? "" : `
         <details class="mobile-execution-row-details">
           <summary>Факт</summary>
@@ -6966,6 +6959,18 @@ function cleanAssignedPlanNotes(notes?: string | null) {
   );
 
   return parts.join(" / ");
+}
+
+function formatAssignedPlanExerciseVolume(exercise: AssignedBlockExercise) {
+  const notes = cleanAssignedPlanNotes(exercise.notes);
+
+  return notes || formatExerciseWorkCell(exercise);
+}
+
+function formatAssignedPlanBlockVolume(block: AssignedPlanBlock) {
+  const notes = cleanAssignedPlanNotes(block.notes);
+
+  return notes || formatBlockTarget(block);
 }
 
 function splitExerciseNoteParts(notes?: string | null) {

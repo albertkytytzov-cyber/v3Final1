@@ -12627,6 +12627,8 @@ export function PageClient({
       : adaptedPlan?.dayLabel ?? primaryAssignedPlan?.day.label ?? ui("noActivePlan");
   const activeAthleteTrainingDayDate = activeAthleteAssignedPlan?.day.dayDate ?? "";
   const activeAthleteTrainingDayNotes = getPlanDisplayNote(activeAthleteAssignedPlan?.day.notes);
+  const activeAthleteTrainingDayDescription =
+    getAssignedPlanDayType(activeAthleteTrainingDayNotes) || activeAthleteTrainingDayNotes;
   const activeAthleteTrainingPlanId =
     activeWorkspace === "athlete-training" || activeWorkspace === "athlete-workspace"
       ? selectedAthleteTrainingPlan?.id ?? ""
@@ -13129,7 +13131,11 @@ export function PageClient({
             ru: "Аналитика",
             bg: "Анализ",
           })
-        : ui("syncNow");
+        : copyFor(language, {
+            en: "Sync",
+            ru: "Синхр.",
+            bg: "Синхр.",
+          });
   const warningsLabel =
     language === "ru"
       ? "Предупреждения"
@@ -13618,9 +13624,20 @@ export function PageClient({
         })),
       ]
     : [];
-  const athleteExecutionCompletedBlocks = executionResults.filter((item) => item.completed).length;
+  const activeAthleteTrainingBlockIds = new Set(
+    activeAthleteTrainingSessions.flatMap((session) => session.blocks.map((block) => block.id)),
+  );
+  const activeAthleteTrainingResults = executionResults.filter((item) =>
+    activeAthleteTrainingBlockIds.has(item.assignedBlockId)
+  );
+  const athleteExecutionCompletedBlocks = activeAthleteTrainingResults.filter((item) => item.completed).length;
   const athletePlannedBlocksCount =
     activeAthleteTrainingSessions.reduce((sum, session) => sum + session.blocks.length, 0);
+  const athleteTaskCompletionTitle = copyFor(language, {
+    en: "Task completion",
+    ru: "Выполнение заданий",
+    bg: "Изпълнение на задачи",
+  });
   const athleteDayChecklist = [
     {
       id: "readiness",
@@ -15556,19 +15573,56 @@ export function PageClient({
 
               <div className="entry-summary athlete-scene-card athlete-execution-card">
                 <div className="summary-topline">
-                  <strong>{t("executionTracking")}</strong>
+                  <strong>{athleteTaskCompletionTitle}</strong>
                   <span className={`status-chip ${pendingExecutionBlockIds.size ? "pending" : "synced"}`}>
-                    {primaryAssignedPlan === null
+                    {activeAthleteAssignedPlan === null
                       ? ui("noActivePlan")
                       : `${athleteExecutionCompletedBlocks}/${athletePlannedBlocksCount}`}
                   </span>
                 </div>
                 {!activeAthleteTrainingPlanId ? (
                   <p className="placeholder-copy">
-                    Assign an active plan before recording actual execution.
+                    {copyFor(language, {
+                      en: "Assign an active plan before recording task completion.",
+                      ru: "Назначьте активный план, чтобы отметить выполнение заданий.",
+                      bg: "Назначете активен план, за да отбележите изпълнението на задачите.",
+                    })}
                   </p>
                 ) : (
                   <div className="stack athlete-execution-stack">
+                    {isAthleteTrainingWorkspace && activeAthleteAssignedPlan ? (
+                      <div className="athlete-execution-day-control">
+                        <label className="field athlete-training-day-picker athlete-execution-day-picker">
+                          <span>
+                            {copyFor(language, {
+                              en: "Training day",
+                              ru: "День тренировки",
+                              bg: "Тренировъчен ден",
+                            })}
+                          </span>
+                          <select
+                            onChange={(event) => setSelectedAthleteTrainingPlanId(event.target.value)}
+                            value={selectedAthleteTrainingPlan?.id ?? activeAthleteAssignedPlan.id}
+                          >
+                            {athleteTrainingPlanOptions.map((plan) => (
+                              <option key={plan.id} value={plan.id}>
+                                {plan.day.dayDate} / {localizedPlannerDayLabel(plan.day.label, language)}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <div className="athlete-execution-day-meta">
+                          <strong>{translateKnownTemplateText(activeAthleteAssignedPlan.templateName, language)}</strong>
+                          <span>
+                            {activeAthleteTrainingDayDate ? `${activeAthleteTrainingDayDate} / ` : ""}
+                            {localizedPlannerDayLabel(activeAthleteTrainingDayLabel, language)}
+                          </span>
+                          {activeAthleteTrainingDayDescription ? (
+                            <small>{renderTrainingTextWithTooltips(activeAthleteTrainingDayDescription)}</small>
+                          ) : null}
+                        </div>
+                      </div>
+                    ) : null}
                     {activeAthleteTrainingSessions.map((session, sessionIndex) => (
                       <details
                         className="session-card athlete-execution-session"
@@ -15586,19 +15640,6 @@ export function PageClient({
                         <div className="athlete-execution-session-body">
                         {session.blocks.map((block) => {
                           const draft = getExecutionDraft(block.id);
-                          const savedResult = executionResults.find(
-                            (item) => item.assignedBlockId === block.id,
-                          );
-                          const blockSyncLabel = pendingExecutionBlockIds.has(block.id)
-                            ? ui("pendingSync")
-                            : savedResult
-                              ? ui("synced")
-                              : ui("notSavedYet");
-                          const blockSyncTone = pendingExecutionBlockIds.has(block.id)
-                            ? "pending"
-                            : savedResult
-                              ? "synced"
-                              : "idle";
                           const visibleBlockNote = getPlanDisplayNote(
                             block.notes,
                             activeAthleteTrainingDayNotes,
@@ -15638,7 +15679,6 @@ export function PageClient({
                                     <small>{translateBlockAction(block.action, language)}</small>
                                   ) : null}
                                 </span>
-                                <span className={`status-chip ${blockSyncTone}`}>{blockSyncLabel}</span>
                               </label>
                               {shouldRenderBlockNote ? (
                                 <p className="assigned-block-note">

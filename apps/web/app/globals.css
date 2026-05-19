@@ -2022,6 +2022,7 @@ td {
 }
 
 .athlete-training-panel .athlete-scene-column-secondary {
+  display: none;
   grid-column: 1 / -1;
 }
 
@@ -2318,6 +2319,41 @@ td {
 
 .athlete-execution-card .session-card {
   height: auto;
+}
+
+.athlete-execution-day-control {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid rgba(15, 118, 110, 0.16);
+  border-radius: 16px;
+  background: rgba(240, 253, 250, 0.72);
+}
+
+.athlete-execution-day-picker {
+  margin: 0;
+}
+
+.athlete-execution-day-meta {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.athlete-execution-day-meta strong,
+.athlete-execution-day-meta span,
+.athlete-execution-day-meta small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.athlete-execution-day-meta span,
+.athlete-execution-day-meta small {
+  color: var(--muted-strong);
+  font-size: 0.88rem;
+  font-weight: 760;
+  line-height: 1.35;
 }
 
 .athlete-execution-block {
@@ -10748,6 +10784,14 @@ td {
     width: 100%;
     min-height: 44px;
     border-radius: 14px;
+  }
+
+  .workspace-top-action {
+    padding: 8px 10px;
+    font-size: 0.86rem;
+    line-height: 1.12;
+    overflow-wrap: anywhere;
+    white-space: normal;
   }
 
   .workspace-language-menu {
