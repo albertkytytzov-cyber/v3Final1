@@ -2310,15 +2310,92 @@ td {
   background: transparent;
   border: 0;
   box-shadow: none;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns: 1fr;
 }
 
 .athlete-execution-card .session-card {
-  height: 100%;
+  height: auto;
 }
 
 .athlete-execution-block {
   background: rgba(255, 255, 255, 0.9);
+}
+
+.athlete-execution-session {
+  overflow: hidden;
+}
+
+.athlete-execution-session-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.athlete-execution-session-summary::-webkit-details-marker,
+.athlete-execution-system-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.athlete-execution-session-summary::after {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 9px;
+  border-right: 2px solid var(--muted-strong);
+  border-bottom: 2px solid var(--muted-strong);
+  content: "";
+  transform: rotate(45deg);
+  transition: transform 0.18s ease;
+}
+
+.athlete-execution-session[open] .athlete-execution-session-summary::after {
+  transform: rotate(225deg);
+}
+
+.athlete-execution-session-summary span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.athlete-execution-session-summary strong,
+.athlete-execution-session-summary small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.athlete-execution-session-summary small {
+  color: var(--muted-strong);
+  font-size: 0.78rem;
+  font-weight: 780;
+}
+
+.athlete-execution-session-body {
+  display: grid;
+  gap: 10px;
+  padding-top: 10px;
+}
+
+.athlete-execution-system-details {
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 12px;
+  background: rgba(248, 250, 252, 0.72);
+}
+
+.athlete-execution-system-details summary {
+  padding: 8px 10px;
+  color: var(--muted-strong);
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 850;
+  list-style: none;
+}
+
+.athlete-execution-system-details > .athlete-execution-target-grid {
+  padding: 0 10px 10px;
 }
 
 .athlete-training-plan-summary {
@@ -5168,21 +5245,31 @@ td {
   display: grid;
   grid-template-columns: minmax(260px, 0.8fr) minmax(0, 1.2fr);
   gap: 12px;
-  align-items: end;
+  align-items: start;
 }
 
 .planning-assignment-current-card {
   display: grid;
-  gap: 4px;
+  gap: 10px;
   padding: 12px;
   border: 1px solid rgba(148, 163, 184, 0.18);
   border-radius: 14px;
   background: rgba(248, 250, 252, 0.9);
 }
 
-.planning-assignment-current-card span,
-.planning-assignment-current-card small {
+.planning-assignment-current-head {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.planning-assignment-current-head span,
+.planning-assignment-current-head small {
   color: var(--muted);
+}
+
+.planning-assignment-session-list {
+  padding-top: 4px;
 }
 
 .planning-advanced-card-grid {
@@ -7158,8 +7245,11 @@ td {
 }
 
 .planning-assigned-table-session {
-  gap: 10px;
-  padding-top: 4px;
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.82);
 }
 
 .planning-assigned-table-session > strong {
@@ -7170,9 +7260,64 @@ td {
   overflow-wrap: anywhere;
 }
 
+.planning-assigned-session-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.planning-assigned-session-summary::-webkit-details-marker {
+  display: none;
+}
+
+.planning-assigned-session-summary::after {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 9px;
+  border-right: 2px solid var(--muted-strong);
+  border-bottom: 2px solid var(--muted-strong);
+  content: "";
+  transform: rotate(45deg);
+  transition: transform 0.18s ease;
+}
+
+.planning-assigned-table-session[open] .planning-assigned-session-summary::after {
+  transform: rotate(225deg);
+}
+
+.planning-assigned-session-summary span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.planning-assigned-session-summary strong,
+.planning-assigned-session-summary small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.planning-assigned-session-summary strong {
+  color: #9a4f17;
+  font-size: 1rem;
+  font-weight: 900;
+  line-height: 1.25;
+}
+
+.planning-assigned-session-summary small {
+  color: var(--muted-strong);
+  font-size: 0.78rem;
+  font-weight: 780;
+}
+
 .planning-assigned-table {
   display: grid;
   min-width: 0;
+  border-top: 1px solid rgba(148, 163, 184, 0.18);
   overflow-x: auto;
 }
 

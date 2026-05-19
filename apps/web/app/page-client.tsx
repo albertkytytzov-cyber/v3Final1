@@ -7010,6 +7010,49 @@ function getRepeatedSingleExerciseBlock(
   return blockName && blockName === exerciseName ? exercise : null;
 }
 
+function getAssignedPlanDisplayExercise(block: AthleteExecutionBlock) {
+  const repeatedExercise = getRepeatedSingleExerciseBlock(block);
+
+  if (repeatedExercise) {
+    return repeatedExercise;
+  }
+
+  const exercises = [...(block.exercises ?? [])].sort((left, right) => left.orderIndex - right.orderIndex);
+
+  return exercises.length === 1 ? exercises[0] : null;
+}
+
+function formatAssignedPlanDisplayVolume(
+  block: AthleteExecutionBlock,
+  language: Language,
+  ...commonNotes: Array<string | null | undefined>
+) {
+  const displayExercise = getAssignedPlanDisplayExercise(block);
+
+  if (displayExercise) {
+    const exerciseVolume = formatAssignedPlanTableVolume(
+      displayExercise,
+      language,
+      block.notes,
+      ...commonNotes,
+    );
+
+    if (exerciseVolume && exerciseVolume !== "-") {
+      return exerciseVolume;
+    }
+  }
+
+  const visibleBlockNote = getPlanDisplayNote(block.notes, ...commonNotes);
+
+  if (visibleBlockNote) {
+    return visibleBlockNote;
+  }
+
+  const blockVolume = formatAssignedPlanBlockVolume(block, language);
+
+  return blockVolume === "-" ? "" : blockVolume;
+}
+
 function splitExerciseNoteParts(notes?: string | null) {
   return (notes ?? "")
     .split(/\s*\/\s*/u)
@@ -15490,10 +15533,21 @@ export function PageClient({
                   </p>
                 ) : (
                   <div className="stack athlete-execution-stack">
-                    {activeAthleteTrainingSessions.map((session) => (
-                      <div className="session-card" key={session.id}>
-                        <strong>{renderTrainingTextWithTooltips(session.name)}</strong>
-                        <span>{activeAthleteTrainingDayLabel}</span>
+                    {activeAthleteTrainingSessions.map((session, sessionIndex) => (
+                      <details
+                        className="session-card athlete-execution-session"
+                        key={session.id}
+                        open={activeAthleteTrainingSessions.length === 1 || sessionIndex === 0}
+                      >
+                        <summary className="athlete-execution-session-summary">
+                          <span>
+                            <strong>{renderTrainingTextWithTooltips(session.name)}</strong>
+                            <small>
+                              {activeAthleteTrainingDayLabel} / {blocksCountLabel(session.blocks.length, language)}
+                            </small>
+                          </span>
+                        </summary>
+                        <div className="athlete-execution-session-body">
                         {session.blocks.map((block) => {
                           const draft = getExecutionDraft(block.id);
                           const savedResult = executionResults.find(
@@ -15513,23 +15567,23 @@ export function PageClient({
                             block.notes,
                             activeAthleteTrainingDayNotes,
                           );
-                          const repeatedExercise = getRepeatedSingleExerciseBlock(block);
-                          const repeatedExerciseVolume = repeatedExercise
-                            ? formatAssignedExerciseVolume(
-                                repeatedExercise,
-                                language,
-                                activeAthleteTrainingDayNotes,
-                                block.notes,
-                              )
-                            : "";
+                          const blockDisplayVolume = formatAssignedPlanDisplayVolume(
+                            block,
+                            language,
+                            activeAthleteTrainingDayNotes,
+                          );
+                          const shouldRenderBlockNote = Boolean(
+                            visibleBlockNote && visibleBlockNote !== blockDisplayVolume,
+                          );
+                          const displayExercise = getAssignedPlanDisplayExercise(block);
 
                           return (
                             <div className="entry-summary athlete-execution-block" key={block.id}>
                               <div className="summary-topline">
                                 <div>
                                   <strong>{renderTrainingTextWithTooltips(block.name)}</strong>
-                                  {repeatedExerciseVolume ? (
-                                    <small>{renderTrainingTextWithTooltips(repeatedExerciseVolume)}</small>
+                                  {blockDisplayVolume ? (
+                                    <small>{renderTrainingTextWithTooltips(blockDisplayVolume)}</small>
                                   ) : null}
                                   {"action" in block && typeof block.action === "string" ? (
                                     <small>{translateBlockAction(block.action, language)}</small>
@@ -15537,12 +15591,12 @@ export function PageClient({
                                 </div>
                                 <span className={`status-chip ${blockSyncTone}`}>{blockSyncLabel}</span>
                               </div>
-                              {visibleBlockNote ? (
+                              {shouldRenderBlockNote ? (
                                 <p className="assigned-block-note">
                                   {renderTrainingTextWithTooltips(visibleBlockNote)}
                                 </p>
                               ) : null}
-                              {!repeatedExercise && (block.exercises ?? []).length > 0 ? (
+                              {!displayExercise && (block.exercises ?? []).length > 0 ? (
                                 <div className="assigned-exercise-list">
                                   {(block.exercises ?? []).map((exercise) => {
                                     const exerciseDraft = getExecutionExerciseDraft(
@@ -15582,36 +15636,45 @@ export function PageClient({
                                   })}
                                 </div>
                               ) : null}
-                              <div className="context-chip-grid athlete-execution-target-grid">
-                                <article className="context-chip">
-                                  <span>{t("targetDuration")}</span>
-                                  <strong>
-                                    {block.targetDurationMinutes ?? "-"} {"->"}{" "}
-                                    {savedResult?.durationMinutes ?? draft.durationMinutes ?? "-"}
-                                  </strong>
-                                </article>
-                                <article className="context-chip">
-                                  <span>{t("targetRpe")}</span>
-                                  <strong>
-                                    {block.targetRpe ?? "-"} {"->"}{" "}
-                                    {savedResult?.rpe ?? draft.rpe ?? "-"}
-                                  </strong>
-                                </article>
-                                <article className="context-chip">
-                                  <span>{t("targetSets")}</span>
-                                  <strong>
-                                    {block.targetSets ?? "-"} {"->"}{" "}
-                                    {savedResult?.setsCompleted ?? draft.setsCompleted ?? "-"}
-                                  </strong>
-                                </article>
-                                <article className="context-chip">
-                                  <span>{t("targetReps")}</span>
-                                  <strong>
-                                    {block.targetReps ?? "-"} {"->"}{" "}
-                                    {savedResult?.repsCompleted ?? draft.repsCompleted ?? "-"}
-                                  </strong>
-                                </article>
-                              </div>
+                              <details className="athlete-execution-system-details">
+                                <summary>
+                                  {copyFor(language, {
+                                    en: "System fields",
+                                    ru: "Системные поля",
+                                    bg: "Системни полета",
+                                  })}
+                                </summary>
+                                <div className="context-chip-grid athlete-execution-target-grid">
+                                  <article className="context-chip">
+                                    <span>{t("targetDuration")}</span>
+                                    <strong>
+                                      {block.targetDurationMinutes ?? "-"} {"->"}{" "}
+                                      {savedResult?.durationMinutes ?? draft.durationMinutes ?? "-"}
+                                    </strong>
+                                  </article>
+                                  <article className="context-chip">
+                                    <span>{t("targetRpe")}</span>
+                                    <strong>
+                                      {block.targetRpe ?? "-"} {"->"}{" "}
+                                      {savedResult?.rpe ?? draft.rpe ?? "-"}
+                                    </strong>
+                                  </article>
+                                  <article className="context-chip">
+                                    <span>{t("targetSets")}</span>
+                                    <strong>
+                                      {block.targetSets ?? "-"} {"->"}{" "}
+                                      {savedResult?.setsCompleted ?? draft.setsCompleted ?? "-"}
+                                    </strong>
+                                  </article>
+                                  <article className="context-chip">
+                                    <span>{t("targetReps")}</span>
+                                    <strong>
+                                      {block.targetReps ?? "-"} {"->"}{" "}
+                                      {savedResult?.repsCompleted ?? draft.repsCompleted ?? "-"}
+                                    </strong>
+                                  </article>
+                                </div>
+                              </details>
 
                               <div className="readiness-form">
                                 <label className="field">
@@ -15734,7 +15797,8 @@ export function PageClient({
                             </div>
                           );
                         })}
-                      </div>
+                        </div>
+                      </details>
                     ))}
                   </div>
                 )}
@@ -23452,20 +23516,60 @@ export function PageClient({
                     </label>
                     {selectedAssignedPlanPreview ? (
                       <article className="planning-assignment-current-card">
-                        <strong>
-                          {selectedAssignedPlanPreview.athleteName}:{" "}
-                          {localizedPlannerDayLabel(selectedAssignedPlanPreview.day.label, language)}
-                        </strong>
-                        <span>{translateKnownTemplateText(selectedAssignedPlanPreview.templateName, language)}</span>
-                        <small>
-                          {selectedAssignedPlanPreview.day.sessions.length}{" "}
-                          {copyFor(language, { en: "sessions", ru: "тренировок", bg: "тренировки" })} /{" "}
-                          {selectedAssignedPlanPreview.day.sessions.reduce(
-                            (total, session) => total + session.blocks.length,
-                            0,
-                          )}{" "}
-                          {copyFor(language, { en: "blocks", ru: "блоков", bg: "блока" })}
-                        </small>
+                        <div className="planning-assignment-current-head">
+                          <strong>
+                            {selectedAssignedPlanPreview.athleteName}:{" "}
+                            {localizedPlannerDayLabel(selectedAssignedPlanPreview.day.label, language)}
+                          </strong>
+                          <span>{translateKnownTemplateText(selectedAssignedPlanPreview.templateName, language)}</span>
+                          <small>
+                            {selectedAssignedPlanPreview.day.sessions.length}{" "}
+                            {copyFor(language, { en: "sessions", ru: "тренировок", bg: "тренировки" })} /{" "}
+                            {blocksCountLabel(
+                              selectedAssignedPlanPreview.day.sessions.reduce(
+                                (total, session) => total + session.blocks.length,
+                                0,
+                              ),
+                              language,
+                            )}
+                          </small>
+                        </div>
+                        <div className="planning-assigned-session-list planning-assignment-session-list">
+                          {selectedAssignedPlanPreview.day.sessions.map((session, sessionIndex) => (
+                            <details
+                              className="planning-assigned-session planning-assigned-table-session"
+                              key={session.id}
+                              open={sessionIndex === 0}
+                            >
+                              <summary className="planning-assigned-session-summary">
+                                <span>
+                                  <strong>{renderTrainingTextWithTooltips(session.name)}</strong>
+                                  <small>{blocksCountLabel(session.blocks.length, language)}</small>
+                                </span>
+                              </summary>
+                              <div className="planning-assigned-table">
+                                <div className="planning-assigned-table-head">
+                                  <span>{copyFor(language, { en: "Block", ru: "Блок", bg: "Блок" })}</span>
+                                  <span>{copyFor(language, { en: "Volume", ru: "Объём", bg: "Обем" })}</span>
+                                </div>
+                                {session.blocks.map((block) => {
+                                  const rowVolume = formatAssignedPlanDisplayVolume(
+                                    block,
+                                    language,
+                                    selectedAssignedPlanPreview.day.notes,
+                                  );
+
+                                  return (
+                                    <div className="planning-assigned-table-row" key={block.id}>
+                                      <span>{renderTrainingTextWithTooltips(block.name)}</span>
+                                      <span>{renderTrainingTextWithTooltips(rowVolume || "-")}</span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </details>
+                          ))}
+                        </div>
                       </article>
                     ) : null}
                   </div>
@@ -24198,32 +24302,39 @@ export function PageClient({
                         </div>
                       </summary>
                       <div className="planning-assigned-session-list">
-                        {selectedAssignedPlanPreview.day.sessions.map((session) => (
-                          <section className="planning-assigned-session planning-assigned-table-session" key={session.id}>
-                            <strong>{renderTrainingTextWithTooltips(session.name)}</strong>
+                        {selectedAssignedPlanPreview.day.sessions.map((session, sessionIndex) => (
+                          <details
+                            className="planning-assigned-session planning-assigned-table-session"
+                            key={session.id}
+                            open={sessionIndex === 0}
+                          >
+                            <summary className="planning-assigned-session-summary">
+                              <span>
+                                <strong>{renderTrainingTextWithTooltips(session.name)}</strong>
+                                <small>{blocksCountLabel(session.blocks.length, language)}</small>
+                              </span>
+                            </summary>
                             <div className="planning-assigned-table">
                               <div className="planning-assigned-table-head">
                                 <span>{copyFor(language, { en: "Block", ru: "Блок", bg: "Блок" })}</span>
                                 <span>{copyFor(language, { en: "Volume", ru: "Объём", bg: "Обем" })}</span>
                               </div>
                               {session.blocks.map((block) => {
-                                const repeatedExercise = getRepeatedSingleExerciseBlock(block);
-                                const primaryExercise =
-                                  repeatedExercise ?? [...(block.exercises ?? [])].sort((left, right) => left.orderIndex - right.orderIndex)[0] ?? null;
-                                const rowName = primaryExercise?.name ?? block.name;
-                                const rowVolume = primaryExercise
-                                  ? formatAssignedPlanTableVolume(primaryExercise, language, block.notes)
-                                  : formatAssignedPlanBlockVolume(block, language);
+                                const rowVolume = formatAssignedPlanDisplayVolume(
+                                  block,
+                                  language,
+                                  selectedAssignedPlanPreview.day.notes,
+                                );
 
                                 return (
                                   <div className="planning-assigned-table-row" key={block.id}>
-                                    <span>{renderTrainingTextWithTooltips(rowName)}</span>
+                                    <span>{renderTrainingTextWithTooltips(block.name)}</span>
                                     <span>{renderTrainingTextWithTooltips(rowVolume || "-")}</span>
                                   </div>
                                 );
                               })}
                             </div>
-                          </section>
+                          </details>
                         ))}
                       </div>
                     </details>
