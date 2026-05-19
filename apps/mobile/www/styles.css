@@ -1160,7 +1160,7 @@ button {
 }
 
 .execution-day-note.is-athlete-diary {
-  margin-top: 4px;
+  margin-top: 10px;
   border-color: rgba(15, 118, 110, 0.22);
   background: #f6fbfa;
 }

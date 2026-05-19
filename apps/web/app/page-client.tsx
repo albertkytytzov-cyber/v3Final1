@@ -5407,6 +5407,11 @@ function localizedPlannerDayFromOffset(dayOffset: number | null, language: Langu
     : localizedPlannerDayLabel(`Day ${dayOffset + 1}`, language);
 }
 
+function formatExecutionSessionDiaryName(sessionName: string) {
+  const shortName = sessionName.split(/[—–-]/)[0]?.trim() || sessionName.trim();
+  return shortName.toLowerCase() || "session";
+}
+
 function localizedPlannerWarningLevel(level: PlannerWarning["level"], language: Language) {
   if (level === "critical") {
     return copyFor(language, { en: "Critical", ru: "Критично", bg: "Критично" });
@@ -9332,11 +9337,11 @@ export function PageClient({
     });
   }
 
-  function getExecutionDayDraftNote(sessions: AssignedPlanSummary["day"]["sessions"]) {
+  function getExecutionSessionDraftNote(session: AssignedPlanSummary["day"]["sessions"][number]) {
     const notes: string[] = [];
     const seen = new Set<string>();
 
-    for (const block of sessions.flatMap((session) => session.blocks)) {
+    for (const block of session.blocks) {
       const note = getExecutionDraft(block.id).notes.trim();
 
       if (note && !seen.has(note)) {
@@ -9348,11 +9353,11 @@ export function PageClient({
     return notes.join("\n\n");
   }
 
-  function updateExecutionDayDraftNote(
-    sessions: AssignedPlanSummary["day"]["sessions"],
+  function updateExecutionSessionDraftNote(
+    session: AssignedPlanSummary["day"]["sessions"][number],
     notes: string,
   ) {
-    const blockIds = sessions.flatMap((session) => session.blocks.map((block) => block.id));
+    const blockIds = session.blocks.map((block) => block.id);
 
     setExecutionDrafts((current) => {
       const next = { ...current };
@@ -15674,7 +15679,7 @@ export function PageClient({
                           </span>
                         </summary>
                         <div className="athlete-execution-session-body">
-                        {session.blocks.map((block) => {
+                          {session.blocks.map((block) => {
                           const draft = getExecutionDraft(block.id);
                           const visibleBlockNote = getPlanDisplayNote(
                             block.notes,
@@ -15769,41 +15774,38 @@ export function PageClient({
                             </div>
                           );
                         })}
+                          <label className="athlete-execution-diary athlete-execution-session-diary">
+                            <span>
+                              {copyFor(language, {
+                                en: "Training diary",
+                                ru: "Дневник тренировки",
+                                bg: "Дневник на тренировката",
+                              })}: {renderTrainingTextWithTooltips(formatExecutionSessionDiaryName(session.name))}
+                            </span>
+                            <small>
+                              {copyFor(language, {
+                                en: "One general note for this workout only. The coach sees it separately from the other session.",
+                                ru: "Одна общая заметка только по этой тренировке. Тренер видит её отдельно от другой сессии.",
+                                bg: "Една обща бележка само за тази тренировка. Треньорът я вижда отделно от другата сесия.",
+                              })}
+                            </small>
+                            <textarea
+                              disabled={busy}
+                              onChange={(event) =>
+                                updateExecutionSessionDraftNote(session, event.target.value)
+                              }
+                              placeholder={copyFor(language, {
+                                en: "How did this workout go: what worked, what was hard, how you felt after",
+                                ru: "Как прошла эта тренировка: что получилось, что было тяжело, самочувствие после",
+                                bg: "Как мина тази тренировка: какво се получи, какво беше трудно, как се чувстваш след това",
+                              })}
+                              rows={4}
+                              value={getExecutionSessionDraftNote(session)}
+                            />
+                          </label>
                         </div>
                       </details>
                     ))}
-                    <label className="athlete-execution-diary">
-                      <span>
-                        {copyFor(language, {
-                          en: "Training diary",
-                          ru: "Дневник тренировки",
-                          bg: "Дневник на тренировката",
-                        })}
-                      </span>
-                      <small>
-                        {copyFor(language, {
-                          en: "One general note after the workout. The coach sees it for the whole day.",
-                          ru: "Одна общая заметка после тренировки. Тренер видит её ко всему дню.",
-                          bg: "Една обща бележка след тренировката. Треньорът я вижда за целия ден.",
-                        })}
-                      </small>
-                      <textarea
-                        disabled={busy}
-                        onChange={(event) =>
-                          updateExecutionDayDraftNote(
-                            activeAthleteTrainingSessions,
-                            event.target.value,
-                          )
-                        }
-                        placeholder={copyFor(language, {
-                          en: "How did the workout go: what worked, what was hard, how you felt after",
-                          ru: "Как прошла тренировка: что получилось, что было тяжело, самочувствие после",
-                          bg: "Как мина тренировката: какво се получи, какво беше трудно, как се чувстваш след това",
-                        })}
-                        rows={4}
-                        value={getExecutionDayDraftNote(activeAthleteTrainingSessions)}
-                      />
-                    </label>
                     <div className="athlete-execution-actions">
                       <button
                         className="primary-button"

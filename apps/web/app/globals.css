@@ -2435,6 +2435,10 @@ td {
   background: rgba(240, 253, 250, 0.76);
 }
 
+.athlete-execution-session-diary {
+  margin-top: 2px;
+}
+
 .athlete-execution-diary span {
   color: var(--text);
   font-size: 0.95rem;

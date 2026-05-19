@@ -863,8 +863,6 @@ export function bootstrapMobileApp(root: HTMLElement) {
     const forms = Array.from(
       group?.querySelectorAll<HTMLFormElement>("[data-execution-form], [data-execution-session-form]") ?? [],
     );
-    const dayNotesInput = group?.querySelector<HTMLTextAreaElement>("[data-execution-day-notes]");
-    const dayNotes = dayNotesInput ? dayNotesInput.value.trim() : null;
 
     if (forms.length === 0) {
       update({ error: "Нет блоков для сохранения." });
@@ -885,9 +883,14 @@ export function bootstrapMobileApp(root: HTMLElement) {
         return;
       }
 
+      const sessionNotesInput = form
+        .closest<HTMLElement>("[data-execution-session]")
+        ?.querySelector<HTMLTextAreaElement>("[data-execution-session-notes]");
+      const sessionNotes = sessionNotesInput ? sessionNotesInput.value.trim() : null;
+
       payloads.push(...formPayloads.map((payload) => ({
         ...payload,
-        notes: dayNotes ?? payload.notes,
+        notes: sessionNotes ?? payload.notes,
       })));
     }
 
@@ -5164,7 +5167,7 @@ function renderExecutionPlanGroup(
       <div class="mobile-plan-day-card-body">
         ${compactAthlete ? renderAthleteCoachDayNote(daySummary.latestDiaryEntry) : renderExecutionDayAnalyticsCard(daySummary, displayCompletion)}
         ${group.plan.day.sessions.map((session) => `
-          <section class="mobile-plan-session">
+          <section class="mobile-plan-session" data-execution-session>
             <h4>${escapeHtml(session.name)}</h4>
             ${isSessionLevelPlanUnit(session) && !compactAthlete
               ? renderExecutionUnifiedSession(state, group.plan, session, canSubmitExecution, options)
@@ -5200,11 +5203,17 @@ function renderExecutionPlanGroup(
                     .join("")}
                 </div>
               `}
+            ${canSubmitExecution || getExecutionSessionNote(state, group.plan.id, session)
+              ? renderExecutionSessionNoteField(
+                  state,
+                  group.plan,
+                  session,
+                  isLocked || !canSubmitExecution,
+                  compactAthlete,
+                )
+              : ""}
           </section>
         `).join("")}
-        ${canSubmitExecution || !compactAthlete
-          ? renderExecutionDayNoteField(state, group, isLocked, compactAthlete)
-          : ""}
         ${canSubmitExecution ? `
           <div class="mobile-execution-day-actions">
             ${isLocked
@@ -5234,25 +5243,29 @@ function renderAthleteCoachDayNote(entry: CoachDiaryEntry | null) {
   `;
 }
 
-function renderExecutionDayNoteField(
+function renderExecutionSessionNoteField(
   state: MobileAppState,
-  group: ExecutionPlanGroup,
+  plan: AssignedPlanSummary,
+  session: MobileAssignedPlanSession,
   disabled = false,
   athleteDiary = false,
 ) {
-  const label = athleteDiary ? "Дневник тренировки" : "Комментарий за день";
+  const sessionName = formatExecutionSessionDiaryName(session.name);
+  const label = athleteDiary
+    ? `Дневник тренировки: ${sessionName}`
+    : `Комментарий спортсмена: ${sessionName}`;
   const hint = athleteDiary
-    ? "Одна общая заметка после тренировки. Она сохраняется ко всему дню и видна тренеру."
-    : "Одна общая заметка ко всему дню, без комментариев под каждым упражнением.";
+    ? "Одна общая заметка только по этой тренировке. Она не относится к другой сессии дня."
+    : "Заметка спортсмена только по этой тренировке, без комментариев под каждым упражнением.";
   const placeholder = athleteDiary
-    ? "Как прошла тренировка: что получилось, что было тяжело, самочувствие после"
+    ? "Как прошла эта тренировка: что получилось, что было тяжело, самочувствие после"
     : "Коротко: что получилось, что было тяжело";
 
   return `
     <label class="execution-day-note ${athleteDiary ? "is-athlete-diary" : ""}">
       <span>${label}</span>
       <small>${hint}</small>
-      <textarea data-execution-day-notes rows="3" placeholder="${placeholder}" ${disabled ? "disabled" : ""}>${escapeHtml(getExecutionDayNote(state, group))}</textarea>
+      <textarea data-execution-session-notes rows="3" placeholder="${placeholder}" ${disabled ? "disabled" : ""}>${escapeHtml(getExecutionSessionNote(state, plan.id, session))}</textarea>
     </label>
   `;
 }
@@ -7139,8 +7152,29 @@ function getExecutionResultForBlock(
   ) ?? null;
 }
 
-function getExecutionDayNote(state: MobileAppState, group: ExecutionPlanGroup) {
-  return getExecutionDayNoteForGroups(state, [group]);
+function formatExecutionSessionDiaryName(sessionName: string) {
+  const shortName = sessionName.split(/[—–-]/)[0]?.trim() || sessionName.trim();
+  return shortName.toLowerCase() || "сессия";
+}
+
+function getExecutionSessionNote(
+  state: MobileAppState,
+  assignedPlanId: string,
+  session: MobileAssignedPlanSession,
+) {
+  const notes: string[] = [];
+  const seen = new Set<string>();
+
+  session.blocks.forEach((block) => {
+    const note = getExecutionResultForBlock(state, assignedPlanId, block.id)?.notes.trim() ?? "";
+
+    if (note && !seen.has(note)) {
+      seen.add(note);
+      notes.push(note);
+    }
+  });
+
+  return notes.join("\n\n");
 }
 
 function getExecutionDayNoteForGroups(state: MobileAppState, groups: ExecutionPlanGroup[]) {
@@ -7148,12 +7182,12 @@ function getExecutionDayNoteForGroups(state: MobileAppState, groups: ExecutionPl
   const seen = new Set<string>();
 
   groups.forEach((group) => {
-    group.blockItems.forEach((item) => {
-      const note = getExecutionResultForBlock(state, item.plan.id, item.block.id)?.notes.trim() ?? "";
+    group.plan.day.sessions.forEach((session) => {
+      const note = getExecutionSessionNote(state, group.plan.id, session);
 
       if (note && !seen.has(note)) {
         seen.add(note);
-        notes.push(note);
+        notes.push(`${formatExecutionSessionDiaryName(session.name)}: ${note}`);
       }
     });
   });
