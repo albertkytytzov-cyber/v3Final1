@@ -2030,10 +2030,13 @@ td {
 }
 
 .athlete-training-panel .athlete-scene-column-tertiary {
-  display: none;
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 12px;
 }
 
 .athlete-history-card,
+.athlete-training-panel .athlete-history-card,
 .athlete-training-panel .athlete-adaptation-card,
 .athlete-training-panel .athlete-context-card,
 .athlete-training-panel .athlete-analytics-card,
