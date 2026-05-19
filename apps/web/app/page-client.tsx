@@ -9541,10 +9541,8 @@ export function PageClient({
     void loadReadiness(entryDate);
   }
 
-  async function handleExecutionSave(assignedPlanId: string, block: AthleteExecutionBlock) {
+  async function persistExecutionBlockResult(assignedPlanId: string, block: AthleteExecutionBlock) {
     const assignedBlockId = block.id;
-    setBusy(true);
-    setErrorMessage("");
     const draft = getExecutionPayloadDraft(block);
     const queueItem = importedCreateQueueItem({
       type: "execution",
@@ -9558,8 +9556,7 @@ export function PageClient({
         queueItem.clientRequestId,
         draft,
       );
-      await loadAnalyticsOverview();
-      setStatusMessage(ui("executionSaved"));
+      return "saved" as const;
     } catch (error) {
       const optimisticResult: ExecutionResult = {
         id: `offline-${assignedBlockId}`,
@@ -9608,6 +9605,45 @@ export function PageClient({
           ? error.message
           : "",
       );
+      return "queued" as const;
+    }
+  }
+
+  async function handleExecutionSave(assignedPlanId: string, block: AthleteExecutionBlock) {
+    setBusy(true);
+    setErrorMessage("");
+
+    try {
+      const result = await persistExecutionBlockResult(assignedPlanId, block);
+      await loadAnalyticsOverview();
+
+      if (result === "saved") {
+        setStatusMessage(ui("executionSaved"));
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleExecutionDaySave(
+    assignedPlanId: string,
+    sessions: AssignedPlanSummary["day"]["sessions"],
+  ) {
+    setBusy(true);
+    setErrorMessage("");
+
+    try {
+      const results: Array<"saved" | "queued"> = [];
+
+      for (const block of sessions.flatMap((session) => session.blocks)) {
+        results.push(await persistExecutionBlockResult(assignedPlanId, block));
+      }
+
+      await loadAnalyticsOverview();
+
+      if (results.every((result) => result === "saved")) {
+        setStatusMessage(ui("executionSaved"));
+      }
     } finally {
       setBusy(false);
     }
@@ -15576,11 +15612,24 @@ export function PageClient({
                             visibleBlockNote && visibleBlockNote !== blockDisplayVolume,
                           );
                           const displayExercise = getAssignedPlanDisplayExercise(block);
+                          const blockSelected = draft.completed;
 
                           return (
-                            <div className="entry-summary athlete-execution-block" key={block.id}>
-                              <div className="summary-topline">
-                                <div>
+                            <div
+                              className={`entry-summary athlete-execution-block athlete-execution-select-card ${
+                                blockSelected ? "is-selected" : ""
+                              }`}
+                              key={block.id}
+                            >
+                              <label className="athlete-execution-select-toggle">
+                                <input
+                                  checked={blockSelected}
+                                  onChange={(event) =>
+                                    updateExecutionBlockCompleted(block, event.target.checked)
+                                  }
+                                  type="checkbox"
+                                />
+                                <span className="athlete-execution-select-copy">
                                   <strong>{renderTrainingTextWithTooltips(block.name)}</strong>
                                   {blockDisplayVolume ? (
                                     <small>{renderTrainingTextWithTooltips(blockDisplayVolume)}</small>
@@ -15588,16 +15637,16 @@ export function PageClient({
                                   {"action" in block && typeof block.action === "string" ? (
                                     <small>{translateBlockAction(block.action, language)}</small>
                                   ) : null}
-                                </div>
+                                </span>
                                 <span className={`status-chip ${blockSyncTone}`}>{blockSyncLabel}</span>
-                              </div>
+                              </label>
                               {shouldRenderBlockNote ? (
                                 <p className="assigned-block-note">
                                   {renderTrainingTextWithTooltips(visibleBlockNote)}
                                 </p>
                               ) : null}
                               {!displayExercise && (block.exercises ?? []).length > 0 ? (
-                                <div className="assigned-exercise-list">
+                                <div className="assigned-exercise-list athlete-execution-exercise-list">
                                   {(block.exercises ?? []).map((exercise) => {
                                     const exerciseDraft = getExecutionExerciseDraft(
                                       block,
@@ -15606,8 +15655,13 @@ export function PageClient({
                                     );
 
                                     return (
-                                      <div className="assigned-exercise-row" key={exercise.id}>
-                                        <label className="exercise-completion-toggle">
+                                      <div
+                                        className={`assigned-exercise-row ${
+                                          exerciseDraft.completed ? "is-selected" : ""
+                                        }`}
+                                        key={exercise.id}
+                                      >
+                                        <label className="exercise-completion-toggle athlete-execution-exercise-toggle">
                                           <input
                                             checked={exerciseDraft.completed}
                                             onChange={(event) =>
@@ -15636,170 +15690,27 @@ export function PageClient({
                                   })}
                                 </div>
                               ) : null}
-                              <details className="athlete-execution-system-details">
-                                <summary>
-                                  {copyFor(language, {
-                                    en: "System fields",
-                                    ru: "Системные поля",
-                                    bg: "Системни полета",
-                                  })}
-                                </summary>
-                                <div className="context-chip-grid athlete-execution-target-grid">
-                                  <article className="context-chip">
-                                    <span>{t("targetDuration")}</span>
-                                    <strong>
-                                      {block.targetDurationMinutes ?? "-"} {"->"}{" "}
-                                      {savedResult?.durationMinutes ?? draft.durationMinutes ?? "-"}
-                                    </strong>
-                                  </article>
-                                  <article className="context-chip">
-                                    <span>{t("targetRpe")}</span>
-                                    <strong>
-                                      {block.targetRpe ?? "-"} {"->"}{" "}
-                                      {savedResult?.rpe ?? draft.rpe ?? "-"}
-                                    </strong>
-                                  </article>
-                                  <article className="context-chip">
-                                    <span>{t("targetSets")}</span>
-                                    <strong>
-                                      {block.targetSets ?? "-"} {"->"}{" "}
-                                      {savedResult?.setsCompleted ?? draft.setsCompleted ?? "-"}
-                                    </strong>
-                                  </article>
-                                  <article className="context-chip">
-                                    <span>{t("targetReps")}</span>
-                                    <strong>
-                                      {block.targetReps ?? "-"} {"->"}{" "}
-                                      {savedResult?.repsCompleted ?? draft.repsCompleted ?? "-"}
-                                    </strong>
-                                  </article>
-                                </div>
-                              </details>
-
-                              <div className="readiness-form">
-                                <label className="field">
-                                  <span>{t("completed")}</span>
-                                  <input
-                                    checked={draft.completed}
-                                    onChange={(event) =>
-                                      updateExecutionBlockCompleted(block, event.target.checked)
-                                    }
-                                    type="checkbox"
-                                  />
-                                </label>
-
-                                <label className="field">
-                                  <span>{t("sets")}</span>
-                                  <input
-                                    type="number"
-                                    value={draft.setsCompleted ?? ""}
-                                    onChange={(event) =>
-                                      updateExecutionDraft(block.id, {
-                                        setsCompleted:
-                                          event.target.value === ""
-                                            ? null
-                                            : Number(event.target.value),
-                                      })
-                                    }
-                                  />
-                                </label>
-
-                                <label className="field">
-                                  <span>{t("reps")}</span>
-                                  <input
-                                    type="number"
-                                    value={draft.repsCompleted ?? ""}
-                                    onChange={(event) =>
-                                      updateExecutionDraft(block.id, {
-                                        repsCompleted:
-                                          event.target.value === ""
-                                            ? null
-                                            : Number(event.target.value),
-                                      })
-                                    }
-                                  />
-                                </label>
-
-                                <label className="field">
-                                  <span>{t("weightKg")}</span>
-                                  <input
-                                    type="number"
-                                    step="0.5"
-                                    value={draft.weightKg ?? ""}
-                                    onChange={(event) =>
-                                      updateExecutionDraft(block.id, {
-                                        weightKg:
-                                          event.target.value === ""
-                                            ? null
-                                            : Number(event.target.value),
-                                      })
-                                    }
-                                  />
-                                </label>
-
-                                <label className="field">
-                                  <span>{t("durationMin")}</span>
-                                  <input
-                                    type="number"
-                                    step="0.5"
-                                    value={draft.durationMinutes ?? ""}
-                                    onChange={(event) =>
-                                      updateExecutionDraft(block.id, {
-                                        durationMinutes:
-                                          event.target.value === ""
-                                            ? null
-                                            : Number(event.target.value),
-                                      })
-                                    }
-                                  />
-                                </label>
-
-                                <label className="field">
-                                  <span>{t("rpe")}</span>
-                                  <input
-                                    type="number"
-                                    min="0"
-                                    max="10"
-                                    step="0.5"
-                                    value={draft.rpe ?? ""}
-                                    onChange={(event) =>
-                                      updateExecutionDraft(block.id, {
-                                        rpe:
-                                          event.target.value === ""
-                                            ? null
-                                            : Number(event.target.value),
-                                      })
-                                    }
-                                  />
-                                </label>
-
-                                <label className="field">
-                                  <span>{t("notes")}</span>
-                                  <input
-                                    value={draft.notes}
-                                    onChange={(event) =>
-                                      updateExecutionDraft(block.id, {
-                                        notes: event.target.value,
-                                      })
-                                    }
-                                  />
-                                </label>
-                              </div>
-
-                              <button
-                                className="primary-button"
-                                disabled={busy}
-                                onClick={() => void handleExecutionSave(activeAthleteTrainingPlanId, block)}
-                                type="button"
-                              >
-                                {busy ? ui("syncingNow") : t("saveExecution")}
-                              </button>
                             </div>
                           );
                         })}
                         </div>
                       </details>
                     ))}
+                    <div className="athlete-execution-actions">
+                      <button
+                        className="primary-button"
+                        disabled={busy}
+                        onClick={() =>
+                          void handleExecutionDaySave(
+                            activeAthleteTrainingPlanId,
+                            activeAthleteTrainingSessions,
+                          )
+                        }
+                        type="button"
+                      >
+                        {busy ? ui("syncingNow") : t("saveExecution")}
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>

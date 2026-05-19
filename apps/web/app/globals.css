@@ -2324,6 +2324,81 @@ td {
   background: rgba(255, 255, 255, 0.9);
 }
 
+.athlete-execution-select-card {
+  padding: 0;
+  border-color: rgba(148, 163, 184, 0.2);
+  transition: background 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.athlete-execution-select-card.is-selected {
+  border-color: rgba(20, 184, 166, 0.42);
+  background: rgba(240, 253, 250, 0.92);
+  box-shadow: 0 14px 32px rgba(15, 118, 110, 0.12);
+}
+
+.athlete-execution-select-toggle {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  min-width: 0;
+  padding: 14px;
+  cursor: pointer;
+}
+
+.athlete-execution-select-toggle input,
+.athlete-execution-exercise-toggle input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--accent);
+}
+
+.athlete-execution-select-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.athlete-execution-select-copy strong,
+.athlete-execution-select-copy small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.athlete-execution-select-copy small {
+  color: var(--muted-strong);
+  font-size: 0.9rem;
+  font-weight: 760;
+  line-height: 1.35;
+}
+
+.athlete-execution-exercise-list {
+  padding: 0 14px 14px 46px;
+}
+
+.athlete-execution-exercise-list .assigned-exercise-row {
+  border-color: rgba(148, 163, 184, 0.18);
+  background: rgba(255, 255, 255, 0.76);
+}
+
+.athlete-execution-exercise-list .assigned-exercise-row.is-selected {
+  border-color: rgba(20, 184, 166, 0.34);
+  background: rgba(240, 253, 250, 0.78);
+}
+
+.athlete-execution-exercise-toggle {
+  cursor: pointer;
+}
+
+.athlete-execution-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.athlete-execution-actions .primary-button {
+  width: 100%;
+}
+
 .athlete-execution-session {
   overflow: hidden;
 }
