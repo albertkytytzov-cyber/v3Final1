@@ -97,6 +97,8 @@ function isWorkspace(value: string | undefined): value is WorkspaceSectionId {
 
 function isPlanningView(value: string | undefined): value is PlanningStudioView {
   return (
+    value === "advanced" ||
+    value === "auto-weekly" ||
     value === "calendar" ||
     value === "season" ||
     value === "mesocycle" ||

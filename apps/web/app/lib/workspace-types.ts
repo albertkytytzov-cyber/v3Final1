@@ -7,6 +7,8 @@ export type CoachDashboardView =
   | "analytics";
 
 export type PlanningStudioView =
+  | "advanced"
+  | "auto-weekly"
   | "calendar"
   | "season"
   | "mesocycle"

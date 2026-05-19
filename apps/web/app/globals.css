@@ -4927,6 +4927,195 @@ td {
   transform: translateY(-1px);
 }
 
+.planning-workgrid.planning-workgrid-advanced,
+.planning-workgrid.planning-workgrid-auto-weekly,
+.planning-workgrid.planning-workgrid-weekly {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.planning-workgrid.planning-workgrid-advanced > *,
+.planning-workgrid.planning-workgrid-auto-weekly > *,
+.planning-workgrid.planning-workgrid-weekly > * {
+  grid-column: 1 / -1;
+}
+
+.planning-assignment-workspace,
+.planning-advanced-overview {
+  display: grid;
+  gap: 16px;
+  width: 100%;
+}
+
+.planning-assignment-grid {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.88fr) minmax(480px, 1.12fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.planning-assignment-template-panel,
+.planning-assignment-review-panel,
+.planning-assignment-current-panel {
+  min-width: 0;
+}
+
+.planning-assignment-template-card {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0;
+  padding: 14px;
+  border: 1px solid rgba(20, 184, 166, 0.24);
+  border-radius: 14px;
+  background: rgba(240, 253, 250, 0.72);
+}
+
+.planning-assignment-template-card strong {
+  font-size: 1.02rem;
+  line-height: 1.25;
+}
+
+.planning-assignment-warning,
+.planning-assignment-ready {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 12px;
+  padding: 12px;
+  border-radius: 14px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.planning-assignment-warning {
+  border: 1px solid rgba(239, 68, 68, 0.24);
+  background: rgba(254, 242, 242, 0.86);
+  color: #991b1b;
+}
+
+.planning-assignment-ready {
+  border: 1px solid rgba(20, 184, 166, 0.22);
+  background: rgba(240, 253, 250, 0.86);
+  color: #0f766e;
+}
+
+.planning-assignment-day-table {
+  display: grid;
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.planning-assignment-day-head,
+.planning-assignment-day-row {
+  display: grid;
+  grid-template-columns: minmax(110px, 0.4fr) minmax(220px, 1fr) minmax(116px, 0.42fr);
+  gap: 12px;
+  align-items: center;
+  padding: 12px 14px;
+}
+
+.planning-assignment-day-head {
+  background: rgba(241, 245, 249, 0.86);
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.planning-assignment-day-row {
+  border-top: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.planning-assignment-day-row.is-selected {
+  background: rgba(240, 253, 250, 0.46);
+}
+
+.planning-assignment-day-more {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.planning-assignment-mode-group,
+.planning-assignment-controls,
+.planning-assignment-actions,
+.planning-assignment-current-grid {
+  margin-top: 14px;
+}
+
+.planning-assignment-controls {
+  display: grid;
+  grid-template-columns: minmax(160px, 0.8fr) minmax(180px, 0.9fr) minmax(220px, 1fr);
+  gap: 12px;
+}
+
+.planning-assignment-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.planning-assignment-current-grid {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.8fr) minmax(0, 1.2fr);
+  gap: 12px;
+  align-items: end;
+}
+
+.planning-assignment-current-card {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 14px;
+  background: rgba(248, 250, 252, 0.9);
+}
+
+.planning-assignment-current-card span,
+.planning-assignment-current-card small {
+  color: var(--muted);
+}
+
+.planning-advanced-card-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.planning-advanced-card {
+  display: grid;
+  gap: 10px;
+  min-height: 150px;
+  padding: 16px;
+  text-align: left;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.86);
+  color: var(--text);
+  cursor: pointer;
+  box-shadow: var(--shadow-soft);
+}
+
+.planning-advanced-card:hover {
+  border-color: rgba(15, 118, 110, 0.36);
+  background: rgba(240, 253, 250, 0.86);
+}
+
+.planning-advanced-card span {
+  color: #0f766e;
+  font-size: 0.78rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.planning-advanced-card strong {
+  font-size: 1.05rem;
+}
+
+.planning-advanced-card small {
+  color: var(--muted);
+  line-height: 1.45;
+}
+
 .planning-workgrid.planning-workgrid-preparation {
   grid-template-columns: minmax(0, 1fr);
 }

@@ -12715,40 +12715,31 @@ export function PageClient({
   ];
   const planningTabs: Array<{ id: PlanningStudioView; label: string }> = [
     {
-      id: "preparation",
-      label:
-        language === "ru"
-          ? "План подготовки"
-          : language === "bg"
-            ? "План за подготовка"
-            : "Preparation plan",
-    },
-    {
-      id: "mesocycle",
-      label:
-        language === "ru"
-          ? "Мезоциклы"
-          : language === "bg"
-            ? "Мезоцикли"
-            : "Mesocycles",
-    },
-    {
       id: "weekly",
       label:
         language === "ru"
-          ? "Недельный план"
+          ? "Назначение"
           : language === "bg"
-            ? "Седмичен план"
-            : "Weekly planner",
+            ? "Назначаване"
+            : "Assignment",
     },
     {
       id: "templates",
       label:
         language === "ru"
-          ? "Библиотека шаблонов"
+          ? "Шаблоны"
           : language === "bg"
-            ? "Библиотека с шаблони"
-            : "Template library",
+            ? "Шаблони"
+            : "Templates",
+    },
+    {
+      id: "calendar",
+      label:
+        language === "ru"
+          ? "Календарь"
+          : language === "bg"
+            ? "Календар"
+            : "Calendar",
     },
     {
       id: "season",
@@ -12760,15 +12751,20 @@ export function PageClient({
             : "Season & starts",
     },
     {
-      id: "calendar",
+      id: "advanced",
       label:
         language === "ru"
-          ? "Календарь"
+          ? "Дополнительно"
           : language === "bg"
-            ? "Календар"
-            : "Calendar",
+            ? "Допълнително"
+            : "More",
     },
   ];
+  const isPlanningAdvancedView =
+    planningView === "advanced" ||
+    planningView === "auto-weekly" ||
+    planningView === "preparation" ||
+    planningView === "mesocycle";
   const topOverviewItems = [
     {
       label: t("athlete"),
@@ -12968,10 +12964,10 @@ export function PageClient({
             : "Execution review, plan vs actual, and deviations for the selected athlete."
         : activeWorkspace === "planning-studio"
           ? language === "ru"
-            ? "План подготовки, недельная работа и библиотека шаблонов."
+            ? "Выбор шаблона, проверка дней и назначение плана спортсмену."
             : language === "bg"
-              ? "План за подготовка, седмична работа и библиотека с шаблони."
-              : "Preparation plan, weekly work, and template library."
+              ? "Избор на шаблон, проверка на дни и назначаване на план."
+              : "Template selection, day review, and plan assignment."
           : language === "ru"
             ? "Очередь синхронизации, локальные данные и конфликты восстановления сети."
             : language === "bg"
@@ -12980,9 +12976,9 @@ export function PageClient({
   const workspaceTopActionLabel =
     activeWorkspace === "planning-studio"
       ? copyFor(language, {
-          en: "Build week",
-          ru: "Собрать неделю",
-          bg: "Сглоби седмица",
+          en: "Assign plan",
+          ru: "Назначить план",
+          bg: "Назначи план",
         })
       : isCoachSceneWorkspace
         ? copyFor(language, {
@@ -13562,7 +13558,9 @@ export function PageClient({
   const coachSceneDescription =
     activeWorkspace === "coach-dashboard" ? coachViewDescription : workspaceSummary;
   const planningViewLabel =
-    planningTabs.find((tab) => tab.id === planningView)?.label ?? planningTabs[0]?.label ?? "";
+    isPlanningAdvancedView
+      ? planningTabs.find((tab) => tab.id === "advanced")?.label ?? planningTabs[0]?.label ?? ""
+      : planningTabs.find((tab) => tab.id === planningView)?.label ?? planningTabs[0]?.label ?? "";
   const planningViewDescription =
     planningView === "calendar"
       ? copyFor(language, {
@@ -13592,12 +13590,18 @@ export function PageClient({
             ? copyFor(language, {
                 en: "Keep reusable days, weeks, and full plans here. Edit first, assign only when needed.",
                 ru: "Храните здесь дни, недели и полные планы. Сначала редактируйте, назначайте только нужное.",
-                bg: "Съхранявайте тук дни, седмици и цели планове. Първо редактирайте, назначавайте само нужното.",
-              })
+            bg: "Съхранявайте тук дни, седмици и цели планове. Първо редактирайте, назначавайте само нужното.",
+          })
+        : isPlanningAdvancedView
+          ? copyFor(language, {
+              en: "Advanced planning tools: automatic week assembly, preparation strategy, mesocycles, and technical diagnostics.",
+              ru: "Дополнительные инструменты планирования: автосборка недели, стратегия подготовки, мезоциклы и техническая диагностика.",
+              bg: "Допълнителни инструменти за планиране: автоматична седмица, стратегия, мезоцикли и техническа диагностика.",
+            })
             : copyFor(language, {
-                en: "Build the working week: days, sessions, exercises, control, and assigned plans.",
-        ru: "Соберите рабочую неделю: дни, тренировки, упражнения, контроль и назначенные планы.",
-        bg: "Сглобете работната седмица: дни, тренировки, упражнения, контрол и назначени планове.",
+                en: "Choose a template, review the training days, and assign the plan to the selected athlete.",
+                ru: "Выберите шаблон, проверьте тренировочные дни и назначьте план выбранному спортсмену.",
+                bg: "Изберете шаблон, проверете тренировъчните дни и назначете плана на избрания спортист.",
               });
   const uwwYearOptions = withFallbackOptions(
     uwwSyncOptions.years,
@@ -13670,6 +13674,44 @@ export function PageClient({
     selectedTemplateAssignDayIndexes,
   );
   const selectedTemplateAssignmentCount = selectedTemplateAssignmentIndexes.length;
+  const planningAssignmentIssueLabels = [
+    !selectedCoachAthlete
+      ? copyFor(language, {
+          en: "Select an athlete before assignment.",
+          ru: "Выберите спортсмена перед назначением.",
+          bg: "Изберете спортист преди назначаване.",
+        })
+      : null,
+    !activePlanTemplate && !importedPlanDraft && !isTemplateDraftActive
+      ? copyFor(language, {
+          en: "No template is selected.",
+          ru: "Не выбран шаблон.",
+          bg: "Няма избран шаблон.",
+        })
+      : null,
+    assignmentTemplateDays.length > 0 && selectedTemplateAssignmentCount === 0
+      ? copyFor(language, {
+          en: "No training days are selected.",
+          ru: "Не выбраны тренировочные дни.",
+          bg: "Няма избрани тренировъчни дни.",
+        })
+      : null,
+  ].filter((item): item is string => Boolean(item));
+  const assignmentPreviewItems = activePlanTemplate
+    ? buildTemplateAssignmentItems({
+        days: activeTemplateDays,
+        mode: selectedTemplateAssignMode,
+        selectedDayIndex: selectedTemplateDayIndex,
+        selectedDayIndexes: selectedTemplateAssignDayIndexes,
+        template: activePlanTemplate,
+      })
+    : [];
+  const usesActiveImportedTemplate = activePlanTemplate?.microcycleType === "imported-plan";
+  const assignmentPreviewStartDate =
+    activePlanTemplate
+      ? getImportedTemplateAssignmentStartDate(activePlanTemplate, assignmentPreviewItems) ??
+        assignedPlanForm.startDate
+      : assignedPlanForm.startDate;
   const selectedAssignedPlans = relevantAssignedPlans.filter((plan) =>
     selectedAssignedPlanIds.includes(plan.id),
   );
@@ -13846,52 +13888,47 @@ export function PageClient({
   const planningSceneMetrics = [
     {
       label: copyFor(language, {
-        en: "Phase",
-        ru: "Фаза",
-        bg: "Фаза",
-      }),
-      value: activePhaseLabel,
-      note: planningViewLabel,
-    },
-    {
-      label: copyFor(language, {
-        en: "Library",
-        ru: "Библиотека",
-        bg: "Библиотека",
+        en: "Templates",
+        ru: "Шаблоны",
+        bg: "Шаблони",
       }),
       value: String(planTemplates.length),
-      note: t("savedTemplates"),
+      note: copyFor(language, {
+        en: "ready for assignment",
+        ru: "готовы к назначению",
+        bg: "готови за назначаване",
+      }),
     },
     {
       label: copyFor(language, {
-        en: "Competition plans",
-        ru: "Планы стартов",
-        bg: "Планове за старт",
+        en: "Selected days",
+        ru: "Дней к назначению",
+        bg: "Дни за назначаване",
       }),
-      value: String(competitionPlans.length),
-      note: competitions.length
-        ? `${competitions.length} ${copyFor(language, {
-            en: "competitions",
-            ru: "соревнований",
-            bg: "състезания",
-          })}`
-        : ui("notGenerated"),
+      value: String(selectedTemplateAssignmentCount || activeTemplateDays.length),
+      note: activePlanTemplate
+        ? translateKnownTemplateText(activePlanTemplate.name, language)
+        : copyFor(language, { en: "No template", ru: "Нет шаблона", bg: "Няма шаблон" }),
     },
     {
       label: copyFor(language, {
-        en: "Mesocycles",
-        ru: "Мезоциклы",
-        bg: "Мезоцикли",
+        en: "Assigned",
+        ru: "Назначено",
+        bg: "Назначено",
       }),
-      value: String(mesocycles.length),
-      note:
-        templatePack?.warnings?.length
-          ? `${templatePack.warnings.length} ${warningsLabel.toLowerCase()}`
-          : copyFor(language, {
-              en: "No active warnings",
-              ru: "Нет активных предупреждений",
-              bg: "Няма активни предупреждения",
-            }),
+      value: String(relevantAssignedPlans.length),
+      note: selectedCoachAthlete?.fullName ?? ui("selectAthlete"),
+    },
+    {
+      label: copyFor(language, {
+        en: "Check",
+        ru: "Проверка",
+        bg: "Проверка",
+      }),
+      value: String(planningAssignmentIssueLabels.length),
+      note: planningAssignmentIssueLabels.length
+        ? copyFor(language, { en: "needs attention", ru: "нужно проверить", bg: "нужно внимание" })
+        : copyFor(language, { en: "ready", ru: "готово", bg: "готово" }),
     },
   ];
   const offlineSceneMetrics = [
@@ -14211,7 +14248,11 @@ export function PageClient({
       <div className="toggle-row compact-tab-row planning-nav-row workspace-stage-tabs">
         {planningTabs.map((tab) => (
           <button
-            className={planningView === tab.id ? "tab-active" : "tab-button"}
+            className={
+              planningView === tab.id || (tab.id === "advanced" && isPlanningAdvancedView)
+                ? "tab-active"
+                : "tab-button"
+            }
             key={tab.id}
             onClick={() => setPlanningView(tab.id)}
             type="button"
@@ -18199,7 +18240,9 @@ export function PageClient({
           >
             <div
               className={`planning-workgrid planning-workgrid-${planningView} ${
-                planningView === "weekly" ? "planning-workgrid-weekly" : ""
+                planningView === "weekly" || planningView === "auto-weekly"
+                  ? "planning-workgrid-weekly"
+                  : ""
               } ${
                 planningView === "season"
                   ? `planning-workgrid-season-${seasonDisplayMode}`
@@ -18216,7 +18259,7 @@ export function PageClient({
                 className="planning-template-tabs"
                 role="tablist"
               >
-                {(["library", "editor", "assign"] as const).map((tab) => (
+                {(["library", "editor"] as const).map((tab) => (
                   <button
                     aria-selected={templatePlanningTab === tab}
                     className={`planning-template-tab ${templatePlanningTab === tab ? "is-active" : ""}`}
@@ -18245,6 +18288,151 @@ export function PageClient({
                   </button>
                 ))}
               </div>
+            ) : null}
+
+            {isPlanningAdvancedView ? (
+              <div
+                aria-label={copyFor(language, {
+                  en: "Advanced planning tools",
+                  ru: "Дополнительные инструменты планирования",
+                  bg: "Допълнителни инструменти за планиране",
+                })}
+                className="planning-template-tabs planning-advanced-tabs"
+                role="tablist"
+              >
+                {([
+                  {
+                    id: "advanced" as const,
+                    label: copyFor(language, { en: "Overview", ru: "Обзор", bg: "Обзор" }),
+                  },
+                  {
+                    id: "auto-weekly" as const,
+                    label: copyFor(language, {
+                      en: "Auto week",
+                      ru: "Автосборка недели",
+                      bg: "Авто седмица",
+                    }),
+                  },
+                  {
+                    id: "preparation" as const,
+                    label: copyFor(language, {
+                      en: "Preparation strategy",
+                      ru: "Стратегия подготовки",
+                      bg: "Стратегия",
+                    }),
+                  },
+                  {
+                    id: "mesocycle" as const,
+                    label: copyFor(language, {
+                      en: "Mesocycles",
+                      ru: "Мезоциклы",
+                      bg: "Мезоцикли",
+                    }),
+                  },
+                ] satisfies Array<{ id: PlanningStudioView; label: string }>).map((tab) => (
+                  <button
+                    aria-selected={planningView === tab.id}
+                    className={`planning-template-tab ${planningView === tab.id ? "is-active" : ""}`}
+                    key={tab.id}
+                    onClick={() => setPlanningView(tab.id)}
+                    role="tab"
+                    type="button"
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+
+            {planningView === "advanced" ? (
+              <section className="entry-summary wide-card planning-advanced-overview">
+                <div className="summary-topline">
+                  <strong>
+                    {copyFor(language, {
+                      en: "Additional planning tools",
+                      ru: "Дополнительные инструменты",
+                      bg: "Допълнителни инструменти",
+                    })}
+                  </strong>
+                  <span>{mesocycles.length + competitionPlans.length + (templatePack ? 1 : 0)}</span>
+                </div>
+                <p className="placeholder-copy">
+                  {copyFor(language, {
+                    en: "These sections stay available, but they are no longer the first planning screen.",
+                    ru: "Эти разделы остаются доступными, но больше не мешают основному назначению плана.",
+                    bg: "Тези раздели остават достъпни, но вече не пречат на основното назначаване.",
+                  })}
+                </p>
+                <div className="planning-advanced-card-grid">
+                  {[
+                    {
+                      id: "auto-weekly" as const,
+                      title: copyFor(language, {
+                        en: "Automatic week assembly",
+                        ru: "Автосборка недели",
+                        bg: "Автоматична седмица",
+                      }),
+                      meta: `${templatePack?.items.length ?? 0} ${copyFor(language, {
+                        en: "slots",
+                        ru: "слотов",
+                        bg: "слота",
+                      })}`,
+                      text: copyFor(language, {
+                        en: "Planner warnings, suggestions, nearby days, and automatic weekly assignment.",
+                        ru: "Предупреждения, советы, ближайшие дни и автоматическое назначение недели.",
+                        bg: "Предупреждения, предложения, близки дни и автоматично назначаване.",
+                      }),
+                    },
+                    {
+                      id: "preparation" as const,
+                      title: copyFor(language, {
+                        en: "Preparation strategy",
+                        ru: "Стратегия подготовки",
+                        bg: "Стратегия",
+                      }),
+                      meta: `${preparationPlanStats.weeks} ${copyFor(language, {
+                        en: "weeks",
+                        ru: "нед.",
+                        bg: "седм.",
+                      })}`,
+                      text: copyFor(language, {
+                        en: "Period, goals, phases, monitoring rules, and exercise library.",
+                        ru: "Период, цели, фазы, правила контроля и библиотека упражнений.",
+                        bg: "Период, цели, фази, правила и библиотека с упражнения.",
+                      }),
+                    },
+                    {
+                      id: "mesocycle" as const,
+                      title: copyFor(language, {
+                        en: "Mesocycles",
+                        ru: "Мезоциклы",
+                        bg: "Мезоцикли",
+                      }),
+                      meta: `${mesocycles.length} ${copyFor(language, {
+                        en: "blocks",
+                        ru: "блоков",
+                        bg: "блока",
+                      })}`,
+                      text: copyFor(language, {
+                        en: "3-6 week training blocks, progression, and weekly targets.",
+                        ru: "Блоки на 3-6 недель, прогрессия и недельные цели.",
+                        bg: "Блокове от 3-6 седмици, прогресия и седмични цели.",
+                      }),
+                    },
+                  ].map((item) => (
+                    <button
+                      className="planning-advanced-card"
+                      key={item.id}
+                      onClick={() => setPlanningView(item.id)}
+                      type="button"
+                    >
+                      <span>{item.meta}</span>
+                      <strong>{item.title}</strong>
+                      <small>{item.text}</small>
+                    </button>
+                  ))}
+                </div>
+              </section>
             ) : null}
 
             {planningView === "preparation" ? (
@@ -22757,6 +22945,446 @@ export function PageClient({
             ) : null}
 
             {planningView === "weekly" ? (
+            <section className="planning-assignment-workspace wide-card">
+              <div className="summary-topline">
+                <div>
+                  <strong>
+                    {copyFor(language, {
+                      en: "Plan assignment",
+                      ru: "Назначение плана",
+                      bg: "Назначаване на план",
+                    })}
+                  </strong>
+                  <p className="placeholder-copy">
+                    {copyFor(language, {
+                      en: "Choose a template, check the training days, and assign it to the selected athlete.",
+                      ru: "Выберите шаблон, проверьте тренировочные дни и назначьте его выбранному спортсмену.",
+                      bg: "Изберете шаблон, проверете тренировъчните дни и го назначете на избрания спортист.",
+                    })}
+                  </p>
+                </div>
+                <span>{selectedCoachAthlete?.fullName ?? ui("selectAthlete")}</span>
+              </div>
+
+              <div className="planning-assignment-grid">
+                <section className="entry-summary planning-assignment-template-panel">
+                  <div className="summary-topline">
+                    <strong>
+                      {copyFor(language, {
+                        en: "1. Choose template",
+                        ru: "1. Выбрать шаблон",
+                        bg: "1. Избор на шаблон",
+                      })}
+                    </strong>
+                    <span>{planTemplates.length}</span>
+                  </div>
+                  <label className="field">
+                    <span>
+                      {copyFor(language, {
+                        en: "Template",
+                        ru: "Шаблон",
+                        bg: "Шаблон",
+                      })}
+                    </span>
+                    <select
+                      disabled={!planTemplates.length}
+                      onChange={(event) => {
+                        setAssignedPlanForm((current) => ({
+                          ...current,
+                          templateId: event.target.value,
+                        }));
+                        setImportedPlanDraft(null);
+                        setSavedImportedPlanTemplate(null);
+                        setTemplateImportNotice(null);
+                        setIsTemplateDraftActive(false);
+                        setSelectedTemplateDayIndex(0);
+                        setSelectedTemplateAssignDayIndexes([]);
+                      }}
+                      value={assignedPlanForm.templateId || activePlanTemplate?.id || ""}
+                    >
+                      {planTemplates.length ? null : (
+                        <option value="">
+                          {copyFor(language, { en: "No templates", ru: "Нет шаблонов", bg: "Няма шаблони" })}
+                        </option>
+                      )}
+                      {planTemplates.map((template) => (
+                        <option key={template.id} value={template.id}>
+                          {translateKnownTemplateText(template.name, language)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  {activePlanTemplate ? (
+                    <article className="planning-assignment-template-card">
+                      <span className="planning-template-library-kind">
+                        {countTemplateDays(activePlanTemplate) > 1
+                          ? copyFor(language, {
+                              en: "Multi-day plan",
+                              ru: "План на несколько дней",
+                              bg: "Многодневен план",
+                            })
+                          : copyFor(language, {
+                              en: "Day template",
+                              ru: "Шаблон дня",
+                              bg: "Шаблон за ден",
+                            })}
+                      </span>
+                      <strong>{translateKnownTemplateText(activePlanTemplate.name, language)}</strong>
+                      <small className="planning-template-library-meta">
+                        {translateKnownTemplateText(activePlanTemplate.sportType, language) || "-"} /{" "}
+                        {localizedOptionLabel(activePlanTemplate.phaseFocus, language, PREPARATION_PHASE_LABELS)} /{" "}
+                        {activePlanTemplate.microcycleType || "-"}
+                      </small>
+                      <div className="planning-template-library-stats">
+                        <span>
+                          <strong>{countTemplateDays(activePlanTemplate)}</strong>
+                          {copyFor(language, { en: "days", ru: "дней", bg: "дни" })}
+                        </span>
+                        <span>
+                          <strong>{countTemplateSessions(activePlanTemplate)}</strong>
+                          {copyFor(language, { en: "sessions", ru: "сессий", bg: "сесии" })}
+                        </span>
+                        <span>
+                          <strong>{activePlanTemplate.blockCount}</strong>
+                          {copyFor(language, { en: "blocks", ru: "блоков", bg: "блокове" })}
+                        </span>
+                        <span>
+                          <strong>{countTemplateExercises(activePlanTemplate)}</strong>
+                          {copyFor(language, { en: "exercises", ru: "упр.", bg: "упр." })}
+                        </span>
+                      </div>
+                      <em>
+                        {copyFor(language, {
+                          en: "Load",
+                          ru: "Нагрузка",
+                          bg: "Натоварване",
+                        })}: {activePlanTemplate.estimatedLoad}
+                      </em>
+                    </article>
+                  ) : (
+                    <p className="placeholder-copy">
+                      {copyFor(language, {
+                        en: "Create or import a template in the Templates section first.",
+                        ru: "Сначала создайте или импортируйте шаблон в разделе «Шаблоны».",
+                        bg: "Първо създайте или импортирайте шаблон в секцията Шаблони.",
+                      })}
+                    </p>
+                  )}
+
+                  <button
+                    className="secondary-button"
+                    onClick={() => setPlanningView("templates")}
+                    type="button"
+                  >
+                    {copyFor(language, {
+                      en: "Open templates",
+                      ru: "Открыть шаблоны",
+                      bg: "Отвори шаблони",
+                    })}
+                  </button>
+                </section>
+
+                <section className="entry-summary planning-assignment-review-panel">
+                  <div className="summary-topline">
+                    <strong>
+                      {copyFor(language, {
+                        en: "2. Check and assign",
+                        ru: "2. Проверить и назначить",
+                        bg: "2. Провери и назначи",
+                      })}
+                    </strong>
+                    <span>{selectedTemplateAssignmentCount}</span>
+                  </div>
+
+                  {planningAssignmentIssueLabels.length ? (
+                    <div className="planning-assignment-warning">
+                      {planningAssignmentIssueLabels.map((issue) => (
+                        <span key={issue}>{issue}</span>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="planning-assignment-ready">
+                      {copyFor(language, {
+                        en: "The plan is ready for assignment.",
+                        ru: "План готов к назначению.",
+                        bg: "Планът е готов за назначаване.",
+                      })}
+                    </div>
+                  )}
+
+                  <div className="planning-assignment-day-table">
+                    <div className="planning-assignment-day-head">
+                      <span>{copyFor(language, { en: "Date", ru: "Дата", bg: "Дата" })}</span>
+                      <span>{copyFor(language, { en: "Training day", ru: "Тренировочный день", bg: "Тренировъчен ден" })}</span>
+                      <span>{copyFor(language, { en: "Sessions", ru: "Тренировки", bg: "Тренировки" })}</span>
+                    </div>
+                    {assignmentTemplateDays.slice(0, 7).map((day, dayIndex) => {
+                      const isSelectedForAssignment = selectedTemplateAssignmentIndexes.includes(dayIndex);
+                      const previewItem = assignmentPreviewItems.find(
+                        (item) => item.templateDayIndex === dayIndex,
+                      );
+
+                      return (
+                        <div
+                          className={`planning-assignment-day-row ${
+                            isSelectedForAssignment ? "is-selected" : ""
+                          }`}
+                          key={`${day.label}-${dayIndex}`}
+                        >
+                          <strong>
+                            {shiftDateInputValue(
+                              assignmentPreviewStartDate,
+                              previewItem?.dayOffset ?? dayIndex,
+                            )}
+                          </strong>
+                          <span>{renderTrainingTextWithTooltips(translateKnownTemplateText(day.label, language))}</span>
+                          <span>
+                            {day.sessions.length}{" "}
+                            {copyFor(language, {
+                              en: "sessions",
+                              ru: "трен.",
+                              bg: "трен.",
+                            })}
+                          </span>
+                        </div>
+                      );
+                    })}
+                    {assignmentTemplateDays.length > 7 ? (
+                      <div className="planning-assignment-day-row planning-assignment-day-more">
+                        <strong>+{assignmentTemplateDays.length - 7}</strong>
+                        <span>
+                          {copyFor(language, {
+                            en: "more days are included in the assignment",
+                            ru: "ещё дней входит в назначение",
+                            bg: "още дни влизат в назначението",
+                          })}
+                        </span>
+                        <span>{selectedTemplateAssignmentCount}</span>
+                      </div>
+                    ) : null}
+                    {assignmentTemplateDays.length === 0 ? (
+                      <p className="placeholder-copy">
+                        {copyFor(language, {
+                          en: "No training days found in the selected template.",
+                          ru: "В выбранном шаблоне нет тренировочных дней.",
+                          bg: "В избрания шаблон няма тренировъчни дни.",
+                        })}
+                      </p>
+                    ) : null}
+                  </div>
+
+                  <div className="planning-template-mode-group planning-assignment-mode-group">
+                    <span>
+                      {copyFor(language, {
+                        en: "Assign",
+                        ru: "Назначить",
+                        bg: "Назначи",
+                      })}
+                    </span>
+                    <div className="planning-template-mode-buttons">
+                      {(["full", "week", "selected"] as const).map((mode) => (
+                        <button
+                          className={selectedTemplateAssignMode === mode ? "is-active" : ""}
+                          key={mode}
+                          onClick={() => {
+                            setSelectedTemplateAssignMode(mode);
+                            if (mode === "selected" && selectedTemplateAssignDayIndexes.length === 0) {
+                              setSelectedTemplateAssignDayIndexes([normalizedSelectedTemplateDayIndex]);
+                            }
+                          }}
+                          type="button"
+                        >
+                          {mode === "full"
+                            ? copyFor(language, { en: "Full plan", ru: "Весь план", bg: "Целият план" })
+                            : mode === "week"
+                              ? copyFor(language, { en: "Week", ru: "Неделя", bg: "Седмица" })
+                              : copyFor(language, { en: "Selected days", ru: "Выбранные дни", bg: "Избрани дни" })}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {selectedTemplateAssignMode === "selected" && assignmentTemplateDays.length ? (
+                    <div className="planning-template-selected-days planning-assignment-selected-days">
+                      {assignmentTemplateDays.map((day, dayIndex) => (
+                        <label key={`${day.label}-${dayIndex}`}>
+                          <input
+                            checked={selectedTemplateAssignDayIndexes.includes(dayIndex)}
+                            onChange={(event) =>
+                              setSelectedTemplateAssignDayIndexes((current) =>
+                                event.target.checked
+                                  ? current.includes(dayIndex)
+                                    ? current
+                                    : [...current, dayIndex]
+                                  : current.filter((index) => index !== dayIndex),
+                              )
+                            }
+                            type="checkbox"
+                          />
+                          <span>{translateKnownTemplateText(day.label, language)}</span>
+                        </label>
+                      ))}
+                    </div>
+                  ) : null}
+
+                  <div className="planning-assignment-controls">
+                    <label className="field">
+                      <span>{t("startDate")}</span>
+                      <input
+                        disabled={usesActiveImportedTemplate}
+                        onChange={(event) =>
+                          setAssignedPlanForm((current) => ({
+                            ...current,
+                            startDate: event.target.value,
+                          }))
+                        }
+                        type="date"
+                        value={usesActiveImportedTemplate ? assignmentPreviewStartDate : assignedPlanForm.startDate}
+                      />
+                      {usesActiveImportedTemplate ? (
+                        <small>
+                          {copyFor(language, {
+                            en: "The date is taken from the imported plan.",
+                            ru: "Дата взята из импортированного плана.",
+                            bg: "Датата е взета от импортирания план.",
+                          })}
+                        </small>
+                      ) : null}
+                    </label>
+                    <label className="field">
+                      <span>{t("plannedPhase")}</span>
+                      <select
+                        value={assignedPlanForm.plannedPhase ?? ""}
+                        onChange={(event) =>
+                          setAssignedPlanForm((current) => ({
+                            ...current,
+                            plannedPhase:
+                              event.target.value === ""
+                                ? null
+                                : (event.target.value as AssignedPlanPayload["plannedPhase"]),
+                          }))
+                        }
+                      >
+                        <option value="">{t("autoFromCompetitionContext")}</option>
+                        {PREPARATION_PHASE_VALUES.map((phase) => (
+                          <option key={phase} value={phase}>
+                            {localizedOptionLabel(phase, language, PREPARATION_PHASE_LABELS)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="field planning-assignment-notes">
+                      <span>{t("coachNotes")}</span>
+                      <input
+                        value={assignedPlanForm.notes}
+                        onChange={(event) =>
+                          setAssignedPlanForm((current) => ({
+                            ...current,
+                            notes: event.target.value,
+                          }))
+                        }
+                      />
+                    </label>
+                  </div>
+
+                  <div className="planning-assignment-actions">
+                    <button
+                      className="primary-button"
+                      disabled={
+                        busy ||
+                        planningAssignmentIssueLabels.length > 0 ||
+                        (!importedPlanDraft && !isTemplateDraftActive && !activePlanTemplate)
+                      }
+                      onClick={() =>
+                        void (importedPlanDraft ? handleAssignImportedPlan() : handleAssignActivePlanTemplate())
+                      }
+                      type="button"
+                    >
+                      {busy
+                        ? ui("assigning")
+                        : copyFor(language, {
+                            en: "Assign to selected athlete",
+                            ru: "Назначить выбранному спортсмену",
+                            bg: "Назначи на избрания спортист",
+                          })}
+                    </button>
+                    <button
+                      className="secondary-button"
+                      disabled={busy || !templateWorkspaceDays.length}
+                      onClick={() => void handleSaveCurrentPlanTemplate()}
+                      type="button"
+                    >
+                      {copyFor(language, {
+                        en: "Save as template",
+                        ru: "Сохранить как шаблон",
+                        bg: "Запази като шаблон",
+                      })}
+                    </button>
+                  </div>
+                </section>
+              </div>
+
+              <section className="entry-summary planning-assignment-current-panel">
+                <div className="summary-topline">
+                  <strong>
+                    {copyFor(language, {
+                      en: "Assigned plans",
+                      ru: "Назначенные планы",
+                      bg: "Назначени планове",
+                    })}
+                  </strong>
+                  <span>{relevantAssignedPlans.length}</span>
+                </div>
+                {relevantAssignedPlans.length === 0 ? (
+                  <p className="placeholder-copy">{ui("noActiveAssignments")}</p>
+                ) : (
+                  <div className="planning-assignment-current-grid">
+                    <label className="field">
+                      <span>
+                        {copyFor(language, {
+                          en: "Show assigned day",
+                          ru: "Показать назначение",
+                          bg: "Покажи назначение",
+                        })}
+                      </span>
+                      <select
+                        onChange={(event) => setSelectedAssignedPlanPreviewId(event.target.value)}
+                        value={selectedAssignedPlanPreview?.id ?? ""}
+                      >
+                        {relevantAssignedPlans.map((plan) => (
+                          <option key={plan.id} value={plan.id}>
+                            {plan.athleteName} · {plan.day.dayDate} ·{" "}
+                            {localizedPlannerDayLabel(plan.day.label, language)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    {selectedAssignedPlanPreview ? (
+                      <article className="planning-assignment-current-card">
+                        <strong>
+                          {selectedAssignedPlanPreview.athleteName}:{" "}
+                          {localizedPlannerDayLabel(selectedAssignedPlanPreview.day.label, language)}
+                        </strong>
+                        <span>{translateKnownTemplateText(selectedAssignedPlanPreview.templateName, language)}</span>
+                        <small>
+                          {selectedAssignedPlanPreview.day.sessions.length}{" "}
+                          {copyFor(language, { en: "sessions", ru: "тренировок", bg: "тренировки" })} /{" "}
+                          {selectedAssignedPlanPreview.day.sessions.reduce(
+                            (total, session) => total + session.blocks.length,
+                            0,
+                          )}{" "}
+                          {copyFor(language, { en: "blocks", ru: "блоков", bg: "блока" })}
+                        </small>
+                      </article>
+                    ) : null}
+                  </div>
+                )}
+              </section>
+            </section>
+            ) : null}
+
+            {planningView === "auto-weekly" ? (
             <form className="auth-form wide-form planning-main-form planning-weekly-form" onSubmit={handleAutoAssignMicrocycleSubmit}>
               <h3>
                 {copyFor(language, {
@@ -23331,7 +23959,7 @@ export function PageClient({
             </form>
             ) : null}
 
-            {planningView === "weekly" ? (
+            {planningView === "auto-weekly" ? (
             <div className="entry-summary wide-card planning-review-card">
                 <div className="summary-topline">
                 <strong>
