@@ -6747,18 +6747,6 @@ function buildExecutionExerciseDrafts(
   }));
 }
 
-function getExecutionExerciseDraft(
-  block: AthleteExecutionBlock,
-  draft: ExecutionDraft,
-  assignedExerciseId: string,
-) {
-  return (
-    buildExecutionExerciseDrafts(block, draft)
-      .find((exercise) => exercise.assignedExerciseId === assignedExerciseId) ??
-    createEmptyExecutionExerciseDraft(assignedExerciseId)
-  );
-}
-
 function normalizeTemplatePackItems(items: TemplatePackDraftItem[]) {
   return [...items]
     .sort((left, right) => left.dayOffset - right.dayOffset)
@@ -7044,6 +7032,28 @@ function formatAssignedPlanDisplayVolume(
 
     if (exerciseVolume && exerciseVolume !== "-") {
       return exerciseVolume;
+    }
+  }
+
+  const exercises = [...(block.exercises ?? [])].sort((left, right) => left.orderIndex - right.orderIndex);
+
+  if (exercises.length > 0) {
+    const exerciseVolumes = exercises
+      .map((exercise) => {
+        const volume = formatAssignedExerciseVolume(exercise, language, block.notes, ...commonNotes);
+        const exerciseName = normalizeImportedPlanText(exercise.name);
+        const blockName = normalizeImportedPlanText(block.name);
+
+        if (!volume || volume === "-") {
+          return "";
+        }
+
+        return exerciseName && exerciseName !== blockName ? `${exercise.name}: ${volume}` : volume;
+      })
+      .filter(Boolean);
+
+    if (exerciseVolumes.length > 0) {
+      return exerciseVolumes.join("; ");
     }
   }
 
@@ -9307,30 +9317,6 @@ export function PageClient({
         [block.id]: {
           ...currentDraft,
           completed,
-          exercises,
-        },
-      };
-    });
-  }
-
-  function updateExecutionExerciseDraft(
-    block: AthleteExecutionBlock,
-    assignedExerciseId: string,
-    patch: Partial<ExecutionExerciseDraft>,
-  ) {
-    setExecutionDrafts((current) => {
-      const currentDraft = current[block.id] ?? emptyExecutionDraft;
-      const exercises = buildExecutionExerciseDrafts(block, currentDraft).map((exercise) =>
-        exercise.assignedExerciseId === assignedExerciseId
-          ? { ...exercise, ...patch, assignedExerciseId }
-          : exercise,
-      );
-
-      return {
-        ...current,
-        [block.id]: {
-          ...currentDraft,
-          completed: exercises.length > 0 ? exercises.every((exercise) => exercise.completed) : currentDraft.completed,
           exercises,
         },
       };
@@ -15383,61 +15369,29 @@ export function PageClient({
                                   block.notes,
                                   activeAthleteTrainingDayNotes,
                                 );
-                                const repeatedExercise = getRepeatedSingleExerciseBlock(block);
-                                const repeatedExerciseVolume = repeatedExercise
-                                  ? formatAssignedExerciseVolume(
-                                      repeatedExercise,
-                                      language,
-                                      activeAthleteTrainingDayNotes,
-                                      block.notes,
-                                    )
-                                  : "";
+                                const blockDisplayVolume = formatAssignedPlanDisplayVolume(
+                                  block,
+                                  language,
+                                  activeAthleteTrainingDayNotes,
+                                );
+                                const shouldRenderBlockNote = Boolean(
+                                  visibleBlockNote && visibleBlockNote !== blockDisplayVolume,
+                                );
 
                                 return (
-                                  <article className="athlete-plan-block-row" key={block.id}>
-                                    {repeatedExercise ? (
-                                      <div className="assigned-exercise-list athlete-plan-exercise-list">
-                                        <div className="assigned-exercise-row assigned-exercise-row-primary">
-                                          <strong>{renderTrainingTextWithTooltips(repeatedExercise.name)}</strong>
-                                          <span>
-                                            {renderTrainingTextWithTooltips(repeatedExerciseVolume || "-")}
-                                          </span>
-                                        </div>
-                                      </div>
-                                    ) : (
-                                      <div className="summary-topline">
-                                        <div>
-                                          <strong>
-                                            {renderTrainingTextWithTooltips(
-                                              translateKnownTemplateText(block.name, language),
-                                            )}
-                                          </strong>
-                                        </div>
-                                      </div>
-                                    )}
-                                    {visibleBlockNote ? (
+                                  <article className="athlete-plan-block-row athlete-plan-table-row" key={block.id}>
+                                    <div>
+                                      <strong>
+                                        {renderTrainingTextWithTooltips(
+                                          translateKnownTemplateText(block.name, language),
+                                        )}
+                                      </strong>
+                                    </div>
+                                    <span>{renderTrainingTextWithTooltips(blockDisplayVolume || "-")}</span>
+                                    {shouldRenderBlockNote ? (
                                       <p className="assigned-block-note">
                                         {renderTrainingTextWithTooltips(visibleBlockNote)}
                                       </p>
-                                    ) : null}
-                                    {!repeatedExercise && (block.exercises ?? []).length > 0 ? (
-                                      <div className="assigned-exercise-list athlete-plan-exercise-list">
-                                        {(block.exercises ?? []).map((exercise) => (
-                                          <div className="assigned-exercise-row" key={exercise.id}>
-                                            <strong>{renderTrainingTextWithTooltips(exercise.name)}</strong>
-                                            <span>
-                                              {renderTrainingTextWithTooltips(
-                                                formatAssignedExerciseVolume(
-                                                  exercise,
-                                                  language,
-                                                  activeAthleteTrainingDayNotes,
-                                                  block.notes,
-                                                ),
-                                              )}
-                                            </span>
-                                          </div>
-                                        ))}
-                                      </div>
                                     ) : null}
                                   </article>
                                 );
@@ -15693,7 +15647,6 @@ export function PageClient({
                           const shouldRenderBlockNote = Boolean(
                             visibleBlockNote && visibleBlockNote !== blockDisplayVolume,
                           );
-                          const displayExercise = getAssignedPlanDisplayExercise(block);
                           const blockSelected = draft.completed;
 
                           return (
@@ -15725,51 +15678,6 @@ export function PageClient({
                                 <p className="assigned-block-note">
                                   {renderTrainingTextWithTooltips(visibleBlockNote)}
                                 </p>
-                              ) : null}
-                              {!displayExercise && (block.exercises ?? []).length > 0 ? (
-                                <div className="assigned-exercise-list athlete-execution-exercise-list">
-                                  {(block.exercises ?? []).map((exercise) => {
-                                    const exerciseDraft = getExecutionExerciseDraft(
-                                      block,
-                                      draft,
-                                      exercise.id,
-                                    );
-
-                                    return (
-                                      <div
-                                        className={`assigned-exercise-row ${
-                                          exerciseDraft.completed ? "is-selected" : ""
-                                        }`}
-                                        key={exercise.id}
-                                      >
-                                        <label className="exercise-completion-toggle athlete-execution-exercise-toggle">
-                                          <input
-                                            checked={exerciseDraft.completed}
-                                            onChange={(event) =>
-                                              updateExecutionExerciseDraft(block, exercise.id, {
-                                                completed: event.target.checked,
-                                              })
-                                            }
-                                            type="checkbox"
-                                          />
-                                          <span>
-                                            <strong>{renderTrainingTextWithTooltips(exercise.name)}</strong>
-                                            <small>
-                                              {renderTrainingTextWithTooltips(
-                                                formatAssignedExerciseVolume(
-                                                  exercise,
-                                                  language,
-                                                  activeAthleteTrainingDayNotes,
-                                                  block.notes,
-                                                ),
-                                              )}
-                                            </small>
-                                          </span>
-                                        </label>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
                               ) : null}
                             </div>
                           );

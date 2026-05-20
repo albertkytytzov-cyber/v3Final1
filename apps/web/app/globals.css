@@ -2618,6 +2618,28 @@ td {
   background: rgba(248, 250, 252, 0.78);
 }
 
+.athlete-plan-table-row {
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  align-items: start;
+}
+
+.athlete-plan-table-row > div,
+.athlete-plan-table-row > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.athlete-plan-table-row > span {
+  color: var(--muted-strong);
+  font-size: 0.86rem;
+  font-weight: 760;
+  line-height: 1.45;
+}
+
+.athlete-plan-table-row .assigned-block-note {
+  grid-column: 1 / -1;
+}
+
 .athlete-plan-block-row .summary-topline span {
   color: var(--muted-strong);
   font-size: 0.76rem;

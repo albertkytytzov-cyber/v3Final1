@@ -5225,7 +5225,7 @@ function renderExecutionPlanGroup(
                 <div class="mobile-plan-table ${compactAthlete ? "is-athlete-simple" : ""}">
                   ${compactAthlete ? "" : `
                     <div class="mobile-plan-table-head">
-                      <span>Упр.</span>
+                      <span>Блок</span>
                       <span>Объём</span>
                     </div>
                   `}
@@ -5407,6 +5407,10 @@ function isRepeatedSingleExerciseBlock(block: { name: string; exercises?: Array<
 }
 
 function formatUnifiedSessionBlockTarget(block: AssignedPlanBlock) {
+  return formatAssignedPlanDisplayVolume(block);
+}
+
+function formatAssignedPlanDisplayVolume(block: AssignedPlanBlock) {
   const exercises = getSortedBlockExercises(block);
 
   if (exercises.length === 0) {
@@ -5417,9 +5421,23 @@ function formatUnifiedSessionBlockTarget(block: AssignedPlanBlock) {
     return formatAssignedPlanExerciseVolume(exercises[0]);
   }
 
-  return exercises
-    .map((exercise) => `${exercise.name}: ${formatAssignedPlanExerciseVolume(exercise)}`)
-    .join("; ");
+  const exerciseVolumes = exercises
+    .map((exercise) => {
+      const volume = formatAssignedPlanExerciseVolume(exercise);
+      const blockName = normalizeRepeatedExerciseName(block.name);
+      const exerciseName = normalizeRepeatedExerciseName(exercise.name);
+
+      if (!volume || volume === "-") {
+        return "";
+      }
+
+      return blockName && exerciseName !== blockName ? `${exercise.name}: ${volume}` : volume;
+    })
+    .filter(Boolean);
+
+  return exerciseVolumes.length > 0
+    ? exerciseVolumes.join("; ")
+    : formatAssignedPlanBlockVolume(block);
 }
 
 function renderExecutionDayAnalyticsCard(
@@ -5557,7 +5575,9 @@ function renderExecutionBlockForm(
     <form class="mobile-execution-row-form" data-execution-form>
       <input name="assignedPlanId" type="hidden" value="${escapeHtml(item.plan.id)}" />
       <input name="assignedBlockId" type="hidden" value="${escapeHtml(item.block.id)}" />
-      ${exercises.length > 0
+      ${options.compactAthlete
+        ? renderExecutionBlockFallbackRow(item.block, result, options)
+        : exercises.length > 0
         ? exercises
             .slice()
             .sort((a, b) => a.orderIndex - b.orderIndex)
@@ -5611,7 +5631,7 @@ function renderExecutionBlockFallbackRow(
   options: ExecutionPlanGroupRenderOptions = {},
 ) {
   const plannedWork = options.compactAthlete
-    ? formatAssignedPlanBlockVolume(block)
+    ? formatAssignedPlanDisplayVolume(block)
     : formatBlockTarget(block);
 
   return `
@@ -5776,7 +5796,7 @@ function renderPlanCard(plan: AssignedPlanSummary, isCoachView = false) {
               : `
                 <div class="mobile-plan-table">
                   <div class="mobile-plan-table-head">
-                    <span>Упр.</span>
+                    <span>Блок</span>
                     <span>Объём</span>
                   </div>
                   ${session.blocks.map((block) => renderPlanBlock(block)).join("")}
@@ -5790,20 +5810,11 @@ function renderPlanCard(plan: AssignedPlanSummary, isCoachView = false) {
 }
 
 function renderPlanBlock(block: AssignedPlanBlock) {
-  const exercises = (block.exercises ?? []).slice().sort((a, b) => a.orderIndex - b.orderIndex);
-
   return `
-    ${exercises.length > 0 ? exercises.map((exercise) => `
-      <div class="mobile-plan-row">
-        <span class="mobile-plan-exercise-name-static">${renderTrainingTextWithAbbreviationHints(exercise.name)}</span>
-        <span class="mobile-plan-cell mobile-plan-work">${renderTrainingTextWithAbbreviationHints(formatExerciseWorkCell(exercise))}</span>
-      </div>
-    `).join("") : `
-      <div class="mobile-plan-row">
-        <span class="mobile-plan-exercise-name-static">${renderTrainingTextWithAbbreviationHints(block.name)}</span>
-        <span class="mobile-plan-cell mobile-plan-work">${renderTrainingTextWithAbbreviationHints(formatBlockTarget(block))}</span>
-      </div>
-    `}
+    <div class="mobile-plan-row">
+      <span class="mobile-plan-exercise-name-static">${renderTrainingTextWithAbbreviationHints(block.name)}</span>
+      <span class="mobile-plan-cell mobile-plan-work">${renderTrainingTextWithAbbreviationHints(formatAssignedPlanDisplayVolume(block))}</span>
+    </div>
   `;
 }
 
