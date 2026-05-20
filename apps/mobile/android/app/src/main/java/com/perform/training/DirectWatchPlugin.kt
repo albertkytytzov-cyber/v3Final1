@@ -703,7 +703,21 @@ class DirectWatchPlugin : Plugin() {
     }
 
     private fun standardCharacteristicReads(services: List<BluetoothGattService>): List<StandardCharacteristicRead> {
-        return listOfNotNull(
+        val requests = mutableListOf<StandardCharacteristicRead>()
+        val seenCharacteristics = mutableSetOf<String>()
+
+        fun addRequest(request: StandardCharacteristicRead?) {
+            if (request == null) {
+                return
+            }
+
+            val key = "${request.serviceUuid}:${request.characteristic.uuid}"
+            if (seenCharacteristics.add(key)) {
+                requests.add(request)
+            }
+        }
+
+        listOfNotNull(
             standardReadRequest(services, BATTERY_SERVICE_UUID, BATTERY_LEVEL_UUID, "battery", "Battery Level"),
             standardReadRequest(services, DEVICE_INFO_SERVICE_UUID, MANUFACTURER_NAME_UUID, "manufacturer", "Manufacturer Name"),
             standardReadRequest(services, DEVICE_INFO_SERVICE_UUID, MODEL_NUMBER_UUID, "model", "Model Number"),
@@ -712,7 +726,27 @@ class DirectWatchPlugin : Plugin() {
             standardReadRequest(services, DEVICE_INFO_SERVICE_UUID, HARDWARE_REVISION_UUID, "hardware", "Hardware Revision"),
             standardReadRequest(services, DEVICE_INFO_SERVICE_UUID, SOFTWARE_REVISION_UUID, "software", "Software Revision"),
             standardReadRequest(services, HEART_RATE_SERVICE_UUID, BODY_SENSOR_LOCATION_UUID, "body-sensor", "Body Sensor Location"),
-        )
+        ).forEach(::addRequest)
+
+        for (service in services) {
+            for (characteristic in service.characteristics) {
+                if (!isReadableCharacteristic(characteristic)) {
+                    continue
+                }
+
+                val knownName = knownCharacteristicName(characteristic.uuid)
+                addRequest(
+                    StandardCharacteristicRead(
+                        serviceUuid = service.uuid,
+                        characteristic = characteristic,
+                        kind = "unknown",
+                        name = if (knownName != "Unknown") knownName else "Readable ${shortUuid(characteristic.uuid)}",
+                    ),
+                )
+            }
+        }
+
+        return requests.take(MAX_STANDARD_READS)
     }
 
     private fun standardReadRequest(
@@ -797,6 +831,11 @@ class DirectWatchPlugin : Plugin() {
     private fun isBluetoothSigUuid(uuid: UUID): Boolean {
         val value = uuid.toString().lowercase(Locale.ROOT)
         return value.startsWith("0000") && value.endsWith("-0000-1000-8000-00805f9b34fb")
+    }
+
+    private fun shortUuid(uuid: UUID): String {
+        val value = uuid.toString().lowercase(Locale.ROOT)
+        return if (isBluetoothSigUuid(uuid)) value.substring(4, 8) else value.take(8)
     }
 
     private fun knownServiceName(uuid: UUID): String {
@@ -957,6 +996,7 @@ class DirectWatchPlugin : Plugin() {
         private const val DEFAULT_SCAN_DURATION_MS = 6_000
         private const val INSPECT_TIMEOUT_MS = 10_000
         private const val PAIR_TIMEOUT_MS = 30_000
+        private const val MAX_STANDARD_READS = 18
         private val PAIRING_TIMEOUT_TOKEN = Any()
         private val HEART_RATE_SERVICE_UUID: UUID = UUID.fromString("0000180d-0000-1000-8000-00805f9b34fb")
         private val HEART_RATE_MEASUREMENT_UUID: UUID = UUID.fromString("00002a37-0000-1000-8000-00805f9b34fb")
