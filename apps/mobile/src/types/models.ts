@@ -184,10 +184,14 @@ export interface MobileAppState {
       deviceName?: string | null;
       deviceType?: "classic" | "dual" | "le" | "unknown" | null;
       deviceTypeCode?: number | null;
+      canReadBatteryLevel?: boolean;
+      canReadDeviceInfo?: boolean;
+      canSubscribeHeartRate?: boolean;
       hasBatteryService?: boolean;
       hasDeviceInfoService?: boolean;
       hasHeartRateService?: boolean;
       inspectedAt?: string | null;
+      proprietaryServiceCount?: number;
       serviceCount?: number;
       services?: Array<{
         uuid: string;
@@ -198,6 +202,18 @@ export interface MobileAppState {
           properties?: string[];
         }>;
       }>;
+      standardReadings?: Array<{
+        error?: string | null;
+        kind?: "battery" | "manufacturer" | "model" | "serial" | "firmware" | "hardware" | "software" | "body-sensor" | "unknown" | null;
+        name?: string | null;
+        numericValue?: number | null;
+        rawHex?: string | null;
+        serviceUuid?: string | null;
+        status?: string | null;
+        textValue?: string | null;
+        uuid: string;
+      }>;
+      unknownServiceCount?: number;
     } | null;
     scannedAt: string | null;
   };

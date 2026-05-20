@@ -32,6 +32,18 @@ export interface DirectWatchCharacteristic {
   properties?: string[];
 }
 
+export interface DirectWatchStandardReading {
+  error?: string | null;
+  kind?: "battery" | "manufacturer" | "model" | "serial" | "firmware" | "hardware" | "software" | "body-sensor" | "unknown" | null;
+  name?: string | null;
+  numericValue?: number | null;
+  rawHex?: string | null;
+  serviceUuid?: string | null;
+  status?: "read" | "not-readable" | "error" | string | null;
+  textValue?: string | null;
+  uuid: string;
+}
+
 export interface DirectWatchService {
   uuid: string;
   name?: string | null;
@@ -45,12 +57,18 @@ export interface DirectWatchInspection {
   deviceName?: string | null;
   deviceType?: "classic" | "dual" | "le" | "unknown" | null;
   deviceTypeCode?: number | null;
+  canReadBatteryLevel?: boolean;
+  canReadDeviceInfo?: boolean;
+  canSubscribeHeartRate?: boolean;
   hasBatteryService?: boolean;
   hasDeviceInfoService?: boolean;
   hasHeartRateService?: boolean;
   inspectedAt?: string | null;
+  proprietaryServiceCount?: number;
   serviceCount?: number;
   services?: DirectWatchService[];
+  standardReadings?: DirectWatchStandardReading[];
+  unknownServiceCount?: number;
 }
 
 export interface DirectWatchPairingResult {
@@ -120,6 +138,11 @@ export async function scanDirectWatchDevices(): Promise<DirectWatchScanResult> {
     devices: Array.isArray(result.devices) ? result.devices.map(normalizeDirectWatchDevice) : [],
     scannedAt: normalizeString(result.scannedAt),
   };
+}
+
+export function isDirectWatchRuntime() {
+  const capacitor = (globalThis as CapacitorWithDirectWatch).Capacitor;
+  return capacitor?.Plugins?.DirectWatch !== undefined;
 }
 
 export async function inspectDirectWatchDevice(deviceId: string): Promise<DirectWatchInspection> {
@@ -198,6 +221,9 @@ function normalizeDirectWatchInspection(value: unknown): DirectWatchInspection {
   return {
     bondState: normalizeBluetoothState(value.bondState),
     bondStateCode: normalizeNumber(value.bondStateCode),
+    canReadBatteryLevel: normalizeBoolean(value.canReadBatteryLevel),
+    canReadDeviceInfo: normalizeBoolean(value.canReadDeviceInfo),
+    canSubscribeHeartRate: normalizeBoolean(value.canSubscribeHeartRate),
     deviceId: normalizeString(value.deviceId) ?? "",
     deviceName: normalizeString(value.deviceName),
     deviceType: normalizeDeviceType(value.deviceType),
@@ -206,10 +232,15 @@ function normalizeDirectWatchInspection(value: unknown): DirectWatchInspection {
     hasDeviceInfoService: normalizeBoolean(value.hasDeviceInfoService),
     hasHeartRateService: normalizeBoolean(value.hasHeartRateService),
     inspectedAt: normalizeString(value.inspectedAt),
+    proprietaryServiceCount: normalizeNumber(value.proprietaryServiceCount) ?? 0,
     serviceCount: normalizeNumber(value.serviceCount) ?? 0,
     services: Array.isArray(value.services)
       ? value.services.map(normalizeDirectWatchService)
       : [],
+    standardReadings: Array.isArray(value.standardReadings)
+      ? value.standardReadings.map(normalizeDirectWatchStandardReading)
+      : [],
+    unknownServiceCount: normalizeNumber(value.unknownServiceCount) ?? 0,
   };
 }
 
@@ -253,6 +284,24 @@ function normalizeDirectWatchCharacteristic(value: unknown): DirectWatchCharacte
     properties: Array.isArray(value.properties)
       ? value.properties.map((property) => normalizeString(property)).filter((property): property is string => Boolean(property))
       : [],
+    uuid: normalizeString(value.uuid) ?? "",
+  };
+}
+
+function normalizeDirectWatchStandardReading(value: unknown): DirectWatchStandardReading {
+  if (!isRecord(value)) {
+    return { uuid: "" };
+  }
+
+  return {
+    error: normalizeString(value.error),
+    kind: normalizeStandardReadingKind(value.kind),
+    name: normalizeString(value.name),
+    numericValue: normalizeNumber(value.numericValue),
+    rawHex: normalizeString(value.rawHex),
+    serviceUuid: normalizeString(value.serviceUuid),
+    status: normalizeString(value.status),
+    textValue: normalizeString(value.textValue),
     uuid: normalizeString(value.uuid) ?? "",
   };
 }
@@ -305,6 +354,21 @@ function normalizeDeviceType(value: unknown) {
   return normalized === "classic" ||
     normalized === "dual" ||
     normalized === "le" ||
+    normalized === "unknown"
+    ? normalized
+    : null;
+}
+
+function normalizeStandardReadingKind(value: unknown) {
+  const normalized = normalizeString(value);
+  return normalized === "battery" ||
+    normalized === "manufacturer" ||
+    normalized === "model" ||
+    normalized === "serial" ||
+    normalized === "firmware" ||
+    normalized === "hardware" ||
+    normalized === "software" ||
+    normalized === "body-sensor" ||
     normalized === "unknown"
     ? normalized
     : null;

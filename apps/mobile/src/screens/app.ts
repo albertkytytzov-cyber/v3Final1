@@ -16,6 +16,7 @@ import {
 } from "../integrations/health-connect.js";
 import {
   inspectDirectWatchDevice,
+  isDirectWatchRuntime,
   pairDirectWatchDevice,
   scanDirectWatchDevices,
 } from "../integrations/direct-watch.js";
@@ -65,7 +66,7 @@ import type {
 } from "../types/models.js";
 
 const runtimeConfig = readRuntimeConfig();
-const SHOW_DIRECT_WATCH_DIAGNOSTICS = false;
+const SHOW_DIRECT_WATCH_DIAGNOSTICS = true;
 const TRAINING_ABBREVIATION_EXPLANATIONS: Record<string, string> = {
   "АНП": "Анаэробный порог. Граница между устойчивой работой и зоной, где усталость начинает быстро накапливаться. Если в плане указана работа около АнП, держи высокую, но контролируемую интенсивность без развала техники.",
   "HR": "Пульс / частота сердечных сокращений. Используется для контроля интенсивности нагрузки. Если указан диапазон HR, держи работу примерно в этом пульсовом коридоре, не уходя сильно выше или ниже.",
@@ -620,9 +621,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
         },
         error: null,
         isBusy: false,
-        message: inspection.hasHeartRateService
-          ? "Часы отдают стандартный сервис пульса. Следующий шаг — чтение живого пульса во время тренировки."
-          : "Часы подключились, но стандартный сервис пульса не найден. Данные могут быть закрыты протоколом Xiaomi.",
+        message: formatDirectWatchInspectionMessage(inspection),
       });
     } catch (error) {
       update({
@@ -2523,7 +2522,7 @@ function renderDeviceHealthCard(
         </article>
       </div>
       ${renderHealthConnectDiagnostics(summary, options.diagnosticsCollapsed === true)}
-      ${canSync && SHOW_DIRECT_WATCH_DIAGNOSTICS ? renderDirectWatchDiagnostics(state) : ""}
+      ${canSync && SHOW_DIRECT_WATCH_DIAGNOSTICS && isDirectWatchRuntime() ? renderDirectWatchDiagnostics(state) : ""}
       ${workouts.length ? `
         <div class="device-health-signal-list">
           ${workouts.map((workout) => `
@@ -2601,6 +2600,7 @@ function renderCompactDeviceHealthCard(
           </button>
         </div>
       ` : ""}
+      ${canSync && SHOW_DIRECT_WATCH_DIAGNOSTICS && isDirectWatchRuntime() ? renderDirectWatchDiagnostics(state) : ""}
     </section>
   `;
 }
@@ -2624,15 +2624,15 @@ function renderDirectWatchDiagnostics(state: MobileAppState) {
     <div class="device-health-diagnostics direct-watch-diagnostics">
       <div class="summary-inline-head">
         <div>
-          <span>Прямое подключение часов</span>
-          <h3>Redmi Watch 5 через Bluetooth</h3>
+          <span>PERFORM Sync</span>
+          <h3>Диагностика прямого подключения</h3>
         </div>
         <button class="secondary-action" data-direct-watch-scan type="button" ${state.isBusy ? "disabled" : ""}>
           Найти часы
         </button>
       </div>
       <p>
-        Этот блок проверяет, какие данные часы отдают напрямую телефону. Пока это диагностика: поиск часов и проверка BLE-сервисов, без записи тренировки.
+        Android проверяет часы напрямую по Bluetooth: поиск, сопряжение, BLE-сервисы и стандартные значения. Пока это диагностика без записи тренировки.
       </p>
       ${diagnostic.scannedAt ? `<p class="muted-copy">Последний поиск: ${escapeHtml(formatDateTime(diagnostic.scannedAt))}</p>` : ""}
       ${devices.length ? `
@@ -2677,8 +2677,8 @@ function renderDirectWatchDiagnostics(state: MobileAppState) {
       `}
       ${inspection ? `
         <div class="direct-watch-inspection">
-          <div class="device-health-status ${inspection.hasHeartRateService ? "is-connected" : "is-missing"}">
-            <strong>${escapeHtml(inspection.hasHeartRateService ? "Пульс доступен по стандартному BLE" : "Стандартный пульс не найден")}</strong>
+          <div class="device-health-status ${inspection.canSubscribeHeartRate || inspection.canReadBatteryLevel || inspection.canReadDeviceInfo ? "is-connected" : "is-missing"}">
+            <strong>${escapeHtml(formatDirectWatchCapabilityTitle(inspection))}</strong>
             <span>${escapeHtml(formatDirectWatchInspectionSummary(inspection))}</span>
           </div>
           <div class="device-health-diagnostics-grid">
@@ -2695,14 +2695,27 @@ function renderDirectWatchDiagnostics(state: MobileAppState) {
               <strong>${escapeHtml(String(inspection.serviceCount ?? services.length))}</strong>
             </article>
             <article>
-              <span>Пульс</span>
-              <strong>${escapeHtml(inspection.hasHeartRateService ? "есть" : "нет")}</strong>
+              <span>Живой пульс</span>
+              <strong>${escapeHtml(formatDirectWatchBoolean(inspection.canSubscribeHeartRate, "можно читать", "нет доступа"))}</strong>
+            </article>
+            <article>
+              <span>Батарея</span>
+              <strong>${escapeHtml(formatDirectWatchBoolean(inspection.canReadBatteryLevel, "читается", "не читается"))}</strong>
+            </article>
+            <article>
+              <span>Инфо часов</span>
+              <strong>${escapeHtml(formatDirectWatchBoolean(inspection.canReadDeviceInfo, "читается", "не читается"))}</strong>
+            </article>
+            <article>
+              <span>Закрытые сервисы</span>
+              <strong>${escapeHtml(String(inspection.proprietaryServiceCount ?? 0))}</strong>
             </article>
             <article>
               <span>Известные сервисы</span>
               <strong>${escapeHtml(knownServices.length ? knownServices.join(", ") : "не найдены")}</strong>
             </article>
           </div>
+          ${renderDirectWatchStandardReadings(inspection)}
           ${services.length ? `
             <details class="direct-watch-services">
               <summary>Показать BLE-сервисы</summary>
@@ -2826,13 +2839,93 @@ function renderDirectWatchAdvertisedData(
   `;
 }
 
+function formatDirectWatchInspectionMessage(
+  inspection: NonNullable<MobileAppState["directWatchDiagnostic"]["inspection"]>,
+) {
+  if (inspection.canSubscribeHeartRate) {
+    return "Диагностика готова: часы отдают стандартный канал живого пульса. Следующий шаг — тестовое чтение пульса и запись в PERFORM Sync.";
+  }
+
+  if (inspection.canReadBatteryLevel || inspection.canReadDeviceInfo) {
+    return "Диагностика готова: часы отвечают по Bluetooth, но пульс/сон могут быть закрыты протоколом Xiaomi.";
+  }
+
+  return "Часы подключились, но стандартные данные здоровья не найдены. Скорее всего, основные показатели закрыты протоколом Xiaomi.";
+}
+
+function formatDirectWatchCapabilityTitle(
+  inspection: NonNullable<MobileAppState["directWatchDiagnostic"]["inspection"]>,
+) {
+  if (inspection.canSubscribeHeartRate) {
+    return "Прямой пульс доступен";
+  }
+
+  if (inspection.canReadBatteryLevel || inspection.canReadDeviceInfo) {
+    return "Часы отвечают, но здоровье не открыто";
+  }
+
+  return "Стандартные данные не найдены";
+}
+
+function formatDirectWatchBoolean(value: boolean | null | undefined, yes: string, no: string) {
+  return value ? yes : no;
+}
+
+function renderDirectWatchStandardReadings(
+  inspection: NonNullable<MobileAppState["directWatchDiagnostic"]["inspection"]>,
+) {
+  const readings = inspection.standardReadings ?? [];
+
+  if (!readings.length) {
+    return "";
+  }
+
+  return `
+    <div class="direct-watch-reading-list">
+      ${readings.map((reading) => `
+        <article>
+          <span>${escapeHtml(reading.name || "BLE value")}</span>
+          <strong>${escapeHtml(formatDirectWatchReadingValue(reading))}</strong>
+        </article>
+      `).join("")}
+    </div>
+  `;
+}
+
+function formatDirectWatchReadingValue(
+  reading: NonNullable<NonNullable<MobileAppState["directWatchDiagnostic"]["inspection"]>["standardReadings"]>[number],
+) {
+  if (reading.status === "error") {
+    return reading.error || "ошибка чтения";
+  }
+
+  if (reading.status === "not-readable") {
+    return "есть, но чтение закрыто";
+  }
+
+  if (typeof reading.numericValue === "number") {
+    return reading.kind === "battery" ? `${Math.round(reading.numericValue)}%` : String(reading.numericValue);
+  }
+
+  if (reading.textValue) {
+    return reading.textValue;
+  }
+
+  if (reading.rawHex) {
+    return reading.rawHex;
+  }
+
+  return "прочитано";
+}
+
 function formatDirectWatchInspectionSummary(
   inspection: NonNullable<MobileAppState["directWatchDiagnostic"]["inspection"]>,
 ) {
   const parts = [
-    inspection.hasHeartRateService ? "сервис пульса есть" : "сервиса пульса нет",
-    inspection.hasBatteryService ? "батарея есть" : null,
-    inspection.hasDeviceInfoService ? "информация об устройстве есть" : null,
+    inspection.canSubscribeHeartRate ? "живой пульс открыт" : "живой пульс не открыт",
+    inspection.canReadBatteryLevel ? "батарея читается" : null,
+    inspection.canReadDeviceInfo ? "модель/прошивка читаются" : null,
+    inspection.proprietaryServiceCount ? `закрытых сервисов: ${inspection.proprietaryServiceCount}` : null,
   ].filter((part): part is string => Boolean(part));
 
   return parts.join(", ");

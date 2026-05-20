@@ -198,12 +198,79 @@ class DirectWatchPlugin : Plugin() {
             }
         }
 
+        val standardReadings = mutableListOf<JSObject>()
+        val standardReadQueue = java.util.ArrayDeque<StandardCharacteristicRead>()
+        var pendingStandardRead: StandardCharacteristicRead? = null
+        var inspectionResponse: JSObject? = null
+
+        fun finishWithInspectionResponse() {
+            mainHandler.removeCallbacks(timeout)
+            val response = inspectionResponse ?: JSObject()
+            response.put("standardReadings", JSArray(standardReadings))
+            finishInspection {
+                call.resolve(response)
+            }
+        }
+
+        fun readNextStandardCharacteristic(gatt: BluetoothGatt) {
+            if (didFinish) {
+                return
+            }
+
+            if (standardReadQueue.isEmpty()) {
+                finishWithInspectionResponse()
+                return
+            }
+
+            val request = standardReadQueue.removeFirst()
+            if (!isReadableCharacteristic(request.characteristic)) {
+                standardReadings.add(buildStandardReadingResponse(request, null, "not-readable", null))
+                readNextStandardCharacteristic(gatt)
+                return
+            }
+
+            pendingStandardRead = request
+            val started = try {
+                @Suppress("DEPRECATION")
+                gatt.readCharacteristic(request.characteristic)
+            } catch (error: SecurityException) {
+                pendingStandardRead = null
+                standardReadings.add(buildStandardReadingResponse(request, null, "error", "Нет разрешения Bluetooth для чтения характеристики."))
+                readNextStandardCharacteristic(gatt)
+                return
+            }
+
+            if (!started) {
+                pendingStandardRead = null
+                standardReadings.add(buildStandardReadingResponse(request, null, "error", "Android не начал чтение характеристики."))
+                readNextStandardCharacteristic(gatt)
+            }
+        }
+
+        fun handleStandardCharacteristicRead(
+            gatt: BluetoothGatt,
+            characteristic: BluetoothGattCharacteristic,
+            value: ByteArray?,
+            status: Int,
+        ) {
+            val request = pendingStandardRead ?: return
+            if (request.characteristic.uuid != characteristic.uuid) {
+                return
+            }
+
+            pendingStandardRead = null
+            val statusLabel = if (status == BluetoothGatt.GATT_SUCCESS) "read" else "error"
+            val error = if (status == BluetoothGatt.GATT_SUCCESS) null else "Bluetooth status $status"
+            standardReadings.add(buildStandardReadingResponse(request, value, statusLabel, error))
+            readNextStandardCharacteristic(gatt)
+        }
+
         val callback = object : BluetoothGattCallback() {
             override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
                 if (status != BluetoothGatt.GATT_SUCCESS) {
                     mainHandler.removeCallbacks(timeout)
                     finishInspection {
-                        call.reject("Не удалось подключиться к часам: Bluetooth status $status.")
+                        call.reject(gattStatusMessage(status))
                     }
                     return
                 }
@@ -221,18 +288,36 @@ class DirectWatchPlugin : Plugin() {
             }
 
             override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
-                mainHandler.removeCallbacks(timeout)
                 if (status != BluetoothGatt.GATT_SUCCESS) {
+                    mainHandler.removeCallbacks(timeout)
                     finishInspection {
-                        call.reject("Часы подключились, но не отдали список сервисов: Bluetooth status $status.")
+                        call.reject("Часы подключились, но не отдали список BLE-сервисов: Bluetooth status $status.")
                     }
                     return
                 }
 
-                val response = buildInspectionResponse(device, gatt.services)
-                finishInspection {
-                    call.resolve(response)
-                }
+                inspectionResponse = buildInspectionResponse(device, gatt.services)
+                standardReadQueue.addAll(standardCharacteristicReads(gatt.services))
+                readNextStandardCharacteristic(gatt)
+            }
+
+            @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
+            @Deprecated("Android keeps this callback for older Bluetooth stacks.")
+            override fun onCharacteristicRead(
+                gatt: BluetoothGatt,
+                characteristic: BluetoothGattCharacteristic,
+                status: Int,
+            ) {
+                handleStandardCharacteristicRead(gatt, characteristic, characteristic.value, status)
+            }
+
+            override fun onCharacteristicRead(
+                gatt: BluetoothGatt,
+                characteristic: BluetoothGattCharacteristic,
+                value: ByteArray,
+                status: Int,
+            ) {
+                handleStandardCharacteristicRead(gatt, characteristic, value, status)
             }
         }
 
@@ -493,6 +578,12 @@ class DirectWatchPlugin : Plugin() {
         }
 
         val serviceUuids = services.map { it.uuid }
+        val heartRateMeasurement = findCharacteristic(services, HEART_RATE_SERVICE_UUID, HEART_RATE_MEASUREMENT_UUID)
+        val batteryLevel = findCharacteristic(services, BATTERY_SERVICE_UUID, BATTERY_LEVEL_UUID)
+        val readableDeviceInfo = DEVICE_INFO_CHARACTERISTIC_UUIDS
+            .mapNotNull { uuid -> findCharacteristic(services, DEVICE_INFO_SERVICE_UUID, uuid) }
+            .any { characteristic -> isReadableCharacteristic(characteristic) }
+        val unknownServices = services.filter { service -> knownServiceName(service.uuid) == "Unknown" }
         val response = JSObject()
         response.put("deviceId", device.address)
         response.put("deviceName", devicesByAddress[device.address]?.name ?: scanResultNameFallback(device))
@@ -503,7 +594,12 @@ class DirectWatchPlugin : Plugin() {
         response.put("hasHeartRateService", serviceUuids.contains(HEART_RATE_SERVICE_UUID))
         response.put("hasBatteryService", serviceUuids.contains(BATTERY_SERVICE_UUID))
         response.put("hasDeviceInfoService", serviceUuids.contains(DEVICE_INFO_SERVICE_UUID))
+        response.put("canSubscribeHeartRate", heartRateMeasurement?.let { canNotifyCharacteristic(it) } == true)
+        response.put("canReadBatteryLevel", batteryLevel?.let { isReadableCharacteristic(it) } == true)
+        response.put("canReadDeviceInfo", readableDeviceInfo)
         response.put("serviceCount", services.size)
+        response.put("unknownServiceCount", unknownServices.size)
+        response.put("proprietaryServiceCount", unknownServices.count { service -> !isBluetoothSigUuid(service.uuid) })
         response.put("services", JSArray(serviceItems))
         response.put("inspectedAt", java.time.Instant.now().toString())
         return response
@@ -520,6 +616,15 @@ class DirectWatchPlugin : Plugin() {
         response.put("bondStateCode", bondState)
         response.put("pairedAt", java.time.Instant.now().toString())
         return response
+    }
+
+    private fun gattStatusMessage(status: Int): String {
+        if (status == 133) {
+            return "Часы найдены, но не открыли прямое BLE-подключение. " +
+                "Обычно это значит, что канал занят Mi Fitness, часы не рекламируют GATT-сервисы или здоровье закрыто протоколом Xiaomi."
+        }
+
+        return "Не удалось подключиться к часам: Bluetooth status $status."
     }
 
     private fun scanResultNameFallback(device: BluetoothDevice): String? {
@@ -539,6 +644,77 @@ class DirectWatchPlugin : Plugin() {
         if (value and BluetoothGattCharacteristic.PROPERTY_WRITE != 0) properties.add("write")
         if (value and BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE != 0) properties.add("write-no-response")
         return JSArray(properties)
+    }
+
+    private fun isReadableCharacteristic(characteristic: BluetoothGattCharacteristic): Boolean {
+        return characteristic.properties and BluetoothGattCharacteristic.PROPERTY_READ != 0
+    }
+
+    private fun canNotifyCharacteristic(characteristic: BluetoothGattCharacteristic): Boolean {
+        val properties = characteristic.properties
+        return properties and BluetoothGattCharacteristic.PROPERTY_NOTIFY != 0 ||
+            properties and BluetoothGattCharacteristic.PROPERTY_INDICATE != 0
+    }
+
+    private fun standardCharacteristicReads(services: List<BluetoothGattService>): List<StandardCharacteristicRead> {
+        return listOfNotNull(
+            standardReadRequest(services, BATTERY_SERVICE_UUID, BATTERY_LEVEL_UUID, "battery", "Battery Level"),
+            standardReadRequest(services, DEVICE_INFO_SERVICE_UUID, MANUFACTURER_NAME_UUID, "manufacturer", "Manufacturer Name"),
+            standardReadRequest(services, DEVICE_INFO_SERVICE_UUID, MODEL_NUMBER_UUID, "model", "Model Number"),
+            standardReadRequest(services, DEVICE_INFO_SERVICE_UUID, SERIAL_NUMBER_UUID, "serial", "Serial Number"),
+            standardReadRequest(services, DEVICE_INFO_SERVICE_UUID, FIRMWARE_REVISION_UUID, "firmware", "Firmware Revision"),
+            standardReadRequest(services, DEVICE_INFO_SERVICE_UUID, HARDWARE_REVISION_UUID, "hardware", "Hardware Revision"),
+            standardReadRequest(services, DEVICE_INFO_SERVICE_UUID, SOFTWARE_REVISION_UUID, "software", "Software Revision"),
+            standardReadRequest(services, HEART_RATE_SERVICE_UUID, BODY_SENSOR_LOCATION_UUID, "body-sensor", "Body Sensor Location"),
+        )
+    }
+
+    private fun standardReadRequest(
+        services: List<BluetoothGattService>,
+        serviceUuid: UUID,
+        characteristicUuid: UUID,
+        kind: String,
+        name: String,
+    ): StandardCharacteristicRead? {
+        val characteristic = findCharacteristic(services, serviceUuid, characteristicUuid) ?: return null
+        return StandardCharacteristicRead(serviceUuid, characteristic, kind, name)
+    }
+
+    private fun findCharacteristic(
+        services: List<BluetoothGattService>,
+        serviceUuid: UUID,
+        characteristicUuid: UUID,
+    ): BluetoothGattCharacteristic? {
+        return services
+            .firstOrNull { service -> service.uuid == serviceUuid }
+            ?.characteristics
+            ?.firstOrNull { characteristic -> characteristic.uuid == characteristicUuid }
+    }
+
+    private fun buildStandardReadingResponse(
+        request: StandardCharacteristicRead,
+        value: ByteArray?,
+        status: String,
+        error: String?,
+    ): JSObject {
+        val item = JSObject()
+        item.put("serviceUuid", request.serviceUuid.toString())
+        item.put("uuid", request.characteristic.uuid.toString())
+        item.put("kind", request.kind)
+        item.put("name", request.name)
+        item.put("status", status)
+        item.put("error", error)
+        item.put("rawHex", bytePreviewHex(value, 24))
+
+        if (status == "read" && value != null) {
+            when (request.kind) {
+                "battery" -> item.put("numericValue", value.firstOrNull()?.toInt()?.and(0xff))
+                "body-sensor" -> item.put("numericValue", value.firstOrNull()?.toInt()?.and(0xff))
+                else -> item.put("textValue", value.toString(Charsets.UTF_8).trim().takeIf { it.isNotBlank() })
+            }
+        }
+
+        return item
     }
 
     private fun manufacturerData(result: ScanResult): JSArray {
@@ -564,12 +740,17 @@ class DirectWatchPlugin : Plugin() {
         })
     }
 
-    private fun bytePreviewHex(bytes: ByteArray?): String? {
+    private fun bytePreviewHex(bytes: ByteArray?, maxBytes: Int = 12): String? {
         if (bytes == null || bytes.isEmpty()) {
             return null
         }
 
-        return bytes.take(12).joinToString("") { byte -> "%02X".format(byte.toInt() and 0xff) }
+        return bytes.take(maxBytes).joinToString("") { byte -> "%02X".format(byte.toInt() and 0xff) }
+    }
+
+    private fun isBluetoothSigUuid(uuid: UUID): Boolean {
+        val value = uuid.toString().lowercase(Locale.ROOT)
+        return value.startsWith("0000") && value.endsWith("-0000-1000-8000-00805f9b34fb")
     }
 
     private fun knownServiceName(uuid: UUID): String {
@@ -589,6 +770,11 @@ class DirectWatchPlugin : Plugin() {
             BATTERY_LEVEL_UUID -> "Battery Level"
             MANUFACTURER_NAME_UUID -> "Manufacturer Name"
             MODEL_NUMBER_UUID -> "Model Number"
+            SERIAL_NUMBER_UUID -> "Serial Number"
+            FIRMWARE_REVISION_UUID -> "Firmware Revision"
+            HARDWARE_REVISION_UUID -> "Hardware Revision"
+            SOFTWARE_REVISION_UUID -> "Software Revision"
+            BODY_SENSOR_LOCATION_UUID -> "Body Sensor Location"
             else -> "Unknown"
         }
     }
@@ -680,6 +866,13 @@ class DirectWatchPlugin : Plugin() {
         }
     }
 
+    private data class StandardCharacteristicRead(
+        val serviceUuid: UUID,
+        val characteristic: BluetoothGattCharacteristic,
+        val kind: String,
+        val name: String,
+    )
+
     private data class ScannedWatchDevice(
         val id: String,
         val name: String?,
@@ -726,8 +919,21 @@ class DirectWatchPlugin : Plugin() {
         private val DEVICE_INFO_SERVICE_UUID: UUID = UUID.fromString("0000180a-0000-1000-8000-00805f9b34fb")
         private val MANUFACTURER_NAME_UUID: UUID = UUID.fromString("00002a29-0000-1000-8000-00805f9b34fb")
         private val MODEL_NUMBER_UUID: UUID = UUID.fromString("00002a24-0000-1000-8000-00805f9b34fb")
+        private val SERIAL_NUMBER_UUID: UUID = UUID.fromString("00002a25-0000-1000-8000-00805f9b34fb")
+        private val FIRMWARE_REVISION_UUID: UUID = UUID.fromString("00002a26-0000-1000-8000-00805f9b34fb")
+        private val HARDWARE_REVISION_UUID: UUID = UUID.fromString("00002a27-0000-1000-8000-00805f9b34fb")
+        private val SOFTWARE_REVISION_UUID: UUID = UUID.fromString("00002a28-0000-1000-8000-00805f9b34fb")
+        private val BODY_SENSOR_LOCATION_UUID: UUID = UUID.fromString("00002a38-0000-1000-8000-00805f9b34fb")
         private val GENERIC_ACCESS_SERVICE_UUID: UUID = UUID.fromString("00001800-0000-1000-8000-00805f9b34fb")
         private val GENERIC_ATTRIBUTE_SERVICE_UUID: UUID = UUID.fromString("00001801-0000-1000-8000-00805f9b34fb")
+        private val DEVICE_INFO_CHARACTERISTIC_UUIDS = listOf(
+            MANUFACTURER_NAME_UUID,
+            MODEL_NUMBER_UUID,
+            SERIAL_NUMBER_UUID,
+            FIRMWARE_REVISION_UUID,
+            HARDWARE_REVISION_UUID,
+            SOFTWARE_REVISION_UUID,
+        )
         private val WATCH_NAME_HINTS = listOf("redmi", "watch", "xiaomi", "mi ", "band")
     }
 }
