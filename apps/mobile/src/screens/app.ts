@@ -6,6 +6,11 @@ import {
 } from "../permissions.js";
 import { readRuntimeConfig } from "../config.js";
 import {
+  isAppleHealthRuntime,
+  readAppleHealthDailySummary,
+  readAppleHealthDeviceWorkouts,
+} from "../integrations/apple-health.js";
+import {
   readMiFitnessHealthConnectDailySummary,
   readMiFitnessHealthConnectDeviceWorkouts,
 } from "../integrations/health-connect.js";
@@ -482,6 +487,27 @@ export function bootstrapMobileApp(root: HTMLElement) {
     }
 
     update({ error: null, isBusy: true, message: "Синхронизирую данные часов..." });
+
+    if (isAppleHealthRuntime()) {
+      try {
+        const payload = await readAppleHealthDailySummary(entryDate);
+        const workoutsPayload = await readAppleHealthDeviceWorkouts(entryDate).catch(() => null);
+        await submitDeviceHealthPayload(payload);
+
+        if (workoutsPayload && workoutsPayload.workouts.length > 0) {
+          await submitDeviceWorkoutsPayload(workoutsPayload);
+        }
+
+        return;
+      } catch (error) {
+        update({
+          error: error instanceof Error ? error.message : "Apple Health недоступен.",
+          isBusy: false,
+          message: null,
+        });
+        return;
+      }
+    }
 
     let healthConnectError: unknown = null;
     try {
@@ -2434,11 +2460,17 @@ function renderDeviceHealthCard(
     <section class="device-health-card ${options.compact ? "is-compact" : ""}">
       <div class="device-health-head">
         <div>
-          <span>Huawei Health / Health Connect</span>
-          <h3>Данные устройства</h3>
+          <span>${escapeHtml(formatDeviceHealthProviderLabel(summary))}</span>
+          <h3>${escapeHtml(formatDeviceHealthCardTitle(summary))}</h3>
           <p>${escapeHtml(formatDate(date))} · ${escapeHtml(syncLabel)}</p>
         </div>
-        ${canSync ? `
+        ${canSync && isAppleHealthRuntime() ? `
+          <div class="device-health-actions">
+            <button class="secondary-action" data-device-health-sync data-device-health-date="${escapeHtml(date)}" type="button" ${state.isBusy ? "disabled" : ""}>
+              Синхронизировать часы
+            </button>
+          </div>
+        ` : canSync ? `
           <div class="device-health-actions">
             <button class="secondary-action" data-huawei-health-sync data-huawei-health-date="${escapeHtml(date)}" type="button" ${state.isBusy ? "disabled" : ""}>
               Huawei
@@ -3089,6 +3121,20 @@ function formatDeviceHealthSyncLabel(summary: DeviceHealthDailySummary | null) {
     : "за этот день синхронизации пока нет";
 }
 
+function formatDeviceHealthProviderLabel(summary: DeviceHealthDailySummary | null) {
+  if (summary?.provider === "apple-health" || isAppleHealthRuntime()) {
+    return "Apple Health";
+  }
+
+  return "Huawei Health / Health Connect";
+}
+
+function formatDeviceHealthCardTitle(summary: DeviceHealthDailySummary | null) {
+  return summary?.provider === "apple-health" || isAppleHealthRuntime()
+    ? "Данные здоровья"
+    : "Данные устройства";
+}
+
 function formatReadinessDeviceHealthSyncLabel(summary: DeviceHealthDailySummary | null) {
   return summary ? `обновлено ${formatDateTime(summary.syncedAt)}` : "нет данных за сегодня";
 }
@@ -3100,7 +3146,9 @@ function formatCompactDeviceHealthStatus(summary: DeviceHealthDailySummary | nul
 function formatCompactDeviceHealthHint(summary: DeviceHealthDailySummary | null, canSync: boolean) {
   if (!summary) {
     return canSync
-      ? "Синхронизируй после сна или тренировки."
+      ? isAppleHealthRuntime()
+        ? "Синхронизируй после сна или тренировки. iPhone прочитает Apple Health."
+        : "Синхронизируй после сна или тренировки."
       : "Спортсмен ещё не синхронизировал часы.";
   }
 
@@ -3148,7 +3196,9 @@ function formatDeviceHealthActionText(summary: DeviceHealthDailySummary | null, 
 
   if (!summary) {
     return canSync
-      ? "Нажмите синхронизацию после сна или тренировки."
+      ? isAppleHealthRuntime()
+        ? "Нажмите синхронизацию: iPhone прочитает данные из Apple Health."
+        : "Нажмите синхронизацию после сна или тренировки."
       : "Попросите спортсмена синхронизировать часы или приложение здоровья за этот день.";
   }
 
