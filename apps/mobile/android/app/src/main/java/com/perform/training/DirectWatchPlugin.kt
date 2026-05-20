@@ -444,6 +444,52 @@ class DirectWatchPlugin : Plugin() {
         }, PAIRING_TIMEOUT_TOKEN, android.os.SystemClock.uptimeMillis() + PAIR_TIMEOUT_MS.toLong())
     }
 
+    @PluginMethod
+    fun unpairDevice(call: PluginCall) {
+        val address = call.getString("deviceId")
+        if (address.isNullOrBlank()) {
+            call.reject("deviceId is required")
+            return
+        }
+
+        val adapter = bluetoothAdapter()
+        if (adapter == null || !adapter.isEnabled) {
+            call.reject("Включите Bluetooth на телефоне и повторите отвязку часов.")
+            return
+        }
+
+        if (!hasRequiredRuntimePermissions()) {
+            call.reject("Нужно разрешить PERFORM подключение к Bluetooth-устройствам.")
+            return
+        }
+
+        val device = try {
+            adapter.getRemoteDevice(address)
+        } catch (error: IllegalArgumentException) {
+            call.reject("Некорректный идентификатор Bluetooth-устройства.", error)
+            return
+        }
+
+        val initialBondState = safeBondState(device)
+        if (initialBondState == BluetoothDevice.BOND_NONE) {
+            call.resolve(buildPairingResponse(device, pairingStarted = false, status = "already-unpaired"))
+            return
+        }
+
+        val unpairStarted = try {
+            val method = device.javaClass.getMethod("removeBond")
+            method.invoke(device) as? Boolean ?: false
+        } catch (error: ReflectiveOperationException) {
+            call.reject("Android не дал программно удалить системное сопряжение часов.", error)
+            return
+        } catch (error: SecurityException) {
+            call.reject("Нет разрешения Bluetooth для удаления сопряжения часов.", error)
+            return
+        }
+
+        call.resolve(buildPairingResponse(device, pairingStarted = unpairStarted, status = if (unpairStarted) "unpair-started" else "not-started"))
+    }
+
     override fun handleOnDestroy() {
         stopActiveScan()
         stopActiveGatt()
