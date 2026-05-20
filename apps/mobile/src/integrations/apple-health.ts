@@ -56,8 +56,7 @@ export async function readAppleHealthDailySummary(
   }
 
   const summary = await plugin.readDailySummary({ entryDate });
-
-  return {
+  const payload: DeviceHealthDailySummaryPayload = {
     entryDate,
     provider: "apple-health",
     sourceDevice: normalizeNullableString(summary.sourceDevice) ?? "Apple Health",
@@ -68,6 +67,16 @@ export async function readAppleHealthDailySummary(
     rawPayload: isPlainRecord(summary.rawPayload) ? summary.rawPayload : null,
     syncedAt: new Date().toISOString(),
   };
+
+  if (!hasMeaningfulAppleHealthData(payload)) {
+    throw new Error(
+      "Apple Health подключён, но за выбранный день не отдал сон, пульс или тренировки. " +
+        "Проверьте в iPhone: Здоровье → Доступ к данным и устройства → PERFORM должен иметь чтение данных, " +
+        "а Mi Fitness должен быть подключён к Apple Health как источник записи.",
+    );
+  }
+
+  return payload;
 }
 
 export async function readAppleHealthDeviceWorkouts(
@@ -233,6 +242,67 @@ function normalizeWorkoutSummary(value: unknown): DeviceHealthWorkoutSummary | n
     totalDistanceMeters: normalizeNumber(value.totalDistanceMeters),
     totalDurationMinutes: normalizeNumber(value.totalDurationMinutes),
   };
+}
+
+function hasMeaningfulAppleHealthData(payload: DeviceHealthDailySummaryPayload) {
+  return Boolean(
+    hasMeaningfulSleep(payload.sleep) ||
+      hasMeaningfulHeartRate(payload.heartRate) ||
+      hasMeaningfulOxygenSaturation(payload.oxygenSaturation) ||
+      hasMeaningfulWorkout(payload.workout),
+  );
+}
+
+function hasMeaningfulSleep(value: DeviceHealthSleepSummary | null) {
+  return Boolean(
+    value &&
+      (hasPositiveNumber(value.durationMinutes) ||
+        hasPositiveNumber(value.deepMinutes) ||
+        hasPositiveNumber(value.lightMinutes) ||
+        hasPositiveNumber(value.remMinutes) ||
+        hasPositiveNumber(value.awakeMinutes) ||
+        hasPositiveNumber(value.score) ||
+        Boolean(value.startTime) ||
+        Boolean(value.endTime)),
+  );
+}
+
+function hasMeaningfulHeartRate(value: DeviceHealthHeartRateSummary | null) {
+  return Boolean(
+    value &&
+      (hasPositiveNumber(value.restingBpm) ||
+        hasPositiveNumber(value.averageBpm) ||
+        hasPositiveNumber(value.minBpm) ||
+        hasPositiveNumber(value.maxBpm) ||
+        hasPositiveNumber(value.hrvRmssdMs)),
+  );
+}
+
+function hasMeaningfulOxygenSaturation(value: DeviceHealthOxygenSaturationSummary | null) {
+  return Boolean(
+    value &&
+      (value.sampleCount > 0 ||
+        hasPositiveNumber(value.averagePercent) ||
+        hasPositiveNumber(value.latestPercent) ||
+        hasPositiveNumber(value.minPercent) ||
+        hasPositiveNumber(value.maxPercent)),
+  );
+}
+
+function hasMeaningfulWorkout(value: DeviceHealthWorkoutSummary | null) {
+  return Boolean(
+    value &&
+      (value.count > 0 ||
+        hasPositiveNumber(value.totalDurationMinutes) ||
+        hasPositiveNumber(value.totalDistanceMeters) ||
+        hasPositiveNumber(value.activeCalories) ||
+        hasPositiveNumber(value.averageHeartRateBpm) ||
+        hasPositiveNumber(value.maxHeartRateBpm)),
+  );
+}
+
+function hasPositiveNumber(value: number | null | undefined) {
+  return typeof value === "number" && Number.isFinite(value) && value > 0;
 }
 
 function normalizeNullableString(value: unknown) {
