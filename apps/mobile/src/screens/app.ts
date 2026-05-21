@@ -3124,6 +3124,14 @@ function renderDirectWatchClassicProbe(
           <strong>${escapeHtml(probe.sentAuthStep1 ? "отправлен" : probe.sentSessionConfig ? "session v2" : "не отправлен")}</strong>
         </article>
         <article>
+          <span>Auth step 2</span>
+          <strong>${escapeHtml(probe.sentAuthStep2 ? "отправлен" : "ожидает ключ")}</strong>
+        </article>
+        <article>
+          <span>Проба данных</span>
+          <strong>${escapeHtml(probe.sentPostAuthProbe ? "отправлена" : "не запускалась")}</strong>
+        </article>
+        <article>
           <span>Пакеты</span>
           <strong>${escapeHtml(String(probe.packetCount ?? packets.length))}</strong>
         </article>
@@ -3147,6 +3155,19 @@ function renderDirectWatchClassicProbe(
       ` : `
         <p class="muted-copy">Classic/SPP открылся без входящих пакетов. Если это повторится, часы могут ждать авторизацию или канал занят другим приложением.</p>
       `}
+      ${probe.decryptedPackets?.length ? `
+        <div class="direct-watch-packet-list">
+          ${probe.decryptedPackets.slice(0, 4).map((packet) => `
+            <article>
+              <div>
+                <strong>${escapeHtml(`command ${packet.commandType ?? "-"}:${packet.commandSubtype ?? "-"}`)}</strong>
+                <span>${escapeHtml(String(packet.byteLength ?? 0))} байт</span>
+              </div>
+              <code>${escapeHtml(packet.rawHex || "empty")}</code>
+            </article>
+          `).join("")}
+        </div>
+      ` : ""}
     </div>
   `;
 }
@@ -3291,8 +3312,16 @@ function formatDirectWatchClassicProbeMessage(
   }
 
   if (probe.detectedProtocol === "spp-v1" || probe.detectedProtocol === "spp-v2") {
+    if (probe.sentPostAuthProbe && probe.decryptedPackets?.length) {
+      return "Auth прошёл, зашифрованный запрос после авторизации расшифрован. Можно переходить к чтению health-данных.";
+    }
+    if (probe.authStage === "authenticated") {
+      return "Ключ принят: Xiaomi Auth прошёл. Следующий шаг — пробное чтение данных здоровья.";
+    }
     if (probe.authStage === "watch-nonce") {
-      return "Часы отдали первый ответ Xiaomi Auth. Следующий шаг — проверить настоящий Auth Key.";
+      return probe.authKeyStatus === "valid"
+        ? "Ключ совпал с ответом часов. Следующий шаг — завершить авторизацию."
+        : "Часы отдали первый ответ Xiaomi Auth. Следующий шаг — проверить настоящий Auth Key.";
     }
     return "Classic/SPP канал часов отвечает. Следующий шаг — авторизация через Auth Key.";
   }
@@ -3312,6 +3341,9 @@ function formatDirectWatchClassicProbeTitle(
   }
 
   if (probe.detectedProtocol === "spp-v1" || probe.detectedProtocol === "spp-v2") {
+    if (probe.authStage === "authenticated") {
+      return "Xiaomi Auth пройден";
+    }
     return probe.authStage === "watch-nonce" ? "Xiaomi Auth отвечает" : "Classic/SPP отвечает";
   }
 
@@ -3332,6 +3364,9 @@ function formatDirectWatchClassicProbeSummary(
   const parts = [
     probe.probedAt ? formatDateTime(probe.probedAt) : null,
     probe.versionHex ? `версия: ${probe.versionHex}` : null,
+    probe.authKeyStatus ? `ключ: ${probe.authKeyStatus}` : null,
+    probe.sentAuthStep2 ? "auth step 2 отправлен" : null,
+    probe.sentPostAuthProbe ? "проба данных отправлена" : null,
     probe.watchNonceHex ? `watch nonce: ${probe.watchNonceHex}` : null,
     probe.rawHex && !probe.versionHex ? `ответ: ${probe.rawHex}` : null,
   ].filter((part): part is string => Boolean(part));

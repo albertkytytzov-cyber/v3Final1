@@ -102,6 +102,15 @@ export interface DirectWatchSessionPacket {
   serviceUuid?: string | null;
 }
 
+export interface DirectWatchDecryptedPacket {
+  byteLength?: number | null;
+  commandStatus?: number | null;
+  commandSubtype?: number | null;
+  commandType?: number | null;
+  rawHex?: string | null;
+  sequenceNumber?: number | null;
+}
+
 export interface DirectWatchSessionStatus {
   connected?: boolean;
   deviceId?: string | null;
@@ -125,6 +134,7 @@ export interface DirectWatchClassicProbe {
   bondState?: "bonded" | "bonding" | "not-bonded" | "unknown" | null;
   bondStateCode?: number | null;
   connected?: boolean;
+  decryptedPackets?: DirectWatchDecryptedPacket[];
   detectedProtocol?: "spp-v1" | "spp-v2" | "unknown" | string | null;
   deviceId?: string | null;
   deviceName?: string | null;
@@ -136,6 +146,8 @@ export interface DirectWatchClassicProbe {
   rawHex?: string | null;
   phoneNonceHex?: string | null;
   sentAuthStep1?: boolean;
+  sentAuthStep2?: boolean;
+  sentPostAuthProbe?: boolean;
   sentSessionConfig?: boolean;
   sentVersionRequest?: boolean;
   versionHex?: string | null;
@@ -164,7 +176,7 @@ interface DirectWatchPlugin {
   inspectDevice?: (input: { deviceId: string }) => Promise<DirectWatchInspection>;
   isAvailable?: () => Promise<DirectWatchAvailability>;
   pairDevice?: (input: { deviceId: string }) => Promise<DirectWatchPairingResult>;
-  probeClassicSession?: (input: { authKeyHex?: string; authStep1?: boolean; deviceId: string }) => Promise<DirectWatchClassicProbe>;
+  probeClassicSession?: (input: { authKeyHex?: string; authStep1?: boolean; deviceId: string; postAuthProbe?: boolean }) => Promise<DirectWatchClassicProbe>;
   requestAuthorization?: () => Promise<DirectWatchPermissionResult>;
   scanDevices?: (input?: { durationMs?: number }) => Promise<DirectWatchScanResult>;
   startSession?: (input: { deviceId: string }) => Promise<DirectWatchSessionStatus>;
@@ -318,6 +330,7 @@ export async function probeDirectWatchClassicSession(
   deviceId: string,
   authStep1 = false,
   authKeyHex?: string,
+  postAuthProbe = false,
 ): Promise<DirectWatchClassicProbe> {
   const plugin = getDirectWatchPlugin();
 
@@ -332,7 +345,7 @@ export async function probeDirectWatchClassicSession(
     }
   }
 
-  const probe = await plugin.probeClassicSession({ authKeyHex, authStep1, deviceId });
+  const probe = await plugin.probeClassicSession({ authKeyHex, authStep1, deviceId, postAuthProbe });
   return normalizeDirectWatchClassicProbe(probe);
 }
 
@@ -489,6 +502,9 @@ function normalizeDirectWatchClassicProbe(value: unknown): DirectWatchClassicPro
     bondState: normalizeBluetoothState(value.bondState),
     bondStateCode: normalizeNumber(value.bondStateCode),
     connected: normalizeBoolean(value.connected),
+    decryptedPackets: Array.isArray(value.decryptedPackets)
+      ? value.decryptedPackets.map(normalizeDirectWatchDecryptedPacket)
+      : [],
     detectedProtocol: normalizeString(value.detectedProtocol),
     deviceId: normalizeString(value.deviceId),
     deviceName: normalizeString(value.deviceName),
@@ -502,11 +518,28 @@ function normalizeDirectWatchClassicProbe(value: unknown): DirectWatchClassicPro
     rawHex: normalizeString(value.rawHex),
     phoneNonceHex: normalizeString(value.phoneNonceHex),
     sentAuthStep1: normalizeBoolean(value.sentAuthStep1),
+    sentAuthStep2: normalizeBoolean(value.sentAuthStep2),
+    sentPostAuthProbe: normalizeBoolean(value.sentPostAuthProbe),
     sentSessionConfig: normalizeBoolean(value.sentSessionConfig),
     sentVersionRequest: normalizeBoolean(value.sentVersionRequest),
     versionHex: normalizeString(value.versionHex),
     watchHmacHex: normalizeString(value.watchHmacHex),
     watchNonceHex: normalizeString(value.watchNonceHex),
+  };
+}
+
+function normalizeDirectWatchDecryptedPacket(value: unknown): DirectWatchDecryptedPacket {
+  if (!isRecord(value)) {
+    return {};
+  }
+
+  return {
+    byteLength: normalizeNumber(value.byteLength),
+    commandStatus: normalizeNumber(value.commandStatus),
+    commandSubtype: normalizeNumber(value.commandSubtype),
+    commandType: normalizeNumber(value.commandType),
+    rawHex: normalizeString(value.rawHex),
+    sequenceNumber: normalizeNumber(value.sequenceNumber),
   };
 }
 

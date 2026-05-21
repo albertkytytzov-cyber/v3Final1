@@ -35,7 +35,9 @@ import java.io.IOException
 import java.security.SecureRandom
 import java.util.Locale
 import java.util.UUID
+import javax.crypto.Cipher
 import javax.crypto.Mac
+import javax.crypto.spec.IvParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
 @CapacitorPlugin(
@@ -592,6 +594,7 @@ class DirectWatchPlugin : Plugin() {
     fun probeClassicSession(call: PluginCall) {
         val address = call.getString("deviceId")
         val authStep1 = call.getBoolean("authStep1") ?: false
+        val postAuthProbe = call.getBoolean("postAuthProbe") ?: false
         val authKeyHex = call.getString("authKeyHex")?.trim()?.takeIf { it.isNotBlank() }
         if (address.isNullOrBlank()) {
             call.reject("deviceId is required")
@@ -631,7 +634,10 @@ class DirectWatchPlugin : Plugin() {
             var sentVersionRequest = false
             var sentSessionConfig = false
             var sentAuthStep1 = false
+            var sentAuthStep2 = false
+            var sentPostAuthProbe = false
             var phoneNonce: ByteArray? = null
+            var postAuthDecryptionKey: ByteArray? = null
             var errorMessage: String? = null
             val combined = java.io.ByteArrayOutputStream()
 
@@ -679,9 +685,53 @@ class DirectWatchPlugin : Plugin() {
                     )
                     socket.outputStream.flush()
                     sentAuthStep1 = true
-                }
 
-                errorMessage = readClassicPackets(socket, packets, combined, CLASSIC_PROBE_READ_MS) ?: errorMessage
+                    errorMessage = readClassicPackets(socket, packets, combined, CLASSIC_PROBE_READ_MS) ?: errorMessage
+
+                    val parsedAuthStep1 = parseClassicProbeBytes(combined.toByteArray())
+                    val authStep2 = buildClassicAuthStep2Material(authKeyHex, phoneNonce, parsedAuthStep1)
+                    if (authStep2.status == "valid" && authStep2.authStep3Command != null) {
+                        if (useSppV2 && parsedAuthStep1.authPacketSequenceNumber != null) {
+                            socket.outputStream.write(buildClassicV2AckPacket(parsedAuthStep1.authPacketSequenceNumber))
+                            socket.outputStream.flush()
+                        }
+                        socket.outputStream.write(
+                            if (useSppV2) {
+                                buildClassicV2AuthStep2Packet(authStep2.authStep3Command, 1)
+                            } else {
+                                buildClassicAuthStep2Packet(authStep2.authStep3Command)
+                            },
+                        )
+                        socket.outputStream.flush()
+                        sentAuthStep2 = true
+                        postAuthDecryptionKey = authStep2.decryptionKey
+                        errorMessage = readClassicPackets(socket, packets, combined, CLASSIC_PROBE_READ_MS) ?: errorMessage
+
+                        val parsedAuthStep2 = parseClassicProbeBytes(combined.toByteArray())
+                        if (postAuthProbe &&
+                            useSppV2 &&
+                            parsedAuthStep2.authStage == "authenticated" &&
+                            authStep2.encryptionKey != null
+                        ) {
+                            if (parsedAuthStep2.authPacketSequenceNumber != null) {
+                                socket.outputStream.write(buildClassicV2AckPacket(parsedAuthStep2.authPacketSequenceNumber))
+                                socket.outputStream.flush()
+                            }
+                            socket.outputStream.write(
+                                buildClassicV2EncryptedCommandPacket(
+                                    command = buildSimpleCommand(2, 78),
+                                    sequenceNumber = 2,
+                                    encryptionKey = authStep2.encryptionKey,
+                                ),
+                            )
+                            socket.outputStream.flush()
+                            sentPostAuthProbe = true
+                            errorMessage = readClassicPackets(socket, packets, combined, CLASSIC_PROBE_READ_MS) ?: errorMessage
+                        }
+                    }
+                } else {
+                    errorMessage = readClassicPackets(socket, packets, combined, CLASSIC_PROBE_READ_MS) ?: errorMessage
+                }
             } catch (error: IOException) {
                 errorMessage = safeMessage(error)
             } catch (error: SecurityException) {
@@ -709,8 +759,11 @@ class DirectWatchPlugin : Plugin() {
                 sentVersionRequest = sentVersionRequest,
                 sentSessionConfig = sentSessionConfig,
                 sentAuthStep1 = sentAuthStep1,
+                sentAuthStep2 = sentAuthStep2,
+                sentPostAuthProbe = sentPostAuthProbe,
                 phoneNonce = phoneNonce,
                 authKeyHex = authKeyHex,
+                postAuthDecryptionKey = postAuthDecryptionKey,
                 packets = packets,
                 combinedBytes = combined.toByteArray(),
                 error = errorMessage,
@@ -1460,8 +1513,11 @@ class DirectWatchPlugin : Plugin() {
         sentVersionRequest: Boolean,
         sentSessionConfig: Boolean,
         sentAuthStep1: Boolean,
+        sentAuthStep2: Boolean,
+        sentPostAuthProbe: Boolean,
         phoneNonce: ByteArray?,
         authKeyHex: String?,
+        postAuthDecryptionKey: ByteArray?,
         packets: List<JSObject>,
         combinedBytes: ByteArray,
         error: String?,
@@ -1477,9 +1533,12 @@ class DirectWatchPlugin : Plugin() {
         response.put("sentVersionRequest", sentVersionRequest)
         response.put("sentSessionConfig", sentSessionConfig)
         response.put("sentAuthStep1", sentAuthStep1)
+        response.put("sentAuthStep2", sentAuthStep2)
+        response.put("sentPostAuthProbe", sentPostAuthProbe)
         response.put("phoneNonceHex", fullHex(phoneNonce))
         response.put("packetCount", packets.size)
         response.put("packets", JSArray(packets))
+        response.put("decryptedPackets", JSArray(collectClassicDecryptedPackets(combinedBytes, postAuthDecryptionKey)))
         response.put("rawHex", bytePreviewHex(combinedBytes, MAX_CLASSIC_PACKET_PREVIEW_BYTES))
         response.put("detectedProtocol", parsed.detectedProtocol)
         response.put("versionHex", parsed.versionHex)
@@ -1520,14 +1579,71 @@ class DirectWatchPlugin : Plugin() {
         val watchHmac = parseHexBytes(parsed.watchHmacHex)
             ?: return ClassicAuthKeyCheck(status = "invalid-watch-hmac", error = "Watch HMAC пришёл в неожиданном формате.")
 
-        val stepHmac = computeClassicAuthStepHmac(authKey, phoneNonce, watchNonce)
-        val decryptionKey = stepHmac.copyOfRange(0, 16)
-        val expectedWatchHmac = hmacSha256(decryptionKey, watchNonce + phoneNonce)
-        return if (expectedWatchHmac.contentEquals(watchHmac)) {
+        return if (isClassicAuthKeyValid(authKey, phoneNonce, watchNonce, watchHmac)) {
             ClassicAuthKeyCheck(status = "valid", error = null)
         } else {
             ClassicAuthKeyCheck(status = "invalid", error = "Auth Key не совпал с ответом часов.")
         }
+    }
+
+    private fun buildClassicAuthStep2Material(
+        authKeyHex: String?,
+        phoneNonce: ByteArray?,
+        parsed: ClassicProbeParse,
+    ): ClassicAuthStep2Material {
+        if (authKeyHex == null) {
+            return ClassicAuthStep2Material(status = "not-provided", error = null, authStep3Command = null)
+        }
+
+        val authKey = parseHexBytes(authKeyHex)
+            ?: return ClassicAuthStep2Material(status = "invalid-format", error = "Auth Key должен быть 16 байт: 32 hex-символа.", authStep3Command = null)
+        if (authKey.size != 16) {
+            return ClassicAuthStep2Material(status = "invalid-format", error = "Auth Key должен быть 16 байт: 32 hex-символа.", authStep3Command = null)
+        }
+
+        if (phoneNonce == null || parsed.watchNonceHex == null || parsed.watchHmacHex == null) {
+            return ClassicAuthStep2Material(status = "no-watch-nonce", error = "Часы ещё не отдали watch nonce для проверки ключа.", authStep3Command = null)
+        }
+
+        val watchNonce = parseHexBytes(parsed.watchNonceHex)
+            ?: return ClassicAuthStep2Material(status = "invalid-watch-nonce", error = "Watch nonce пришёл в неожиданном формате.", authStep3Command = null)
+        val watchHmac = parseHexBytes(parsed.watchHmacHex)
+            ?: return ClassicAuthStep2Material(status = "invalid-watch-hmac", error = "Watch HMAC пришёл в неожиданном формате.", authStep3Command = null)
+
+        if (!isClassicAuthKeyValid(authKey, phoneNonce, watchNonce, watchHmac)) {
+            return ClassicAuthStep2Material(status = "invalid", error = "Auth Key не совпал с ответом часов.", authStep3Command = null)
+        }
+
+        val stepHmac = computeClassicAuthStepHmac(authKey, phoneNonce, watchNonce)
+        val decryptionKey = stepHmac.copyOfRange(0, 16)
+        val encryptionKey = stepHmac.copyOfRange(16, 32)
+        val encryptionNonce = stepHmac.copyOfRange(36, 40)
+        val packetNonce = java.io.ByteArrayOutputStream()
+        packetNonce.write(encryptionNonce)
+        writeLittleEndianUInt32(packetNonce, 0)
+        writeLittleEndianUInt32(packetNonce, 0)
+
+        val encryptedNonces = hmacSha256(encryptionKey, phoneNonce + watchNonce)
+        val encryptedDeviceInfo = encryptAesCcm4(encryptionKey, packetNonce.toByteArray(), buildClassicAuthDeviceInfo())
+        return ClassicAuthStep2Material(
+            status = "valid",
+            error = null,
+            authStep3Command = buildAuthStep3Command(encryptedNonces, encryptedDeviceInfo),
+            encryptionKey = encryptionKey,
+            decryptionKey = decryptionKey,
+        )
+    }
+
+    private fun isClassicAuthKeyValid(
+        authKey: ByteArray,
+        phoneNonce: ByteArray,
+        watchNonce: ByteArray,
+        watchHmac: ByteArray,
+    ): Boolean {
+        val stepHmac = computeClassicAuthStepHmac(authKey, phoneNonce, watchNonce)
+        val decryptionKey = stepHmac.copyOfRange(0, 16)
+        val expectedWatchHmac = hmacSha256(decryptionKey, watchNonce + phoneNonce)
+        return expectedWatchHmac.contentEquals(watchHmac)
     }
 
     private fun parseClassicProbeBytes(bytes: ByteArray): ClassicProbeParse {
@@ -1543,6 +1659,7 @@ class DirectWatchPlugin : Plugin() {
                 watchNonceHex = auth.watchNonceHex,
                 watchHmacHex = auth.watchHmacHex,
                 authStage = auth.authStage,
+                authPacketSequenceNumber = auth.authPacketSequenceNumber,
             )
         }
 
@@ -1569,6 +1686,7 @@ class DirectWatchPlugin : Plugin() {
                 watchNonceHex = auth.watchNonceHex,
                 watchHmacHex = auth.watchHmacHex,
                 authStage = auth.authStage,
+                authPacketSequenceNumber = auth.authPacketSequenceNumber,
             )
         }
 
@@ -1581,11 +1699,13 @@ class DirectWatchPlugin : Plugin() {
             watchNonceHex = auth.watchNonceHex,
             watchHmacHex = auth.watchHmacHex,
             authStage = auth.authStage,
+            authPacketSequenceNumber = auth.authPacketSequenceNumber,
         )
     }
 
     private fun parseClassicAuthProbe(bytes: ByteArray): ClassicAuthProbeParse {
         var offset = 0
+        var result = ClassicAuthProbeParse()
         while (offset <= bytes.size - 8) {
             if (offset <= bytes.size - 11 &&
                 bytes[offset] == 0xBA.toByte() &&
@@ -1602,7 +1722,7 @@ class DirectWatchPlugin : Plugin() {
                         val payloadEnd = payloadStart + payloadLength
                         val parsed = parseAuthCommand(bytes.copyOfRange(payloadStart, payloadEnd))
                         if (parsed.authStage != null) {
-                            return parsed
+                            result = mergeClassicAuthProbe(result, parsed)
                         }
                     }
                     offset += packetSize.coerceAtLeast(1)
@@ -1620,9 +1740,10 @@ class DirectWatchPlugin : Plugin() {
                         val rawChannel = bytes[payloadStart].toInt() and 0x0f
                         val opCode = bytes[payloadStart + 1].toInt() and 0xff
                         if (rawChannel == 1 && opCode == 1) {
+                            val sequenceNumber = bytes[offset + 3].toInt() and 0xff
                             val parsed = parseAuthCommand(bytes.copyOfRange(payloadStart + 2, payloadStart + payloadLength))
                             if (parsed.authStage != null) {
-                                return parsed
+                                result = mergeClassicAuthProbe(result, parsed.copy(authPacketSequenceNumber = sequenceNumber))
                             }
                         }
                     }
@@ -1634,7 +1755,84 @@ class DirectWatchPlugin : Plugin() {
             offset += 1
         }
 
-        return ClassicAuthProbeParse()
+        return result
+    }
+
+    private fun mergeClassicAuthProbe(
+        previous: ClassicAuthProbeParse,
+        next: ClassicAuthProbeParse,
+    ): ClassicAuthProbeParse {
+        return ClassicAuthProbeParse(
+            authSubtype = next.authSubtype ?: previous.authSubtype,
+            authStatus = next.authStatus ?: previous.authStatus,
+            watchNonceHex = next.watchNonceHex ?: previous.watchNonceHex,
+            watchHmacHex = next.watchHmacHex ?: previous.watchHmacHex,
+            authStage = next.authStage ?: previous.authStage,
+            authPacketSequenceNumber = next.authPacketSequenceNumber ?: previous.authPacketSequenceNumber,
+        )
+    }
+
+    private fun collectClassicDecryptedPackets(
+        bytes: ByteArray,
+        decryptionKey: ByteArray?,
+    ): List<JSObject> {
+        if (decryptionKey == null) {
+            return emptyList()
+        }
+
+        val decryptedPackets = mutableListOf<JSObject>()
+        var offset = 0
+        while (offset <= bytes.size - 8) {
+            if (bytes[offset] == 0xA5.toByte() && bytes[offset + 1] == 0xA5.toByte()) {
+                val packetType = bytes[offset + 2].toInt() and 0x0f
+                val sequenceNumber = bytes[offset + 3].toInt() and 0xff
+                val payloadLength = littleEndianUInt16(bytes, offset + 4)
+                val packetSize = 8 + payloadLength
+                if (payloadLength >= 2 && offset + packetSize <= bytes.size && packetType == 3) {
+                    val payloadStart = offset + 8
+                    val rawChannel = bytes[payloadStart].toInt() and 0x0f
+                    val opCode = bytes[payloadStart + 1].toInt() and 0xff
+                    if (rawChannel == 1 && opCode == 2) {
+                        val encryptedPayload = bytes.copyOfRange(payloadStart + 2, payloadStart + payloadLength)
+                        val decryptedPayload = try {
+                            aesCtrCrypt(decryptionKey, decryptionKey, encryptedPayload)
+                        } catch (_: Exception) {
+                            null
+                        }
+                        if (decryptedPayload != null) {
+                            val command = parseClassicCommandHeader(decryptedPayload)
+                            val item = JSObject()
+                            item.put("sequenceNumber", sequenceNumber)
+                            item.put("byteLength", decryptedPayload.size)
+                            item.put("rawHex", bytePreviewHex(decryptedPayload, MAX_CLASSIC_PACKET_PREVIEW_BYTES))
+                            item.put("commandType", command.commandType)
+                            item.put("commandSubtype", command.commandSubtype)
+                            item.put("commandStatus", command.commandStatus)
+                            decryptedPackets.add(item)
+                        }
+                    }
+                    offset += packetSize.coerceAtLeast(1)
+                    continue
+                }
+            }
+            offset += 1
+        }
+
+        return decryptedPackets
+    }
+
+    private fun parseClassicCommandHeader(payload: ByteArray): ClassicCommandHeader {
+        var commandType: Int? = null
+        var commandSubtype: Int? = null
+        var commandStatus: Int? = null
+        walkProtoFields(payload) { fieldNumber, wireType, value ->
+            when {
+                fieldNumber == 1 && wireType == 0 -> commandType = value.intValue
+                fieldNumber == 2 && wireType == 0 -> commandSubtype = value.intValue
+                fieldNumber == 100 && wireType == 0 -> commandStatus = value.intValue
+            }
+        }
+        return ClassicCommandHeader(commandType, commandSubtype, commandStatus)
     }
 
     private fun parseAuthCommand(payload: ByteArray): ClassicAuthProbeParse {
@@ -1643,6 +1841,8 @@ class DirectWatchPlugin : Plugin() {
         var authStatus: Int? = null
         var watchNonceHex: String? = null
         var watchHmacHex: String? = null
+        var hasAuthStep3 = false
+        var hasAuthStep4 = false
 
         walkProtoFields(payload) { fieldNumber, wireType, value ->
             when {
@@ -1661,6 +1861,8 @@ class DirectWatchPlugin : Plugin() {
                                     }
                                 }
                             }
+                            authField == 32 && authWireType == 2 -> hasAuthStep3 = true
+                            authField == 33 && authWireType == 2 -> hasAuthStep4 = true
                         }
                     }
                 }
@@ -1668,8 +1870,9 @@ class DirectWatchPlugin : Plugin() {
         }
 
         val stage = when {
+            commandSubtype == 27 || hasAuthStep4 -> "authenticated"
             watchNonceHex != null && watchHmacHex != null -> "watch-nonce"
-            commandSubtype != null || commandStatus != null || authStatus != null -> "auth-response"
+            hasAuthStep3 || commandSubtype != null || commandStatus != null || authStatus != null -> "auth-response"
             else -> null
         }
 
@@ -1679,6 +1882,7 @@ class DirectWatchPlugin : Plugin() {
             watchNonceHex = watchNonceHex,
             watchHmacHex = watchHmacHex,
             authStage = stage,
+            authPacketSequenceNumber = null,
         )
     }
 
@@ -1759,6 +1963,53 @@ class DirectWatchPlugin : Plugin() {
         return command.toByteArray()
     }
 
+    private fun buildClassicAuthStep2Packet(command: ByteArray): ByteArray {
+        return buildClassicSppV1Packet(
+            channel = 0x02,
+            flags = 0x80,
+            opCode = 0x02,
+            frameSerial = 0x01,
+            dataType = 0x02,
+            payload = command,
+        )
+    }
+
+    private fun buildAuthStep3Command(encryptedNonces: ByteArray, encryptedDeviceInfo: ByteArray): ByteArray {
+        val authStep3Message = java.io.ByteArrayOutputStream()
+        writeProtoBytesField(authStep3Message, 1, encryptedNonces)
+        writeProtoBytesField(authStep3Message, 2, encryptedDeviceInfo)
+
+        val authMessage = java.io.ByteArrayOutputStream()
+        writeProtoBytesField(authMessage, 32, authStep3Message.toByteArray())
+
+        val command = java.io.ByteArrayOutputStream()
+        writeProtoVarintField(command, 1, 1)
+        writeProtoVarintField(command, 2, 27)
+        writeProtoBytesField(command, 3, authMessage.toByteArray())
+        return command.toByteArray()
+    }
+
+    private fun buildSimpleCommand(type: Int, subtype: Int): ByteArray {
+        val command = java.io.ByteArrayOutputStream()
+        writeProtoVarintField(command, 1, type)
+        writeProtoVarintField(command, 2, subtype)
+        return command.toByteArray()
+    }
+
+    private fun buildClassicAuthDeviceInfo(): ByteArray {
+        val region = Locale.getDefault().language
+            .take(2)
+            .uppercase(Locale.ROOT)
+            .ifBlank { "US" }
+        val info = java.io.ByteArrayOutputStream()
+        writeProtoVarintField(info, 1, 0)
+        writeProtoFloatField(info, 2, Build.VERSION.SDK_INT.toFloat())
+        writeProtoStringField(info, 3, Build.MODEL ?: "Android")
+        writeProtoVarintField(info, 4, 224)
+        writeProtoStringField(info, 5, region)
+        return info.toByteArray()
+    }
+
     private fun buildClassicSppV1Packet(
         channel: Int,
         flags: Int,
@@ -1800,6 +2051,30 @@ class DirectWatchPlugin : Plugin() {
         payload.write(0x01)
         payload.write(0x01)
         payload.write(command)
+        return buildClassicSppV2Packet(packetType = 3, sequenceNumber = sequenceNumber, payload = payload.toByteArray())
+    }
+
+    private fun buildClassicV2AuthStep2Packet(command: ByteArray, sequenceNumber: Int): ByteArray {
+        val payload = java.io.ByteArrayOutputStream()
+        payload.write(0x01)
+        payload.write(0x01)
+        payload.write(command)
+        return buildClassicSppV2Packet(packetType = 3, sequenceNumber = sequenceNumber, payload = payload.toByteArray())
+    }
+
+    private fun buildClassicV2AckPacket(sequenceNumber: Int): ByteArray {
+        return buildClassicSppV2Packet(packetType = 1, sequenceNumber = sequenceNumber, payload = byteArrayOf())
+    }
+
+    private fun buildClassicV2EncryptedCommandPacket(
+        command: ByteArray,
+        sequenceNumber: Int,
+        encryptionKey: ByteArray,
+    ): ByteArray {
+        val payload = java.io.ByteArrayOutputStream()
+        payload.write(0x01)
+        payload.write(0x02)
+        payload.write(aesCtrCrypt(encryptionKey, encryptionKey, command))
         return buildClassicSppV2Packet(packetType = 3, sequenceNumber = sequenceNumber, payload = payload.toByteArray())
     }
 
@@ -1860,6 +2135,97 @@ class DirectWatchPlugin : Plugin() {
         return mac.doFinal(input)
     }
 
+    private fun encryptAesCcm4(key: ByteArray, nonce: ByteArray, payload: ByteArray): ByteArray {
+        val macLength = 4
+        val lengthFieldSize = 15 - nonce.size
+        require(lengthFieldSize in 2..8) { "AES-CCM nonce must be 7..13 bytes." }
+
+        val macBlocks = mutableListOf<ByteArray>()
+        val b0 = ByteArray(16)
+        b0[0] = ((((macLength - 2) / 2) shl 3) or (lengthFieldSize - 1)).toByte()
+        System.arraycopy(nonce, 0, b0, 1, nonce.size)
+        writeBigEndianLength(b0, 16 - lengthFieldSize, lengthFieldSize, payload.size)
+        macBlocks.add(b0)
+        macBlocks.addAll(blocks16(payload))
+
+        var x = ByteArray(16)
+        for (block in macBlocks) {
+            x = aesEncryptBlock(key, xorBlocks(x, block))
+        }
+        val tag = x.copyOfRange(0, macLength)
+
+        val output = ByteArray(payload.size + macLength)
+        var payloadOffset = 0
+        var counter = 1
+        while (payloadOffset < payload.size) {
+            val s = aesEncryptBlock(key, ccmCounterBlock(nonce, lengthFieldSize, counter))
+            val chunkSize = minOf(16, payload.size - payloadOffset)
+            for (index in 0 until chunkSize) {
+                output[payloadOffset + index] = (payload[payloadOffset + index].toInt() xor s[index].toInt()).toByte()
+            }
+            payloadOffset += chunkSize
+            counter += 1
+        }
+
+        val s0 = aesEncryptBlock(key, ccmCounterBlock(nonce, lengthFieldSize, 0))
+        for (index in 0 until macLength) {
+            output[payload.size + index] = (tag[index].toInt() xor s0[index].toInt()).toByte()
+        }
+
+        return output
+    }
+
+    private fun ccmCounterBlock(nonce: ByteArray, lengthFieldSize: Int, counter: Int): ByteArray {
+        val block = ByteArray(16)
+        block[0] = (lengthFieldSize - 1).toByte()
+        System.arraycopy(nonce, 0, block, 1, nonce.size)
+        writeBigEndianLength(block, 16 - lengthFieldSize, lengthFieldSize, counter)
+        return block
+    }
+
+    private fun blocks16(payload: ByteArray): List<ByteArray> {
+        if (payload.isEmpty()) {
+            return emptyList()
+        }
+
+        val blocks = mutableListOf<ByteArray>()
+        var offset = 0
+        while (offset < payload.size) {
+            val block = ByteArray(16)
+            val chunkSize = minOf(16, payload.size - offset)
+            System.arraycopy(payload, offset, block, 0, chunkSize)
+            blocks.add(block)
+            offset += chunkSize
+        }
+        return blocks
+    }
+
+    private fun aesEncryptBlock(key: ByteArray, block: ByteArray): ByteArray {
+        val cipher = Cipher.getInstance("AES/ECB/NoPadding")
+        cipher.init(Cipher.ENCRYPT_MODE, SecretKeySpec(key, "AES"))
+        return cipher.doFinal(block)
+    }
+
+    private fun aesCtrCrypt(key: ByteArray, iv: ByteArray, payload: ByteArray): ByteArray {
+        val cipher = Cipher.getInstance("AES/CTR/NoPadding")
+        cipher.init(Cipher.ENCRYPT_MODE, SecretKeySpec(key, "AES"), IvParameterSpec(iv))
+        return cipher.doFinal(payload)
+    }
+
+    private fun xorBlocks(left: ByteArray, right: ByteArray): ByteArray {
+        val output = ByteArray(16)
+        for (index in 0 until 16) {
+            output[index] = (left[index].toInt() xor right[index].toInt()).toByte()
+        }
+        return output
+    }
+
+    private fun writeBigEndianLength(target: ByteArray, offset: Int, length: Int, value: Int) {
+        for (index in 0 until length) {
+            target[offset + length - 1 - index] = ((value ushr (8 * index)) and 0xff).toByte()
+        }
+    }
+
     private fun readClassicPackets(
         socket: BluetoothSocket,
         packets: MutableList<JSObject>,
@@ -1901,6 +2267,15 @@ class DirectWatchPlugin : Plugin() {
         output.write(bytes)
     }
 
+    private fun writeProtoStringField(output: java.io.ByteArrayOutputStream, fieldNumber: Int, value: String) {
+        writeProtoBytesField(output, fieldNumber, value.toByteArray(Charsets.UTF_8))
+    }
+
+    private fun writeProtoFloatField(output: java.io.ByteArrayOutputStream, fieldNumber: Int, value: Float) {
+        writeProtoVarint(output, (fieldNumber shl 3) or 5)
+        writeLittleEndianUInt32(output, java.lang.Float.floatToIntBits(value))
+    }
+
     private fun writeProtoVarint(output: java.io.ByteArrayOutputStream, value: Int) {
         var remaining = value
         while (remaining >= 0x80) {
@@ -1913,6 +2288,13 @@ class DirectWatchPlugin : Plugin() {
     private fun writeLittleEndianUInt16(output: java.io.ByteArrayOutputStream, value: Int) {
         output.write(value and 0xff)
         output.write((value ushr 8) and 0xff)
+    }
+
+    private fun writeLittleEndianUInt32(output: java.io.ByteArrayOutputStream, value: Int) {
+        output.write(value and 0xff)
+        output.write((value ushr 8) and 0xff)
+        output.write((value ushr 16) and 0xff)
+        output.write((value ushr 24) and 0xff)
     }
 
     private fun littleEndianUInt16(bytes: ByteArray, offset: Int): Int {
@@ -2109,6 +2491,7 @@ class DirectWatchPlugin : Plugin() {
         val watchNonceHex: String?,
         val watchHmacHex: String?,
         val authStage: String?,
+        val authPacketSequenceNumber: Int?,
     )
 
     private data class ClassicAuthProbeParse(
@@ -2117,11 +2500,26 @@ class DirectWatchPlugin : Plugin() {
         val watchNonceHex: String? = null,
         val watchHmacHex: String? = null,
         val authStage: String? = null,
+        val authPacketSequenceNumber: Int? = null,
     )
 
     private data class ClassicAuthKeyCheck(
         val status: String,
         val error: String?,
+    )
+
+    private data class ClassicAuthStep2Material(
+        val status: String,
+        val error: String?,
+        val authStep3Command: ByteArray?,
+        val encryptionKey: ByteArray? = null,
+        val decryptionKey: ByteArray? = null,
+    )
+
+    private data class ClassicCommandHeader(
+        val commandType: Int?,
+        val commandSubtype: Int?,
+        val commandStatus: Int?,
     )
 
     private data class ProtoValue(
