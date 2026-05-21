@@ -556,6 +556,23 @@ export function bootstrapMobileApp(root: HTMLElement) {
       }
     }
 
+    let directWatchError: unknown = null;
+    const directWatchConfig = loadDirectWatchConfig();
+    if (isDirectWatchRuntime() && directWatchConfig.deviceId && directWatchConfig.authKeyHex) {
+      try {
+        update({ error: null, isBusy: true, message: "PERFORM Sync читает день напрямую с часов..." });
+        const payload = await readDirectWatchDailySummary(
+          entryDate,
+          directWatchConfig.deviceId,
+          directWatchConfig.authKeyHex,
+        );
+        await submitDeviceHealthPayload(payload);
+        return;
+      } catch (error) {
+        directWatchError = error;
+      }
+    }
+
     let healthConnectError: unknown = null;
     try {
       const payload = await readMiFitnessHealthConnectDailySummary(entryDate);
@@ -569,22 +586,6 @@ export function bootstrapMobileApp(root: HTMLElement) {
       return;
     } catch (error) {
       healthConnectError = error;
-    }
-
-    let directWatchError: unknown = null;
-    const directWatchConfig = loadDirectWatchConfig();
-    if (isDirectWatchRuntime() && directWatchConfig.deviceId && directWatchConfig.authKeyHex) {
-      try {
-        const payload = await readDirectWatchDailySummary(
-          entryDate,
-          directWatchConfig.deviceId,
-          directWatchConfig.authKeyHex,
-        );
-        await submitDeviceHealthPayload(payload);
-        return;
-      } catch (error) {
-        directWatchError = error;
-      }
     }
 
     try {
