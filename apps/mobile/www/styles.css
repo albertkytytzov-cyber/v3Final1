@@ -3766,6 +3766,368 @@ button {
   font-weight: 740;
 }
 
+.watch-recovery-card,
+.watch-parameters-card,
+.watch-workouts-card,
+.watch-settings-panel,
+.readiness-watch-summary-card {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 14px 30px rgba(13, 44, 39, 0.08);
+}
+
+.watch-recovery-card {
+  background:
+    linear-gradient(135deg, rgba(240, 253, 250, 0.96), rgba(255, 255, 255, 0.92)),
+    #ffffff;
+}
+
+.watch-recovery-card.is-empty {
+  background:
+    linear-gradient(135deg, rgba(255, 247, 237, 0.9), rgba(255, 255, 255, 0.92)),
+    #ffffff;
+}
+
+.watch-card-head,
+.readiness-watch-summary-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+}
+
+.watch-card-head span,
+.readiness-watch-summary-head span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.watch-card-head h3,
+.readiness-watch-summary-head h3 {
+  margin: 2px 0 0;
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 950;
+  line-height: 1.15;
+}
+
+.watch-card-head p,
+.readiness-watch-summary-head p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 760;
+  line-height: 1.3;
+}
+
+.watch-card-head > strong {
+  align-self: start;
+  padding: 7px 10px;
+  border: 1px solid rgba(15, 118, 110, 0.2);
+  border-radius: 999px;
+  background: rgba(204, 251, 241, 0.76);
+  color: var(--accent-dark);
+  font-size: 0.72rem;
+  font-weight: 950;
+  text-align: center;
+}
+
+.watch-recovery-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+  gap: 12px;
+  align-items: stretch;
+}
+
+.watch-sleep-visual,
+.watch-vital-stack {
+  display: grid;
+  gap: 10px;
+}
+
+.watch-sleep-visual {
+  justify-items: center;
+  padding: 12px;
+  border: 1px solid rgba(15, 118, 110, 0.12);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.watch-sleep-visual > span {
+  justify-self: start;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.watch-sleep-ring {
+  display: grid;
+  place-items: center;
+  width: min(170px, 100%);
+  aspect-ratio: 1;
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at center, #ffffff 0 58%, transparent 59%),
+    conic-gradient(#0f766e calc(var(--sleep-progress, 0) * 1%), rgba(148, 163, 184, 0.2) 0);
+  box-shadow: inset 0 0 0 1px rgba(15, 118, 110, 0.08);
+  text-align: center;
+}
+
+.watch-sleep-ring strong {
+  display: block;
+  color: var(--text);
+  font-size: 1.45rem;
+  font-weight: 950;
+  line-height: 1;
+}
+
+.watch-sleep-ring small {
+  display: block;
+  width: 72%;
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1.15;
+}
+
+.watch-stage-panel {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+}
+
+.watch-stage-bar {
+  display: flex;
+  min-height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.18);
+}
+
+.watch-stage-bar span.is-deep,
+.watch-stage-legend i.is-deep {
+  background: #0b5b55;
+}
+
+.watch-stage-bar span.is-rem,
+.watch-stage-legend i.is-rem {
+  background: #4d79a8;
+}
+
+.watch-stage-bar span.is-light,
+.watch-stage-legend i.is-light {
+  background: #a15c07;
+}
+
+.watch-stage-legend {
+  display: grid;
+  gap: 5px;
+}
+
+.watch-stage-legend span {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 820;
+}
+
+.watch-stage-legend i {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+}
+
+.watch-vital-stack {
+  align-content: start;
+}
+
+.watch-vital-tile {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 11px;
+  border: 1px solid rgba(15, 118, 110, 0.12);
+  border-radius: 15px;
+  background: rgba(255, 255, 255, 0.8);
+}
+
+.watch-vital-tile span,
+.watch-parameter-row span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 900;
+}
+
+.watch-vital-tile strong,
+.watch-parameter-row strong {
+  color: var(--text);
+  font-size: 1.05rem;
+  font-weight: 950;
+  line-height: 1.12;
+}
+
+.watch-vital-tile small,
+.watch-parameter-row small,
+.watch-empty-note,
+.watch-source-note span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 760;
+  line-height: 1.3;
+}
+
+.watch-insight {
+  display: grid;
+  gap: 4px;
+  padding: 11px;
+  border: 1px solid rgba(15, 118, 110, 0.14);
+  border-radius: 15px;
+  background: rgba(240, 253, 250, 0.78);
+}
+
+.watch-insight strong {
+  color: var(--accent-dark);
+  font-size: 0.88rem;
+  font-weight: 950;
+}
+
+.watch-insight span {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 780;
+  line-height: 1.35;
+}
+
+.watch-actions,
+.readiness-watch-summary-actions,
+.watch-settings-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.watch-actions .secondary-action,
+.watch-settings-actions .secondary-action,
+.readiness-watch-summary-actions .secondary-action {
+  min-height: 46px;
+  padding: 0 12px;
+  border: 1px solid rgba(15, 118, 110, 0.16);
+  border-radius: 15px;
+  background: #ffffff;
+  color: var(--accent-dark);
+  font-weight: 900;
+}
+
+.watch-actions .secondary-action:disabled,
+.watch-settings-actions .secondary-action:disabled,
+.readiness-watch-summary-actions .secondary-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.watch-vital-tile small,
+.watch-parameter-row small {
+  hyphens: none;
+  overflow-wrap: normal;
+}
+
+.watch-parameter-list {
+  display: grid;
+  gap: 8px;
+}
+
+.watch-parameter-row {
+  display: grid;
+  grid-template-columns: minmax(0, 0.75fr) minmax(0, 0.65fr) minmax(0, 1.1fr);
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.76);
+}
+
+.watch-workout-list {
+  display: grid;
+  gap: 8px;
+}
+
+.watch-workout-item {
+  padding: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.76);
+}
+
+.watch-workout-item summary,
+.watch-settings-panel summary {
+  display: grid;
+  gap: 3px;
+  cursor: pointer;
+}
+
+.watch-workout-item summary span,
+.watch-settings-panel summary span {
+  color: var(--text);
+  font-size: 0.86rem;
+  font-weight: 950;
+}
+
+.watch-workout-item summary small,
+.watch-settings-panel summary small {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 760;
+}
+
+.watch-settings-body {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.watch-source-note {
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.76);
+}
+
+.watch-source-note strong {
+  color: var(--text);
+  font-size: 0.9rem;
+  font-weight: 950;
+}
+
+.readiness-watch-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.readiness-watch-summary-head .secondary-action {
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1px solid rgba(15, 118, 110, 0.16);
+  border-radius: 14px;
+  background: #ffffff;
+  color: var(--accent-dark);
+  font-weight: 900;
+}
+
 .direct-watch-diagnostics {
   border-color: rgba(34, 197, 94, 0.24);
   background: rgba(240, 253, 244, 0.82);
@@ -4359,6 +4721,8 @@ button.timeline-card:active {
   .summary-inline-head,
   .coach-ai-review-head,
   .device-health-head,
+  .watch-card-head,
+  .readiness-watch-summary-head,
   .today-indicators-head,
   .readiness-trend-head,
   .readiness-trend-chart-meta,
@@ -4385,11 +4749,15 @@ button.timeline-card:active {
   }
 
   .readiness-metrics,
+  .readiness-watch-summary-grid,
   .device-health-compact-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .readiness-utility-actions,
+  .watch-actions,
+  .watch-settings-actions,
+  .readiness-watch-summary-actions,
   .device-health-compact-actions,
   .athlete-day-brief-actions {
     grid-template-columns: minmax(0, 1fr);
@@ -4416,6 +4784,15 @@ button.timeline-card:active {
 
   .coach-team-day-row {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .watch-recovery-layout,
+  .watch-parameter-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .readiness-watch-summary-head .secondary-action {
+    justify-self: start;
   }
 
   .coach-team-day-row button {
@@ -4462,8 +4839,12 @@ button.timeline-card:active {
   .readiness-factor-row,
   .coach-readiness-analytics .readiness-factor-row,
   .athlete-home-actions,
+  .readiness-watch-summary-grid,
   .device-health-compact-grid,
   .device-health-compact-actions,
+  .watch-actions,
+  .watch-settings-actions,
+  .readiness-watch-summary-actions,
   .choice-group,
   .coach-day-status-brief-grid {
     grid-template-columns: 1fr;

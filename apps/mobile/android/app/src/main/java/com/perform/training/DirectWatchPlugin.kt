@@ -22,6 +22,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import androidx.core.app.ActivityCompat
 import com.getcapacitor.JSArray
 import com.getcapacitor.JSObject
@@ -33,13 +34,17 @@ import com.getcapacitor.annotation.Permission
 import com.getcapacitor.annotation.PermissionCallback
 import java.io.IOException
 import java.security.SecureRandom
+import java.util.Calendar
+import java.util.GregorianCalendar
 import java.util.Locale
+import java.util.TimeZone
 import java.util.UUID
 import javax.crypto.Cipher
 import javax.crypto.Mac
 import javax.crypto.spec.IvParameterSpec
 import javax.crypto.spec.SecretKeySpec
 import kotlin.math.roundToInt
+import org.json.JSONObject
 
 @CapacitorPlugin(
     name = "DirectWatch",
@@ -56,6 +61,10 @@ import kotlin.math.roundToInt
             alias = "location",
             strings = [Manifest.permission.ACCESS_FINE_LOCATION],
         ),
+        Permission(
+            alias = "notifications",
+            strings = [Manifest.permission.POST_NOTIFICATIONS],
+        ),
     ],
 )
 class DirectWatchPlugin : Plugin() {
@@ -66,6 +75,7 @@ class DirectWatchPlugin : Plugin() {
     private var activeBondReceiver: BroadcastReceiver? = null
     private var activeClassicSocket: BluetoothSocket? = null
     private var activeClassicThread: Thread? = null
+    private var activeClassicForegroundBridge = false
     private var activeSession: DirectWatchSession? = null
     private val sessionSubscribeQueue = java.util.ArrayDeque<NotifyCharacteristicSubscription>()
     private var pendingSessionSubscribe: NotifyCharacteristicSubscription? = null
@@ -592,6 +602,18 @@ class DirectWatchPlugin : Plugin() {
     }
 
     @PluginMethod
+    fun getSyncServiceStatus(call: PluginCall) {
+        call.resolve(DirectWatchForegroundService.status(context))
+    }
+
+    @PluginMethod
+    fun stopSyncService(call: PluginCall) {
+        stopActiveClassicSocket()
+        DirectWatchForegroundService.stop(context.applicationContext)
+        call.resolve(DirectWatchForegroundService.status(context))
+    }
+
+    @PluginMethod
     fun probeClassicSession(call: PluginCall) {
         val address = call.getString("deviceId")
         val authStep1 = call.getBoolean("authStep1") ?: false
@@ -798,6 +820,235 @@ class DirectWatchPlugin : Plugin() {
             mainHandler.post {
                 call.resolve(response)
             }
+        }
+        activeClassicThread = worker
+        worker.start()
+    }
+
+    @PluginMethod
+    fun syncService(call: PluginCall) {
+        val address = call.getString("deviceId")
+        val authKeyHex = call.getString("authKeyHex")?.trim()?.takeIf { it.isNotBlank() }
+        val weatherPayload = call.data.optJSONObject("weather")
+        val keepAliveMs = (call.getInt("keepAliveMs") ?: 0).coerceIn(0, CLASSIC_SERVICE_BRIDGE_MAX_MS)
+        if (address.isNullOrBlank()) {
+            call.reject("deviceId is required")
+            return
+        }
+
+        val adapter = bluetoothAdapter()
+        if (adapter == null || !adapter.isEnabled) {
+            call.reject("Включите Bluetooth на телефоне и повторите служебную синхронизацию.")
+            return
+        }
+
+        if (!hasRequiredRuntimePermissions()) {
+            call.reject("Нужно разрешить PERFORM подключение к Bluetooth-устройствам.")
+            return
+        }
+
+        if (authKeyHex.isNullOrBlank()) {
+            call.reject("Auth Key должен быть сохранён перед служебной синхронизацией.")
+            return
+        }
+
+        val device = try {
+            adapter.getRemoteDevice(address)
+        } catch (error: IllegalArgumentException) {
+            call.reject("Некорректный идентификатор Bluetooth-устройства.", error)
+            return
+        }
+
+        if (safeBondState(device) != BluetoothDevice.BOND_BONDED) {
+            call.reject("Для служебной синхронизации часы должны быть в системном сопряжении.")
+            return
+        }
+
+        stopActiveGatt()
+        stopActiveClassicSocket()
+
+        val worker = Thread {
+            var socket: BluetoothSocket? = null
+            val packets = mutableListOf<JSObject>()
+            val serviceCommands = mutableListOf<String>()
+            var connected = false
+            var sentVersionRequest = false
+            var sentSessionConfig = false
+            var sentAuthStep1 = false
+            var sentAuthStep2 = false
+            var phoneNonce: ByteArray? = null
+            var postAuthDecryptionKey: ByteArray? = null
+            var errorMessage: String? = null
+            var resolved = false
+            var nextServiceSequence = 2
+            var foregroundServiceStarted = false
+            val combined = java.io.ByteArrayOutputStream()
+
+            fun resolveNow() {
+                if (resolved) {
+                    return
+                }
+                resolved = true
+                val response = buildServiceSyncResponse(
+                    device = device,
+                    connected = connected,
+                    sentVersionRequest = sentVersionRequest,
+                    sentSessionConfig = sentSessionConfig,
+                    sentAuthStep1 = sentAuthStep1,
+                    sentAuthStep2 = sentAuthStep2,
+                    sentServiceCommands = serviceCommands,
+                    keepAliveMs = keepAliveMs,
+                    phoneNonce = phoneNonce,
+                    authKeyHex = authKeyHex,
+                    postAuthDecryptionKey = postAuthDecryptionKey,
+                    packets = packets,
+                    combinedBytes = combined.toByteArray(),
+                    error = errorMessage,
+                )
+                mainHandler.post {
+                    call.resolve(response)
+                }
+            }
+
+            try {
+                try {
+                    adapter.cancelDiscovery()
+                } catch (_: SecurityException) {
+                    // Discovery cancellation is best-effort.
+                }
+
+                socket = try {
+                    device.createRfcommSocketToServiceRecord(SPP_SERVICE_UUID)
+                } catch (error: IOException) {
+                    throw IOException("Android не смог создать SPP-сокет для часов.", error)
+                }
+
+                activeClassicSocket = socket
+                socket.connect()
+                connected = true
+
+                socket.outputStream.write(CLASSIC_SPP_V1_VERSION_REQUEST)
+                socket.outputStream.flush()
+                sentVersionRequest = true
+                readClassicPackets(socket, packets, combined, CLASSIC_VERSION_READ_MS)
+
+                val versionProbe = parseClassicProbeBytes(combined.toByteArray())
+                val useSppV2 = shouldUseClassicSppV2(versionProbe.versionHex)
+                if (useSppV2) {
+                    socket.outputStream.write(buildClassicV2SessionConfigPacket(0))
+                    socket.outputStream.flush()
+                    sentSessionConfig = true
+                    readClassicPackets(socket, packets, combined, CLASSIC_SESSION_CONFIG_READ_MS)
+                }
+
+                phoneNonce = ByteArray(16)
+                SecureRandom().nextBytes(phoneNonce)
+                socket.outputStream.write(
+                    if (useSppV2) {
+                        buildClassicV2AuthStep1Packet(phoneNonce, 0)
+                    } else {
+                        buildClassicAuthStep1Packet(phoneNonce)
+                    },
+                )
+                socket.outputStream.flush()
+                sentAuthStep1 = true
+                errorMessage = readClassicPackets(socket, packets, combined, CLASSIC_PROBE_READ_MS) ?: errorMessage
+
+                val parsedAuthStep1 = parseClassicProbeBytes(combined.toByteArray())
+                val authStep2 = buildClassicAuthStep2Material(authKeyHex, phoneNonce, parsedAuthStep1)
+                if (authStep2.status != "valid" || authStep2.authStep3Command == null) {
+                    errorMessage = authStep2.error ?: "PERFORM Sync не смог авторизоваться для служебной синхронизации."
+                } else {
+                    if (useSppV2 && parsedAuthStep1.authPacketSequenceNumber != null) {
+                        socket.outputStream.write(buildClassicV2AckPacket(parsedAuthStep1.authPacketSequenceNumber))
+                        socket.outputStream.flush()
+                    }
+                    socket.outputStream.write(
+                        if (useSppV2) {
+                            buildClassicV2AuthStep2Packet(authStep2.authStep3Command, 1)
+                        } else {
+                            buildClassicAuthStep2Packet(authStep2.authStep3Command)
+                        },
+                    )
+                    socket.outputStream.flush()
+                    sentAuthStep2 = true
+                    postAuthDecryptionKey = authStep2.decryptionKey
+                    errorMessage = readClassicPackets(socket, packets, combined, CLASSIC_PROBE_READ_MS) ?: errorMessage
+
+                    val parsedAuthStep2 = parseClassicProbeBytes(combined.toByteArray())
+                    if (!useSppV2 || parsedAuthStep2.authStage != "authenticated" || authStep2.encryptionKey == null) {
+                        errorMessage = "Часы авторизовались не полностью: служебные команды доступны только в SPP v2 после auth."
+                    } else {
+                        if (parsedAuthStep2.authPacketSequenceNumber != null) {
+                            socket.outputStream.write(buildClassicV2AckPacket(parsedAuthStep2.authPacketSequenceNumber))
+                            socket.outputStream.flush()
+                        }
+
+                        val serviceSyncCommands = buildClassicServiceSyncCommands(weatherPayload)
+                        serviceSyncCommands.forEachIndexed { index, command ->
+                            socket.outputStream.write(
+                                buildClassicV2EncryptedCommandPacket(
+                                    command = command.payload,
+                                    sequenceNumber = 2 + index,
+                                    encryptionKey = authStep2.encryptionKey,
+                                ),
+                            )
+                            serviceCommands.add(command.label)
+                            Thread.sleep(CLASSIC_POST_AUTH_COMMAND_DELAY_MS)
+                        }
+                        nextServiceSequence = 2 + serviceSyncCommands.size
+                        socket.outputStream.flush()
+                        errorMessage = readClassicPackets(socket, packets, combined, CLASSIC_SERVICE_SYNC_READ_MS) ?: errorMessage
+                        if (keepAliveMs > 0 && errorMessage == null) {
+                            DirectWatchForegroundService.start(
+                                context.applicationContext,
+                                device.address,
+                                devicesByAddress[device.address]?.name ?: scanResultNameFallback(device),
+                                keepAliveMs.toLong(),
+                            )
+                            foregroundServiceStarted = true
+                            activeClassicForegroundBridge = true
+                            serviceCommands.add("bluetooth-bridge")
+                            resolveNow()
+                            keepAliveClassicServiceBridge(
+                                socket = socket,
+                                packets = packets,
+                                combined = combined,
+                                encryptionKey = authStep2.encryptionKey,
+                                decryptionKey = authStep2.decryptionKey,
+                                weatherPayload = weatherPayload,
+                                initialSequenceNumber = nextServiceSequence,
+                                durationMs = keepAliveMs.toLong(),
+                            )
+                        }
+                    }
+                }
+            } catch (error: IOException) {
+                errorMessage = safeMessage(error)
+            } catch (error: SecurityException) {
+                errorMessage = "Нет разрешения Bluetooth для Classic/SPP-подключения."
+            } catch (error: InterruptedException) {
+                Thread.currentThread().interrupt()
+                errorMessage = "Служебная синхронизация была остановлена."
+            } finally {
+                try {
+                    socket?.close()
+                } catch (_: IOException) {
+                    // Socket is already closed.
+                }
+                if (activeClassicSocket == socket) {
+                    activeClassicSocket = null
+                }
+                if (activeClassicThread == Thread.currentThread()) {
+                    activeClassicThread = null
+                }
+                if (foregroundServiceStarted) {
+                    activeClassicForegroundBridge = false
+                    DirectWatchForegroundService.stop(context.applicationContext)
+                }
+            }
+
+            resolveNow()
         }
         activeClassicThread = worker
         worker.start()
@@ -1044,7 +1295,9 @@ class DirectWatchPlugin : Plugin() {
     override fun handleOnDestroy() {
         stopActiveScan()
         stopActiveGatt()
-        stopActiveClassicSocket()
+        if (!activeClassicForegroundBridge) {
+            stopActiveClassicSocket()
+        }
         stopActiveBondReceiver()
         super.handleOnDestroy()
     }
@@ -1069,7 +1322,9 @@ class DirectWatchPlugin : Plugin() {
     }
 
     private fun requiredPermissionAliases(): Array<String> {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            arrayOf("bluetoothScan", "bluetoothConnect", "notifications")
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             arrayOf("bluetoothScan", "bluetoothConnect")
         } else {
             arrayOf("location")
@@ -1583,6 +1838,79 @@ class DirectWatchPlugin : Plugin() {
         response.put("authStage", parsed.authStage)
         response.put("error", error)
         response.put("probedAt", java.time.Instant.now().toString())
+        return response
+    }
+
+    private fun buildServiceSyncResponse(
+        device: BluetoothDevice,
+        connected: Boolean,
+        sentVersionRequest: Boolean,
+        sentSessionConfig: Boolean,
+        sentAuthStep1: Boolean,
+        sentAuthStep2: Boolean,
+        sentServiceCommands: List<String>,
+        keepAliveMs: Int,
+        phoneNonce: ByteArray?,
+        authKeyHex: String?,
+        postAuthDecryptionKey: ByteArray?,
+        packets: List<JSObject>,
+        combinedBytes: ByteArray,
+        error: String?,
+    ): JSObject {
+        val response = buildClassicProbeResponse(
+            device = device,
+            connected = connected,
+            sentVersionRequest = sentVersionRequest,
+            sentSessionConfig = sentSessionConfig,
+            sentAuthStep1 = sentAuthStep1,
+            sentAuthStep2 = sentAuthStep2,
+            sentPostAuthProbe = sentServiceCommands.isNotEmpty(),
+            sentActivityFileProbe = false,
+            activityFileProbeCount = 0,
+            phoneNonce = phoneNonce,
+            authKeyHex = authKeyHex,
+            postAuthDecryptionKey = postAuthDecryptionKey,
+            packets = packets,
+            combinedBytes = combinedBytes,
+            error = error,
+        )
+        response.put("sentServiceSync", sentServiceCommands.isNotEmpty())
+        response.put("sentTime", sentServiceCommands.contains("time"))
+        response.put("sentPhoneLocation", sentServiceCommands.contains("phone-location"))
+        response.put(
+            "sentWeatherPrefsRead",
+            sentServiceCommands.any { it == "weather-prefs-read" || it == "weather-prefs-read-confirm" },
+        )
+        response.put(
+            "sentWeatherPrefs",
+            sentServiceCommands.any {
+                it == "weather-prefs" ||
+                    it == "weather-enable" ||
+                    it == "weather-temp-unit" ||
+                    it == "weather-alerts"
+            },
+        )
+        response.put(
+            "sentWeatherLocationsRead",
+            sentServiceCommands.any { it == "weather-locations-read" || it == "weather-locations-read-confirm" },
+        )
+        response.put("sentWeatherLocation", sentServiceCommands.any { it == "weather-location" || it == "weather-location-add" })
+        response.put("sentWeatherLocationsOrder", sentServiceCommands.contains("weather-locations-order"))
+        response.put("sentWeatherCurrent", sentServiceCommands.contains("weather-current"))
+        response.put("sentWeatherDaily", sentServiceCommands.contains("weather-daily"))
+        response.put("sentWeatherHourly", sentServiceCommands.contains("weather-hourly"))
+        response.put("keptBluetoothBridge", sentServiceCommands.contains("bluetooth-bridge"))
+        response.put("keepAliveMs", keepAliveMs)
+        response.put(
+            "bridgeUntil",
+            if (keepAliveMs > 0) {
+                java.time.Instant.now().plusMillis(keepAliveMs.toLong()).toString()
+            } else {
+                null
+            },
+        )
+        response.put("serviceCommands", JSArray(sentServiceCommands))
+        response.put("syncedAt", java.time.Instant.now().toString())
         return response
     }
 
@@ -2136,6 +2464,15 @@ class DirectWatchPlugin : Plugin() {
             "8:35" -> "Настройки Vitality"
             "8:42" -> "Цели активности"
             "8:45", "8:46", "8:47" -> "Онлайн-показатели"
+            "10:0" -> "Погода сейчас"
+            "10:1" -> "Прогноз погоды на дни"
+            "10:2" -> "Почасовой прогноз погоды"
+            "10:3" -> "Запрос погоды"
+            "10:5" -> "Список локаций погоды"
+            "10:6" -> "Порядок локаций погоды"
+            "10:7" -> "Локация погоды"
+            "10:9" -> "Запрос настроек погоды"
+            "10:10" -> "Настройки погоды"
             else -> null
         }
     }
@@ -2151,6 +2488,343 @@ class DirectWatchPlugin : Plugin() {
             ClassicPostAuthProbeCommand("stress-config", buildSimpleCommand(8, 14)),
             ClassicPostAuthProbeCommand("vitality-config", buildSimpleCommand(8, 35)),
         )
+    }
+
+    private fun buildClassicServiceSyncCommands(weatherPayload: JSONObject?): List<ClassicPostAuthProbeCommand> {
+        val commands = mutableListOf(
+            ClassicPostAuthProbeCommand("time", buildSetCurrentTimeCommand()),
+        )
+
+        if (weatherPayload != null) {
+            Log.i(TAG, "classic service weather sync ${describeWeatherPayload(weatherPayload)}")
+            buildPostLocationCommand(weatherPayload)?.let {
+                commands.add(ClassicPostAuthProbeCommand("phone-location", it))
+            }
+            commands.add(ClassicPostAuthProbeCommand("weather-locations-read", buildGetWeatherLocationsCommand()))
+            commands.add(ClassicPostAuthProbeCommand("weather-location-add", buildAddWeatherLocationCommand(weatherPayload)))
+            commands.add(ClassicPostAuthProbeCommand("weather-locations-order", buildSetWeatherLocationsOrderCommand(weatherPayload)))
+            commands.add(ClassicPostAuthProbeCommand("weather-temp-unit", buildSetWeatherTempUnitCommand()))
+            commands.add(ClassicPostAuthProbeCommand("weather-alerts", buildSetWeatherAlertsCommand()))
+            buildSetCurrentWeatherCommand(weatherPayload)?.let {
+                commands.add(ClassicPostAuthProbeCommand("weather-current", it))
+            }
+            buildSetDailyWeatherForecastCommand(weatherPayload)?.let {
+                commands.add(ClassicPostAuthProbeCommand("weather-daily", it))
+            }
+            buildSetHourlyWeatherForecastCommand(weatherPayload)?.let {
+                commands.add(ClassicPostAuthProbeCommand("weather-hourly", it))
+            }
+        }
+
+        return commands
+    }
+
+    private fun buildPostLocationCommand(weatherPayload: JSONObject): ByteArray? {
+        val latitude = weatherPayload.optNullableDouble("latitude") ?: 47.0105
+        val longitude = weatherPayload.optNullableDouble("longitude") ?: 28.8638
+        val altitude = weatherPayload.optNullableDouble("altitude") ?: 0.0
+        if (latitude == 0.0 && longitude == 0.0) {
+            return null
+        }
+
+        val location = java.io.ByteArrayOutputStream()
+        writeProtoInt32Field(location, 1, (System.currentTimeMillis() / 1000L).toInt())
+        writeProtoDoubleField(location, 2, longitude)
+        writeProtoDoubleField(location, 3, latitude)
+        writeProtoDoubleField(location, 4, altitude)
+
+        val locationEnvelope = java.io.ByteArrayOutputStream()
+        writeProtoBytesField(locationEnvelope, 3, location.toByteArray())
+
+        val command = java.io.ByteArrayOutputStream()
+        writeProtoVarintField(command, 1, 16)
+        writeProtoVarintField(command, 2, 2)
+        writeProtoBytesField(command, 18, locationEnvelope.toByteArray())
+        return command.toByteArray()
+    }
+
+    private fun buildClassicWeatherRefreshCommands(weatherPayload: JSONObject): List<ClassicPostAuthProbeCommand> {
+        Log.i(TAG, "classic bridge weather payload ${describeWeatherPayload(weatherPayload)}")
+        val commands = mutableListOf(
+            ClassicPostAuthProbeCommand("weather-locations-read-refresh", buildGetWeatherLocationsCommand()),
+            ClassicPostAuthProbeCommand("weather-locations-order-refresh", buildSetWeatherLocationsOrderCommand(weatherPayload)),
+            ClassicPostAuthProbeCommand("weather-temp-unit-refresh", buildSetWeatherTempUnitCommand()),
+            ClassicPostAuthProbeCommand("weather-alerts-refresh", buildSetWeatherAlertsCommand()),
+        )
+        buildSetCurrentWeatherCommand(weatherPayload)?.let {
+            commands.add(ClassicPostAuthProbeCommand("weather-current-refresh", it))
+        }
+        buildSetDailyWeatherForecastCommand(weatherPayload)?.let {
+            commands.add(ClassicPostAuthProbeCommand("weather-daily-refresh", it))
+        }
+        buildSetHourlyWeatherForecastCommand(weatherPayload)?.let {
+            commands.add(ClassicPostAuthProbeCommand("weather-hourly-refresh", it))
+        }
+        return commands
+    }
+
+    private fun describeWeatherPayload(weatherPayload: JSONObject): String {
+        val current = weatherPayload.optJSONObject("current")
+        val dailyCount = weatherPayload.optJSONArray("daily")?.length() ?: 0
+        val hourlyCount = weatherPayload.optJSONArray("hourly")?.length() ?: 0
+        return "location=${weatherPayload.optString("locationKey", "-")} " +
+            "name=${weatherPayload.optString("locationName", "-")} " +
+            "published=${weatherPayload.optString("publicationTimestamp", "-")} " +
+            "current=${current != null} daily=$dailyCount hourly=$hourlyCount"
+    }
+
+    private fun buildSetCurrentTimeCommand(): ByteArray {
+        val now = GregorianCalendar.getInstance()
+        val timezone = TimeZone.getDefault()
+
+        val date = java.io.ByteArrayOutputStream()
+        writeProtoVarintField(date, 1, now.get(Calendar.YEAR))
+        writeProtoVarintField(date, 2, now.get(Calendar.MONTH) + 1)
+        writeProtoVarintField(date, 3, now.get(Calendar.DATE))
+
+        val time = java.io.ByteArrayOutputStream()
+        writeProtoVarintField(time, 1, now.get(Calendar.HOUR_OF_DAY))
+        writeProtoVarintField(time, 2, now.get(Calendar.MINUTE))
+        writeProtoVarintField(time, 3, now.get(Calendar.SECOND))
+        writeProtoVarintField(time, 4, now.get(Calendar.MILLISECOND))
+
+        val timeZone = java.io.ByteArrayOutputStream()
+        writeProtoInt32Field(timeZone, 1, ((now.get(Calendar.ZONE_OFFSET) / 1000) / 60) / 15)
+        writeProtoInt32Field(timeZone, 2, ((now.get(Calendar.DST_OFFSET) / 1000) / 60) / 15)
+        writeProtoStringField(timeZone, 3, timezone.id)
+
+        val clock = java.io.ByteArrayOutputStream()
+        writeProtoBytesField(clock, 1, date.toByteArray())
+        writeProtoBytesField(clock, 2, time.toByteArray())
+        writeProtoBytesField(clock, 3, timeZone.toByteArray())
+        writeProtoVarintField(clock, 4, if (android.text.format.DateFormat.is24HourFormat(context)) 0 else 1)
+
+        val system = java.io.ByteArrayOutputStream()
+        writeProtoBytesField(system, 4, clock.toByteArray())
+
+        val command = java.io.ByteArrayOutputStream()
+        writeProtoVarintField(command, 1, 2)
+        writeProtoVarintField(command, 2, 3)
+        writeProtoBytesField(command, 4, system.toByteArray())
+        return command.toByteArray()
+    }
+
+    private fun buildSetWeatherTempUnitCommand(): ByteArray {
+        val prefs = java.io.ByteArrayOutputStream()
+        writeProtoVarintField(prefs, 1, 1) // Celsius.
+
+        val weather = java.io.ByteArrayOutputStream()
+        writeProtoBytesField(weather, 6, prefs.toByteArray())
+
+        val command = java.io.ByteArrayOutputStream()
+        writeProtoVarintField(command, 1, 10)
+        writeProtoVarintField(command, 2, 10)
+        writeProtoBytesField(command, 12, weather.toByteArray())
+        return command.toByteArray()
+    }
+
+    private fun buildSetWeatherAlertsCommand(): ByteArray {
+        val prefs = java.io.ByteArrayOutputStream()
+        writeProtoVarintField(prefs, 2, 1) // Weather alerts enabled.
+
+        val weather = java.io.ByteArrayOutputStream()
+        writeProtoBytesField(weather, 6, prefs.toByteArray())
+
+        val command = java.io.ByteArrayOutputStream()
+        writeProtoVarintField(command, 1, 10)
+        writeProtoVarintField(command, 2, 10)
+        writeProtoBytesField(command, 12, weather.toByteArray())
+        return command.toByteArray()
+    }
+
+    private fun buildGetWeatherPrefsCommand(): ByteArray {
+        val command = java.io.ByteArrayOutputStream()
+        writeProtoVarintField(command, 1, 10)
+        writeProtoVarintField(command, 2, 9)
+        return command.toByteArray()
+    }
+
+    private fun buildGetWeatherLocationsCommand(): ByteArray {
+        val command = java.io.ByteArrayOutputStream()
+        writeProtoVarintField(command, 1, 10)
+        writeProtoVarintField(command, 2, 5)
+        return command.toByteArray()
+    }
+
+    private fun buildAddWeatherLocationCommand(weatherPayload: JSONObject): ByteArray {
+        val weather = java.io.ByteArrayOutputStream()
+        writeProtoBytesField(weather, 5, buildWeatherLocation(weatherPayload))
+        return buildWeatherCommand(7, weather.toByteArray())
+    }
+
+    private fun buildSetWeatherLocationsOrderCommand(weatherPayload: JSONObject): ByteArray {
+        val locations = java.io.ByteArrayOutputStream()
+        writeProtoBytesField(locations, 1, buildWeatherLocation(weatherPayload))
+
+        val weather = java.io.ByteArrayOutputStream()
+        writeProtoBytesField(weather, 4, locations.toByteArray())
+        return buildWeatherCommand(6, weather.toByteArray())
+    }
+
+    private fun buildSetCurrentWeatherCommand(weatherPayload: JSONObject): ByteArray? {
+        val current = weatherPayload.optJSONObject("current") ?: return null
+
+        val currentWeather = java.io.ByteArrayOutputStream()
+        writeProtoBytesField(currentWeather, 1, buildWeatherMetadata(weatherPayload))
+        writeProtoVarintField(currentWeather, 2, current.optInt("conditionCode", XIAOMI_WEATHER_CLEAR_SKY))
+        writeProtoBytesField(currentWeather, 3, buildWeatherUnitValue(current.optInt("temperatureC", 0), "℃"))
+        val humidity = current.optNullableInt("humidity")
+        writeProtoBytesField(currentWeather, 4, buildWeatherUnitValue(humidity ?: 0, if (humidity != null) "%" else ""))
+        val windSpeed = current.optNullableInt("windSpeedBeaufort")
+        writeProtoBytesField(currentWeather, 5, buildWeatherUnitValue(windSpeed ?: 0, if (windSpeed != null) current.optInt("windDirection", 0).toString() else ""))
+        writeProtoBytesField(currentWeather, 6, buildWeatherUnitValue(current.optNullableInt("uvIndex") ?: 0, ""))
+        writeProtoBytesField(currentWeather, 7, buildWeatherUnitValue(current.optNullableInt("aqi") ?: 0, ""))
+        writeProtoBytesField(currentWeather, 8, buildEmptyWeatherAlertsList())
+        current.optNullableFloat("pressureHpa")?.let {
+            writeProtoFloatField(currentWeather, 9, it * 100f)
+        }
+
+        val weather = java.io.ByteArrayOutputStream()
+        writeProtoBytesField(weather, 1, currentWeather.toByteArray())
+
+        return buildWeatherCommand(0, weather.toByteArray())
+    }
+
+    private fun buildSetDailyWeatherForecastCommand(weatherPayload: JSONObject): ByteArray? {
+        val daily = weatherPayload.optJSONArray("daily") ?: return null
+        if (daily.length() == 0) {
+            return null
+        }
+
+        val entries = java.io.ByteArrayOutputStream()
+        val count = minOf(daily.length(), 7)
+        for (index in 0 until count) {
+            val day = daily.optJSONObject(index) ?: continue
+            val entry = java.io.ByteArrayOutputStream()
+            writeProtoBytesField(entry, 1, buildWeatherUnitValue(0, ""))
+            writeProtoBytesField(entry, 2, buildWeatherRange(day.optInt("conditionCode", XIAOMI_WEATHER_CLEAR_SKY), day.optInt("conditionCode", XIAOMI_WEATHER_CLEAR_SKY)))
+            writeProtoBytesField(entry, 3, buildWeatherRange(day.optInt("temperatureMinC", 0), day.optInt("temperatureMaxC", 0)))
+            writeProtoStringField(entry, 4, "℃")
+            val sunrise = day.optString("sunrise", "")
+            val sunset = day.optString("sunset", "")
+            if (sunrise.isNotBlank() || sunset.isNotBlank()) {
+                writeProtoBytesField(entry, 5, buildWeatherSunriseSunset(sunrise, sunset))
+            }
+            writeProtoBytesField(entries, 1, entry.toByteArray())
+        }
+
+        val forecast = java.io.ByteArrayOutputStream()
+        writeProtoBytesField(forecast, 1, buildWeatherMetadata(weatherPayload))
+        writeProtoBytesField(forecast, 2, entries.toByteArray())
+
+        val weather = java.io.ByteArrayOutputStream()
+        writeProtoBytesField(weather, 2, forecast.toByteArray())
+
+        return buildWeatherCommand(1, weather.toByteArray())
+    }
+
+    private fun buildSetHourlyWeatherForecastCommand(weatherPayload: JSONObject): ByteArray? {
+        val hourly = weatherPayload.optJSONArray("hourly") ?: return null
+        if (hourly.length() == 0) {
+            return null
+        }
+
+        val entries = java.io.ByteArrayOutputStream()
+        val count = minOf(hourly.length(), 24)
+        for (index in 0 until count) {
+            val hour = hourly.optJSONObject(index) ?: continue
+            val entry = java.io.ByteArrayOutputStream()
+            writeProtoBytesField(entry, 1, buildWeatherUnitValue(0, ""))
+            writeProtoBytesField(entry, 2, buildWeatherRange(0, hour.optInt("conditionCode", XIAOMI_WEATHER_CLEAR_SKY)))
+            writeProtoBytesField(entry, 3, buildWeatherRange(0, hour.optInt("temperatureC", 0)))
+            hour.optNullableInt("windSpeedBeaufort")?.let { speed ->
+                writeProtoBytesField(entry, 6, buildWeatherUnitValue(speed, hour.optInt("windDirection", 0).toString()))
+            }
+            writeProtoBytesField(entries, 1, entry.toByteArray())
+        }
+
+        val forecast = java.io.ByteArrayOutputStream()
+        writeProtoBytesField(forecast, 1, buildWeatherMetadata(weatherPayload))
+        writeProtoBytesField(forecast, 2, entries.toByteArray())
+
+        val weather = java.io.ByteArrayOutputStream()
+        writeProtoBytesField(weather, 2, forecast.toByteArray())
+
+        return buildWeatherCommand(2, weather.toByteArray())
+    }
+
+    private fun buildWeatherCommand(subtype: Int, weatherPayload: ByteArray): ByteArray {
+        val command = java.io.ByteArrayOutputStream()
+        writeProtoVarintField(command, 1, 10)
+        writeProtoVarintField(command, 2, subtype)
+        writeProtoBytesField(command, 12, weatherPayload)
+        return command.toByteArray()
+    }
+
+    private fun buildWeatherMetadata(weatherPayload: JSONObject): ByteArray {
+        val locationName = weatherPayload.optString("locationName", "Chisinau").ifBlank { "Chisinau" }
+        val cityName = weatherPayload.optString("cityName", "").ifBlank { locationName }
+        val locationKey = weatherPayload.optString("locationKey", "").ifBlank {
+            "accu:${kotlin.math.abs(locationName.hashCode()) % 1_000_000}"
+        }
+        val publicationTimestamp = weatherPayload.optString("publicationTimestamp", java.time.Instant.now().toString())
+
+        val metadata = java.io.ByteArrayOutputStream()
+        writeProtoStringField(metadata, 1, publicationTimestamp)
+        writeProtoStringField(metadata, 2, cityName)
+        writeProtoStringField(metadata, 3, locationName)
+        writeProtoStringField(metadata, 4, locationKey)
+        writeProtoVarintField(metadata, 5, if (weatherPayload.optBoolean("isCurrentLocation", true)) 1 else 0)
+        return metadata.toByteArray()
+    }
+
+    private fun buildWeatherLocation(weatherPayload: JSONObject): ByteArray {
+        val locationName = weatherPayload.optString("locationName", "Chisinau").ifBlank { "Chisinau" }
+        val locationKey = weatherPayload.optString("locationKey", "").ifBlank {
+            "accu:${kotlin.math.abs(locationName.hashCode()) % 1_000_000}"
+        }
+
+        val location = java.io.ByteArrayOutputStream()
+        writeProtoStringField(location, 1, locationKey)
+        writeProtoStringField(location, 2, locationName)
+        return location.toByteArray()
+    }
+
+    private fun buildWeatherUnitValue(value: Int, unit: String): ByteArray {
+        val unitValue = java.io.ByteArrayOutputStream()
+        writeProtoStringField(unitValue, 1, unit)
+        writeProtoInt32Field(unitValue, 2, value)
+        return unitValue.toByteArray()
+    }
+
+    private fun buildWeatherRange(from: Int, to: Int): ByteArray {
+        val range = java.io.ByteArrayOutputStream()
+        writeProtoInt32Field(range, 1, from)
+        writeProtoInt32Field(range, 2, to)
+        return range.toByteArray()
+    }
+
+    private fun buildEmptyWeatherAlertsList(): ByteArray {
+        return java.io.ByteArrayOutputStream().toByteArray()
+    }
+
+    private fun buildWeatherSunriseSunset(sunrise: String, sunset: String): ByteArray {
+        val value = java.io.ByteArrayOutputStream()
+        writeProtoStringField(value, 1, sunrise)
+        writeProtoStringField(value, 2, sunset)
+        return value.toByteArray()
+    }
+
+    private fun JSONObject.optNullableInt(key: String): Int? {
+        return if (has(key) && !isNull(key)) optInt(key) else null
+    }
+
+    private fun JSONObject.optNullableFloat(key: String): Float? {
+        return if (has(key) && !isNull(key)) optDouble(key).toFloat() else null
+    }
+
+    private fun JSONObject.optNullableDouble(key: String): Double? {
+        return if (has(key) && !isNull(key)) optDouble(key) else null
     }
 
     private fun classicActivityFileIds(bytes: ByteArray, decryptionKey: ByteArray?): List<ByteArray> {
@@ -3259,9 +3933,115 @@ class DirectWatchPlugin : Plugin() {
         return null
     }
 
+    private fun keepAliveClassicServiceBridge(
+        socket: BluetoothSocket,
+        packets: MutableList<JSObject>,
+        combined: java.io.ByteArrayOutputStream,
+        encryptionKey: ByteArray,
+        decryptionKey: ByteArray?,
+        weatherPayload: JSONObject?,
+        initialSequenceNumber: Int,
+        durationMs: Long,
+    ) {
+        val startedAt = android.os.SystemClock.uptimeMillis()
+        var nextSequenceNumber = initialSequenceNumber
+        var nextWeatherRefreshAt = startedAt + CLASSIC_SERVICE_BRIDGE_REFRESH_MS
+        var processedDecryptedPacketCount = collectClassicDecryptedPackets(
+            combined.toByteArray(),
+            decryptionKey,
+        ).size
+
+        while (
+            !Thread.currentThread().isInterrupted &&
+            android.os.SystemClock.uptimeMillis() - startedAt < durationMs
+        ) {
+            readClassicPackets(socket, packets, combined, CLASSIC_SERVICE_BRIDGE_POLL_MS)
+
+            val now = android.os.SystemClock.uptimeMillis()
+            val decryptedPackets = collectClassicDecryptedPackets(combined.toByteArray(), decryptionKey)
+            var hasWeatherRequest = false
+            var hasLocationRequest = false
+            if (decryptedPackets.size > processedDecryptedPacketCount) {
+                for (index in processedDecryptedPacketCount until decryptedPackets.size) {
+                    val packet = decryptedPackets[index]
+                    Log.i(
+                        TAG,
+                        "classic bridge incoming command type=${packet.optInt("commandType", -1)} subtype=${packet.optInt("commandSubtype", -1)} raw=${packet.optString("rawHex")}",
+                    )
+                    if (
+                        packet.optString("channel") == "command" &&
+                        packet.optInt("commandType", -1) == 10 &&
+                        packet.optInt("commandSubtype", -1) == 3
+                    ) {
+                        hasWeatherRequest = true
+                    }
+                    if (
+                        packet.optString("channel") == "command" &&
+                        packet.optInt("commandType", -1) == 16 &&
+                        packet.optInt("commandSubtype", -1) in listOf(1, 3)
+                    ) {
+                        hasLocationRequest = true
+                    }
+                }
+                processedDecryptedPacketCount = decryptedPackets.size
+            }
+
+            if (weatherPayload != null && hasLocationRequest) {
+                buildPostLocationCommand(weatherPayload)?.let { payload ->
+                    Log.i(TAG, "classic bridge send phone-location-watch-request")
+                    socket.outputStream.write(
+                        buildClassicV2EncryptedCommandPacket(
+                            command = payload,
+                            sequenceNumber = nextSequenceNumber++,
+                            encryptionKey = encryptionKey,
+                        ),
+                    )
+                    socket.outputStream.flush()
+                    Thread.sleep(CLASSIC_POST_AUTH_COMMAND_DELAY_MS)
+                }
+            }
+
+            if (weatherPayload != null && (hasWeatherRequest || hasLocationRequest || now >= nextWeatherRefreshAt)) {
+                val refreshReason = when {
+                    hasWeatherRequest -> "watch-request"
+                    hasLocationRequest -> "location-request"
+                    else -> "timer"
+                }
+                Log.i(TAG, "classic bridge weather refresh reason=$refreshReason")
+                buildClassicWeatherRefreshCommands(weatherPayload).forEach { command ->
+                    Log.i(TAG, "classic bridge send ${command.label}")
+                    socket.outputStream.write(
+                        buildClassicV2EncryptedCommandPacket(
+                            command = command.payload,
+                            sequenceNumber = nextSequenceNumber++,
+                            encryptionKey = encryptionKey,
+                        ),
+                    )
+                    Thread.sleep(CLASSIC_POST_AUTH_COMMAND_DELAY_MS)
+                }
+                socket.outputStream.flush()
+                nextWeatherRefreshAt = now + CLASSIC_SERVICE_BRIDGE_REFRESH_MS
+            }
+        }
+    }
+
     private fun writeProtoVarintField(output: java.io.ByteArrayOutputStream, fieldNumber: Int, value: Int) {
         writeProtoVarint(output, (fieldNumber shl 3) or 0)
         writeProtoVarint(output, value)
+    }
+
+    private fun writeProtoSInt32Field(output: java.io.ByteArrayOutputStream, fieldNumber: Int, value: Int) {
+        writeProtoVarint(output, (fieldNumber shl 3) or 0)
+        writeProtoVarint(output, (value shl 1) xor (value shr 31))
+    }
+
+    private fun writeProtoInt32Field(output: java.io.ByteArrayOutputStream, fieldNumber: Int, value: Int) {
+        writeProtoVarint(output, (fieldNumber shl 3) or 0)
+        if (value >= 0) {
+            writeProtoVarint(output, value)
+        } else {
+            writeProtoVarint64(output, value.toLong())
+        }
     }
 
     private fun writeProtoBytesField(output: java.io.ByteArrayOutputStream, fieldNumber: Int, bytes: ByteArray) {
@@ -3279,6 +4059,11 @@ class DirectWatchPlugin : Plugin() {
         writeLittleEndianUInt32(output, java.lang.Float.floatToIntBits(value))
     }
 
+    private fun writeProtoDoubleField(output: java.io.ByteArrayOutputStream, fieldNumber: Int, value: Double) {
+        writeProtoVarint(output, (fieldNumber shl 3) or 1)
+        writeLittleEndianUInt64(output, java.lang.Double.doubleToLongBits(value))
+    }
+
     private fun writeProtoVarint(output: java.io.ByteArrayOutputStream, value: Int) {
         var remaining = value
         while (remaining >= 0x80) {
@@ -3286,6 +4071,15 @@ class DirectWatchPlugin : Plugin() {
             remaining = remaining ushr 7
         }
         output.write(remaining)
+    }
+
+    private fun writeProtoVarint64(output: java.io.ByteArrayOutputStream, value: Long) {
+        var remaining = value
+        while ((remaining and -128L) != 0L) {
+            output.write(((remaining and 0x7fL) or 0x80L).toInt())
+            remaining = remaining ushr 7
+        }
+        output.write(remaining.toInt())
     }
 
     private fun writeLittleEndianUInt16(output: java.io.ByteArrayOutputStream, value: Int) {
@@ -3298,6 +4092,17 @@ class DirectWatchPlugin : Plugin() {
         output.write((value ushr 8) and 0xff)
         output.write((value ushr 16) and 0xff)
         output.write((value ushr 24) and 0xff)
+    }
+
+    private fun writeLittleEndianUInt64(output: java.io.ByteArrayOutputStream, value: Long) {
+        output.write((value and 0xffL).toInt())
+        output.write(((value ushr 8) and 0xffL).toInt())
+        output.write(((value ushr 16) and 0xffL).toInt())
+        output.write(((value ushr 24) and 0xffL).toInt())
+        output.write(((value ushr 32) and 0xffL).toInt())
+        output.write(((value ushr 40) and 0xffL).toInt())
+        output.write(((value ushr 48) and 0xffL).toInt())
+        output.write(((value ushr 56) and 0xffL).toInt())
     }
 
     private fun littleEndianUInt16(bytes: ByteArray, offset: Int): Int {
@@ -3400,6 +4205,7 @@ class DirectWatchPlugin : Plugin() {
     }
 
     private fun stopActiveClassicSocket() {
+        activeClassicForegroundBridge = false
         val thread = activeClassicThread
         activeClassicThread = null
         if (thread != null && thread.isAlive) {
@@ -3415,6 +4221,7 @@ class DirectWatchPlugin : Plugin() {
                 // Socket is already closed.
             }
         }
+        DirectWatchForegroundService.stop(context.applicationContext)
     }
 
     private fun stopActiveBondReceiver() {
@@ -3745,6 +4552,7 @@ class DirectWatchPlugin : Plugin() {
     }
 
     companion object {
+        private const val TAG = "DirectWatch"
         private const val DEFAULT_SCAN_DURATION_MS = 6_000
         private const val INSPECT_TIMEOUT_MS = 10_000
         private const val SESSION_CONNECT_TIMEOUT_MS = 15_000
@@ -3756,6 +4564,7 @@ class DirectWatchPlugin : Plugin() {
         private const val MAX_CLASSIC_PACKET_PREVIEW_BYTES = 160
         private const val CLASSIC_PROBE_READ_MS = 6_000L
         private const val CLASSIC_POST_AUTH_READ_MS = 10_000L
+        private const val CLASSIC_SERVICE_SYNC_READ_MS = 4_000L
         private const val CLASSIC_ACTIVITY_FILE_READ_MS = 15_000L
         private const val CLASSIC_ACTIVITY_FILE_PROBE_LIMIT = 10
         private const val CLASSIC_POST_AUTH_COMMAND_DELAY_MS = 120L
@@ -3763,6 +4572,10 @@ class DirectWatchPlugin : Plugin() {
         private const val CLASSIC_VERSION_READ_MS = 1_200L
         private const val CLASSIC_SESSION_CONFIG_READ_MS = 1_200L
         private const val CLASSIC_PROBE_POLL_MS = 120L
+        private const val CLASSIC_SERVICE_BRIDGE_MAX_MS = 2 * 60 * 60 * 1000
+        private const val CLASSIC_SERVICE_BRIDGE_POLL_MS = 1_000L
+        private const val CLASSIC_SERVICE_BRIDGE_REFRESH_MS = 15 * 60 * 1000L
+        private const val XIAOMI_WEATHER_CLEAR_SKY = 0
         private val PAIRING_TIMEOUT_TOKEN = Any()
         private val SESSION_TIMEOUT_TOKEN = Any()
         private val SPP_SERVICE_UUID: UUID = UUID.fromString("00001101-0000-1000-8000-00805f9b34fb")

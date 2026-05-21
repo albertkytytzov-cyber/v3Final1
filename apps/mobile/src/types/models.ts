@@ -46,6 +46,7 @@ import type {
   DirectWatchInspection,
   DirectWatchSessionPacket,
   DirectWatchSessionStatus,
+  DirectWatchSyncServiceStatus,
 } from "../integrations/direct-watch.js";
 
 export type {
@@ -98,7 +99,8 @@ export type MobileScreen =
   | "plans"
   | "calendar"
   | "results"
-  | "readiness";
+  | "readiness"
+  | "watches";
 
 export interface MobileSessionState {
   apiBaseUrl: string;
@@ -166,6 +168,7 @@ export interface MobileAppState {
     packets: DirectWatchSessionPacket[];
     scannedAt: string | null;
     session: DirectWatchSessionStatus | null;
+    serviceStatus: DirectWatchSyncServiceStatus | null;
   };
   aiReviewByDay: Record<string, CoachDayAiReview>;
   selectedScreen: MobileScreen;

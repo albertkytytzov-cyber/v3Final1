@@ -18,6 +18,7 @@ import {
   addDirectWatchPacketListener,
   addDirectWatchSessionListener,
   getDirectWatchSessionStatus,
+  getDirectWatchSyncServiceStatus,
   inspectDirectWatchDevice,
   isDirectWatchRuntime,
   pairDirectWatchDevice,
@@ -26,10 +27,18 @@ import {
   scanDirectWatchDevices,
   startDirectWatchSession,
   stopDirectWatchSession,
+  stopDirectWatchSyncService,
+  syncDirectWatchService,
   unpairDirectWatchDevice,
 } from "../integrations/direct-watch.js";
-import type { DirectWatchDecryptedPacket } from "../integrations/direct-watch.js";
+import type { DirectWatchDecryptedPacket, DirectWatchServiceSyncResult } from "../integrations/direct-watch.js";
 import { readHuaweiHealthDailySummary } from "../integrations/huawei-health.js";
+import {
+  buildDirectWatchWeatherLocationPayload,
+  fetchDirectWatchWeatherPayload,
+  getDirectWatchWeatherLocation,
+  resolveDirectWatchWeatherLocation,
+} from "../integrations/watch-weather.js";
 import {
   clearSession,
   loadDirectWatchConfig,
@@ -79,6 +88,7 @@ import type {
 const runtimeConfig = readRuntimeConfig();
 const SHOW_DIRECT_WATCH_DIAGNOSTICS = true;
 const DIRECT_WATCH_AUTH_KEY_PATTERN = /^[0-9a-f]{32}$/i;
+const DIRECT_WATCH_SERVICE_KEEP_ALIVE_MS = 2 * 60 * 60 * 1000;
 const TRAINING_ABBREVIATION_EXPLANATIONS: Record<string, string> = {
   "АНП": "Анаэробный порог. Граница между устойчивой работой и зоной, где усталость начинает быстро накапливаться. Если в плане указана работа около АнП, держи высокую, но контролируемую интенсивность без развала техники.",
   "HR": "Пульс / частота сердечных сокращений. Используется для контроля интенсивности нагрузки. Если указан диапазон HR, держи работу примерно в этом пульсовом коридоре, не уходя сильно выше или ниже.",
@@ -109,6 +119,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
       packets: [],
       scannedAt: null,
       session: null,
+      serviceStatus: null,
     },
     aiReviewByDay: buildCoachAiReviewByDay(initialData.coachAiReviews),
     selectedScreen: "dashboard",
@@ -157,6 +168,16 @@ export function bootstrapMobileApp(root: HTMLElement) {
           session,
         },
       });
+    });
+    void getDirectWatchSyncServiceStatus().then((serviceStatus) => {
+      update({
+        directWatchDiagnostic: {
+          ...state.directWatchDiagnostic,
+          serviceStatus,
+        },
+      });
+    }).catch(() => {
+      // Статус служебного режима не критичен для запуска приложения.
     });
   }
 
@@ -650,6 +671,115 @@ export function bootstrapMobileApp(root: HTMLElement) {
     }
   };
 
+  const syncDirectWatchServiceSettings = async (deviceId?: string | null) => {
+    if (state.session.user?.role !== "athlete") {
+      update({
+        error: "Служебная синхронизация выполняется на телефоне спортсмена.",
+        isBusy: false,
+        message: null,
+      });
+      return;
+    }
+
+    const config = loadDirectWatchConfig();
+    const targetDeviceId = deviceId || config.deviceId;
+
+    if (!targetDeviceId) {
+      update({ error: "Сначала выберите часы в блоке PERFORM Sync." });
+      return;
+    }
+
+    if (!config.authKeyHex) {
+      update({ error: "Сначала сохраните Auth Key часов в блоке PERFORM Sync." });
+      return;
+    }
+
+    const targetDevice = state.directWatchDiagnostic.devices.find((device) => device.id === targetDeviceId);
+    saveDirectWatchConfig({
+      ...config,
+      deviceId: targetDeviceId,
+      deviceName: targetDevice?.name ?? config.deviceName,
+    });
+
+    update({
+      error: null,
+      isBusy: true,
+      message: "PERFORM Sync обновляет время, часовой пояс и погоду на часах...",
+    });
+
+    try {
+      let weatherPayload = null;
+      let weatherError: string | null = null;
+      try {
+        weatherPayload = await fetchDirectWatchWeatherPayload(config);
+      } catch (error) {
+        weatherError = error instanceof Error ? error.message : "погода не получена";
+        weatherPayload = buildDirectWatchWeatherLocationPayload(config);
+      }
+
+      const result = await syncDirectWatchService(
+        targetDeviceId,
+        config.authKeyHex,
+        weatherPayload,
+        DIRECT_WATCH_SERVICE_KEEP_ALIVE_MS,
+      );
+      const serviceStatus = await getDirectWatchSyncServiceStatus().catch(() => null);
+      const ok = result.authKeyStatus === "valid" && result.sentTime;
+      update({
+        directWatchDiagnostic: {
+          ...state.directWatchDiagnostic,
+          classicProbe: {
+            ...result,
+            sentActivityFileProbe: result.sentActivityFileProbe ?? false,
+          },
+          serviceStatus,
+        },
+        error: ok ? null : result.authKeyError || result.error || "Служебная синхронизация часов не подтвердилась.",
+        isBusy: false,
+        message: ok
+          ? formatDirectWatchServiceSyncMessage(result, weatherPayload?.locationName ?? null, weatherError)
+          : null,
+      });
+    } catch (error) {
+      update({
+        error: error instanceof Error ? error.message : "Не удалось выполнить служебную синхронизацию часов.",
+        isBusy: false,
+        message: null,
+      });
+    }
+  };
+
+  const saveDirectWatchWeatherLocation = async () => {
+    const input = root.querySelector<HTMLInputElement>("[data-direct-watch-weather-city]");
+    const rawValue = input?.value.trim() ?? "";
+    update({
+      error: null,
+      isBusy: true,
+      message: "Ищу город для погоды часов...",
+    });
+
+    try {
+      const location = await resolveDirectWatchWeatherLocation(rawValue);
+      saveDirectWatchConfig({
+        ...loadDirectWatchConfig(),
+        weatherCity: location.city,
+        weatherLatitude: location.latitude,
+        weatherLongitude: location.longitude,
+      });
+      update({
+        error: null,
+        isBusy: false,
+        message: `Город погоды сохранён: ${location.city}.`,
+      });
+    } catch (error) {
+      update({
+        error: error instanceof Error ? error.message : "Не удалось сохранить город погоды.",
+        isBusy: false,
+        message: null,
+      });
+    }
+  };
+
   const saveDirectWatchAuthKey = () => {
     const input = root.querySelector<HTMLInputElement>("[data-direct-watch-auth-key]");
     const rawValue = input?.value.trim() ?? "";
@@ -741,6 +871,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
           packets: state.directWatchDiagnostic.packets,
           scannedAt: result.scannedAt ?? new Date().toISOString(),
           session: state.directWatchDiagnostic.session,
+          serviceStatus: state.directWatchDiagnostic.serviceStatus,
         },
         error: null,
         isBusy: false,
@@ -991,6 +1122,49 @@ export function bootstrapMobileApp(root: HTMLElement) {
       });
     } catch {
       // Session refresh is diagnostic only; the visible action will report connection errors.
+    }
+  };
+
+  const refreshDirectWatchSyncService = async () => {
+    try {
+      const serviceStatus = await getDirectWatchSyncServiceStatus();
+      update({
+        directWatchDiagnostic: {
+          ...state.directWatchDiagnostic,
+          serviceStatus,
+        },
+      });
+    } catch (error) {
+      update({
+        error: error instanceof Error ? error.message : "Не удалось обновить статус сервиса часов.",
+      });
+    }
+  };
+
+  const stopDirectWatchForegroundService = async () => {
+    update({
+      error: null,
+      isBusy: true,
+      message: "Останавливаю служебный режим часов...",
+    });
+
+    try {
+      const serviceStatus = await stopDirectWatchSyncService();
+      update({
+        directWatchDiagnostic: {
+          ...state.directWatchDiagnostic,
+          serviceStatus,
+        },
+        error: null,
+        isBusy: false,
+        message: "Служебный режим часов остановлен.",
+      });
+    } catch (error) {
+      update({
+        error: error instanceof Error ? error.message : "Не удалось остановить служебный режим часов.",
+        isBusy: false,
+        message: null,
+      });
     }
   };
 
@@ -1665,6 +1839,10 @@ export function bootstrapMobileApp(root: HTMLElement) {
       saveDirectWatchAuthKey();
     });
 
+    root.querySelector<HTMLButtonElement>("[data-direct-watch-weather-save]")?.addEventListener("click", () => {
+      void saveDirectWatchWeatherLocation();
+    });
+
     root.querySelectorAll<HTMLButtonElement>("[data-direct-watch-select]").forEach((button) => {
       button.addEventListener("click", () => {
         selectDirectWatchDevice(button.dataset.directWatchSelect ?? "");
@@ -1677,6 +1855,24 @@ export function bootstrapMobileApp(root: HTMLElement) {
           button.dataset.directWatchSyncDate ?? todayValue(),
           button.dataset.directWatchSync ?? null,
         );
+      });
+    });
+
+    root.querySelectorAll<HTMLButtonElement>("[data-direct-watch-service-sync]").forEach((button) => {
+      button.addEventListener("click", () => {
+        void syncDirectWatchServiceSettings(button.dataset.directWatchServiceSync ?? null);
+      });
+    });
+
+    root.querySelectorAll<HTMLButtonElement>("[data-direct-watch-service-status]").forEach((button) => {
+      button.addEventListener("click", () => {
+        void refreshDirectWatchSyncService();
+      });
+    });
+
+    root.querySelectorAll<HTMLButtonElement>("[data-direct-watch-service-stop]").forEach((button) => {
+      button.addEventListener("click", () => {
+        void stopDirectWatchForegroundService();
       });
     });
 
@@ -1973,6 +2169,10 @@ function renderScreen(state: MobileAppState, athleteId: string | null) {
 
   if (state.selectedScreen === "readiness") {
     return renderReadinessScreen(state);
+  }
+
+  if (state.selectedScreen === "watches") {
+    return renderWatchesScreen(state);
   }
 
   return renderDashboardScreen(state, athleteId);
@@ -2826,7 +3026,7 @@ function renderDeviceHealthCard(
     <section class="device-health-card ${options.compact ? "is-compact" : ""}">
       <div class="device-health-head">
         <div>
-          <span>${escapeHtml(formatDeviceHealthProviderLabel(summary))}</span>
+          <span>${escapeHtml(formatWatchProviderLabel(summary))}</span>
           <h3>${escapeHtml(formatDeviceHealthCardTitle(summary))}</h3>
           <p>${escapeHtml(formatDate(date))} · ${escapeHtml(syncLabel)}</p>
         </div>
@@ -2972,6 +3172,439 @@ function renderCompactDeviceHealthCard(
   `;
 }
 
+function renderWatchesScreen(state: MobileAppState) {
+  if (state.session.user?.role !== "athlete") {
+    return renderEmpty("Часы подключает спортсмен", "Тренер видит данные часов в карточке спортсмена после синхронизации.");
+  }
+
+  const athleteId = state.session.user.athleteId;
+  if (!athleteId) {
+    return renderEmpty("Профиль спортсмена не найден", "Войдите под спортсменом, чтобы подключить часы.");
+  }
+
+  const date = todayValue();
+  const summary = getDeviceHealthSummaryForDate(state, athleteId, date);
+  const workouts = getDeviceWorkoutsForDate(state, athleteId, date);
+
+  return `
+    <div class="screen-head watches-head">
+      <h2>Часы</h2>
+      <p>Сон, восстановление и PERFORM Sync за сегодня.</p>
+    </div>
+    ${renderWatchRecoveryCard(state, summary, date)}
+    ${renderWatchParametersCard(summary)}
+    ${renderWatchWorkoutsCard(workouts)}
+    ${renderWatchSettingsPanel(state, summary, date)}
+  `;
+}
+
+function renderWatchRecoveryCard(
+  state: MobileAppState,
+  summary: DeviceHealthDailySummary | null,
+  date: string,
+) {
+  const status = getDeviceHealthStatus(summary);
+  const syncLabel = summary ? formatDateTime(summary.syncedAt) : "данных за сегодня нет";
+  const canFill = summary !== null &&
+    (getDeviceSleepHoursForReadiness(summary) !== null || getDeviceRestingHrForReadiness(summary) !== null);
+  const directWatchConfig = loadDirectWatchConfig();
+  const canServiceSync = state.session.user?.role === "athlete" &&
+    isDirectWatchRuntime() &&
+    Boolean(directWatchConfig.deviceId && directWatchConfig.authKeyHex);
+  const sleepProgress = getWatchSleepProgress(summary);
+
+  return `
+    <section class="watch-recovery-card ${summary ? "is-connected" : "is-empty"}">
+      <div class="watch-card-head">
+        <div>
+          <span>${escapeHtml(formatWatchProviderLabel(summary))}</span>
+          <h3>График восстановления</h3>
+          <p>${formatDate(date)} · ${escapeHtml(syncLabel)}</p>
+        </div>
+        <strong>${escapeHtml(status.statusLabel)}</strong>
+      </div>
+      <div class="watch-recovery-layout">
+        <article class="watch-sleep-visual">
+          <span>Сон</span>
+          <div class="watch-sleep-ring" style="--sleep-progress: ${sleepProgress}">
+            <strong>${escapeHtml(formatWatchSleepClock(summary))}</strong>
+            <small>${escapeHtml(formatWatchSleepWindow(summary))}</small>
+          </div>
+          ${renderWatchSleepStages(summary)}
+        </article>
+        <div class="watch-vital-stack">
+          ${renderWatchVitalTile("Пульс покоя", formatDeviceHealthRestingHrValue(summary), formatDeviceHealthHeartRateDetail(summary), "pulse")}
+          ${renderWatchVitalTile("SpO2", formatDeviceHealthOxygenValue(summary), formatDeviceHealthOxygenDetail(summary), "oxygen")}
+          ${renderWatchVitalTile("Шаги", formatWatchStepsValue(summary), formatWatchStepsDetail(summary), "steps")}
+        </div>
+      </div>
+      <div class="watch-insight">
+        <strong>${escapeHtml(formatWatchInsightTitle(summary))}</strong>
+        <span>${escapeHtml(formatWatchInsightText(summary))}</span>
+      </div>
+      <div class="watch-actions">
+        <button class="primary-action" data-device-health-sync data-device-health-date="${escapeHtml(date)}" type="button" ${state.isBusy ? "disabled" : ""}>
+          Синхронизировать часы
+        </button>
+        ${isDirectWatchRuntime() ? `
+          <button
+            class="secondary-action"
+            data-direct-watch-service-sync="${escapeHtml(directWatchConfig.deviceId || "")}"
+            type="button"
+            ${state.isBusy || !canServiceSync ? "disabled" : ""}
+          >
+            Служебная синхронизация
+          </button>
+        ` : ""}
+        <button class="secondary-action" data-readiness-fill-watch="${escapeHtml(date)}" type="button" ${canFill ? "" : "disabled"}>
+          Заполнить показатели
+        </button>
+      </div>
+    </section>
+  `;
+}
+
+function renderWatchParametersCard(summary: DeviceHealthDailySummary | null) {
+  const rawPayload = summary?.rawPayload ?? {};
+  const stressAvg = readDeviceHealthRawNumber(rawPayload, "stressAvg");
+  const trainingLoadDay = readDeviceHealthRawNumber(rawPayload, "trainingLoadDay");
+  const vitality = readDeviceHealthRawNumber(rawPayload, "vitality");
+
+  const rows = [
+    {
+      detail: formatDeviceHealthSleepDetail(summary),
+      label: "Сон",
+      value: formatDeviceHealthSleepValue(summary),
+    },
+    {
+      detail: formatDeviceHealthHeartRateDetail(summary),
+      label: "Пульс покоя",
+      value: formatDeviceHealthRestingHrValue(summary),
+    },
+    {
+      detail: formatDeviceHealthOxygenDetail(summary),
+      label: "SpO2",
+      value: formatDeviceHealthOxygenValue(summary),
+    },
+    {
+      detail: formatWatchStepsDetail(summary),
+      label: "Шаги",
+      value: formatWatchStepsValue(summary),
+    },
+    {
+      detail: stressAvg === null ? "часы не передали стресс" : "среднее значение за день",
+      label: "Стресс",
+      value: formatWatchOptionalNumber(stressAvg),
+    },
+    {
+      detail: [trainingLoadDay !== null ? "дневная нагрузка" : null, vitality !== null ? `vitality ${formatLoadValue(vitality)}` : null]
+        .filter((item): item is string => Boolean(item))
+        .join(" · ") || "часы не передали нагрузку",
+      label: "Нагрузка",
+      value: formatWatchOptionalNumber(trainingLoadDay),
+    },
+  ];
+
+  return `
+    <section class="watch-parameters-card">
+      <div class="watch-card-head">
+        <div>
+          <span>Параметры</span>
+          <h3>Что пришло с часов</h3>
+        </div>
+      </div>
+      <div class="watch-parameter-list">
+        ${rows.map((row) => `
+          <article class="watch-parameter-row">
+            <span>${escapeHtml(row.label)}</span>
+            <strong>${escapeHtml(row.value)}</strong>
+            <small>${escapeHtml(row.detail)}</small>
+          </article>
+        `).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderWatchWorkoutsCard(workouts: DeviceWorkout[]) {
+  return `
+    <section class="watch-workouts-card">
+      <div class="watch-card-head">
+        <div>
+          <span>Тренировки</span>
+          <h3>Активность с устройства</h3>
+        </div>
+        <strong>${workouts.length}</strong>
+      </div>
+      ${workouts.length ? `
+        <div class="watch-workout-list">
+          ${workouts.slice(0, 4).map((workout) => `
+            <details class="watch-workout-item">
+              <summary>
+                <span>${escapeHtml(formatDeviceWorkoutTitle(workout))}</span>
+                <small>${escapeHtml(formatDeviceWorkoutSummary(workout) || "итоговые данные получены")}</small>
+              </summary>
+              ${renderDeviceWorkoutMetrics(workout)}
+              ${renderDeviceWorkoutGraph(workout)}
+            </details>
+          `).join("")}
+        </div>
+      ` : `
+        <p class="watch-empty-note">Внешние тренировки за сегодня пока не пришли. После синхронизации они появятся здесь отдельным списком.</p>
+      `}
+    </section>
+  `;
+}
+
+function renderWatchSettingsPanel(
+  state: MobileAppState,
+  summary: DeviceHealthDailySummary | null,
+  date: string,
+) {
+  const canSync = state.session.user?.role === "athlete";
+  const directWatchConfig = loadDirectWatchConfig();
+  const canServiceSync = canSync &&
+    isDirectWatchRuntime() &&
+    Boolean(directWatchConfig.deviceId && directWatchConfig.authKeyHex);
+
+  return `
+    <details class="watch-settings-panel">
+      <summary>
+        <span>Источник и диагностика</span>
+        <small>${escapeHtml(formatWatchSourceHint(summary))}</small>
+      </summary>
+      <div class="watch-settings-body">
+        <article class="watch-source-note">
+          <strong>${escapeHtml(formatWatchProviderLabel(summary))}</strong>
+          <span>${escapeHtml(formatWatchSourceDescription(summary))}</span>
+        </article>
+        ${canSync ? `
+          <div class="watch-settings-actions">
+            <button class="secondary-action" data-device-health-sync data-device-health-date="${escapeHtml(date)}" type="button" ${state.isBusy ? "disabled" : ""}>
+              Синхронизировать часы
+            </button>
+            ${isDirectWatchRuntime() ? `
+              <button
+                class="secondary-action"
+                data-direct-watch-service-sync="${escapeHtml(directWatchConfig.deviceId || "")}"
+                type="button"
+                ${state.isBusy || !canServiceSync ? "disabled" : ""}
+              >
+                Служебная синхронизация
+              </button>
+            ` : ""}
+          </div>
+        ` : ""}
+        ${renderHealthConnectDiagnostics(summary, true)}
+        ${canSync && SHOW_DIRECT_WATCH_DIAGNOSTICS && isDirectWatchRuntime() ? renderDirectWatchDiagnostics(state, date) : ""}
+      </div>
+    </details>
+  `;
+}
+
+function renderReadinessWatchSummaryCard(state: MobileAppState, athleteId: string, date: string) {
+  const summary = getDeviceHealthSummaryForDate(state, athleteId, date);
+  const status = getDeviceHealthStatus(summary);
+  const canFill = summary !== null &&
+    (getDeviceSleepHoursForReadiness(summary) !== null || getDeviceRestingHrForReadiness(summary) !== null);
+
+  return `
+    <section class="readiness-watch-summary-card">
+      <div class="readiness-watch-summary-head">
+        <div>
+          <span>Часы</span>
+          <h3>Параметры дня</h3>
+          <p>${escapeHtml(status.statusLabel)} · ${escapeHtml(formatReadinessDeviceHealthSyncLabel(summary))}</p>
+        </div>
+        <button class="secondary-action" data-screen="watches" type="button">Открыть</button>
+      </div>
+      <div class="readiness-watch-summary-grid">
+        ${renderWatchVitalTile("Сон", formatDeviceHealthSleepValue(summary), formatDeviceHealthSleepDetail(summary), "sleep")}
+        ${renderWatchVitalTile("Пульс", formatDeviceHealthRestingHrValue(summary), formatDeviceHealthHeartRateDetail(summary), "pulse")}
+        ${renderWatchVitalTile("Тренировки", formatDeviceHealthWorkoutValue(summary), formatDeviceHealthWorkoutDetail(summary), "workouts")}
+      </div>
+      <div class="readiness-watch-summary-actions">
+        <button class="secondary-action" data-device-health-sync data-device-health-date="${escapeHtml(date)}" type="button" ${state.isBusy ? "disabled" : ""}>
+          Синхронизировать часы
+        </button>
+        <button class="secondary-action" data-readiness-fill-watch="${escapeHtml(date)}" type="button" ${canFill ? "" : "disabled"}>
+          Заполнить показатели
+        </button>
+      </div>
+    </section>
+  `;
+}
+
+function renderWatchVitalTile(label: string, value: string, detail: string, status: string) {
+  return `
+    <article class="watch-vital-tile is-${escapeHtml(status)}">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value)}</strong>
+      <small>${escapeHtml(detail)}</small>
+    </article>
+  `;
+}
+
+function renderWatchSleepStages(summary: DeviceHealthDailySummary | null) {
+  const stages = [
+    { className: "deep", label: "Глубокий", minutes: summary?.sleep?.deepMinutes ?? 0 },
+    { className: "rem", label: "REM", minutes: summary?.sleep?.remMinutes ?? 0 },
+    { className: "light", label: "Лёгкий", minutes: summary?.sleep?.lightMinutes ?? 0 },
+  ].filter((stage) => stage.minutes > 0);
+
+  if (stages.length === 0) {
+    return `<p class="watch-empty-note">Детализация сна появится после синхронизации.</p>`;
+  }
+
+  return `
+    <div class="watch-stage-panel">
+      <div class="watch-stage-bar">
+        ${stages.map((stage) => `
+          <span class="is-${escapeHtml(stage.className)}" style="flex-grow: ${stage.minutes}"></span>
+        `).join("")}
+      </div>
+      <div class="watch-stage-legend">
+        ${stages.map((stage) => `
+          <span><i class="is-${escapeHtml(stage.className)}"></i>${escapeHtml(stage.label)} ${escapeHtml(formatDurationHours(stage.minutes))}</span>
+        `).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function getWatchStepCount(summary: DeviceHealthDailySummary | null) {
+  const rawPayload = summary?.rawPayload ?? {};
+  return readDeviceHealthRawNumber(rawPayload, "steps") ??
+    readDeviceHealthRawNumber(rawPayload, "stepCount") ??
+    readDeviceHealthRawNumber(rawPayload, "totalSteps");
+}
+
+function formatWatchStepsValue(summary: DeviceHealthDailySummary | null) {
+  const steps = getWatchStepCount(summary);
+  return steps === null ? "-" : Math.round(steps).toLocaleString("ru-RU");
+}
+
+function formatWatchStepsDetail(summary: DeviceHealthDailySummary | null) {
+  const steps = getWatchStepCount(summary);
+  return steps === null ? "шаги не пришли" : "активность за день";
+}
+
+function formatWatchOptionalNumber(value: number | null) {
+  return value === null ? "-" : formatLoadValue(value);
+}
+
+function formatWatchSleepClock(summary: DeviceHealthDailySummary | null) {
+  const minutes = summary?.sleep?.durationMinutes;
+  if (minutes === null || minutes === undefined) {
+    return "-";
+  }
+
+  const roundedMinutes = Math.max(0, Math.round(minutes));
+  const hours = Math.floor(roundedMinutes / 60);
+  const remainder = roundedMinutes % 60;
+  return `${hours}:${remainder.toString().padStart(2, "0")}`;
+}
+
+function formatWatchSleepWindow(summary: DeviceHealthDailySummary | null) {
+  const sleep = summary?.sleep;
+
+  if (sleep?.startTime && sleep.endTime) {
+    return `${formatTime(sleep.startTime)}-${formatTime(sleep.endTime)}`;
+  }
+
+  return hasDeviceSleepData(summary) ? formatDeviceHealthSleepDetail(summary) : "нет данных сна";
+}
+
+function getWatchSleepProgress(summary: DeviceHealthDailySummary | null) {
+  const minutes = summary?.sleep?.durationMinutes;
+  if (minutes === null || minutes === undefined) {
+    return 0;
+  }
+
+  return Math.max(0, Math.min(100, Math.round((minutes / 480) * 100)));
+}
+
+function formatWatchInsightTitle(summary: DeviceHealthDailySummary | null) {
+  if (!summary) {
+    return "Нужна синхронизация";
+  }
+
+  const status = getDeviceHealthStatus(summary);
+  return status.missing.length === 0 ? "Данные готовы" : "Данные частичные";
+}
+
+function formatWatchInsightText(summary: DeviceHealthDailySummary | null) {
+  if (!summary) {
+    return "Нажми синхронизацию после сна или тренировки, затем можно перенести сон и пульс в показатели готовности.";
+  }
+
+  const status = getDeviceHealthStatus(summary);
+  if (status.missing.length > 0) {
+    return `Не хватает: ${status.missing.join(", ")}. Недостающее лучше заполнить вручную.`;
+  }
+
+  return "Сон, пульс и активность можно использовать для готовности и разбора дня.";
+}
+
+function formatWatchSourceHint(summary: DeviceHealthDailySummary | null) {
+  if (summary) {
+    return `${formatWatchProviderLabel(summary)} · ${formatDateTime(summary.syncedAt)}`;
+  }
+
+  if (isAppleHealthRuntime()) {
+    return "Apple Health и разрешения iPhone";
+  }
+
+  if (isDirectWatchRuntime()) {
+    return "PERFORM Sync, Auth Key и Bluetooth";
+  }
+
+  return "Health Connect и приложения здоровья";
+}
+
+function formatWatchProviderLabel(summary: DeviceHealthDailySummary | null) {
+  if (summary) {
+    if (summary.provider === "direct-watch") {
+      return "PERFORM Sync";
+    }
+    if (summary.provider === "apple-health") {
+      return "Apple Health";
+    }
+    if (summary.provider === "health-connect") {
+      return "Health Connect";
+    }
+    if (summary.provider === "huawei-health") {
+      return "Huawei Health";
+    }
+  }
+
+  if (isAppleHealthRuntime()) {
+    return "Apple Health";
+  }
+
+  if (isDirectWatchRuntime()) {
+    return "PERFORM Sync";
+  }
+
+  return "Health Connect";
+}
+
+function formatWatchSourceDescription(summary: DeviceHealthDailySummary | null) {
+  if (summary?.provider === "direct-watch") {
+    return "PERFORM Sync читает часы напрямую. Диагностика ниже нужна только для настройки и проверки соединения.";
+  }
+
+  if (summary?.provider === "apple-health" || isAppleHealthRuntime()) {
+    return "iPhone отдаёт данные через Apple Health. Если показателей нет, проверь разрешения в приложении Здоровье.";
+  }
+
+  if (summary?.provider === "health-connect") {
+    return "Android читает данные через Health Connect. В диагностике видно, какой источник реально записал сон, пульс и тренировки.";
+  }
+
+  return "После первой синхронизации здесь будет видно, откуда пришли данные и что именно удалось прочитать.";
+}
+
 function renderDirectWatchDiagnostics(state: MobileAppState, date: string) {
   const diagnostic = state.directWatchDiagnostic;
   const devices = diagnostic.devices
@@ -2984,10 +3617,12 @@ function renderDirectWatchDiagnostics(state: MobileAppState, date: string) {
   const inspection = diagnostic.inspection;
   const session = diagnostic.session;
   const classicProbe = diagnostic.classicProbe;
+  const serviceStatus = diagnostic.serviceStatus;
   const sessionPackets = diagnostic.packets.length ? diagnostic.packets : session?.packets ?? [];
   const activeSessionDeviceId = session?.connected ? session.deviceId : null;
   const config = loadDirectWatchConfig();
   const hasAuthKey = Boolean(config.authKeyHex);
+  const weatherLocation = getDirectWatchWeatherLocation(config);
   const services = inspection?.services ?? [];
   const knownServices = services
     .filter((service) => service.name && service.name !== "Unknown")
@@ -3028,14 +3663,29 @@ function renderDirectWatchDiagnostics(state: MobileAppState, date: string) {
             <span>Выбранные часы</span>
             <strong>${escapeHtml(config.deviceName || (config.deviceId ? formatDirectWatchDeviceId(config.deviceId) : "не выбраны"))}</strong>
           </article>
+          <article>
+            <span>Погода</span>
+            <strong>${escapeHtml(weatherLocation.city)}</strong>
+          </article>
+          <article>
+            <span>Сервис часов</span>
+            <strong>${escapeHtml(formatDirectWatchSyncServiceStatus(serviceStatus))}</strong>
+          </article>
         </div>
         <label class="wide-field">
           <span>Auth Key часов</span>
           <input data-direct-watch-auth-key inputmode="text" placeholder="32 hex-символа" type="password" autocomplete="off">
         </label>
+        <label class="wide-field">
+          <span>Город погоды</span>
+          <input data-direct-watch-weather-city inputmode="text" placeholder="Chisinau" type="text" value="${escapeHtml(weatherLocation.city)}">
+        </label>
         <div class="device-health-actions">
           <button class="secondary-action" data-direct-watch-auth-key-save type="button" ${state.isBusy ? "disabled" : ""}>
             Сохранить ключ
+          </button>
+          <button class="secondary-action" data-direct-watch-weather-save type="button" ${state.isBusy ? "disabled" : ""}>
+            Сохранить город
           </button>
           <button
             class="secondary-action"
@@ -3045,6 +3695,25 @@ function renderDirectWatchDiagnostics(state: MobileAppState, date: string) {
             ${state.isBusy || !config.deviceId || !hasAuthKey ? "disabled" : ""}
           >
             Считать выбранный день
+          </button>
+          <button
+            class="secondary-action"
+            data-direct-watch-service-sync="${escapeHtml(config.deviceId || "")}"
+            type="button"
+            ${state.isBusy || !config.deviceId || !hasAuthKey ? "disabled" : ""}
+          >
+            Запустить сервис часов
+          </button>
+          <button class="secondary-action" data-direct-watch-service-status type="button" ${state.isBusy ? "disabled" : ""}>
+            Обновить статус
+          </button>
+          <button
+            class="secondary-action"
+            data-direct-watch-service-stop
+            type="button"
+            ${state.isBusy || !serviceStatus?.running ? "disabled" : ""}
+          >
+            Остановить сервис
           </button>
         </div>
       </details>
@@ -3091,6 +3760,14 @@ function renderDirectWatchDiagnostics(state: MobileAppState, date: string) {
                   ${state.isBusy || device.bondState !== "bonded" || !hasAuthKey ? "disabled" : ""}
                 >
                   Считать день
+                </button>
+                <button
+                  class="secondary-action"
+                  data-direct-watch-service-sync="${escapeHtml(device.id)}"
+                  type="button"
+                  ${state.isBusy || device.bondState !== "bonded" || !hasAuthKey ? "disabled" : ""}
+                >
+                  Обновить время
                 </button>
                 ${device.bondState !== "bonded" ? `
                   <button
@@ -3551,6 +4228,45 @@ function formatDirectWatchClassicProbeMessage(
   return "Classic/SPP канал не подтвердился.";
 }
 
+function formatDirectWatchServiceSyncMessage(
+  result: DirectWatchServiceSyncResult,
+  weatherLocation: string | null,
+  weatherError: string | null,
+) {
+  const parts = [
+    result.sentTime ? "время и часовой пояс" : null,
+    result.sentPhoneLocation ? "координаты телефона" : null,
+    result.sentWeatherPrefsRead ? "проверка настроек погоды" : null,
+    result.sentWeatherPrefs ? "Celsius для погоды" : null,
+    result.sentWeatherLocation && weatherLocation ? `локация ${weatherLocation}` : null,
+    result.sentWeatherLocationsRead ? "проверка списка локаций" : null,
+    result.sentWeatherCurrent && weatherLocation ? `погода ${weatherLocation}` : null,
+    result.sentWeatherDaily ? "прогноз на дни" : null,
+    result.sentWeatherHourly ? "почасовой прогноз" : null,
+  ].filter((item): item is string => Boolean(item));
+
+  const baseMessage = parts.length
+    ? `Служебная синхронизация отправлена: ${parts.join(", ")}.`
+    : "Служебная синхронизация подключилась, но команды не были отправлены.";
+  const bridgeMessage = result.keptBluetoothBridge
+    ? `Сервис часов активен до ${result.bridgeUntil ? formatDateTime(result.bridgeUntil) : "окончания окна синхронизации"}. Открой погоду на часах сейчас.`
+    : "";
+  const weatherMessage = weatherError ? `Погода не обновилась: ${weatherError}.` : "";
+  return [baseMessage, bridgeMessage, weatherMessage].filter(Boolean).join(" ");
+}
+
+function formatDirectWatchSyncServiceStatus(
+  status: MobileAppState["directWatchDiagnostic"]["serviceStatus"],
+) {
+  if (!status?.running) {
+    return "не активен";
+  }
+
+  return status.bridgeUntil
+    ? `активен до ${formatDateTime(status.bridgeUntil)}`
+    : "активен";
+}
+
 function formatDirectWatchClassicProbeTitle(
   probe: NonNullable<MobileAppState["directWatchDiagnostic"]["classicProbe"]>,
 ) {
@@ -3921,7 +4637,7 @@ function isEstimatedRestingHrSource(source: string | null) {
 function getDeviceHealthStatus(summary: DeviceHealthDailySummary | null) {
   if (!summary) {
     return {
-      missing: ["сон", "пульс покоя", "тренировки с устройства"],
+      missing: ["сон", "пульс покоя", "SpO2"],
       present: [] as string[],
       statusLabel: "Нет синхронизации",
     };
@@ -3936,7 +4652,7 @@ function getDeviceHealthStatus(summary: DeviceHealthDailySummary | null) {
     missing.push("сон");
   }
 
-  if (summary.heartRate?.restingBpm !== null && summary.heartRate?.restingBpm !== undefined) {
+  if (hasDeviceRestingHeartRateData(summary)) {
     present.push("пульс покоя");
   } else {
     missing.push("пульс покоя");
@@ -3948,10 +4664,10 @@ function getDeviceHealthStatus(summary: DeviceHealthDailySummary | null) {
     missing.push("SpO2");
   }
 
-  if (summary.workout) {
-    present.push(summary.workout.count > 0 ? "тренировки с устройства" : "тренировки: 0");
-  } else {
-    missing.push("тренировки с устройства");
+  if (hasDeviceWorkoutData(summary)) {
+    present.push("тренировки с устройства");
+  } else if (summary.workout) {
+    present.push("тренировки: 0");
   }
 
   return {
@@ -4006,7 +4722,7 @@ function formatDeviceHealthProviderLabel(summary: DeviceHealthDailySummary | nul
     return "Apple Health";
   }
 
-  return "Huawei Health / Health Connect";
+  return "Health Connect";
 }
 
 function formatDeviceHealthCardTitle(summary: DeviceHealthDailySummary | null) {
@@ -5152,7 +5868,7 @@ function renderReadinessScreen(state: MobileAppState) {
         : `<button class="primary-action" type="submit">${readiness ? "Сохранить изменения" : "Сохранить готовность"}</button>`}
     </form>
     ${renderReadinessSyncMenu(state)}
-    ${state.session.user.athleteId ? renderReadinessDeviceHealthMenu(state, state.session.user.athleteId, todayValue()) : ""}
+    ${state.session.user.athleteId ? renderReadinessWatchSummaryCard(state, state.session.user.athleteId, todayValue()) : ""}
     ${renderReadinessHistory(readinessHistory)}
   `;
 }
@@ -6794,6 +7510,7 @@ function getScreensForRole(role: string | undefined): Array<{ id: MobileScreen; 
   return [
     dashboard,
     { id: "readiness", label: "Готовность", icon: "●" },
+    { id: "watches", label: "Часы", icon: "◌" },
     calendar,
     results,
   ];
@@ -7894,15 +8611,59 @@ function compareDeviceHealthSummaries(
     return scoreDelta;
   }
 
+  const providerDelta = getDeviceHealthProviderPriority(right) - getDeviceHealthProviderPriority(left);
+  if (providerDelta !== 0) {
+    return providerDelta;
+  }
+
   return right.syncedAt.localeCompare(left.syncedAt);
 }
 
 function getDeviceHealthSummaryScore(summary: DeviceHealthDailySummary) {
   return [
     hasDeviceSleepData(summary),
-    summary.heartRate?.restingBpm !== null && summary.heartRate?.restingBpm !== undefined,
-    Boolean(summary.workout),
+    hasDeviceRestingHeartRateData(summary),
+    hasDeviceHeartRateData(summary),
+    hasDeviceOxygenSaturationData(summary),
+    hasDeviceWorkoutData(summary),
+    getWatchStepCount(summary) !== null,
   ].filter(Boolean).length;
+}
+
+function getDeviceHealthProviderPriority(summary: DeviceHealthDailySummary) {
+  if (summary.provider === "direct-watch") {
+    return 3;
+  }
+
+  if (summary.provider === "apple-health") {
+    return 2;
+  }
+
+  if (summary.provider === "health-connect") {
+    return 1;
+  }
+
+  return 0;
+}
+
+function hasDeviceRestingHeartRateData(summary: DeviceHealthDailySummary | null) {
+  return summary?.heartRate?.restingBpm !== null && summary?.heartRate?.restingBpm !== undefined;
+}
+
+function hasDeviceHeartRateData(summary: DeviceHealthDailySummary | null) {
+  return Boolean(
+    summary?.heartRate &&
+      (
+        hasDeviceRestingHeartRateData(summary) ||
+        summary.heartRate.averageBpm !== null ||
+        summary.heartRate.minBpm !== null ||
+        summary.heartRate.maxBpm !== null
+      ),
+  );
+}
+
+function hasDeviceWorkoutData(summary: DeviceHealthDailySummary | null) {
+  return Boolean(summary?.workout && summary.workout.count > 0);
 }
 
 function estimateAssignedBlockLoad(block: AssignedPlanBlock) {

@@ -4,6 +4,7 @@ import type {
   DeviceHealthOxygenSaturationSummary,
   DeviceHealthSleepSummary,
 } from "../types/models.js";
+import type { DirectWatchWeatherPayload } from "./watch-weather.js";
 
 export interface DirectWatchAvailability {
   available?: boolean;
@@ -227,6 +228,34 @@ export interface DirectWatchClassicProbe {
   watchNonceHex?: string | null;
 }
 
+export interface DirectWatchServiceSyncResult extends DirectWatchClassicProbe {
+  sentServiceSync?: boolean;
+  sentTime?: boolean;
+  sentPhoneLocation?: boolean;
+  sentWeatherCurrent?: boolean;
+  sentWeatherDaily?: boolean;
+  sentWeatherHourly?: boolean;
+  sentWeatherLocation?: boolean;
+  sentWeatherLocationsRead?: boolean;
+  sentWeatherLocationsOrder?: boolean;
+  sentWeatherPrefsRead?: boolean;
+  sentWeatherPrefs?: boolean;
+  bridgeUntil?: string | null;
+  keepAliveMs?: number | null;
+  keptBluetoothBridge?: boolean;
+  serviceCommands?: string[];
+  syncedAt?: string | null;
+}
+
+export interface DirectWatchSyncServiceStatus {
+  bridgeUntil?: string | null;
+  deviceId?: string | null;
+  deviceName?: string | null;
+  message?: string | null;
+  running?: boolean;
+  updatedAt?: string | null;
+}
+
 export interface DirectWatchPayloadPreview {
   byteLength?: number | null;
   companyId?: number | null;
@@ -253,6 +282,14 @@ interface DirectWatchPlugin {
   scanDevices?: (input?: { durationMs?: number }) => Promise<DirectWatchScanResult>;
   startSession?: (input: { deviceId: string }) => Promise<DirectWatchSessionStatus>;
   stopSession?: () => Promise<DirectWatchSessionStatus>;
+  getSyncServiceStatus?: () => Promise<DirectWatchSyncServiceStatus>;
+  stopSyncService?: () => Promise<DirectWatchSyncServiceStatus>;
+  syncService?: (input: {
+    authKeyHex: string;
+    deviceId: string;
+    keepAliveMs?: number;
+    weather?: DirectWatchWeatherPayload;
+  }) => Promise<DirectWatchServiceSyncResult>;
   unpairDevice?: (input: { deviceId: string }) => Promise<DirectWatchPairingResult>;
 }
 
@@ -398,6 +435,28 @@ export async function getDirectWatchSessionStatus(): Promise<DirectWatchSessionS
   return normalizeDirectWatchSessionStatus(status);
 }
 
+export async function getDirectWatchSyncServiceStatus(): Promise<DirectWatchSyncServiceStatus> {
+  const plugin = getDirectWatchPlugin();
+
+  if (!plugin?.getSyncServiceStatus) {
+    return { running: false };
+  }
+
+  const status = await plugin.getSyncServiceStatus();
+  return normalizeDirectWatchSyncServiceStatus(status);
+}
+
+export async function stopDirectWatchSyncService(): Promise<DirectWatchSyncServiceStatus> {
+  const plugin = getDirectWatchPlugin();
+
+  if (!plugin?.stopSyncService) {
+    throw new Error("Служебный режим часов доступен только в Android-сборке PERFORM.");
+  }
+
+  const status = await plugin.stopSyncService();
+  return normalizeDirectWatchSyncServiceStatus(status);
+}
+
 export async function probeDirectWatchClassicSession(
   deviceId: string,
   authStep1 = false,
@@ -419,6 +478,34 @@ export async function probeDirectWatchClassicSession(
 
   const probe = await plugin.probeClassicSession({ authKeyHex, authStep1, deviceId, postAuthProbe });
   return normalizeDirectWatchClassicProbe(probe);
+}
+
+export async function syncDirectWatchService(
+  deviceId: string,
+  authKeyHex: string,
+  weather?: DirectWatchWeatherPayload | null,
+  keepAliveMs?: number,
+): Promise<DirectWatchServiceSyncResult> {
+  const plugin = getDirectWatchPlugin();
+
+  if (!plugin?.syncService) {
+    throw new Error("Служебная синхронизация часов доступна только в Android-сборке PERFORM.");
+  }
+
+  if (plugin.requestAuthorization) {
+    const authorization = await plugin.requestAuthorization();
+    if (!authorization.granted) {
+      throw new Error(authorization.reason || "Нужно разрешить PERFORM подключение к Bluetooth-устройствам.");
+    }
+  }
+
+  const result = await plugin.syncService({
+    authKeyHex,
+    deviceId,
+    ...(keepAliveMs ? { keepAliveMs } : {}),
+    ...(weather ? { weather } : {}),
+  });
+  return normalizeDirectWatchServiceSyncResult(result);
 }
 
 export async function readDirectWatchDailySummary(
@@ -655,6 +742,50 @@ function normalizeDirectWatchClassicProbe(value: unknown): DirectWatchClassicPro
     versionHex: normalizeString(value.versionHex),
     watchHmacHex: normalizeString(value.watchHmacHex),
     watchNonceHex: normalizeString(value.watchNonceHex),
+  };
+}
+
+function normalizeDirectWatchServiceSyncResult(value: unknown): DirectWatchServiceSyncResult {
+  const base = normalizeDirectWatchClassicProbe(value);
+  if (!isRecord(value)) {
+    return base;
+  }
+
+  return {
+    ...base,
+    sentServiceSync: normalizeBoolean(value.sentServiceSync),
+    sentTime: normalizeBoolean(value.sentTime),
+    sentPhoneLocation: normalizeBoolean(value.sentPhoneLocation),
+    sentWeatherCurrent: normalizeBoolean(value.sentWeatherCurrent),
+    sentWeatherDaily: normalizeBoolean(value.sentWeatherDaily),
+    sentWeatherHourly: normalizeBoolean(value.sentWeatherHourly),
+    sentWeatherLocation: normalizeBoolean(value.sentWeatherLocation),
+    sentWeatherLocationsRead: normalizeBoolean(value.sentWeatherLocationsRead),
+    sentWeatherLocationsOrder: normalizeBoolean(value.sentWeatherLocationsOrder),
+    sentWeatherPrefsRead: normalizeBoolean(value.sentWeatherPrefsRead),
+    sentWeatherPrefs: normalizeBoolean(value.sentWeatherPrefs),
+    bridgeUntil: normalizeString(value.bridgeUntil),
+    keepAliveMs: normalizeNumber(value.keepAliveMs),
+    keptBluetoothBridge: normalizeBoolean(value.keptBluetoothBridge),
+    serviceCommands: Array.isArray(value.serviceCommands)
+      ? value.serviceCommands.map((item) => normalizeString(item)).filter((item): item is string => Boolean(item))
+      : [],
+    syncedAt: normalizeString(value.syncedAt),
+  };
+}
+
+function normalizeDirectWatchSyncServiceStatus(value: unknown): DirectWatchSyncServiceStatus {
+  if (!isRecord(value)) {
+    return { running: false };
+  }
+
+  return {
+    bridgeUntil: normalizeString(value.bridgeUntil),
+    deviceId: normalizeString(value.deviceId),
+    deviceName: normalizeString(value.deviceName),
+    message: normalizeString(value.message),
+    running: Boolean(value.running),
+    updatedAt: normalizeString(value.updatedAt),
   };
 }
 
