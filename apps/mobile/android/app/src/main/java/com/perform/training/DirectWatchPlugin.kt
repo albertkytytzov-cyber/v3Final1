@@ -831,6 +831,7 @@ class DirectWatchPlugin : Plugin() {
         val authKeyHex = call.getString("authKeyHex")?.trim()?.takeIf { it.isNotBlank() }
         val weatherPayload = call.data.optJSONObject("weather")
         val keepAliveMs = (call.getInt("keepAliveMs") ?: 0).coerceIn(0, CLASSIC_SERVICE_BRIDGE_MAX_MS)
+        val timeOffsetMinutes = (call.getInt("timeOffsetMinutes") ?: 0).coerceIn(-720, 720)
         if (address.isNullOrBlank()) {
             call.reject("deviceId is required")
             return
@@ -984,7 +985,7 @@ class DirectWatchPlugin : Plugin() {
                             socket.outputStream.flush()
                         }
 
-                        val serviceSyncCommands = buildClassicServiceSyncCommands(weatherPayload)
+                        val serviceSyncCommands = buildClassicServiceSyncCommands(weatherPayload, timeOffsetMinutes)
                         serviceSyncCommands.forEachIndexed { index, command ->
                             socket.outputStream.write(
                                 buildClassicV2EncryptedCommandPacket(
@@ -2490,9 +2491,12 @@ class DirectWatchPlugin : Plugin() {
         )
     }
 
-    private fun buildClassicServiceSyncCommands(weatherPayload: JSONObject?): List<ClassicPostAuthProbeCommand> {
+    private fun buildClassicServiceSyncCommands(
+        weatherPayload: JSONObject?,
+        timeOffsetMinutes: Int = 0,
+    ): List<ClassicPostAuthProbeCommand> {
         val commands = mutableListOf(
-            ClassicPostAuthProbeCommand("time", buildSetCurrentTimeCommand()),
+            ClassicPostAuthProbeCommand("time", buildSetCurrentTimeCommand(timeOffsetMinutes)),
         )
 
         if (weatherPayload != null) {
@@ -2573,8 +2577,12 @@ class DirectWatchPlugin : Plugin() {
             "current=${current != null} daily=$dailyCount hourly=$hourlyCount"
     }
 
-    private fun buildSetCurrentTimeCommand(): ByteArray {
-        val now = GregorianCalendar.getInstance()
+    private fun buildSetCurrentTimeCommand(timeOffsetMinutes: Int = 0): ByteArray {
+        val now = GregorianCalendar.getInstance().apply {
+            if (timeOffsetMinutes != 0) {
+                add(Calendar.MINUTE, timeOffsetMinutes)
+            }
+        }
         val timezone = TimeZone.getDefault()
 
         val date = java.io.ByteArrayOutputStream()

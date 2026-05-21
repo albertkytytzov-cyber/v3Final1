@@ -6,6 +6,8 @@ import type {
 } from "../types/models.js";
 import type { DirectWatchWeatherPayload } from "./watch-weather.js";
 
+const DIRECT_WATCH_TIME_OFFSET_MINUTES = -90;
+
 export interface DirectWatchAvailability {
   available?: boolean;
   bluetoothEnabled?: boolean;
@@ -288,6 +290,7 @@ interface DirectWatchPlugin {
     authKeyHex: string;
     deviceId: string;
     keepAliveMs?: number;
+    timeOffsetMinutes?: number;
     weather?: DirectWatchWeatherPayload;
   }) => Promise<DirectWatchServiceSyncResult>;
   unpairDevice?: (input: { deviceId: string }) => Promise<DirectWatchPairingResult>;
@@ -503,6 +506,7 @@ export async function syncDirectWatchService(
     authKeyHex,
     deviceId,
     ...(keepAliveMs ? { keepAliveMs } : {}),
+    timeOffsetMinutes: DIRECT_WATCH_TIME_OFFSET_MINUTES,
     ...(weather ? { weather } : {}),
   });
   return normalizeDirectWatchServiceSyncResult(result);
