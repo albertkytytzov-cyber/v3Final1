@@ -116,6 +116,33 @@ export interface DirectWatchSessionStatus {
   updatedAt?: string | null;
 }
 
+export interface DirectWatchClassicProbe {
+  authStage?: "watch-nonce" | "auth-response" | string | null;
+  authKeyError?: string | null;
+  authKeyStatus?: "not-provided" | "valid" | "invalid" | "invalid-format" | "no-watch-nonce" | string | null;
+  authStatus?: number | null;
+  authSubtype?: number | null;
+  bondState?: "bonded" | "bonding" | "not-bonded" | "unknown" | null;
+  bondStateCode?: number | null;
+  connected?: boolean;
+  detectedProtocol?: "spp-v1" | "spp-v2" | "unknown" | string | null;
+  deviceId?: string | null;
+  deviceName?: string | null;
+  error?: string | null;
+  packetCount?: number;
+  packetType?: string | null;
+  packets?: DirectWatchSessionPacket[];
+  probedAt?: string | null;
+  rawHex?: string | null;
+  phoneNonceHex?: string | null;
+  sentAuthStep1?: boolean;
+  sentSessionConfig?: boolean;
+  sentVersionRequest?: boolean;
+  versionHex?: string | null;
+  watchHmacHex?: string | null;
+  watchNonceHex?: string | null;
+}
+
 export interface DirectWatchPayloadPreview {
   byteLength?: number | null;
   companyId?: number | null;
@@ -137,6 +164,7 @@ interface DirectWatchPlugin {
   inspectDevice?: (input: { deviceId: string }) => Promise<DirectWatchInspection>;
   isAvailable?: () => Promise<DirectWatchAvailability>;
   pairDevice?: (input: { deviceId: string }) => Promise<DirectWatchPairingResult>;
+  probeClassicSession?: (input: { authKeyHex?: string; authStep1?: boolean; deviceId: string }) => Promise<DirectWatchClassicProbe>;
   requestAuthorization?: () => Promise<DirectWatchPermissionResult>;
   scanDevices?: (input?: { durationMs?: number }) => Promise<DirectWatchScanResult>;
   startSession?: (input: { deviceId: string }) => Promise<DirectWatchSessionStatus>;
@@ -286,6 +314,28 @@ export async function getDirectWatchSessionStatus(): Promise<DirectWatchSessionS
   return normalizeDirectWatchSessionStatus(status);
 }
 
+export async function probeDirectWatchClassicSession(
+  deviceId: string,
+  authStep1 = false,
+  authKeyHex?: string,
+): Promise<DirectWatchClassicProbe> {
+  const plugin = getDirectWatchPlugin();
+
+  if (!plugin?.probeClassicSession) {
+    throw new Error("Classic/SPP-диагностика доступна только в Android-сборке PERFORM.");
+  }
+
+  if (plugin.requestAuthorization) {
+    const authorization = await plugin.requestAuthorization();
+    if (!authorization.granted) {
+      throw new Error(authorization.reason || "Нужно разрешить PERFORM подключение к Bluetooth-устройствам.");
+    }
+  }
+
+  const probe = await plugin.probeClassicSession({ authKeyHex, authStep1, deviceId });
+  return normalizeDirectWatchClassicProbe(probe);
+}
+
 export async function addDirectWatchPacketListener(
   callback: (packet: DirectWatchSessionPacket) => void,
 ): Promise<DirectWatchListenerHandle | null> {
@@ -422,6 +472,41 @@ function normalizeDirectWatchSessionStatus(value: unknown): DirectWatchSessionSt
       : [],
     subscribedCount: normalizeNumber(value.subscribedCount) ?? 0,
     updatedAt: normalizeString(value.updatedAt),
+  };
+}
+
+function normalizeDirectWatchClassicProbe(value: unknown): DirectWatchClassicProbe {
+  if (!isRecord(value)) {
+    return {};
+  }
+
+  return {
+    authStage: normalizeString(value.authStage),
+    authKeyError: normalizeString(value.authKeyError),
+    authKeyStatus: normalizeString(value.authKeyStatus),
+    authStatus: normalizeNumber(value.authStatus),
+    authSubtype: normalizeNumber(value.authSubtype),
+    bondState: normalizeBluetoothState(value.bondState),
+    bondStateCode: normalizeNumber(value.bondStateCode),
+    connected: normalizeBoolean(value.connected),
+    detectedProtocol: normalizeString(value.detectedProtocol),
+    deviceId: normalizeString(value.deviceId),
+    deviceName: normalizeString(value.deviceName),
+    error: normalizeString(value.error),
+    packetCount: normalizeNumber(value.packetCount) ?? 0,
+    packetType: normalizeString(value.packetType),
+    packets: Array.isArray(value.packets)
+      ? value.packets.map(normalizeDirectWatchSessionPacket)
+      : [],
+    probedAt: normalizeString(value.probedAt),
+    rawHex: normalizeString(value.rawHex),
+    phoneNonceHex: normalizeString(value.phoneNonceHex),
+    sentAuthStep1: normalizeBoolean(value.sentAuthStep1),
+    sentSessionConfig: normalizeBoolean(value.sentSessionConfig),
+    sentVersionRequest: normalizeBoolean(value.sentVersionRequest),
+    versionHex: normalizeString(value.versionHex),
+    watchHmacHex: normalizeString(value.watchHmacHex),
+    watchNonceHex: normalizeString(value.watchNonceHex),
   };
 }
 

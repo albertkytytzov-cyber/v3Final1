@@ -10,6 +10,7 @@ import android.bluetooth.BluetoothGattDescriptor
 import android.bluetooth.BluetoothGattService
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
+import android.bluetooth.BluetoothSocket
 import android.bluetooth.BluetoothStatusCodes
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
@@ -30,8 +31,12 @@ import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.CapacitorPlugin
 import com.getcapacitor.annotation.Permission
 import com.getcapacitor.annotation.PermissionCallback
+import java.io.IOException
+import java.security.SecureRandom
 import java.util.Locale
 import java.util.UUID
+import javax.crypto.Mac
+import javax.crypto.spec.SecretKeySpec
 
 @CapacitorPlugin(
     name = "DirectWatch",
@@ -56,6 +61,8 @@ class DirectWatchPlugin : Plugin() {
     private var activeScanCallback: ScanCallback? = null
     private var activeGatt: BluetoothGatt? = null
     private var activeBondReceiver: BroadcastReceiver? = null
+    private var activeClassicSocket: BluetoothSocket? = null
+    private var activeClassicThread: Thread? = null
     private var activeSession: DirectWatchSession? = null
     private val sessionSubscribeQueue = java.util.ArrayDeque<NotifyCharacteristicSubscription>()
     private var pendingSessionSubscribe: NotifyCharacteristicSubscription? = null
@@ -582,6 +589,141 @@ class DirectWatchPlugin : Plugin() {
     }
 
     @PluginMethod
+    fun probeClassicSession(call: PluginCall) {
+        val address = call.getString("deviceId")
+        val authStep1 = call.getBoolean("authStep1") ?: false
+        val authKeyHex = call.getString("authKeyHex")?.trim()?.takeIf { it.isNotBlank() }
+        if (address.isNullOrBlank()) {
+            call.reject("deviceId is required")
+            return
+        }
+
+        val adapter = bluetoothAdapter()
+        if (adapter == null || !adapter.isEnabled) {
+            call.reject("Включите Bluetooth на телефоне и повторите проверку Classic/SPP.")
+            return
+        }
+
+        if (!hasRequiredRuntimePermissions()) {
+            call.reject("Нужно разрешить PERFORM подключение к Bluetooth-устройствам.")
+            return
+        }
+
+        val device = try {
+            adapter.getRemoteDevice(address)
+        } catch (error: IllegalArgumentException) {
+            call.reject("Некорректный идентификатор Bluetooth-устройства.", error)
+            return
+        }
+
+        if (safeBondState(device) != BluetoothDevice.BOND_BONDED) {
+            call.reject("Для проверки Classic/SPP часы должны быть в системном сопряжении. Нажмите “Сопрячь” и повторите проверку.")
+            return
+        }
+
+        stopActiveGatt()
+        stopActiveClassicSocket()
+
+        val worker = Thread {
+            var socket: BluetoothSocket? = null
+            val packets = mutableListOf<JSObject>()
+            var connected = false
+            var sentVersionRequest = false
+            var sentSessionConfig = false
+            var sentAuthStep1 = false
+            var phoneNonce: ByteArray? = null
+            var errorMessage: String? = null
+            val combined = java.io.ByteArrayOutputStream()
+
+            try {
+                try {
+                    adapter.cancelDiscovery()
+                } catch (_: SecurityException) {
+                    // Discovery cancellation is best-effort; connection will report a clearer error if permission is gone.
+                }
+
+                socket = try {
+                    device.createRfcommSocketToServiceRecord(SPP_SERVICE_UUID)
+                } catch (error: IOException) {
+                    throw IOException("Android не смог создать SPP-сокет для часов.", error)
+                }
+
+                activeClassicSocket = socket
+                socket.connect()
+                connected = true
+
+                val versionRequest = CLASSIC_SPP_V1_VERSION_REQUEST
+                socket.outputStream.write(versionRequest)
+                socket.outputStream.flush()
+                sentVersionRequest = true
+                readClassicPackets(socket, packets, combined, CLASSIC_VERSION_READ_MS)
+
+                if (authStep1) {
+                    val versionProbe = parseClassicProbeBytes(combined.toByteArray())
+                    val useSppV2 = shouldUseClassicSppV2(versionProbe.versionHex)
+                    if (useSppV2) {
+                        socket.outputStream.write(buildClassicV2SessionConfigPacket(0))
+                        socket.outputStream.flush()
+                        sentSessionConfig = true
+                        readClassicPackets(socket, packets, combined, CLASSIC_SESSION_CONFIG_READ_MS)
+                    }
+
+                    phoneNonce = ByteArray(16)
+                    SecureRandom().nextBytes(phoneNonce)
+                    socket.outputStream.write(
+                        if (useSppV2) {
+                            buildClassicV2AuthStep1Packet(phoneNonce, 0)
+                        } else {
+                            buildClassicAuthStep1Packet(phoneNonce)
+                        },
+                    )
+                    socket.outputStream.flush()
+                    sentAuthStep1 = true
+                }
+
+                errorMessage = readClassicPackets(socket, packets, combined, CLASSIC_PROBE_READ_MS) ?: errorMessage
+            } catch (error: IOException) {
+                errorMessage = safeMessage(error)
+            } catch (error: SecurityException) {
+                errorMessage = "Нет разрешения Bluetooth для Classic/SPP-подключения."
+            } catch (error: InterruptedException) {
+                Thread.currentThread().interrupt()
+                errorMessage = "Проверка Classic/SPP была остановлена."
+            } finally {
+                try {
+                    socket?.close()
+                } catch (_: IOException) {
+                    // Socket is already closed.
+                }
+                if (activeClassicSocket == socket) {
+                    activeClassicSocket = null
+                }
+                if (activeClassicThread == Thread.currentThread()) {
+                    activeClassicThread = null
+                }
+            }
+
+            val response = buildClassicProbeResponse(
+                device = device,
+                connected = connected,
+                sentVersionRequest = sentVersionRequest,
+                sentSessionConfig = sentSessionConfig,
+                sentAuthStep1 = sentAuthStep1,
+                phoneNonce = phoneNonce,
+                authKeyHex = authKeyHex,
+                packets = packets,
+                combinedBytes = combined.toByteArray(),
+                error = errorMessage,
+            )
+            mainHandler.post {
+                call.resolve(response)
+            }
+        }
+        activeClassicThread = worker
+        worker.start()
+    }
+
+    @PluginMethod
     fun pairDevice(call: PluginCall) {
         val address = call.getString("deviceId")
         if (address.isNullOrBlank()) {
@@ -822,6 +964,7 @@ class DirectWatchPlugin : Plugin() {
     override fun handleOnDestroy() {
         stopActiveScan()
         stopActiveGatt()
+        stopActiveClassicSocket()
         stopActiveBondReceiver()
         super.handleOnDestroy()
     }
@@ -1000,6 +1143,10 @@ class DirectWatchPlugin : Plugin() {
         }
 
         return "Не удалось подключиться к часам: Bluetooth status $status."
+    }
+
+    private fun safeMessage(error: Exception): String {
+        return error.message ?: error.javaClass.simpleName
     }
 
     private fun scanResultNameFallback(device: BluetoothDevice): String? {
@@ -1298,6 +1445,509 @@ class DirectWatchPlugin : Plugin() {
         notifyListeners("directWatchSession", buildSessionStatus(activeSession))
     }
 
+    private fun buildClassicPacket(bytes: ByteArray, packetIndex: Int): JSObject {
+        val packet = JSObject()
+        packet.put("packetIndex", packetIndex)
+        packet.put("byteLength", bytes.size)
+        packet.put("rawHex", bytePreviewHex(bytes, MAX_CLASSIC_PACKET_PREVIEW_BYTES))
+        packet.put("receivedAt", java.time.Instant.now().toString())
+        return packet
+    }
+
+    private fun buildClassicProbeResponse(
+        device: BluetoothDevice,
+        connected: Boolean,
+        sentVersionRequest: Boolean,
+        sentSessionConfig: Boolean,
+        sentAuthStep1: Boolean,
+        phoneNonce: ByteArray?,
+        authKeyHex: String?,
+        packets: List<JSObject>,
+        combinedBytes: ByteArray,
+        error: String?,
+    ): JSObject {
+        val response = JSObject()
+        val parsed = parseClassicProbeBytes(combinedBytes)
+        val keyCheck = checkClassicAuthKey(authKeyHex, phoneNonce, parsed)
+        response.put("deviceId", device.address)
+        response.put("deviceName", devicesByAddress[device.address]?.name ?: scanResultNameFallback(device))
+        response.put("bondState", bondStateLabel(safeBondState(device)))
+        response.put("bondStateCode", safeBondState(device))
+        response.put("connected", connected)
+        response.put("sentVersionRequest", sentVersionRequest)
+        response.put("sentSessionConfig", sentSessionConfig)
+        response.put("sentAuthStep1", sentAuthStep1)
+        response.put("phoneNonceHex", fullHex(phoneNonce))
+        response.put("packetCount", packets.size)
+        response.put("packets", JSArray(packets))
+        response.put("rawHex", bytePreviewHex(combinedBytes, MAX_CLASSIC_PACKET_PREVIEW_BYTES))
+        response.put("detectedProtocol", parsed.detectedProtocol)
+        response.put("versionHex", parsed.versionHex)
+        response.put("packetType", parsed.packetType)
+        response.put("authSubtype", parsed.authSubtype)
+        response.put("authStatus", parsed.authStatus)
+        response.put("authKeyStatus", keyCheck.status)
+        response.put("authKeyError", keyCheck.error)
+        response.put("watchNonceHex", parsed.watchNonceHex)
+        response.put("watchHmacHex", parsed.watchHmacHex)
+        response.put("authStage", parsed.authStage)
+        response.put("error", error)
+        response.put("probedAt", java.time.Instant.now().toString())
+        return response
+    }
+
+    private fun checkClassicAuthKey(
+        authKeyHex: String?,
+        phoneNonce: ByteArray?,
+        parsed: ClassicProbeParse,
+    ): ClassicAuthKeyCheck {
+        if (authKeyHex == null) {
+            return ClassicAuthKeyCheck(status = "not-provided", error = null)
+        }
+
+        val authKey = parseHexBytes(authKeyHex)
+            ?: return ClassicAuthKeyCheck(status = "invalid-format", error = "Auth Key должен быть 16 байт: 32 hex-символа.")
+        if (authKey.size != 16) {
+            return ClassicAuthKeyCheck(status = "invalid-format", error = "Auth Key должен быть 16 байт: 32 hex-символа.")
+        }
+
+        if (phoneNonce == null || parsed.watchNonceHex == null || parsed.watchHmacHex == null) {
+            return ClassicAuthKeyCheck(status = "no-watch-nonce", error = "Часы ещё не отдали watch nonce для проверки ключа.")
+        }
+
+        val watchNonce = parseHexBytes(parsed.watchNonceHex)
+            ?: return ClassicAuthKeyCheck(status = "invalid-watch-nonce", error = "Watch nonce пришёл в неожиданном формате.")
+        val watchHmac = parseHexBytes(parsed.watchHmacHex)
+            ?: return ClassicAuthKeyCheck(status = "invalid-watch-hmac", error = "Watch HMAC пришёл в неожиданном формате.")
+
+        val stepHmac = computeClassicAuthStepHmac(authKey, phoneNonce, watchNonce)
+        val decryptionKey = stepHmac.copyOfRange(0, 16)
+        val expectedWatchHmac = hmacSha256(decryptionKey, watchNonce + phoneNonce)
+        return if (expectedWatchHmac.contentEquals(watchHmac)) {
+            ClassicAuthKeyCheck(status = "valid", error = null)
+        } else {
+            ClassicAuthKeyCheck(status = "invalid", error = "Auth Key не совпал с ответом часов.")
+        }
+    }
+
+    private fun parseClassicProbeBytes(bytes: ByteArray): ClassicProbeParse {
+        val auth = parseClassicAuthProbe(bytes)
+        if (bytes.size >= 2 && bytes[0] == 0xA5.toByte() && bytes[1] == 0xA5.toByte()) {
+            val packetType = if (bytes.size >= 3) (bytes[2].toInt() and 0x0f).toString() else null
+            return ClassicProbeParse(
+                detectedProtocol = "spp-v2",
+                versionHex = null,
+                packetType = packetType,
+                authSubtype = auth.authSubtype,
+                authStatus = auth.authStatus,
+                watchNonceHex = auth.watchNonceHex,
+                watchHmacHex = auth.watchHmacHex,
+                authStage = auth.authStage,
+            )
+        }
+
+        if (bytes.size >= 11 &&
+            bytes[0] == 0xBA.toByte() &&
+            bytes[1] == 0xDC.toByte() &&
+            bytes[2] == 0xFE.toByte()
+        ) {
+            val payloadHeaderLength = littleEndianUInt16(bytes, 5)
+            val payloadLength = (payloadHeaderLength - 3).coerceAtLeast(0)
+            val payloadStart = 10
+            val payloadEnd = minOf(bytes.size, payloadStart + payloadLength)
+            val versionBytes = if (payloadEnd > payloadStart) {
+                bytes.copyOfRange(payloadStart, payloadEnd)
+            } else {
+                byteArrayOf()
+            }
+            return ClassicProbeParse(
+                detectedProtocol = "spp-v1",
+                versionHex = bytePreviewHex(versionBytes, 16),
+                packetType = (bytes.getOrNull(7)?.toInt()?.and(0xff))?.toString(),
+                authSubtype = auth.authSubtype,
+                authStatus = auth.authStatus,
+                watchNonceHex = auth.watchNonceHex,
+                watchHmacHex = auth.watchHmacHex,
+                authStage = auth.authStage,
+            )
+        }
+
+        return ClassicProbeParse(
+            detectedProtocol = if (bytes.isEmpty()) null else "unknown",
+            versionHex = null,
+            packetType = null,
+            authSubtype = auth.authSubtype,
+            authStatus = auth.authStatus,
+            watchNonceHex = auth.watchNonceHex,
+            watchHmacHex = auth.watchHmacHex,
+            authStage = auth.authStage,
+        )
+    }
+
+    private fun parseClassicAuthProbe(bytes: ByteArray): ClassicAuthProbeParse {
+        var offset = 0
+        while (offset <= bytes.size - 8) {
+            if (offset <= bytes.size - 11 &&
+                bytes[offset] == 0xBA.toByte() &&
+                bytes[offset + 1] == 0xDC.toByte() &&
+                bytes[offset + 2] == 0xFE.toByte()
+            ) {
+                val payloadHeaderLength = littleEndianUInt16(bytes, offset + 5)
+                val payloadLength = payloadHeaderLength - 3
+                val packetSize = 11 + payloadLength
+                if (payloadLength >= 0 && offset + packetSize <= bytes.size) {
+                    val dataType = bytes[offset + 9].toInt() and 0xff
+                    if (dataType == 2) {
+                        val payloadStart = offset + 10
+                        val payloadEnd = payloadStart + payloadLength
+                        val parsed = parseAuthCommand(bytes.copyOfRange(payloadStart, payloadEnd))
+                        if (parsed.authStage != null) {
+                            return parsed
+                        }
+                    }
+                    offset += packetSize.coerceAtLeast(1)
+                    continue
+                }
+            }
+
+            if (bytes[offset] == 0xA5.toByte() && bytes[offset + 1] == 0xA5.toByte()) {
+                val packetType = bytes[offset + 2].toInt() and 0x0f
+                val payloadLength = littleEndianUInt16(bytes, offset + 4)
+                val packetSize = 8 + payloadLength
+                if (payloadLength >= 0 && offset + packetSize <= bytes.size) {
+                    if (packetType == 3 && payloadLength >= 2) {
+                        val payloadStart = offset + 8
+                        val rawChannel = bytes[payloadStart].toInt() and 0x0f
+                        val opCode = bytes[payloadStart + 1].toInt() and 0xff
+                        if (rawChannel == 1 && opCode == 1) {
+                            val parsed = parseAuthCommand(bytes.copyOfRange(payloadStart + 2, payloadStart + payloadLength))
+                            if (parsed.authStage != null) {
+                                return parsed
+                            }
+                        }
+                    }
+                    offset += packetSize.coerceAtLeast(1)
+                    continue
+                }
+            }
+
+            offset += 1
+        }
+
+        return ClassicAuthProbeParse()
+    }
+
+    private fun parseAuthCommand(payload: ByteArray): ClassicAuthProbeParse {
+        var commandSubtype: Int? = null
+        var commandStatus: Int? = null
+        var authStatus: Int? = null
+        var watchNonceHex: String? = null
+        var watchHmacHex: String? = null
+
+        walkProtoFields(payload) { fieldNumber, wireType, value ->
+            when {
+                fieldNumber == 2 && wireType == 0 -> commandSubtype = value.intValue
+                fieldNumber == 100 && wireType == 0 -> commandStatus = value.intValue
+                fieldNumber == 3 && wireType == 2 && value.bytes != null -> {
+                    walkProtoFields(value.bytes) { authField, authWireType, authValue ->
+                        when {
+                            authField == 8 && authWireType == 0 -> authStatus = authValue.intValue
+                            authField == 31 && authWireType == 2 && authValue.bytes != null -> {
+                                walkProtoFields(authValue.bytes) { nonceField, nonceWireType, nonceValue ->
+                                    if (nonceField == 1 && nonceWireType == 2) {
+                                        watchNonceHex = fullHex(nonceValue.bytes)
+                                    } else if (nonceField == 2 && nonceWireType == 2) {
+                                        watchHmacHex = fullHex(nonceValue.bytes)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        val stage = when {
+            watchNonceHex != null && watchHmacHex != null -> "watch-nonce"
+            commandSubtype != null || commandStatus != null || authStatus != null -> "auth-response"
+            else -> null
+        }
+
+        return ClassicAuthProbeParse(
+            authSubtype = commandSubtype,
+            authStatus = authStatus ?: commandStatus,
+            watchNonceHex = watchNonceHex,
+            watchHmacHex = watchHmacHex,
+            authStage = stage,
+        )
+    }
+
+    private fun walkProtoFields(bytes: ByteArray, visitor: (Int, Int, ProtoValue) -> Unit) {
+        var offset = 0
+        while (offset < bytes.size) {
+            val key = readProtoVarint(bytes, offset) ?: return
+            offset = key.nextOffset
+            val fieldNumber = key.value.toInt() ushr 3
+            val wireType = key.value.toInt() and 0x07
+            when (wireType) {
+                0 -> {
+                    val value = readProtoVarint(bytes, offset) ?: return
+                    offset = value.nextOffset
+                    visitor(fieldNumber, wireType, ProtoValue(value.value.toInt(), null))
+                }
+                2 -> {
+                    val length = readProtoVarint(bytes, offset) ?: return
+                    offset = length.nextOffset
+                    val end = offset + length.value.toInt()
+                    if (end > bytes.size) {
+                        return
+                    }
+                    visitor(fieldNumber, wireType, ProtoValue(null, bytes.copyOfRange(offset, end)))
+                    offset = end
+                }
+                5 -> {
+                    if (offset + 4 > bytes.size) return
+                    offset += 4
+                }
+                1 -> {
+                    if (offset + 8 > bytes.size) return
+                    offset += 8
+                }
+                else -> return
+            }
+        }
+    }
+
+    private fun readProtoVarint(bytes: ByteArray, startOffset: Int): ProtoVarint? {
+        var result = 0L
+        var shift = 0
+        var offset = startOffset
+        while (offset < bytes.size && shift < 64) {
+            val value = bytes[offset].toInt() and 0xff
+            result = result or ((value and 0x7f).toLong() shl shift)
+            offset += 1
+            if (value and 0x80 == 0) {
+                return ProtoVarint(result, offset)
+            }
+            shift += 7
+        }
+        return null
+    }
+
+    private fun buildClassicAuthStep1Packet(phoneNonce: ByteArray): ByteArray {
+        return buildClassicSppV1Packet(
+            channel = 0x02,
+            flags = 0x80,
+            opCode = 0x02,
+            frameSerial = 0x00,
+            dataType = 0x02,
+            payload = buildAuthStep1Command(phoneNonce),
+        )
+    }
+
+    private fun buildAuthStep1Command(phoneNonce: ByteArray): ByteArray {
+        val phoneNonceMessage = java.io.ByteArrayOutputStream()
+        writeProtoBytesField(phoneNonceMessage, 1, phoneNonce)
+
+        val authMessage = java.io.ByteArrayOutputStream()
+        writeProtoBytesField(authMessage, 30, phoneNonceMessage.toByteArray())
+
+        val command = java.io.ByteArrayOutputStream()
+        writeProtoVarintField(command, 1, 1)
+        writeProtoVarintField(command, 2, 26)
+        writeProtoBytesField(command, 3, authMessage.toByteArray())
+        return command.toByteArray()
+    }
+
+    private fun buildClassicSppV1Packet(
+        channel: Int,
+        flags: Int,
+        opCode: Int,
+        frameSerial: Int,
+        dataType: Int,
+        payload: ByteArray,
+    ): ByteArray {
+        val packet = java.io.ByteArrayOutputStream()
+        packet.write(CLASSIC_SPP_PREAMBLE)
+        packet.write(channel and 0xff)
+        packet.write(flags and 0xff)
+        writeLittleEndianUInt16(packet, payload.size + 3)
+        packet.write(opCode and 0xff)
+        packet.write(frameSerial and 0xff)
+        packet.write(dataType and 0xff)
+        packet.write(payload)
+        packet.write(0xEF)
+        return packet.toByteArray()
+    }
+
+    private fun buildClassicV2SessionConfigPacket(sequenceNumber: Int): ByteArray {
+        return buildClassicSppV2Packet(
+            packetType = 2,
+            sequenceNumber = sequenceNumber,
+            payload = byteArrayOf(
+                0x01,
+                0x01, 0x03, 0x00, 0x01, 0x00, 0x00,
+                0x02, 0x02, 0x00, 0x00, 0xFC.toByte(),
+                0x03, 0x02, 0x00, 0x20, 0x00,
+                0x04, 0x02, 0x10, 0x27,
+            ),
+        )
+    }
+
+    private fun buildClassicV2AuthStep1Packet(phoneNonce: ByteArray, sequenceNumber: Int): ByteArray {
+        val command = buildAuthStep1Command(phoneNonce)
+        val payload = java.io.ByteArrayOutputStream()
+        payload.write(0x01)
+        payload.write(0x01)
+        payload.write(command)
+        return buildClassicSppV2Packet(packetType = 3, sequenceNumber = sequenceNumber, payload = payload.toByteArray())
+    }
+
+    private fun buildClassicSppV2Packet(packetType: Int, sequenceNumber: Int, payload: ByteArray): ByteArray {
+        val packet = java.io.ByteArrayOutputStream()
+        packet.write(0xA5)
+        packet.write(0xA5)
+        packet.write(packetType and 0x0f)
+        packet.write(sequenceNumber and 0xff)
+        writeLittleEndianUInt16(packet, payload.size)
+        writeLittleEndianUInt16(packet, classicSppV2Checksum(payload))
+        packet.write(payload)
+        return packet.toByteArray()
+    }
+
+    private fun classicSppV2Checksum(payload: ByteArray): Int {
+        var crc = 0
+        for (byte in payload) {
+            val unsigned = byte.toInt() and 0xff
+            for (bit in 0 until 8) {
+                crc = crc shl 1
+                if ((((crc ushr 16) and 1) xor ((unsigned ushr bit) and 1)) == 1) {
+                    crc = crc xor 0x8005
+                }
+            }
+        }
+
+        return Integer.reverse(crc) ushr 16
+    }
+
+    private fun shouldUseClassicSppV2(versionHex: String?): Boolean {
+        val majorHex = versionHex?.take(2) ?: return false
+        return majorHex.toIntOrNull(16)?.let { it >= 2 } == true
+    }
+
+    private fun computeClassicAuthStepHmac(secretKey: ByteArray, phoneNonce: ByteArray, watchNonce: ByteArray): ByteArray {
+        val seed = phoneNonce + watchNonce
+        val hmacKey = hmacSha256(seed, secretKey)
+        val output = ByteArray(64)
+        val label = "miwear-auth".toByteArray(Charsets.UTF_8)
+        var previous = ByteArray(0)
+        var counter = 1
+        var offset = 0
+        while (offset < output.size) {
+            val chunk = hmacSha256(hmacKey, previous + label + byteArrayOf(counter.toByte()))
+            val copyLength = minOf(chunk.size, output.size - offset)
+            System.arraycopy(chunk, 0, output, offset, copyLength)
+            previous = chunk
+            counter += 1
+            offset += copyLength
+        }
+        return output
+    }
+
+    private fun hmacSha256(key: ByteArray, input: ByteArray): ByteArray {
+        val mac = Mac.getInstance("HmacSHA256")
+        mac.init(SecretKeySpec(key, "HmacSHA256"))
+        return mac.doFinal(input)
+    }
+
+    private fun readClassicPackets(
+        socket: BluetoothSocket,
+        packets: MutableList<JSObject>,
+        combined: java.io.ByteArrayOutputStream,
+        durationMs: Long,
+    ): String? {
+        val startedAt = android.os.SystemClock.uptimeMillis()
+        val readBuffer = ByteArray(512)
+        while (android.os.SystemClock.uptimeMillis() - startedAt < durationMs) {
+            val available = try {
+                socket.inputStream.available()
+            } catch (error: IOException) {
+                return "SPP-сокет закрылся во время чтения: ${safeMessage(error)}"
+            }
+
+            if (available > 0) {
+                val bytesToRead = minOf(readBuffer.size, available)
+                val count = socket.inputStream.read(readBuffer, 0, bytesToRead)
+                if (count > 0) {
+                    val bytes = readBuffer.copyOfRange(0, count)
+                    combined.write(bytes)
+                    packets.add(buildClassicPacket(bytes, packets.size + 1))
+                }
+            } else {
+                Thread.sleep(CLASSIC_PROBE_POLL_MS)
+            }
+        }
+        return null
+    }
+
+    private fun writeProtoVarintField(output: java.io.ByteArrayOutputStream, fieldNumber: Int, value: Int) {
+        writeProtoVarint(output, (fieldNumber shl 3) or 0)
+        writeProtoVarint(output, value)
+    }
+
+    private fun writeProtoBytesField(output: java.io.ByteArrayOutputStream, fieldNumber: Int, bytes: ByteArray) {
+        writeProtoVarint(output, (fieldNumber shl 3) or 2)
+        writeProtoVarint(output, bytes.size)
+        output.write(bytes)
+    }
+
+    private fun writeProtoVarint(output: java.io.ByteArrayOutputStream, value: Int) {
+        var remaining = value
+        while (remaining >= 0x80) {
+            output.write((remaining and 0x7f) or 0x80)
+            remaining = remaining ushr 7
+        }
+        output.write(remaining)
+    }
+
+    private fun writeLittleEndianUInt16(output: java.io.ByteArrayOutputStream, value: Int) {
+        output.write(value and 0xff)
+        output.write((value ushr 8) and 0xff)
+    }
+
+    private fun littleEndianUInt16(bytes: ByteArray, offset: Int): Int {
+        if (bytes.size < offset + 2) {
+            return 0
+        }
+        return (bytes[offset].toInt() and 0xff) or ((bytes[offset + 1].toInt() and 0xff) shl 8)
+    }
+
+    private fun fullHex(bytes: ByteArray?): String? {
+        if (bytes == null || bytes.isEmpty()) {
+            return null
+        }
+
+        return bytes.joinToString("") { byte -> "%02X".format(byte.toInt() and 0xff) }
+    }
+
+    private fun parseHexBytes(value: String): ByteArray? {
+        val normalized = value
+            .removePrefix("0x")
+            .removePrefix("0X")
+            .filterNot { it == ':' || it == '-' || it == ' ' }
+        if (normalized.length % 2 != 0) {
+            return null
+        }
+
+        return try {
+            ByteArray(normalized.length / 2) { index ->
+                normalized.substring(index * 2, index * 2 + 2).toInt(16).toByte()
+            }
+        } catch (_: NumberFormatException) {
+            null
+        }
+    }
+
     private fun writeDescriptorCompat(
         gatt: BluetoothGatt,
         descriptor: BluetoothGattDescriptor,
@@ -1345,6 +1995,24 @@ class DirectWatchPlugin : Plugin() {
         }
         activeGatt = null
         activeSession = null
+    }
+
+    private fun stopActiveClassicSocket() {
+        val thread = activeClassicThread
+        activeClassicThread = null
+        if (thread != null && thread.isAlive) {
+            thread.interrupt()
+        }
+
+        val socket = activeClassicSocket
+        activeClassicSocket = null
+        if (socket != null) {
+            try {
+                socket.close()
+            } catch (_: IOException) {
+                // Socket is already closed.
+            }
+        }
     }
 
     private fun stopActiveBondReceiver() {
@@ -1432,6 +2100,40 @@ class DirectWatchPlugin : Plugin() {
         val packets: java.util.ArrayDeque<JSObject> = java.util.ArrayDeque(),
     )
 
+    private data class ClassicProbeParse(
+        val detectedProtocol: String?,
+        val versionHex: String?,
+        val packetType: String?,
+        val authSubtype: Int?,
+        val authStatus: Int?,
+        val watchNonceHex: String?,
+        val watchHmacHex: String?,
+        val authStage: String?,
+    )
+
+    private data class ClassicAuthProbeParse(
+        val authSubtype: Int? = null,
+        val authStatus: Int? = null,
+        val watchNonceHex: String? = null,
+        val watchHmacHex: String? = null,
+        val authStage: String? = null,
+    )
+
+    private data class ClassicAuthKeyCheck(
+        val status: String,
+        val error: String?,
+    )
+
+    private data class ProtoValue(
+        val intValue: Int?,
+        val bytes: ByteArray?,
+    )
+
+    private data class ProtoVarint(
+        val value: Long,
+        val nextOffset: Int,
+    )
+
     private data class ScannedWatchDevice(
         val id: String,
         val name: String?,
@@ -1475,8 +2177,28 @@ class DirectWatchPlugin : Plugin() {
         private const val MAX_SESSION_SUBSCRIPTIONS = 10
         private const val MAX_SESSION_PACKETS = 16
         private const val MAX_PACKET_PREVIEW_BYTES = 96
+        private const val MAX_CLASSIC_PACKET_PREVIEW_BYTES = 160
+        private const val CLASSIC_PROBE_READ_MS = 6_000L
+        private const val CLASSIC_VERSION_READ_MS = 1_200L
+        private const val CLASSIC_SESSION_CONFIG_READ_MS = 1_200L
+        private const val CLASSIC_PROBE_POLL_MS = 120L
         private val PAIRING_TIMEOUT_TOKEN = Any()
         private val SESSION_TIMEOUT_TOKEN = Any()
+        private val SPP_SERVICE_UUID: UUID = UUID.fromString("00001101-0000-1000-8000-00805f9b34fb")
+        private val CLASSIC_SPP_PREAMBLE = byteArrayOf(0xBA.toByte(), 0xDC.toByte(), 0xFE.toByte())
+        private val CLASSIC_SPP_V1_VERSION_REQUEST = byteArrayOf(
+            0xBA.toByte(),
+            0xDC.toByte(),
+            0xFE.toByte(),
+            0x00,
+            0xC0.toByte(),
+            0x03,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0xEF.toByte(),
+        )
         private val CLIENT_CHARACTERISTIC_CONFIG_UUID: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
         private val HEART_RATE_SERVICE_UUID: UUID = UUID.fromString("0000180d-0000-1000-8000-00805f9b34fb")
         private val HEART_RATE_MEASUREMENT_UUID: UUID = UUID.fromString("00002a37-0000-1000-8000-00805f9b34fb")

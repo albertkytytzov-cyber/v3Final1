@@ -21,6 +21,7 @@ import {
   inspectDirectWatchDevice,
   isDirectWatchRuntime,
   pairDirectWatchDevice,
+  probeDirectWatchClassicSession,
   scanDirectWatchDevices,
   startDirectWatchSession,
   stopDirectWatchSession,
@@ -96,6 +97,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
     coachAiDiagnostic: null,
     coachAiStatus: null,
     directWatchDiagnostic: {
+      classicProbe: null,
       devices: [],
       inspectedDeviceId: null,
       inspection: null,
@@ -622,6 +624,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
       const result = await scanDirectWatchDevices();
       update({
         directWatchDiagnostic: {
+          classicProbe: state.directWatchDiagnostic.classicProbe,
           devices: result.devices.filter((device) => Boolean(device.id)),
           inspectedDeviceId: null,
           inspection: null,
@@ -707,6 +710,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
         directWatchDiagnostic: {
           ...state.directWatchDiagnostic,
           devices,
+          classicProbe: null,
         },
         error: null,
         isBusy: false,
@@ -751,6 +755,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
         directWatchDiagnostic: {
           ...state.directWatchDiagnostic,
           devices,
+          classicProbe: null,
           session: null,
         },
         error: null,
@@ -760,6 +765,44 @@ export function bootstrapMobileApp(root: HTMLElement) {
     } catch (error) {
       update({
         error: error instanceof Error ? error.message : "Не удалось сбросить системную привязку часов.",
+        isBusy: false,
+        message: null,
+      });
+    }
+  };
+
+  const probeDirectWatchClassic = async (deviceId: string, authStep1 = false) => {
+    if (!deviceId) {
+      update({ error: "Выберите часы для проверки Classic/SPP." });
+      return;
+    }
+
+    update({
+      error: null,
+      isBusy: true,
+      message: authStep1
+        ? "Проверяю первый шаг Xiaomi Auth..."
+        : "Проверяю Classic/SPP-канал часов...",
+    });
+
+    try {
+      const classicProbe = await probeDirectWatchClassicSession(deviceId, authStep1);
+      update({
+        directWatchDiagnostic: {
+          ...state.directWatchDiagnostic,
+          classicProbe,
+        },
+        error: classicProbe.error,
+        isBusy: false,
+        message: formatDirectWatchClassicProbeMessage(classicProbe),
+      });
+    } catch (error) {
+      update({
+        directWatchDiagnostic: {
+          ...state.directWatchDiagnostic,
+          classicProbe: null,
+        },
+        error: error instanceof Error ? error.message : "Не удалось проверить Classic/SPP-канал часов.",
         isBusy: false,
         message: null,
       });
@@ -1523,6 +1566,18 @@ export function bootstrapMobileApp(root: HTMLElement) {
     root.querySelectorAll<HTMLButtonElement>("[data-direct-watch-unpair]").forEach((button) => {
       button.addEventListener("click", () => {
         void unpairDirectWatch(button.dataset.directWatchUnpair ?? "");
+      });
+    });
+
+    root.querySelectorAll<HTMLButtonElement>("[data-direct-watch-classic-probe]").forEach((button) => {
+      button.addEventListener("click", () => {
+        void probeDirectWatchClassic(button.dataset.directWatchClassicProbe ?? "");
+      });
+    });
+
+    root.querySelectorAll<HTMLButtonElement>("[data-direct-watch-auth-probe]").forEach((button) => {
+      button.addEventListener("click", () => {
+        void probeDirectWatchClassic(button.dataset.directWatchAuthProbe ?? "", true);
       });
     });
 
@@ -2799,6 +2854,7 @@ function renderDirectWatchDiagnostics(state: MobileAppState) {
     .slice(0, 8);
   const inspection = diagnostic.inspection;
   const session = diagnostic.session;
+  const classicProbe = diagnostic.classicProbe;
   const sessionPackets = diagnostic.packets.length ? diagnostic.packets : session?.packets ?? [];
   const activeSessionDeviceId = session?.connected ? session.deviceId : null;
   const services = inspection?.services ?? [];
@@ -2832,6 +2888,7 @@ function renderDirectWatchDiagnostics(state: MobileAppState) {
       </p>
       ${diagnostic.scannedAt ? `<p class="muted-copy">Последний поиск: ${escapeHtml(formatDateTime(diagnostic.scannedAt))}</p>` : ""}
       ${renderDirectWatchSession(session, sessionPackets)}
+      ${renderDirectWatchClassicProbe(classicProbe)}
       ${devices.length ? `
         <div class="direct-watch-device-list">
           ${devices.map((device) => `
@@ -2875,6 +2932,22 @@ function renderDirectWatchDiagnostics(state: MobileAppState) {
                     Сбросить привязку
                   </button>
                 `}
+                <button
+                  class="secondary-action"
+                  data-direct-watch-classic-probe="${escapeHtml(device.id)}"
+                  type="button"
+                  ${state.isBusy || session?.connected || device.bondState !== "bonded" ? "disabled" : ""}
+                >
+                  Проверить SPP
+                </button>
+                <button
+                  class="secondary-action"
+                  data-direct-watch-auth-probe="${escapeHtml(device.id)}"
+                  type="button"
+                  ${state.isBusy || session?.connected || device.bondState !== "bonded" ? "disabled" : ""}
+                >
+                  Проверить Auth
+                </button>
                 <button
                   class="secondary-action"
                   data-direct-watch-inspect="${escapeHtml(device.id)}"
@@ -3017,6 +3090,67 @@ function renderDirectWatchSession(
   `;
 }
 
+function renderDirectWatchClassicProbe(
+  probe: MobileAppState["directWatchDiagnostic"]["classicProbe"],
+) {
+  if (!probe) {
+    return "";
+  }
+
+  const packets = probe.packets ?? [];
+  const statusClass = probe.connected && !probe.error ? "is-connected" : "is-missing";
+
+  return `
+    <div class="direct-watch-session ${probe.connected ? "is-connected" : "is-stopped"}">
+      <div class="device-health-status ${statusClass}">
+        <strong>${escapeHtml(formatDirectWatchClassicProbeTitle(probe))}</strong>
+        <span>${escapeHtml(formatDirectWatchClassicProbeSummary(probe))}</span>
+      </div>
+      <div class="device-health-diagnostics-grid">
+        <article>
+          <span>Канал</span>
+          <strong>${escapeHtml(probe.detectedProtocol || "не определён")}</strong>
+        </article>
+        <article>
+          <span>Сопряжение</span>
+          <strong>${escapeHtml(formatDirectWatchBondState(probe.bondState))}</strong>
+        </article>
+        <article>
+          <span>Запрос версии</span>
+          <strong>${escapeHtml(probe.sentVersionRequest ? "отправлен" : "не отправлен")}</strong>
+        </article>
+        <article>
+          <span>Auth step 1</span>
+          <strong>${escapeHtml(probe.sentAuthStep1 ? "отправлен" : probe.sentSessionConfig ? "session v2" : "не отправлен")}</strong>
+        </article>
+        <article>
+          <span>Пакеты</span>
+          <strong>${escapeHtml(String(probe.packetCount ?? packets.length))}</strong>
+        </article>
+        <article>
+          <span>Ответ Auth</span>
+          <strong>${escapeHtml(probe.authStage === "watch-nonce" ? "watch nonce" : probe.authStage || "нет")}</strong>
+        </article>
+      </div>
+      ${packets.length ? `
+        <div class="direct-watch-packet-list">
+          ${packets.slice(0, 4).map((packet) => `
+            <article>
+              <div>
+                <strong>${escapeHtml(packet.receivedAt ? formatDateTime(packet.receivedAt) : "SPP packet")}</strong>
+                <span>${escapeHtml(String(packet.byteLength ?? 0))} байт</span>
+              </div>
+              <code>${escapeHtml(packet.rawHex || "empty")}</code>
+            </article>
+          `).join("")}
+        </div>
+      ` : `
+        <p class="muted-copy">Classic/SPP открылся без входящих пакетов. Если это повторится, часы могут ждать авторизацию или канал занят другим приложением.</p>
+      `}
+    </div>
+  `;
+}
+
 function formatDirectWatchSignal(rssi: number | null | undefined) {
   if (typeof rssi !== "number" || !Number.isFinite(rssi)) {
     return "сигнал неизвестен";
@@ -3147,6 +3281,62 @@ function formatDirectWatchSessionMessage(
   }
 
   return "PERFORM Sync подключился к часам, но Android не смог включить уведомления BLE-характеристик.";
+}
+
+function formatDirectWatchClassicProbeMessage(
+  probe: NonNullable<MobileAppState["directWatchDiagnostic"]["classicProbe"]>,
+) {
+  if (probe.error) {
+    return "Classic/SPP проверен, но канал не открылся. Подробность показана в диагностике.";
+  }
+
+  if (probe.detectedProtocol === "spp-v1" || probe.detectedProtocol === "spp-v2") {
+    if (probe.authStage === "watch-nonce") {
+      return "Часы отдали первый ответ Xiaomi Auth. Следующий шаг — проверить настоящий Auth Key.";
+    }
+    return "Classic/SPP канал часов отвечает. Следующий шаг — авторизация через Auth Key.";
+  }
+
+  if (probe.connected) {
+    return "Classic/SPP сокет открылся, но часы не вернули версию протокола.";
+  }
+
+  return "Classic/SPP канал не подтвердился.";
+}
+
+function formatDirectWatchClassicProbeTitle(
+  probe: NonNullable<MobileAppState["directWatchDiagnostic"]["classicProbe"]>,
+) {
+  if (probe.error) {
+    return "Classic/SPP не прошёл";
+  }
+
+  if (probe.detectedProtocol === "spp-v1" || probe.detectedProtocol === "spp-v2") {
+    return probe.authStage === "watch-nonce" ? "Xiaomi Auth отвечает" : "Classic/SPP отвечает";
+  }
+
+  if (probe.connected) {
+    return "Classic/SPP подключился";
+  }
+
+  return "Classic/SPP не подключился";
+}
+
+function formatDirectWatchClassicProbeSummary(
+  probe: NonNullable<MobileAppState["directWatchDiagnostic"]["classicProbe"]>,
+) {
+  if (probe.error) {
+    return probe.error;
+  }
+
+  const parts = [
+    probe.probedAt ? formatDateTime(probe.probedAt) : null,
+    probe.versionHex ? `версия: ${probe.versionHex}` : null,
+    probe.watchNonceHex ? `watch nonce: ${probe.watchNonceHex}` : null,
+    probe.rawHex && !probe.versionHex ? `ответ: ${probe.rawHex}` : null,
+  ].filter((part): part is string => Boolean(part));
+
+  return parts.length ? parts.join(" · ") : "ответа от часов пока нет";
 }
 
 function formatDirectWatchUnpairMessage(status: string | null | undefined) {

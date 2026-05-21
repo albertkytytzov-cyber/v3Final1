@@ -41,6 +41,7 @@ import type {
   UserRole,
 } from "@training-platform/shared";
 import type {
+  DirectWatchClassicProbe,
   DirectWatchDevice,
   DirectWatchInspection,
   DirectWatchSessionPacket,
@@ -158,6 +159,7 @@ export interface MobileAppState {
   coachAiDiagnostic: CoachAiReviewDiagnosticResponse | null;
   coachAiStatus: CoachAiReviewStatus | null;
   directWatchDiagnostic: {
+    classicProbe: DirectWatchClassicProbe | null;
     devices: DirectWatchDevice[];
     inspectedDeviceId: string | null;
     inspection: DirectWatchInspection | null;
