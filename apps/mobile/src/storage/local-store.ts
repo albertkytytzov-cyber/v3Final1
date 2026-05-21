@@ -16,6 +16,11 @@ export interface DirectWatchLocalConfig {
   authKeyHex: string | null;
   deviceId: string | null;
   deviceName: string | null;
+  lastServiceBridgeUntil: string | null;
+  lastServiceError: string | null;
+  lastServiceStatus: "error" | "running" | "stopped" | "synced" | null;
+  lastServiceSyncedAt: string | null;
+  lastServiceUpdatedAt: string | null;
   weatherCity: string | null;
   weatherLatitude: number | null;
   weatherLongitude: number | null;
@@ -140,6 +145,11 @@ export function loadDirectWatchConfig(): DirectWatchLocalConfig {
     authKeyHex: normalizeAuthKey(config.authKeyHex),
     deviceId: normalizeText(config.deviceId),
     deviceName: normalizeText(config.deviceName),
+    lastServiceBridgeUntil: normalizeText(config.lastServiceBridgeUntil),
+    lastServiceError: normalizeText(config.lastServiceError),
+    lastServiceStatus: normalizeDirectWatchServiceStatus(config.lastServiceStatus),
+    lastServiceSyncedAt: normalizeText(config.lastServiceSyncedAt),
+    lastServiceUpdatedAt: normalizeText(config.lastServiceUpdatedAt),
     weatherCity: normalizeText(config.weatherCity),
     weatherLatitude: normalizeNumber(config.weatherLatitude),
     weatherLongitude: normalizeNumber(config.weatherLongitude),
@@ -151,6 +161,11 @@ export function saveDirectWatchConfig(config: DirectWatchLocalConfig) {
     authKeyHex: normalizeAuthKey(config.authKeyHex),
     deviceId: normalizeText(config.deviceId),
     deviceName: normalizeText(config.deviceName),
+    lastServiceBridgeUntil: normalizeText(config.lastServiceBridgeUntil),
+    lastServiceError: normalizeText(config.lastServiceError),
+    lastServiceStatus: normalizeDirectWatchServiceStatus(config.lastServiceStatus),
+    lastServiceSyncedAt: normalizeText(config.lastServiceSyncedAt),
+    lastServiceUpdatedAt: normalizeText(config.lastServiceUpdatedAt),
     weatherCity: normalizeText(config.weatherCity),
     weatherLatitude: normalizeNumber(config.weatherLatitude),
     weatherLongitude: normalizeNumber(config.weatherLongitude),
@@ -168,6 +183,12 @@ function normalizeAuthKey(value: unknown) {
 
 function normalizeText(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function normalizeDirectWatchServiceStatus(value: unknown) {
+  return value === "error" || value === "running" || value === "stopped" || value === "synced"
+    ? value
+    : null;
 }
 
 function normalizeNumber(value: unknown) {

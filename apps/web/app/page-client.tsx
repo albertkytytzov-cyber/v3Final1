@@ -3822,11 +3822,54 @@ function getImportedTableColumnIndexes(headers: string[], firstDataCellCount: nu
   };
 }
 
-function parseImportedPlanTableBlocks(table: HTMLTableElement, startOrderIndex: number) {
+function getImportedTableControlIndexes(
+  headers: string[],
+  firstDataCellCount: number,
+  indexes: ReturnType<typeof getImportedTableColumnIndexes>,
+) {
+  const explicitControlIndexes = headers
+    .map((header, index) => ({ header: header.toLowerCase(), index }))
+    .filter(({ header, index }) =>
+      index < firstDataCellCount &&
+      index !== indexes.nameIndex &&
+      index !== indexes.volumeIndex &&
+      /(?:контроль|коммент|примеч|критер|note|comment|control)/iu.test(header),
+    )
+    .map(({ index }) => index);
+
+  if (explicitControlIndexes.length > 0) {
+    return explicitControlIndexes;
+  }
+
+  return Array.from({ length: firstDataCellCount }, (_, index) => index).filter(
+    (index) =>
+      index !== indexes.nameIndex &&
+      index !== indexes.volumeIndex &&
+      index !== indexes.orderIndex,
+  );
+}
+
+function formatImportedTableCommonNote(name: string, volume: string, controlValues: string[]) {
+  const control = controlValues.map(normalizeImportedPlanText).filter(Boolean).join(" / ");
+
+  if (!control) {
+    return "";
+  }
+
+  if (isImportedServiceTableRow(name)) {
+    return [name, volume, control].map(normalizeImportedPlanText).filter(Boolean).join(": ");
+  }
+
+  return control;
+}
+
+function parseImportedPlanTable(table: HTMLTableElement, startOrderIndex: number) {
   const blocks: PlanTemplatePayload["blocks"] = [];
+  const notes: string[] = [];
   const rows = Array.from(table.querySelectorAll("tr"));
   const headers = getImportedTableHeaders(table);
   let indexes: ReturnType<typeof getImportedTableColumnIndexes> | null = null;
+  let controlIndexes: number[] = [];
 
   rows.forEach((row) => {
     if (row.querySelector("th") && !row.querySelector("td")) {
@@ -3843,10 +3886,20 @@ function parseImportedPlanTableBlocks(table: HTMLTableElement, startOrderIndex: 
 
     if (!indexes) {
       indexes = getImportedTableColumnIndexes(headers, cells.length);
+      controlIndexes = getImportedTableControlIndexes(headers, cells.length, indexes);
     }
 
     const name = cells[indexes.nameIndex] ?? "";
     const volume = indexes.volumeIndex >= 0 ? cells[indexes.volumeIndex] ?? "" : "";
+    const commonNote = formatImportedTableCommonNote(
+      name,
+      volume,
+      controlIndexes.map((index) => cells[index] ?? ""),
+    );
+
+    if (commonNote) {
+      notes.push(commonNote);
+    }
 
     if (!name || isImportedServiceTableRow(name)) {
       return;
@@ -3855,7 +3908,14 @@ function parseImportedPlanTableBlocks(table: HTMLTableElement, startOrderIndex: 
     blocks.push(createImportedPlanBlock(name, volume ?? "", "", startOrderIndex + blocks.length));
   });
 
-  return blocks;
+  return {
+    blocks,
+    notes: notes.filter((note, noteIndex) => notes.indexOf(note) === noteIndex),
+  };
+}
+
+function parseImportedPlanTableBlocks(table: HTMLTableElement, startOrderIndex: number) {
+  return parseImportedPlanTable(table, startOrderIndex).blocks;
 }
 
 function parseImportedPlanListBlocks(list: HTMLElement, startOrderIndex: number) {
@@ -3901,14 +3961,20 @@ function parseImportedPlanStructuredSessions(
   return sessionSources
     .map((source, sourceIndex) => {
       const sessionName = getImportedSectionHeadingText(source, fallbackSessionName);
-      const blocks =
-        source.tagName === "TABLE"
-          ? parseImportedPlanTableBlocks(source as HTMLTableElement, sourceIndex * 100)
-          : parseImportedPlanListBlocks(source, sourceIndex * 100);
+      const tableResult = source.tagName === "TABLE"
+        ? parseImportedPlanTable(source as HTMLTableElement, sourceIndex * 100)
+        : null;
+      const blocks = tableResult
+        ? tableResult.blocks
+        : parseImportedPlanListBlocks(source, sourceIndex * 100);
+      const sourceNotes = mergeImportedNotes(
+        getImportedNoteTexts(source).join(" / "),
+        tableResult?.notes.join("; "),
+      );
 
       return {
         name: sessionName,
-        notes: getImportedNoteTexts(source).join(" / "),
+        notes: sourceNotes,
         orderIndex: sourceIndex,
         executionMode: "by_blocks",
         deviceLinkMode: "block",
@@ -4160,14 +4226,16 @@ function parseImportedPlanHtml(
                 ru: `Сессия ${sessionIndex + 1}`,
                 bg: `Сесия ${sessionIndex + 1}`,
               });
-            const tableBlocks = Array.from(session.querySelectorAll<HTMLTableElement>("table")).flatMap(
-              (table, tableIndex) => parseImportedPlanTableBlocks(table, tableIndex * 100),
+            const tableResults = Array.from(session.querySelectorAll<HTMLTableElement>("table")).map(
+              (table, tableIndex) => parseImportedPlanTable(table, tableIndex * 100),
             );
+            const tableBlocks = tableResults.flatMap((result) => result.blocks);
+            const tableNotes = tableResults.flatMap((result) => result.notes);
             const blocks = tableBlocks;
 
             return {
               name: sessionName,
-              notes: getImportedNoteTexts(session).join(" / "),
+              notes: mergeImportedNotes(getImportedNoteTexts(session).join(" / "), tableNotes.join("; ")),
               orderIndex: sessionIndex,
               executionMode: "by_blocks",
               deviceLinkMode: "block",

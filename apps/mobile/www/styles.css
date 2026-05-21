@@ -3767,6 +3767,7 @@ button {
 }
 
 .watch-recovery-card,
+.watch-sync-panel,
 .watch-parameters-card,
 .watch-workouts-card,
 .watch-settings-panel,
@@ -3790,6 +3791,208 @@ button {
   background:
     linear-gradient(135deg, rgba(255, 247, 237, 0.9), rgba(255, 255, 255, 0.92)),
     #ffffff;
+}
+
+.watch-sync-panel {
+  border-color: rgba(15, 118, 110, 0.18);
+  background:
+    linear-gradient(135deg, rgba(236, 253, 245, 0.95), rgba(255, 255, 255, 0.94)),
+    #ffffff;
+}
+
+.watch-sync-panel.is-error {
+  border-color: rgba(185, 28, 28, 0.2);
+  background:
+    linear-gradient(135deg, rgba(254, 242, 242, 0.94), rgba(255, 255, 255, 0.94)),
+    #ffffff;
+}
+
+.watch-sync-panel.is-setup {
+  border-color: rgba(180, 83, 9, 0.2);
+  background:
+    linear-gradient(135deg, rgba(255, 251, 235, 0.94), rgba(255, 255, 255, 0.94)),
+    #ffffff;
+}
+
+.watch-sync-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+}
+
+.watch-sync-head span,
+.watch-sync-grid span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.watch-sync-head h3 {
+  margin: 2px 0 0;
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 950;
+  line-height: 1.15;
+}
+
+.watch-sync-head p,
+.watch-sync-help,
+.watch-sync-error,
+.watch-sync-device-list span {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 760;
+  line-height: 1.3;
+}
+
+.watch-sync-status {
+  align-self: start;
+  padding: 7px 10px;
+  border: 1px solid rgba(15, 118, 110, 0.2);
+  border-radius: 999px;
+  background: rgba(204, 251, 241, 0.82);
+  color: var(--accent-dark);
+  font-size: 0.72rem;
+  font-weight: 950;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.watch-sync-panel.is-error .watch-sync-status {
+  border-color: rgba(185, 28, 28, 0.2);
+  background: rgba(254, 226, 226, 0.9);
+  color: #991b1b;
+}
+
+.watch-sync-panel.is-setup .watch-sync-status {
+  border-color: rgba(180, 83, 9, 0.22);
+  background: rgba(254, 243, 199, 0.9);
+  color: #92400e;
+}
+
+.watch-sync-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.watch-sync-grid article,
+.watch-sync-device-list article {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid rgba(15, 118, 110, 0.12);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.watch-sync-grid strong,
+.watch-sync-device-list strong {
+  display: block;
+  margin-top: 3px;
+  overflow-wrap: anywhere;
+  color: var(--text);
+  font-size: 0.9rem;
+  font-weight: 950;
+  line-height: 1.2;
+}
+
+.watch-sync-error {
+  padding: 9px 10px;
+  border: 1px solid rgba(185, 28, 28, 0.16);
+  border-radius: 12px;
+  background: rgba(254, 242, 242, 0.82);
+  color: #991b1b;
+  font-weight: 850;
+}
+
+.watch-sync-actions,
+.watch-sync-setup-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.watch-sync-actions .primary-action {
+  grid-column: 1 / -1;
+}
+
+.watch-sync-actions .primary-action,
+.watch-sync-actions .secondary-action,
+.watch-sync-setup-actions .secondary-action {
+  min-height: 42px;
+  padding: 0 12px;
+}
+
+.watch-sync-actions .primary-action {
+  font-size: 1rem;
+  line-height: 1.12;
+}
+
+.watch-sync-actions .secondary-action,
+.watch-sync-setup-actions .secondary-action {
+  font-size: 0.9rem;
+  line-height: 1.12;
+}
+
+.watch-sync-actions .secondary-action,
+.watch-sync-setup-actions .secondary-action {
+  border: 1px solid rgba(15, 118, 110, 0.16);
+  border-radius: 15px;
+  background: #ffffff;
+  color: var(--accent-dark);
+  font-weight: 900;
+}
+
+.watch-sync-actions button:disabled,
+.watch-sync-setup-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.watch-sync-setup {
+  padding: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.watch-sync-setup summary {
+  cursor: pointer;
+  color: var(--accent-dark);
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+
+.watch-sync-setup-body {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.watch-sync-setup-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.watch-sync-device-list {
+  display: grid;
+  gap: 8px;
+}
+
+.watch-sync-device-list article {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.watch-sync-device-list article.is-selected {
+  border-color: rgba(15, 118, 110, 0.26);
+  background: rgba(204, 251, 241, 0.5);
 }
 
 .watch-card-head,
@@ -4721,6 +4924,7 @@ button.timeline-card:active {
   .summary-inline-head,
   .coach-ai-review-head,
   .device-health-head,
+  .watch-sync-head,
   .watch-card-head,
   .readiness-watch-summary-head,
   .today-indicators-head,
@@ -4740,6 +4944,7 @@ button.timeline-card:active {
 
   .coach-day-status-head > strong,
   .summary-inline-head > strong,
+  .watch-sync-status,
   .today-indicators-head strong,
   .readiness-trend-head strong,
   .athlete-day-brief-head strong,
@@ -4750,11 +4955,14 @@ button.timeline-card:active {
 
   .readiness-metrics,
   .readiness-watch-summary-grid,
+  .watch-sync-grid,
   .device-health-compact-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .readiness-utility-actions,
+  .watch-sync-setup-actions,
+  .watch-sync-setup-grid,
   .watch-actions,
   .watch-settings-actions,
   .readiness-watch-summary-actions,
@@ -4787,6 +4995,7 @@ button.timeline-card:active {
   }
 
   .watch-recovery-layout,
+  .watch-sync-device-list article,
   .watch-parameter-row {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -4840,8 +5049,12 @@ button.timeline-card:active {
   .coach-readiness-analytics .readiness-factor-row,
   .athlete-home-actions,
   .readiness-watch-summary-grid,
+  .watch-sync-grid,
   .device-health-compact-grid,
   .device-health-compact-actions,
+  .watch-sync-actions,
+  .watch-sync-setup-actions,
+  .watch-sync-setup-grid,
   .watch-actions,
   .watch-settings-actions,
   .readiness-watch-summary-actions,

@@ -51,6 +51,7 @@ import {
   saveSession,
   saveSnapshot,
 } from "../storage/local-store.js";
+import type { DirectWatchLocalConfig } from "../storage/local-store.js";
 import { createPendingAction, enqueueAction, flushSyncQueue } from "../sync/sync-queue.js";
 import {
   estimateTrainingActualLoad,
@@ -86,7 +87,7 @@ import type {
 } from "../types/models.js";
 
 const runtimeConfig = readRuntimeConfig();
-const SHOW_DIRECT_WATCH_DIAGNOSTICS = true;
+const SHOW_DIRECT_WATCH_DIAGNOSTICS = false;
 const DIRECT_WATCH_AUTH_KEY_PATTERN = /^[0-9a-f]{32}$/i;
 const DIRECT_WATCH_SERVICE_KEEP_ALIVE_MS = 2 * 60 * 60 * 1000;
 const TRAINING_ABBREVIATION_EXPLANATIONS: Record<string, string> = {
@@ -139,6 +140,13 @@ export function bootstrapMobileApp(root: HTMLElement) {
   const update = (patch: Partial<MobileAppState>) => {
     Object.assign(state, patch);
     render();
+  };
+
+  const rememberDirectWatchConfig = (patch: Partial<DirectWatchLocalConfig>) => {
+    saveDirectWatchConfig({
+      ...loadDirectWatchConfig(),
+      ...patch,
+    });
   };
 
   if (isDirectWatchRuntime()) {
@@ -725,6 +733,21 @@ export function bootstrapMobileApp(root: HTMLElement) {
       );
       const serviceStatus = await getDirectWatchSyncServiceStatus().catch(() => null);
       const ok = result.authKeyStatus === "valid" && result.sentTime;
+      const syncedAt = result.syncedAt ?? new Date().toISOString();
+      const serviceError = result.authKeyError || result.error || "Служебная синхронизация часов не подтвердилась.";
+      rememberDirectWatchConfig({
+        deviceId: targetDeviceId,
+        deviceName: serviceStatus?.deviceName ?? targetDevice?.name ?? config.deviceName,
+        lastServiceBridgeUntil: serviceStatus?.bridgeUntil ?? result.bridgeUntil ?? null,
+        lastServiceError: ok ? null : serviceError,
+        lastServiceStatus: ok
+          ? serviceStatus?.running || result.keptBluetoothBridge
+            ? "running"
+            : "synced"
+          : "error",
+        lastServiceSyncedAt: ok ? syncedAt : config.lastServiceSyncedAt,
+        lastServiceUpdatedAt: serviceStatus?.updatedAt ?? syncedAt,
+      });
       update({
         directWatchDiagnostic: {
           ...state.directWatchDiagnostic,
@@ -734,15 +757,21 @@ export function bootstrapMobileApp(root: HTMLElement) {
           },
           serviceStatus,
         },
-        error: ok ? null : result.authKeyError || result.error || "Служебная синхронизация часов не подтвердилась.",
+        error: ok ? null : serviceError,
         isBusy: false,
         message: ok
           ? formatDirectWatchServiceSyncMessage(result, weatherPayload?.locationName ?? null, weatherError)
           : null,
       });
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Не удалось выполнить служебную синхронизацию часов.";
+      rememberDirectWatchConfig({
+        lastServiceError: errorMessage,
+        lastServiceStatus: "error",
+        lastServiceUpdatedAt: new Date().toISOString(),
+      });
       update({
-        error: error instanceof Error ? error.message : "Не удалось выполнить служебную синхронизацию часов.",
+        error: errorMessage,
         isBusy: false,
         message: null,
       });
@@ -1128,6 +1157,14 @@ export function bootstrapMobileApp(root: HTMLElement) {
   const refreshDirectWatchSyncService = async () => {
     try {
       const serviceStatus = await getDirectWatchSyncServiceStatus();
+      rememberDirectWatchConfig({
+        deviceId: serviceStatus.deviceId ?? loadDirectWatchConfig().deviceId,
+        deviceName: serviceStatus.deviceName ?? loadDirectWatchConfig().deviceName,
+        lastServiceBridgeUntil: serviceStatus.bridgeUntil ?? null,
+        lastServiceError: serviceStatus.running ? null : loadDirectWatchConfig().lastServiceError,
+        lastServiceStatus: serviceStatus.running ? "running" : "stopped",
+        lastServiceUpdatedAt: serviceStatus.updatedAt ?? new Date().toISOString(),
+      });
       update({
         directWatchDiagnostic: {
           ...state.directWatchDiagnostic,
@@ -1150,6 +1187,12 @@ export function bootstrapMobileApp(root: HTMLElement) {
 
     try {
       const serviceStatus = await stopDirectWatchSyncService();
+      rememberDirectWatchConfig({
+        lastServiceBridgeUntil: null,
+        lastServiceError: null,
+        lastServiceStatus: "stopped",
+        lastServiceUpdatedAt: serviceStatus.updatedAt ?? new Date().toISOString(),
+      });
       update({
         directWatchDiagnostic: {
           ...state.directWatchDiagnostic,
@@ -3191,10 +3234,160 @@ function renderWatchesScreen(state: MobileAppState) {
       <h2>Часы</h2>
       <p>Сон, восстановление и PERFORM Sync за сегодня.</p>
     </div>
+    ${renderWatchSyncPanel(state, date)}
     ${renderWatchRecoveryCard(state, summary, date)}
     ${renderWatchParametersCard(summary)}
     ${renderWatchWorkoutsCard(workouts)}
     ${renderWatchSettingsPanel(state, summary, date)}
+  `;
+}
+
+function renderWatchSyncPanel(state: MobileAppState, date: string) {
+  if (!isDirectWatchRuntime()) {
+    return "";
+  }
+
+  const config = loadDirectWatchConfig();
+  const weatherLocation = getDirectWatchWeatherLocation(config);
+  const serviceStatus = state.directWatchDiagnostic.serviceStatus;
+  const hasDevice = Boolean(config.deviceId);
+  const hasAuthKey = Boolean(config.authKeyHex);
+  const canServiceSync = hasDevice && hasAuthKey;
+  const isRunning = isDirectWatchServiceRunning(config, serviceStatus);
+  const statusKind = getDirectWatchServiceStatusKind(config, serviceStatus);
+  const statusLabel = formatDirectWatchServiceStatusLabel(config, serviceStatus);
+  const lastSyncLabel = config.lastServiceSyncedAt ? formatDateTime(config.lastServiceSyncedAt) : "ещё не было";
+  const bridgeLabel = formatDirectWatchServiceRuntime(config, serviceStatus);
+  const deviceLabel = config.deviceName || (config.deviceId ? formatDirectWatchDeviceId(config.deviceId) : "часы не выбраны");
+  const setupOpen = !hasDevice || !hasAuthKey;
+
+  return `
+    <section class="watch-sync-panel is-${escapeHtml(statusKind)}">
+      <div class="watch-sync-head">
+        <div>
+          <span>PERFORM Sync</span>
+          <h3>Служебная синхронизация часов</h3>
+          <p>${escapeHtml(bridgeLabel)}</p>
+        </div>
+        <strong class="watch-sync-status">${escapeHtml(statusLabel)}</strong>
+      </div>
+      <div class="watch-sync-grid">
+        <article>
+          <span>Часы</span>
+          <strong>${escapeHtml(deviceLabel)}</strong>
+        </article>
+        <article>
+          <span>Последний запуск</span>
+          <strong>${escapeHtml(lastSyncLabel)}</strong>
+        </article>
+        <article>
+          <span>Город погоды</span>
+          <strong>${escapeHtml(weatherLocation.city)}</strong>
+        </article>
+      </div>
+      ${config.lastServiceError ? `<p class="watch-sync-error">${escapeHtml(config.lastServiceError)}</p>` : ""}
+      <div class="watch-sync-actions">
+        <button
+          class="primary-action"
+          data-direct-watch-service-sync="${escapeHtml(config.deviceId || "")}"
+          type="button"
+          ${state.isBusy || !canServiceSync ? "disabled" : ""}
+        >
+          Синхронизировать часы
+        </button>
+        <button
+          class="secondary-action"
+          data-direct-watch-sync="${escapeHtml(config.deviceId || "")}"
+          data-direct-watch-sync-date="${escapeHtml(date)}"
+          type="button"
+          ${state.isBusy || !canServiceSync ? "disabled" : ""}
+        >
+          Считать данные
+        </button>
+        <button class="secondary-action" data-direct-watch-service-status type="button" ${state.isBusy ? "disabled" : ""}>
+          Обновить статус
+        </button>
+        <button
+          class="secondary-action"
+          data-direct-watch-service-stop
+          type="button"
+          ${state.isBusy || !isRunning ? "disabled" : ""}
+        >
+          Остановить службу
+        </button>
+      </div>
+      <details class="watch-sync-setup" ${setupOpen ? "open" : ""}>
+        <summary>Настройки подключения</summary>
+        <div class="watch-sync-setup-body">
+          <div class="watch-sync-setup-grid">
+            <label class="wide-field">
+              <span>Город погоды</span>
+              <input data-direct-watch-weather-city inputmode="text" placeholder="Chisinau" type="text" value="${escapeHtml(weatherLocation.city)}">
+            </label>
+            <label class="wide-field">
+              <span>Auth Key часов</span>
+              <input data-direct-watch-auth-key inputmode="text" placeholder="${escapeHtml(hasAuthKey ? "ключ сохранён" : "32 hex-символа")}" type="password" autocomplete="off">
+            </label>
+          </div>
+          <div class="watch-sync-setup-actions">
+            <button class="secondary-action" data-direct-watch-weather-save type="button" ${state.isBusy ? "disabled" : ""}>
+              Сохранить город
+            </button>
+            <button class="secondary-action" data-direct-watch-auth-key-save type="button" ${state.isBusy ? "disabled" : ""}>
+              Сохранить ключ
+            </button>
+            <button class="secondary-action" data-direct-watch-scan type="button" ${state.isBusy ? "disabled" : ""}>
+              Найти часы
+            </button>
+          </div>
+          ${renderWatchSyncDevicePicker(state, config)}
+        </div>
+      </details>
+    </section>
+  `;
+}
+
+function renderWatchSyncDevicePicker(state: MobileAppState, config: DirectWatchLocalConfig) {
+  const devices = state.directWatchDiagnostic.devices
+    .slice()
+    .sort((left, right) =>
+      Number(Boolean(right.isLikelyWatch)) - Number(Boolean(left.isLikelyWatch)) ||
+      (right.rssi ?? -999) - (left.rssi ?? -999),
+    )
+    .slice(0, 5);
+
+  if (!devices.length) {
+    return `
+      <p class="watch-sync-help">
+        ${config.deviceId
+          ? "Часы уже выбраны. Если нужно заменить устройство, нажмите “Найти часы”."
+          : "Нажмите “Найти часы”, когда Redmi Watch рядом с телефоном и Bluetooth включён."}
+      </p>
+    `;
+  }
+
+  return `
+    <div class="watch-sync-device-list">
+      ${devices.map((device) => {
+        const isSelected = config.deviceId === device.id;
+        return `
+          <article class="${isSelected ? "is-selected" : ""}">
+            <div>
+              <strong>${escapeHtml(device.name || "Bluetooth-устройство")}</strong>
+              <span>${escapeHtml(formatDirectWatchBondState(device.bondState))} · ${escapeHtml(formatDirectWatchSignal(device.rssi))}</span>
+            </div>
+            <button
+              class="secondary-action"
+              data-direct-watch-select="${escapeHtml(device.id)}"
+              type="button"
+              ${state.isBusy || isSelected ? "disabled" : ""}
+            >
+              ${isSelected ? "Выбрано" : "Выбрать"}
+            </button>
+          </article>
+        `;
+      }).join("")}
+    </div>
   `;
 }
 
@@ -3207,10 +3400,6 @@ function renderWatchRecoveryCard(
   const syncLabel = summary ? formatDateTime(summary.syncedAt) : "данных за сегодня нет";
   const canFill = summary !== null &&
     (getDeviceSleepHoursForReadiness(summary) !== null || getDeviceRestingHrForReadiness(summary) !== null);
-  const directWatchConfig = loadDirectWatchConfig();
-  const canServiceSync = state.session.user?.role === "athlete" &&
-    isDirectWatchRuntime() &&
-    Boolean(directWatchConfig.deviceId && directWatchConfig.authKeyHex);
   const sleepProgress = getWatchSleepProgress(summary);
 
   return `
@@ -3244,18 +3433,8 @@ function renderWatchRecoveryCard(
       </div>
       <div class="watch-actions">
         <button class="primary-action" data-device-health-sync data-device-health-date="${escapeHtml(date)}" type="button" ${state.isBusy ? "disabled" : ""}>
-          Синхронизировать часы
+          Считать данные за сегодня
         </button>
-        ${isDirectWatchRuntime() ? `
-          <button
-            class="secondary-action"
-            data-direct-watch-service-sync="${escapeHtml(directWatchConfig.deviceId || "")}"
-            type="button"
-            ${state.isBusy || !canServiceSync ? "disabled" : ""}
-          >
-            Служебная синхронизация
-          </button>
-        ` : ""}
         <button class="secondary-action" data-readiness-fill-watch="${escapeHtml(date)}" type="button" ${canFill ? "" : "disabled"}>
           Заполнить показатели
         </button>
@@ -3362,10 +3541,6 @@ function renderWatchSettingsPanel(
   date: string,
 ) {
   const canSync = state.session.user?.role === "athlete";
-  const directWatchConfig = loadDirectWatchConfig();
-  const canServiceSync = canSync &&
-    isDirectWatchRuntime() &&
-    Boolean(directWatchConfig.deviceId && directWatchConfig.authKeyHex);
 
   return `
     <details class="watch-settings-panel">
@@ -3381,21 +3556,11 @@ function renderWatchSettingsPanel(
         ${canSync ? `
           <div class="watch-settings-actions">
             <button class="secondary-action" data-device-health-sync data-device-health-date="${escapeHtml(date)}" type="button" ${state.isBusy ? "disabled" : ""}>
-              Синхронизировать часы
-            </button>
-            ${isDirectWatchRuntime() ? `
-              <button
-                class="secondary-action"
-                data-direct-watch-service-sync="${escapeHtml(directWatchConfig.deviceId || "")}"
-                type="button"
-                ${state.isBusy || !canServiceSync ? "disabled" : ""}
-              >
-                Служебная синхронизация
-              </button>
-            ` : ""}
+            Синхронизировать часы
+          </button>
           </div>
         ` : ""}
-        ${renderHealthConnectDiagnostics(summary, true)}
+        ${isDirectWatchRuntime() ? "" : renderHealthConnectDiagnostics(summary, true)}
         ${canSync && SHOW_DIRECT_WATCH_DIAGNOSTICS && isDirectWatchRuntime() ? renderDirectWatchDiagnostics(state, date) : ""}
       </div>
     </details>
@@ -4233,23 +4398,21 @@ function formatDirectWatchServiceSyncMessage(
   weatherLocation: string | null,
   weatherError: string | null,
 ) {
-  const parts = [
-    result.sentTime ? "время и часовой пояс" : null,
-    result.sentPhoneLocation ? "координаты телефона" : null,
-    result.sentWeatherPrefsRead ? "проверка настроек погоды" : null,
-    result.sentWeatherPrefs ? "Celsius для погоды" : null,
-    result.sentWeatherLocation && weatherLocation ? `локация ${weatherLocation}` : null,
-    result.sentWeatherLocationsRead ? "проверка списка локаций" : null,
-    result.sentWeatherCurrent && weatherLocation ? `погода ${weatherLocation}` : null,
-    result.sentWeatherDaily ? "прогноз на дни" : null,
-    result.sentWeatherHourly ? "почасовой прогноз" : null,
-  ].filter((item): item is string => Boolean(item));
-
-  const baseMessage = parts.length
-    ? `Служебная синхронизация отправлена: ${parts.join(", ")}.`
-    : "Служебная синхронизация подключилась, но команды не были отправлены.";
+  const hasUsefulSync =
+    result.sentTime ||
+    result.sentPhoneLocation ||
+    result.sentWeatherPrefs ||
+    result.sentWeatherLocation ||
+    result.sentWeatherCurrent ||
+    result.sentWeatherDaily ||
+    result.sentWeatherHourly;
+  const baseMessage = hasUsefulSync
+    ? weatherLocation
+      ? `Часы синхронизированы. Погода обновлена для ${weatherLocation}.`
+      : "Часы синхронизированы."
+    : "Часы подключились, но данные не обновились.";
   const bridgeMessage = result.keptBluetoothBridge
-    ? `Сервис часов активен до ${result.bridgeUntil ? formatDateTime(result.bridgeUntil) : "окончания окна синхронизации"}. Открой погоду на часах сейчас.`
+    ? `Сервис активен до ${result.bridgeUntil ? formatDateTime(result.bridgeUntil) : "окончания окна синхронизации"}.`
     : "";
   const weatherMessage = weatherError ? `Погода не обновилась: ${weatherError}.` : "";
   return [baseMessage, bridgeMessage, weatherMessage].filter(Boolean).join(" ");
@@ -4265,6 +4428,87 @@ function formatDirectWatchSyncServiceStatus(
   return status.bridgeUntil
     ? `активен до ${formatDateTime(status.bridgeUntil)}`
     : "активен";
+}
+
+function getDirectWatchServiceStatusKind(
+  config: DirectWatchLocalConfig,
+  status: MobileAppState["directWatchDiagnostic"]["serviceStatus"],
+) {
+  if (!config.deviceId || !config.authKeyHex) {
+    return "setup";
+  }
+
+  if (isDirectWatchServiceRunning(config, status)) {
+    return "running";
+  }
+
+  return config.lastServiceStatus === "error" ? "error" : "stopped";
+}
+
+function isDirectWatchServiceRunning(
+  config: DirectWatchLocalConfig,
+  status: MobileAppState["directWatchDiagnostic"]["serviceStatus"],
+) {
+  if (status?.running) {
+    return true;
+  }
+
+  return config.lastServiceStatus === "running" && isFutureDate(config.lastServiceBridgeUntil);
+}
+
+function formatDirectWatchServiceStatusLabel(
+  config: DirectWatchLocalConfig,
+  status: MobileAppState["directWatchDiagnostic"]["serviceStatus"],
+) {
+  if (!config.deviceId) {
+    return "часы не выбраны";
+  }
+
+  if (!config.authKeyHex) {
+    return "нужен ключ";
+  }
+
+  if (isDirectWatchServiceRunning(config, status)) {
+    return "подключено";
+  }
+
+  if (config.lastServiceStatus === "error") {
+    return "ошибка";
+  }
+
+  return config.lastServiceSyncedAt ? "не подключено" : "ещё не запускалось";
+}
+
+function formatDirectWatchServiceRuntime(
+  config: DirectWatchLocalConfig,
+  status: MobileAppState["directWatchDiagnostic"]["serviceStatus"],
+) {
+  const bridgeUntil = status?.bridgeUntil ?? config.lastServiceBridgeUntil;
+
+  if (isDirectWatchServiceRunning(config, status)) {
+    return bridgeUntil
+      ? `Bluetooth-канал активен до ${formatDateTime(bridgeUntil)}.`
+      : "Bluetooth-канал активен.";
+  }
+
+  if (!config.deviceId || !config.authKeyHex) {
+    return "Сначала выберите часы и сохраните Auth Key.";
+  }
+
+  if (config.lastServiceStatus === "error") {
+    return "Последняя синхронизация не завершилась. Можно повторить запуск.";
+  }
+
+  return "Служба остановлена. Для времени и погоды запустите синхронизацию.";
+}
+
+function isFutureDate(value: string | null | undefined) {
+  if (!value) {
+    return false;
+  }
+
+  const time = new Date(value).getTime();
+  return Number.isFinite(time) && time > Date.now();
 }
 
 function formatDirectWatchClassicProbeTitle(
