@@ -27,6 +27,7 @@ import {
   stopDirectWatchSession,
   unpairDirectWatchDevice,
 } from "../integrations/direct-watch.js";
+import type { DirectWatchDecryptedPacket } from "../integrations/direct-watch.js";
 import { readHuaweiHealthDailySummary } from "../integrations/huawei-health.js";
 import {
   clearSession,
@@ -3132,6 +3133,10 @@ function renderDirectWatchClassicProbe(
           <strong>${escapeHtml(probe.sentPostAuthProbe ? "отправлена" : "не запускалась")}</strong>
         </article>
         <article>
+          <span>Файл активности</span>
+          <strong>${escapeHtml(probe.sentActivityFileProbe ? "запрошен" : "не запрашивался")}</strong>
+        </article>
+        <article>
           <span>Пакеты</span>
           <strong>${escapeHtml(String(probe.packetCount ?? packets.length))}</strong>
         </article>
@@ -3157,11 +3162,11 @@ function renderDirectWatchClassicProbe(
       `}
       ${probe.decryptedPackets?.length ? `
         <div class="direct-watch-packet-list">
-          ${probe.decryptedPackets.slice(0, 4).map((packet) => `
+          ${probe.decryptedPackets.slice(0, 10).map((packet) => `
             <article>
               <div>
-                <strong>${escapeHtml(`command ${packet.commandType ?? "-"}:${packet.commandSubtype ?? "-"}`)}</strong>
-                <span>${escapeHtml(String(packet.byteLength ?? 0))} байт</span>
+                <strong>${escapeHtml(packet.label || `command ${packet.commandType ?? "-"}:${packet.commandSubtype ?? "-"}`)}</strong>
+                <span>${escapeHtml(formatDirectWatchDecryptedPacketSummary(packet))}</span>
               </div>
               <code>${escapeHtml(packet.rawHex || "empty")}</code>
             </article>
@@ -3170,6 +3175,28 @@ function renderDirectWatchClassicProbe(
       ` : ""}
     </div>
   `;
+}
+
+function formatDirectWatchDecryptedPacketSummary(packet: DirectWatchDecryptedPacket) {
+  const details = [
+    typeof packet.batteryLevel === "number" ? `батарея ${packet.batteryLevel}%` : null,
+    typeof packet.isWorn === "boolean" ? `на руке: ${formatDirectWatchBoolean(packet.isWorn, "да", "нет")}` : null,
+    typeof packet.isCharging === "boolean" ? `зарядка: ${formatDirectWatchBoolean(packet.isCharging, "да", "нет")}` : null,
+    packet.deviceModel ? `модель ${packet.deviceModel}` : null,
+    packet.firmware ? `прошивка ${packet.firmware}` : null,
+    typeof packet.heartRateInterval === "number" ? `пульс: интервал ${packet.heartRateInterval}` : null,
+    typeof packet.heartRateDisabled === "boolean" ? `пульс выкл: ${formatDirectWatchBoolean(packet.heartRateDisabled, "да", "нет")}` : null,
+    typeof packet.steps === "number" ? `шаги ${packet.steps}` : null,
+    typeof packet.heartRate === "number" ? `пульс ${packet.heartRate}` : null,
+    typeof packet.activityFileCount === "number" ? `файлов активности ${packet.activityFileCount}` : null,
+    typeof packet.activityChunkNumber === "number" && typeof packet.activityChunkTotal === "number"
+      ? `часть файла ${packet.activityChunkNumber}/${packet.activityChunkTotal}`
+      : null,
+    typeof packet.activityChunkPayloadBytes === "number" ? `данных ${packet.activityChunkPayloadBytes} байт` : null,
+  ].filter(Boolean);
+
+  const command = `command ${packet.commandType ?? "-"}:${packet.commandSubtype ?? "-"}`;
+  return `${details.length ? details.join(" · ") : `${packet.byteLength ?? 0} байт`} · ${command}`;
 }
 
 function formatDirectWatchSignal(rssi: number | null | undefined) {

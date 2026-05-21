@@ -102,13 +102,44 @@ export interface DirectWatchSessionPacket {
   serviceUuid?: string | null;
 }
 
+export interface DirectWatchActivityFile {
+  detailType?: number | null;
+  idHex?: string | null;
+  subtype?: number | null;
+  timestamp?: string | null;
+  timezone?: number | null;
+  type?: number | null;
+  version?: number | null;
+}
+
 export interface DirectWatchDecryptedPacket {
+  activityChunkNumber?: number | null;
+  activityChunkPayloadBytes?: number | null;
+  activityChunkTotal?: number | null;
+  activityFileCount?: number | null;
+  activityFileIdsHex?: string | null;
+  activityFiles?: DirectWatchActivityFile[];
+  batteryLevel?: number | null;
+  batteryState?: number | null;
   byteLength?: number | null;
+  calories?: number | null;
+  channel?: string | null;
   commandStatus?: number | null;
   commandSubtype?: number | null;
   commandType?: number | null;
+  deviceModel?: string | null;
+  firmware?: string | null;
+  heartRate?: number | null;
+  heartRateDisabled?: boolean | null;
+  heartRateInterval?: number | null;
+  isCharging?: boolean | null;
+  isUserAsleep?: boolean | null;
+  isWorn?: boolean | null;
+  label?: string | null;
   rawHex?: string | null;
   sequenceNumber?: number | null;
+  serialNumber?: string | null;
+  steps?: number | null;
 }
 
 export interface DirectWatchSessionStatus {
@@ -147,6 +178,7 @@ export interface DirectWatchClassicProbe {
   phoneNonceHex?: string | null;
   sentAuthStep1?: boolean;
   sentAuthStep2?: boolean;
+  sentActivityFileProbe?: boolean;
   sentPostAuthProbe?: boolean;
   sentSessionConfig?: boolean;
   sentVersionRequest?: boolean;
@@ -519,6 +551,7 @@ function normalizeDirectWatchClassicProbe(value: unknown): DirectWatchClassicPro
     phoneNonceHex: normalizeString(value.phoneNonceHex),
     sentAuthStep1: normalizeBoolean(value.sentAuthStep1),
     sentAuthStep2: normalizeBoolean(value.sentAuthStep2),
+    sentActivityFileProbe: normalizeBoolean(value.sentActivityFileProbe),
     sentPostAuthProbe: normalizeBoolean(value.sentPostAuthProbe),
     sentSessionConfig: normalizeBoolean(value.sentSessionConfig),
     sentVersionRequest: normalizeBoolean(value.sentVersionRequest),
@@ -534,12 +567,51 @@ function normalizeDirectWatchDecryptedPacket(value: unknown): DirectWatchDecrypt
   }
 
   return {
+    activityChunkNumber: normalizeNumber(value.activityChunkNumber),
+    activityChunkPayloadBytes: normalizeNumber(value.activityChunkPayloadBytes),
+    activityChunkTotal: normalizeNumber(value.activityChunkTotal),
+    activityFileCount: normalizeNumber(value.activityFileCount),
+    activityFileIdsHex: normalizeString(value.activityFileIdsHex),
+    activityFiles: Array.isArray(value.activityFiles)
+      ? value.activityFiles.map(normalizeDirectWatchActivityFile)
+      : [],
+    batteryLevel: normalizeNumber(value.batteryLevel),
+    batteryState: normalizeNumber(value.batteryState),
     byteLength: normalizeNumber(value.byteLength),
+    calories: normalizeNumber(value.calories),
+    channel: normalizeString(value.channel),
     commandStatus: normalizeNumber(value.commandStatus),
     commandSubtype: normalizeNumber(value.commandSubtype),
     commandType: normalizeNumber(value.commandType),
+    deviceModel: normalizeString(value.deviceModel),
+    firmware: normalizeString(value.firmware),
+    heartRate: normalizeNumber(value.heartRate),
+    heartRateDisabled: normalizeBoolean(value.heartRateDisabled),
+    heartRateInterval: normalizeNumber(value.heartRateInterval),
+    isCharging: normalizeBoolean(value.isCharging),
+    isUserAsleep: normalizeBoolean(value.isUserAsleep),
+    isWorn: normalizeBoolean(value.isWorn),
+    label: normalizeString(value.label),
     rawHex: normalizeString(value.rawHex),
     sequenceNumber: normalizeNumber(value.sequenceNumber),
+    serialNumber: normalizeString(value.serialNumber),
+    steps: normalizeNumber(value.steps),
+  };
+}
+
+function normalizeDirectWatchActivityFile(value: unknown): DirectWatchActivityFile {
+  if (!isRecord(value)) {
+    return {};
+  }
+
+  return {
+    detailType: normalizeNumber(value.detailType),
+    idHex: normalizeString(value.idHex),
+    subtype: normalizeNumber(value.subtype),
+    timestamp: normalizeString(value.timestamp),
+    timezone: normalizeNumber(value.timezone),
+    type: normalizeNumber(value.type),
+    version: normalizeNumber(value.version),
   };
 }
 

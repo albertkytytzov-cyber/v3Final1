@@ -636,6 +636,7 @@ class DirectWatchPlugin : Plugin() {
             var sentAuthStep1 = false
             var sentAuthStep2 = false
             var sentPostAuthProbe = false
+            var sentActivityFileProbe = false
             var phoneNonce: ByteArray? = null
             var postAuthDecryptionKey: ByteArray? = null
             var errorMessage: String? = null
@@ -717,16 +718,33 @@ class DirectWatchPlugin : Plugin() {
                                 socket.outputStream.write(buildClassicV2AckPacket(parsedAuthStep2.authPacketSequenceNumber))
                                 socket.outputStream.flush()
                             }
-                            socket.outputStream.write(
-                                buildClassicV2EncryptedCommandPacket(
-                                    command = buildSimpleCommand(2, 78),
-                                    sequenceNumber = 2,
-                                    encryptionKey = authStep2.encryptionKey,
-                                ),
-                            )
+                            buildClassicPostAuthProbeCommands().forEachIndexed { index, command ->
+                                socket.outputStream.write(
+                                    buildClassicV2EncryptedCommandPacket(
+                                        command = command.payload,
+                                        sequenceNumber = 2 + index,
+                                        encryptionKey = authStep2.encryptionKey,
+                                    ),
+                                )
+                                Thread.sleep(CLASSIC_POST_AUTH_COMMAND_DELAY_MS)
+                            }
                             socket.outputStream.flush()
                             sentPostAuthProbe = true
-                            errorMessage = readClassicPackets(socket, packets, combined, CLASSIC_PROBE_READ_MS) ?: errorMessage
+                            errorMessage = readClassicPackets(socket, packets, combined, CLASSIC_POST_AUTH_READ_MS) ?: errorMessage
+
+                            val firstActivityFileId = firstClassicActivityFileId(combined.toByteArray(), authStep2.decryptionKey)
+                            if (firstActivityFileId != null) {
+                                socket.outputStream.write(
+                                    buildClassicV2EncryptedCommandPacket(
+                                        command = buildActivityFetchRequestCommand(firstActivityFileId),
+                                        sequenceNumber = 2 + buildClassicPostAuthProbeCommands().size,
+                                        encryptionKey = authStep2.encryptionKey,
+                                    ),
+                                )
+                                socket.outputStream.flush()
+                                sentActivityFileProbe = true
+                                errorMessage = readClassicPackets(socket, packets, combined, CLASSIC_ACTIVITY_FILE_READ_MS) ?: errorMessage
+                            }
                         }
                     }
                 } else {
@@ -761,6 +779,7 @@ class DirectWatchPlugin : Plugin() {
                 sentAuthStep1 = sentAuthStep1,
                 sentAuthStep2 = sentAuthStep2,
                 sentPostAuthProbe = sentPostAuthProbe,
+                sentActivityFileProbe = sentActivityFileProbe,
                 phoneNonce = phoneNonce,
                 authKeyHex = authKeyHex,
                 postAuthDecryptionKey = postAuthDecryptionKey,
@@ -1515,6 +1534,7 @@ class DirectWatchPlugin : Plugin() {
         sentAuthStep1: Boolean,
         sentAuthStep2: Boolean,
         sentPostAuthProbe: Boolean,
+        sentActivityFileProbe: Boolean,
         phoneNonce: ByteArray?,
         authKeyHex: String?,
         postAuthDecryptionKey: ByteArray?,
@@ -1535,6 +1555,7 @@ class DirectWatchPlugin : Plugin() {
         response.put("sentAuthStep1", sentAuthStep1)
         response.put("sentAuthStep2", sentAuthStep2)
         response.put("sentPostAuthProbe", sentPostAuthProbe)
+        response.put("sentActivityFileProbe", sentActivityFileProbe)
         response.put("phoneNonceHex", fullHex(phoneNonce))
         response.put("packetCount", packets.size)
         response.put("packets", JSArray(packets))
@@ -1648,11 +1669,13 @@ class DirectWatchPlugin : Plugin() {
 
     private fun parseClassicProbeBytes(bytes: ByteArray): ClassicProbeParse {
         val auth = parseClassicAuthProbe(bytes)
-        if (bytes.size >= 2 && bytes[0] == 0xA5.toByte() && bytes[1] == 0xA5.toByte()) {
-            val packetType = if (bytes.size >= 3) (bytes[2].toInt() and 0x0f).toString() else null
+        val versionHex = classicSppV1VersionHex(bytes)
+        val sppV2Offset = classicSppV2Offset(bytes)
+        if (sppV2Offset != null) {
+            val packetType = if (bytes.size >= sppV2Offset + 3) (bytes[sppV2Offset + 2].toInt() and 0x0f).toString() else null
             return ClassicProbeParse(
                 detectedProtocol = "spp-v2",
-                versionHex = null,
+                versionHex = versionHex,
                 packetType = packetType,
                 authSubtype = auth.authSubtype,
                 authStatus = auth.authStatus,
@@ -1668,18 +1691,9 @@ class DirectWatchPlugin : Plugin() {
             bytes[1] == 0xDC.toByte() &&
             bytes[2] == 0xFE.toByte()
         ) {
-            val payloadHeaderLength = littleEndianUInt16(bytes, 5)
-            val payloadLength = (payloadHeaderLength - 3).coerceAtLeast(0)
-            val payloadStart = 10
-            val payloadEnd = minOf(bytes.size, payloadStart + payloadLength)
-            val versionBytes = if (payloadEnd > payloadStart) {
-                bytes.copyOfRange(payloadStart, payloadEnd)
-            } else {
-                byteArrayOf()
-            }
             return ClassicProbeParse(
                 detectedProtocol = "spp-v1",
-                versionHex = bytePreviewHex(versionBytes, 16),
+                versionHex = versionHex,
                 packetType = (bytes.getOrNull(7)?.toInt()?.and(0xff))?.toString(),
                 authSubtype = auth.authSubtype,
                 authStatus = auth.authStatus,
@@ -1701,6 +1715,40 @@ class DirectWatchPlugin : Plugin() {
             authStage = auth.authStage,
             authPacketSequenceNumber = auth.authPacketSequenceNumber,
         )
+    }
+
+    private fun classicSppV2Offset(bytes: ByteArray): Int? {
+        var offset = 0
+        while (offset <= bytes.size - 2) {
+            if (bytes[offset] == 0xA5.toByte() && bytes[offset + 1] == 0xA5.toByte()) {
+                return offset
+            }
+            offset += 1
+        }
+        return null
+    }
+
+    private fun classicSppV1VersionHex(bytes: ByteArray): String? {
+        var offset = 0
+        while (offset <= bytes.size - 11) {
+            if (bytes[offset] == 0xBA.toByte() &&
+                bytes[offset + 1] == 0xDC.toByte() &&
+                bytes[offset + 2] == 0xFE.toByte()
+            ) {
+                val payloadHeaderLength = littleEndianUInt16(bytes, offset + 5)
+                val payloadLength = (payloadHeaderLength - 3).coerceAtLeast(0)
+                val payloadStart = offset + 10
+                val payloadEnd = minOf(bytes.size, payloadStart + payloadLength)
+                val versionBytes = if (payloadEnd > payloadStart) {
+                    bytes.copyOfRange(payloadStart, payloadEnd)
+                } else {
+                    byteArrayOf()
+                }
+                return bytePreviewHex(versionBytes, 16)
+            }
+            offset += 1
+        }
+        return null
     }
 
     private fun parseClassicAuthProbe(bytes: ByteArray): ClassicAuthProbeParse {
@@ -1781,6 +1829,7 @@ class DirectWatchPlugin : Plugin() {
         }
 
         val decryptedPackets = mutableListOf<JSObject>()
+        val seenPackets = mutableSetOf<String>()
         var offset = 0
         while (offset <= bytes.size - 8) {
             if (bytes[offset] == 0xA5.toByte() && bytes[offset + 1] == 0xA5.toByte()) {
@@ -1792,7 +1841,7 @@ class DirectWatchPlugin : Plugin() {
                     val payloadStart = offset + 8
                     val rawChannel = bytes[payloadStart].toInt() and 0x0f
                     val opCode = bytes[payloadStart + 1].toInt() and 0xff
-                    if (rawChannel == 1 && opCode == 2) {
+                    if ((rawChannel == 1 || rawChannel == 5) && opCode == 2) {
                         val encryptedPayload = bytes.copyOfRange(payloadStart + 2, payloadStart + payloadLength)
                         val decryptedPayload = try {
                             aesCtrCrypt(decryptionKey, decryptionKey, encryptedPayload)
@@ -1800,14 +1849,47 @@ class DirectWatchPlugin : Plugin() {
                             null
                         }
                         if (decryptedPayload != null) {
+                            val packetKey = "${sequenceNumber}:${fullHex(decryptedPayload)}"
+                            if (!seenPackets.add(packetKey)) {
+                                offset += packetSize.coerceAtLeast(1)
+                                continue
+                            }
                             val command = parseClassicCommandHeader(decryptedPayload)
                             val item = JSObject()
                             item.put("sequenceNumber", sequenceNumber)
                             item.put("byteLength", decryptedPayload.size)
                             item.put("rawHex", bytePreviewHex(decryptedPayload, MAX_CLASSIC_PACKET_PREVIEW_BYTES))
+                            item.put("channel", if (rawChannel == 5) "activity" else "command")
+                            if (rawChannel == 5) {
+                                val chunk = parseClassicActivityChunk(decryptedPayload)
+                                item.put("label", chunk?.label ?: "Файл активности")
+                                item.put("activityChunkNumber", chunk?.number)
+                                item.put("activityChunkTotal", chunk?.total)
+                                item.put("activityChunkPayloadBytes", chunk?.payloadBytes)
+                                decryptedPackets.add(item)
+                                offset += packetSize.coerceAtLeast(1)
+                                continue
+                            }
                             item.put("commandType", command.commandType)
                             item.put("commandSubtype", command.commandSubtype)
                             item.put("commandStatus", command.commandStatus)
+                            item.put("label", command.label)
+                            item.put("batteryLevel", command.batteryLevel)
+                            item.put("batteryState", command.batteryState)
+                            item.put("isCharging", command.isCharging)
+                            item.put("isWorn", command.isWorn)
+                            item.put("isUserAsleep", command.isUserAsleep)
+                            item.put("deviceModel", command.deviceModel)
+                            item.put("firmware", command.firmware)
+                            item.put("serialNumber", command.serialNumber)
+                            item.put("activityFileCount", command.activityFileCount)
+                            item.put("activityFileIdsHex", command.activityFileIdsHex)
+                            item.put("heartRateInterval", command.heartRateInterval)
+                            item.put("heartRateDisabled", command.heartRateDisabled)
+                            item.put("steps", command.steps)
+                            item.put("heartRate", command.heartRate)
+                            item.put("calories", command.calories)
+                            item.put("activityFiles", JSArray(command.activityFiles.map { file -> file.toJson() }))
                             decryptedPackets.add(item)
                         }
                     }
@@ -1825,14 +1907,288 @@ class DirectWatchPlugin : Plugin() {
         var commandType: Int? = null
         var commandSubtype: Int? = null
         var commandStatus: Int? = null
+        var systemBytes: ByteArray? = null
+        var healthBytes: ByteArray? = null
         walkProtoFields(payload) { fieldNumber, wireType, value ->
             when {
                 fieldNumber == 1 && wireType == 0 -> commandType = value.intValue
                 fieldNumber == 2 && wireType == 0 -> commandSubtype = value.intValue
+                fieldNumber == 4 && wireType == 2 -> systemBytes = value.bytes
+                fieldNumber == 10 && wireType == 2 -> healthBytes = value.bytes
                 fieldNumber == 100 && wireType == 0 -> commandStatus = value.intValue
             }
         }
-        return ClassicCommandHeader(commandType, commandSubtype, commandStatus)
+        val system = parseClassicSystemPayload(systemBytes)
+        val health = parseClassicHealthPayload(healthBytes)
+        return ClassicCommandHeader(
+            commandType = commandType,
+            commandSubtype = commandSubtype,
+            commandStatus = commandStatus,
+            label = classicCommandLabel(commandType, commandSubtype),
+            batteryLevel = system.batteryLevel,
+            batteryState = system.batteryState,
+            isCharging = system.isCharging,
+            isWorn = system.isWorn,
+            isUserAsleep = system.isUserAsleep,
+            deviceModel = system.deviceModel,
+            firmware = system.firmware,
+            serialNumber = system.serialNumber,
+            activityFileCount = health.activityFileCount,
+            activityFileIdsHex = health.activityFileIdsHex,
+            heartRateInterval = health.heartRateInterval,
+            heartRateDisabled = health.heartRateDisabled,
+            steps = health.steps,
+            heartRate = health.heartRate,
+            calories = health.calories,
+            activityFiles = health.activityFiles,
+        )
+    }
+
+    private fun parseClassicSystemPayload(systemBytes: ByteArray?): ClassicSystemPayload {
+        val parsed = ClassicSystemPayload()
+        if (systemBytes == null) {
+            return parsed
+        }
+
+        walkProtoFields(systemBytes) { fieldNumber, wireType, value ->
+            when {
+                fieldNumber == 2 && wireType == 2 && value.bytes != null -> {
+                    parseClassicPowerPayload(value.bytes, parsed)
+                }
+                fieldNumber == 3 && wireType == 2 && value.bytes != null -> {
+                    parseClassicDeviceInfoPayload(value.bytes, parsed)
+                }
+                fieldNumber == 48 && wireType == 2 && value.bytes != null -> {
+                    parseClassicBasicDeviceStatePayload(value.bytes, parsed)
+                }
+            }
+        }
+
+        return parsed
+    }
+
+    private fun parseClassicPowerPayload(powerBytes: ByteArray, parsed: ClassicSystemPayload) {
+        walkProtoFields(powerBytes) { fieldNumber, wireType, value ->
+            if (fieldNumber == 1 && wireType == 2 && value.bytes != null) {
+                walkProtoFields(value.bytes) { batteryField, batteryWireType, batteryValue ->
+                    when {
+                        batteryField == 1 && batteryWireType == 0 -> parsed.batteryLevel = batteryValue.intValue
+                        batteryField == 2 && batteryWireType == 0 -> parsed.batteryState = batteryValue.intValue
+                    }
+                }
+            }
+        }
+    }
+
+    private fun parseClassicDeviceInfoPayload(deviceInfoBytes: ByteArray, parsed: ClassicSystemPayload) {
+        walkProtoFields(deviceInfoBytes) { fieldNumber, wireType, value ->
+            if (wireType == 2 && value.bytes != null) {
+                when (fieldNumber) {
+                    1 -> parsed.serialNumber = value.bytes.toString(Charsets.UTF_8)
+                    2 -> parsed.firmware = value.bytes.toString(Charsets.UTF_8)
+                    4 -> parsed.deviceModel = value.bytes.toString(Charsets.UTF_8)
+                }
+            }
+        }
+    }
+
+    private fun parseClassicBasicDeviceStatePayload(deviceStateBytes: ByteArray, parsed: ClassicSystemPayload) {
+        walkProtoFields(deviceStateBytes) { fieldNumber, wireType, value ->
+            if (wireType == 0) {
+                when (fieldNumber) {
+                    1 -> parsed.isCharging = value.intValue == 1
+                    2 -> parsed.batteryLevel = value.intValue
+                    3 -> parsed.isWorn = value.intValue == 1
+                    4 -> parsed.isUserAsleep = value.intValue == 1
+                }
+            }
+        }
+    }
+
+    private fun parseClassicHealthPayload(healthBytes: ByteArray?): ClassicHealthPayload {
+        val parsed = ClassicHealthPayload()
+        if (healthBytes == null) {
+            return parsed
+        }
+
+        walkProtoFields(healthBytes) { fieldNumber, wireType, value ->
+            when {
+                fieldNumber == 2 && wireType == 2 && value.bytes != null -> {
+                    parsed.activityFileIdsHex = fullHex(value.bytes)
+                    parsed.activityFileCount = if (value.bytes.isNotEmpty()) value.bytes.size / 7 else 0
+                    parsed.activityFiles = parseClassicActivityFileIds(value.bytes)
+                }
+                fieldNumber == 8 && wireType == 2 && value.bytes != null -> {
+                    parseClassicHeartRateConfig(value.bytes, parsed)
+                }
+                fieldNumber == 39 && wireType == 2 && value.bytes != null -> {
+                    parseClassicRealTimeStats(value.bytes, parsed)
+                }
+            }
+        }
+
+        return parsed
+    }
+
+    private fun parseClassicHeartRateConfig(heartRateBytes: ByteArray, parsed: ClassicHealthPayload) {
+        walkProtoFields(heartRateBytes) { fieldNumber, wireType, value ->
+            if (wireType == 0) {
+                when (fieldNumber) {
+                    1 -> parsed.heartRateDisabled = value.intValue == 1
+                    2 -> parsed.heartRateInterval = value.intValue
+                }
+            }
+        }
+    }
+
+    private fun parseClassicRealTimeStats(statsBytes: ByteArray, parsed: ClassicHealthPayload) {
+        walkProtoFields(statsBytes) { fieldNumber, wireType, value ->
+            if (wireType == 0) {
+                when (fieldNumber) {
+                    1 -> parsed.steps = value.intValue
+                    2 -> parsed.calories = value.intValue
+                    4 -> parsed.heartRate = value.intValue
+                }
+            }
+        }
+    }
+
+    private fun classicCommandLabel(commandType: Int?, commandSubtype: Int?): String? {
+        return when ("${commandType ?: "-"}:${commandSubtype ?: "-"}") {
+            "2:1" -> "Батарея часов"
+            "2:2" -> "Модель и прошивка"
+            "2:78" -> "Состояние часов"
+            "8:1" -> "Файлы активности за сегодня"
+            "8:2" -> "Файлы активности из истории"
+            "8:8" -> "Настройки SpO2"
+            "8:10" -> "Настройки пульса"
+            "8:14" -> "Настройки стресса"
+            "8:35" -> "Настройки Vitality"
+            "8:42" -> "Цели активности"
+            "8:45", "8:46", "8:47" -> "Онлайн-показатели"
+            else -> null
+        }
+    }
+
+    private fun buildClassicPostAuthProbeCommands(): List<ClassicPostAuthProbeCommand> {
+        return listOf(
+            ClassicPostAuthProbeCommand("state", buildSimpleCommand(2, 78)),
+            ClassicPostAuthProbeCommand("battery", buildSimpleCommand(2, 1)),
+            ClassicPostAuthProbeCommand("device-info", buildSimpleCommand(2, 2)),
+            ClassicPostAuthProbeCommand("activity-today", buildActivityFetchTodayCommand()),
+            ClassicPostAuthProbeCommand("heart-rate-config", buildSimpleCommand(8, 10)),
+            ClassicPostAuthProbeCommand("spo2-config", buildSimpleCommand(8, 8)),
+            ClassicPostAuthProbeCommand("stress-config", buildSimpleCommand(8, 14)),
+            ClassicPostAuthProbeCommand("vitality-config", buildSimpleCommand(8, 35)),
+        )
+    }
+
+    private fun firstClassicActivityFileId(bytes: ByteArray, decryptionKey: ByteArray?): ByteArray? {
+        if (decryptionKey == null) {
+            return null
+        }
+
+        var offset = 0
+        while (offset <= bytes.size - 8) {
+            if (bytes[offset] == 0xA5.toByte() && bytes[offset + 1] == 0xA5.toByte()) {
+                val packetType = bytes[offset + 2].toInt() and 0x0f
+                val payloadLength = littleEndianUInt16(bytes, offset + 4)
+                val packetSize = 8 + payloadLength
+                if (payloadLength >= 2 && offset + packetSize <= bytes.size && packetType == 3) {
+                    val payloadStart = offset + 8
+                    val rawChannel = bytes[payloadStart].toInt() and 0x0f
+                    val opCode = bytes[payloadStart + 1].toInt() and 0xff
+                    if (rawChannel == 1 && opCode == 2) {
+                        val encryptedPayload = bytes.copyOfRange(payloadStart + 2, payloadStart + payloadLength)
+                        val decryptedPayload = try {
+                            aesCtrCrypt(decryptionKey, decryptionKey, encryptedPayload)
+                        } catch (_: Exception) {
+                            null
+                        }
+                        val activityBytes = decryptedPayload?.let { extractClassicActivityFileIdBytes(it) }
+                        if (activityBytes != null) {
+                            return activityBytes
+                        }
+                    }
+                    offset += packetSize.coerceAtLeast(1)
+                    continue
+                }
+            }
+            offset += 1
+        }
+
+        return null
+    }
+
+    private fun extractClassicActivityFileIdBytes(commandPayload: ByteArray): ByteArray? {
+        var commandType: Int? = null
+        var commandSubtype: Int? = null
+        var healthBytes: ByteArray? = null
+        walkProtoFields(commandPayload) { fieldNumber, wireType, value ->
+            when {
+                fieldNumber == 1 && wireType == 0 -> commandType = value.intValue
+                fieldNumber == 2 && wireType == 0 -> commandSubtype = value.intValue
+                fieldNumber == 10 && wireType == 2 -> healthBytes = value.bytes
+            }
+        }
+        if (commandType != 8 || (commandSubtype != 1 && commandSubtype != 2) || healthBytes == null) {
+            return null
+        }
+
+        var activityFileIds: ByteArray? = null
+        walkProtoFields(healthBytes!!) { fieldNumber, wireType, value ->
+            if (fieldNumber == 2 && wireType == 2 && value.bytes != null && value.bytes.size >= 7) {
+                activityFileIds = value.bytes.copyOfRange(0, 7)
+            }
+        }
+        return activityFileIds
+    }
+
+    private fun parseClassicActivityFileIds(bytes: ByteArray): List<ClassicActivityFileSummary> {
+        if (bytes.size < 7) {
+            return emptyList()
+        }
+
+        val files = mutableListOf<ClassicActivityFileSummary>()
+        var offset = 0
+        while (offset + 7 <= bytes.size) {
+            val fileBytes = bytes.copyOfRange(offset, offset + 7)
+            val timestampSeconds = littleEndianUInt32(fileBytes, 0)
+            val timezone = fileBytes[4].toInt()
+            val version = fileBytes[5].toInt() and 0xff
+            val flags = fileBytes[6].toInt() and 0xff
+            val type = (flags ushr 7) and 1
+            val subtype = (flags and 127) ushr 2
+            val detailType = flags and 3
+            files.add(
+                ClassicActivityFileSummary(
+                    idHex = fullHex(fileBytes) ?: "",
+                    timestamp = java.time.Instant.ofEpochSecond(timestampSeconds.toLong()).toString(),
+                    timezone = timezone,
+                    type = type,
+                    subtype = subtype,
+                    detailType = detailType,
+                    version = version,
+                ),
+            )
+            offset += 7
+        }
+        return files
+    }
+
+    private fun parseClassicActivityChunk(payload: ByteArray): ClassicActivityChunk? {
+        if (payload.size < 4) {
+            return null
+        }
+
+        val total = littleEndianUInt16(payload, 0)
+        val number = littleEndianUInt16(payload, 2)
+        return ClassicActivityChunk(
+            total = total,
+            number = number,
+            payloadBytes = payload.size - 4,
+            label = "Файл активности ${number}/${total}",
+        )
     }
 
     private fun parseAuthCommand(payload: ByteArray): ClassicAuthProbeParse {
@@ -1993,6 +2349,31 @@ class DirectWatchPlugin : Plugin() {
         val command = java.io.ByteArrayOutputStream()
         writeProtoVarintField(command, 1, type)
         writeProtoVarintField(command, 2, subtype)
+        return command.toByteArray()
+    }
+
+    private fun buildActivityFetchTodayCommand(): ByteArray {
+        val requestToday = java.io.ByteArrayOutputStream()
+        writeProtoVarintField(requestToday, 1, 0)
+
+        val health = java.io.ByteArrayOutputStream()
+        writeProtoBytesField(health, 5, requestToday.toByteArray())
+
+        val command = java.io.ByteArrayOutputStream()
+        writeProtoVarintField(command, 1, 8)
+        writeProtoVarintField(command, 2, 1)
+        writeProtoBytesField(command, 10, health.toByteArray())
+        return command.toByteArray()
+    }
+
+    private fun buildActivityFetchRequestCommand(fileId: ByteArray): ByteArray {
+        val health = java.io.ByteArrayOutputStream()
+        writeProtoBytesField(health, 2, fileId)
+
+        val command = java.io.ByteArrayOutputStream()
+        writeProtoVarintField(command, 1, 8)
+        writeProtoVarintField(command, 2, 3)
+        writeProtoBytesField(command, 10, health.toByteArray())
         return command.toByteArray()
     }
 
@@ -2304,6 +2685,16 @@ class DirectWatchPlugin : Plugin() {
         return (bytes[offset].toInt() and 0xff) or ((bytes[offset + 1].toInt() and 0xff) shl 8)
     }
 
+    private fun littleEndianUInt32(bytes: ByteArray, offset: Int): Long {
+        if (bytes.size < offset + 4) {
+            return 0
+        }
+        return (bytes[offset].toLong() and 0xffL) or
+            ((bytes[offset + 1].toLong() and 0xffL) shl 8) or
+            ((bytes[offset + 2].toLong() and 0xffL) shl 16) or
+            ((bytes[offset + 3].toLong() and 0xffL) shl 24)
+    }
+
     private fun fullHex(bytes: ByteArray?): String? {
         if (bytes == null || bytes.isEmpty()) {
             return null
@@ -2520,6 +2911,79 @@ class DirectWatchPlugin : Plugin() {
         val commandType: Int?,
         val commandSubtype: Int?,
         val commandStatus: Int?,
+        val label: String?,
+        val batteryLevel: Int? = null,
+        val batteryState: Int? = null,
+        val isCharging: Boolean? = null,
+        val isWorn: Boolean? = null,
+        val isUserAsleep: Boolean? = null,
+        val deviceModel: String? = null,
+        val firmware: String? = null,
+        val serialNumber: String? = null,
+        val activityFileCount: Int? = null,
+        val activityFileIdsHex: String? = null,
+        val heartRateInterval: Int? = null,
+        val heartRateDisabled: Boolean? = null,
+        val steps: Int? = null,
+        val heartRate: Int? = null,
+        val calories: Int? = null,
+        val activityFiles: List<ClassicActivityFileSummary> = emptyList(),
+    )
+
+    private data class ClassicPostAuthProbeCommand(
+        val label: String,
+        val payload: ByteArray,
+    )
+
+    private data class ClassicSystemPayload(
+        var batteryLevel: Int? = null,
+        var batteryState: Int? = null,
+        var isCharging: Boolean? = null,
+        var isWorn: Boolean? = null,
+        var isUserAsleep: Boolean? = null,
+        var deviceModel: String? = null,
+        var firmware: String? = null,
+        var serialNumber: String? = null,
+    )
+
+    private data class ClassicHealthPayload(
+        var activityFileCount: Int? = null,
+        var activityFileIdsHex: String? = null,
+        var heartRateInterval: Int? = null,
+        var heartRateDisabled: Boolean? = null,
+        var steps: Int? = null,
+        var heartRate: Int? = null,
+        var calories: Int? = null,
+        var activityFiles: List<ClassicActivityFileSummary> = emptyList(),
+    )
+
+    private data class ClassicActivityFileSummary(
+        val idHex: String,
+        val timestamp: String,
+        val timezone: Int,
+        val type: Int,
+        val subtype: Int,
+        val detailType: Int,
+        val version: Int,
+    ) {
+        fun toJson(): JSObject {
+            val item = JSObject()
+            item.put("idHex", idHex)
+            item.put("timestamp", timestamp)
+            item.put("timezone", timezone)
+            item.put("type", type)
+            item.put("subtype", subtype)
+            item.put("detailType", detailType)
+            item.put("version", version)
+            return item
+        }
+    }
+
+    private data class ClassicActivityChunk(
+        val total: Int,
+        val number: Int,
+        val payloadBytes: Int,
+        val label: String,
     )
 
     private data class ProtoValue(
@@ -2577,6 +3041,9 @@ class DirectWatchPlugin : Plugin() {
         private const val MAX_PACKET_PREVIEW_BYTES = 96
         private const val MAX_CLASSIC_PACKET_PREVIEW_BYTES = 160
         private const val CLASSIC_PROBE_READ_MS = 6_000L
+        private const val CLASSIC_POST_AUTH_READ_MS = 10_000L
+        private const val CLASSIC_ACTIVITY_FILE_READ_MS = 10_000L
+        private const val CLASSIC_POST_AUTH_COMMAND_DELAY_MS = 120L
         private const val CLASSIC_VERSION_READ_MS = 1_200L
         private const val CLASSIC_SESSION_CONFIG_READ_MS = 1_200L
         private const val CLASSIC_PROBE_POLL_MS = 120L
