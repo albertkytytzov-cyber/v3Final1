@@ -3134,7 +3134,7 @@ function renderDirectWatchClassicProbe(
         </article>
         <article>
           <span>Файл активности</span>
-          <strong>${escapeHtml(probe.sentActivityFileProbe ? "запрошен" : "не запрашивался")}</strong>
+          <strong>${escapeHtml(probe.sentActivityFileProbe ? `запрошено ${probe.activityFileProbeCount ?? 0}` : "не запрашивался")}</strong>
         </article>
         <article>
           <span>Пакеты</span>
@@ -3191,6 +3191,19 @@ function formatDirectWatchDecryptedPacketSummary(packet: DirectWatchDecryptedPac
     typeof packet.activityFileCount === "number" ? `файлов активности ${packet.activityFileCount}` : null,
     typeof packet.activityChunkNumber === "number" && typeof packet.activityChunkTotal === "number"
       ? `часть файла ${packet.activityChunkNumber}/${packet.activityChunkTotal}`
+      : null,
+    packet.activityFileKind || packet.activityFile?.kind || null,
+    typeof packet.activitySampleCount === "number" ? `точек ${packet.activitySampleCount}` : null,
+    typeof packet.activitySteps === "number" ? `шаги ${packet.activitySteps}` : null,
+    typeof packet.activityCalories === "number" ? `ккал ${packet.activityCalories}` : null,
+    typeof packet.activityHeartRateResting === "number" ? `пульс покоя ${packet.activityHeartRateResting}` : null,
+    typeof packet.activityHeartRateAvg === "number" ? `пульс ср. ${packet.activityHeartRateAvg}` : null,
+    typeof packet.activitySpo2Avg === "number" ? `SpO2 ср. ${packet.activitySpo2Avg}` : null,
+    typeof packet.activityStressAvg === "number" ? `стресс ср. ${packet.activityStressAvg}` : null,
+    typeof packet.activityTrainingLoadDay === "number" ? `нагрузка ${packet.activityTrainingLoadDay}` : null,
+    typeof packet.activityVitality === "number" ? `Vitality ${packet.activityVitality}` : null,
+    typeof packet.activityFileCrcValid === "boolean"
+      ? `CRC ${packet.activityFileCrcValid ? "ок" : "ошибка"}`
       : null,
     typeof packet.activityChunkPayloadBytes === "number" ? `данных ${packet.activityChunkPayloadBytes} байт` : null,
   ].filter(Boolean);

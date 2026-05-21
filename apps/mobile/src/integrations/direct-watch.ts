@@ -105,6 +105,7 @@ export interface DirectWatchSessionPacket {
 export interface DirectWatchActivityFile {
   detailType?: number | null;
   idHex?: string | null;
+  kind?: string | null;
   subtype?: number | null;
   timestamp?: string | null;
   timezone?: number | null;
@@ -116,9 +117,30 @@ export interface DirectWatchDecryptedPacket {
   activityChunkNumber?: number | null;
   activityChunkPayloadBytes?: number | null;
   activityChunkTotal?: number | null;
+  activityFile?: DirectWatchActivityFile | null;
   activityFileCount?: number | null;
+  activityFileCrcValid?: boolean | null;
   activityFileIdsHex?: string | null;
+  activityFileKind?: string | null;
+  activityFilePadding?: number | null;
+  activityFilePayloadBytes?: number | null;
   activityFiles?: DirectWatchActivityFile[];
+  activityCalories?: number | null;
+  activityHeartRateAvg?: number | null;
+  activityHeartRateMax?: number | null;
+  activityHeartRateMin?: number | null;
+  activityHeartRateResting?: number | null;
+  activitySampleCount?: number | null;
+  activitySpo2Avg?: number | null;
+  activitySpo2Max?: number | null;
+  activitySpo2Min?: number | null;
+  activitySteps?: number | null;
+  activityStressAvg?: number | null;
+  activityStressMax?: number | null;
+  activityStressMin?: number | null;
+  activityTrainingLoadDay?: number | null;
+  activityTrainingLoadWeek?: number | null;
+  activityVitality?: number | null;
   batteryLevel?: number | null;
   batteryState?: number | null;
   byteLength?: number | null;
@@ -157,6 +179,7 @@ export interface DirectWatchSessionStatus {
 }
 
 export interface DirectWatchClassicProbe {
+  activityFileProbeCount?: number | null;
   authStage?: "watch-nonce" | "auth-response" | string | null;
   authKeyError?: string | null;
   authKeyStatus?: "not-provided" | "valid" | "invalid" | "invalid-format" | "no-watch-nonce" | string | null;
@@ -529,6 +552,7 @@ function normalizeDirectWatchClassicProbe(value: unknown): DirectWatchClassicPro
     authStage: normalizeString(value.authStage),
     authKeyError: normalizeString(value.authKeyError),
     authKeyStatus: normalizeString(value.authKeyStatus),
+    activityFileProbeCount: normalizeNumber(value.activityFileProbeCount),
     authStatus: normalizeNumber(value.authStatus),
     authSubtype: normalizeNumber(value.authSubtype),
     bondState: normalizeBluetoothState(value.bondState),
@@ -570,11 +594,32 @@ function normalizeDirectWatchDecryptedPacket(value: unknown): DirectWatchDecrypt
     activityChunkNumber: normalizeNumber(value.activityChunkNumber),
     activityChunkPayloadBytes: normalizeNumber(value.activityChunkPayloadBytes),
     activityChunkTotal: normalizeNumber(value.activityChunkTotal),
+    activityFile: isRecord(value.activityFile) ? normalizeDirectWatchActivityFile(value.activityFile) : null,
     activityFileCount: normalizeNumber(value.activityFileCount),
+    activityFileCrcValid: normalizeBoolean(value.activityFileCrcValid),
     activityFileIdsHex: normalizeString(value.activityFileIdsHex),
+    activityFileKind: normalizeString(value.activityFileKind),
+    activityFilePadding: normalizeNumber(value.activityFilePadding),
+    activityFilePayloadBytes: normalizeNumber(value.activityFilePayloadBytes),
     activityFiles: Array.isArray(value.activityFiles)
       ? value.activityFiles.map(normalizeDirectWatchActivityFile)
       : [],
+    activityCalories: normalizeNumber(value.activityCalories),
+    activityHeartRateAvg: normalizeNumber(value.activityHeartRateAvg),
+    activityHeartRateMax: normalizeNumber(value.activityHeartRateMax),
+    activityHeartRateMin: normalizeNumber(value.activityHeartRateMin),
+    activityHeartRateResting: normalizeNumber(value.activityHeartRateResting),
+    activitySampleCount: normalizeNumber(value.activitySampleCount),
+    activitySpo2Avg: normalizeNumber(value.activitySpo2Avg),
+    activitySpo2Max: normalizeNumber(value.activitySpo2Max),
+    activitySpo2Min: normalizeNumber(value.activitySpo2Min),
+    activitySteps: normalizeNumber(value.activitySteps),
+    activityStressAvg: normalizeNumber(value.activityStressAvg),
+    activityStressMax: normalizeNumber(value.activityStressMax),
+    activityStressMin: normalizeNumber(value.activityStressMin),
+    activityTrainingLoadDay: normalizeNumber(value.activityTrainingLoadDay),
+    activityTrainingLoadWeek: normalizeNumber(value.activityTrainingLoadWeek),
+    activityVitality: normalizeNumber(value.activityVitality),
     batteryLevel: normalizeNumber(value.batteryLevel),
     batteryState: normalizeNumber(value.batteryState),
     byteLength: normalizeNumber(value.byteLength),
@@ -607,6 +652,7 @@ function normalizeDirectWatchActivityFile(value: unknown): DirectWatchActivityFi
   return {
     detailType: normalizeNumber(value.detailType),
     idHex: normalizeString(value.idHex),
+    kind: normalizeString(value.kind),
     subtype: normalizeNumber(value.subtype),
     timestamp: normalizeString(value.timestamp),
     timezone: normalizeNumber(value.timezone),

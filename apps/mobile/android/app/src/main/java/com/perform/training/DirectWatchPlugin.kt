@@ -39,6 +39,7 @@ import javax.crypto.Cipher
 import javax.crypto.Mac
 import javax.crypto.spec.IvParameterSpec
 import javax.crypto.spec.SecretKeySpec
+import kotlin.math.roundToInt
 
 @CapacitorPlugin(
     name = "DirectWatch",
@@ -637,6 +638,7 @@ class DirectWatchPlugin : Plugin() {
             var sentAuthStep2 = false
             var sentPostAuthProbe = false
             var sentActivityFileProbe = false
+            var activityFileProbeCount = 0
             var phoneNonce: ByteArray? = null
             var postAuthDecryptionKey: ByteArray? = null
             var errorMessage: String? = null
@@ -732,17 +734,22 @@ class DirectWatchPlugin : Plugin() {
                             sentPostAuthProbe = true
                             errorMessage = readClassicPackets(socket, packets, combined, CLASSIC_POST_AUTH_READ_MS) ?: errorMessage
 
-                            val firstActivityFileId = firstClassicActivityFileId(combined.toByteArray(), authStep2.decryptionKey)
-                            if (firstActivityFileId != null) {
-                                socket.outputStream.write(
-                                    buildClassicV2EncryptedCommandPacket(
-                                        command = buildActivityFetchRequestCommand(firstActivityFileId),
-                                        sequenceNumber = 2 + buildClassicPostAuthProbeCommands().size,
-                                        encryptionKey = authStep2.encryptionKey,
-                                    ),
-                                )
+                            val activityFileIds = classicActivityFileIds(combined.toByteArray(), authStep2.decryptionKey)
+                                .take(CLASSIC_ACTIVITY_FILE_PROBE_LIMIT)
+                            if (activityFileIds.isNotEmpty()) {
+                                activityFileIds.forEachIndexed { index, fileId ->
+                                    socket.outputStream.write(
+                                        buildClassicV2EncryptedCommandPacket(
+                                            command = buildActivityFetchRequestCommand(fileId),
+                                            sequenceNumber = 2 + buildClassicPostAuthProbeCommands().size + index,
+                                            encryptionKey = authStep2.encryptionKey,
+                                        ),
+                                    )
+                                    Thread.sleep(CLASSIC_POST_AUTH_COMMAND_DELAY_MS)
+                                }
                                 socket.outputStream.flush()
                                 sentActivityFileProbe = true
+                                activityFileProbeCount = activityFileIds.size
                                 errorMessage = readClassicPackets(socket, packets, combined, CLASSIC_ACTIVITY_FILE_READ_MS) ?: errorMessage
                             }
                         }
@@ -780,6 +787,7 @@ class DirectWatchPlugin : Plugin() {
                 sentAuthStep2 = sentAuthStep2,
                 sentPostAuthProbe = sentPostAuthProbe,
                 sentActivityFileProbe = sentActivityFileProbe,
+                activityFileProbeCount = activityFileProbeCount,
                 phoneNonce = phoneNonce,
                 authKeyHex = authKeyHex,
                 postAuthDecryptionKey = postAuthDecryptionKey,
@@ -1535,6 +1543,7 @@ class DirectWatchPlugin : Plugin() {
         sentAuthStep2: Boolean,
         sentPostAuthProbe: Boolean,
         sentActivityFileProbe: Boolean,
+        activityFileProbeCount: Int,
         phoneNonce: ByteArray?,
         authKeyHex: String?,
         postAuthDecryptionKey: ByteArray?,
@@ -1556,6 +1565,7 @@ class DirectWatchPlugin : Plugin() {
         response.put("sentAuthStep2", sentAuthStep2)
         response.put("sentPostAuthProbe", sentPostAuthProbe)
         response.put("sentActivityFileProbe", sentActivityFileProbe)
+        response.put("activityFileProbeCount", activityFileProbeCount)
         response.put("phoneNonceHex", fullHex(phoneNonce))
         response.put("packetCount", packets.size)
         response.put("packets", JSArray(packets))
@@ -1830,6 +1840,9 @@ class DirectWatchPlugin : Plugin() {
 
         val decryptedPackets = mutableListOf<JSObject>()
         val seenPackets = mutableSetOf<String>()
+        val seenCompleteActivityFiles = mutableSetOf<String>()
+        var activityAssembly: java.io.ByteArrayOutputStream? = null
+        var activityAssemblyTotal: Int? = null
         var offset = 0
         while (offset <= bytes.size - 8) {
             if (bytes[offset] == 0xA5.toByte() && bytes[offset + 1] == 0xA5.toByte()) {
@@ -1862,10 +1875,57 @@ class DirectWatchPlugin : Plugin() {
                             item.put("channel", if (rawChannel == 5) "activity" else "command")
                             if (rawChannel == 5) {
                                 val chunk = parseClassicActivityChunk(decryptedPayload)
-                                item.put("label", chunk?.label ?: "Файл активности")
+                                val chunkData = if (decryptedPayload.size > 4) {
+                                    decryptedPayload.copyOfRange(4, decryptedPayload.size)
+                                } else {
+                                    byteArrayOf()
+                                }
+                                var file = if (chunk?.number == 1) {
+                                    parseClassicActivityFilePayload(chunkData, isComplete = chunk.total == 1)
+                                } else {
+                                    null
+                                }
+                                if (chunk?.number == 1) {
+                                    activityAssembly = java.io.ByteArrayOutputStream()
+                                    activityAssemblyTotal = chunk.total
+                                }
+                                if (chunk != null && activityAssembly != null && activityAssemblyTotal == chunk.total) {
+                                    activityAssembly?.write(chunkData)
+                                    if (chunk.number == chunk.total) {
+                                        file = parseClassicActivityFilePayload(activityAssembly!!.toByteArray(), isComplete = true) ?: file
+                                        activityAssembly = null
+                                        activityAssemblyTotal = null
+                                    }
+                                }
+                                if (file?.crcValid != null && !seenCompleteActivityFiles.add(file.file.idHex)) {
+                                    offset += packetSize.coerceAtLeast(1)
+                                    continue
+                                }
+                                item.put("label", file?.let { "${it.fileKind} ${chunk?.number ?: "-"}/${chunk?.total ?: "-"}" } ?: chunk?.label ?: "Файл активности")
                                 item.put("activityChunkNumber", chunk?.number)
                                 item.put("activityChunkTotal", chunk?.total)
                                 item.put("activityChunkPayloadBytes", chunk?.payloadBytes)
+                                item.put("activityFile", file?.file?.toJson())
+                                item.put("activityFileKind", file?.fileKind)
+                                item.put("activityFilePadding", file?.padding)
+                                item.put("activityFilePayloadBytes", file?.payloadBytes)
+                                item.put("activityFileCrcValid", file?.crcValid)
+                                item.put("activitySampleCount", file?.sampleCount)
+                                item.put("activitySteps", file?.steps)
+                                item.put("activityHeartRateAvg", file?.heartRateAvg)
+                                item.put("activityHeartRateMin", file?.heartRateMin)
+                                item.put("activityHeartRateMax", file?.heartRateMax)
+                                item.put("activityHeartRateResting", file?.heartRateResting)
+                                item.put("activitySpo2Avg", file?.spo2Avg)
+                                item.put("activitySpo2Min", file?.spo2Min)
+                                item.put("activitySpo2Max", file?.spo2Max)
+                                item.put("activityStressAvg", file?.stressAvg)
+                                item.put("activityStressMin", file?.stressMin)
+                                item.put("activityStressMax", file?.stressMax)
+                                item.put("activityCalories", file?.calories)
+                                item.put("activityTrainingLoadDay", file?.trainingLoadDay)
+                                item.put("activityTrainingLoadWeek", file?.trainingLoadWeek)
+                                item.put("activityVitality", file?.vitality)
                                 decryptedPackets.add(item)
                                 offset += packetSize.coerceAtLeast(1)
                                 continue
@@ -2083,11 +2143,12 @@ class DirectWatchPlugin : Plugin() {
         )
     }
 
-    private fun firstClassicActivityFileId(bytes: ByteArray, decryptionKey: ByteArray?): ByteArray? {
+    private fun classicActivityFileIds(bytes: ByteArray, decryptionKey: ByteArray?): List<ByteArray> {
         if (decryptionKey == null) {
-            return null
+            return emptyList()
         }
 
+        val fileIds = mutableListOf<ByteArray>()
         var offset = 0
         while (offset <= bytes.size - 8) {
             if (bytes[offset] == 0xA5.toByte() && bytes[offset + 1] == 0xA5.toByte()) {
@@ -2105,9 +2166,8 @@ class DirectWatchPlugin : Plugin() {
                         } catch (_: Exception) {
                             null
                         }
-                        val activityBytes = decryptedPayload?.let { extractClassicActivityFileIdBytes(it) }
-                        if (activityBytes != null) {
-                            return activityBytes
+                        if (decryptedPayload != null) {
+                            fileIds.addAll(extractClassicActivityFileIdByteList(decryptedPayload))
                         }
                     }
                     offset += packetSize.coerceAtLeast(1)
@@ -2117,10 +2177,10 @@ class DirectWatchPlugin : Plugin() {
             offset += 1
         }
 
-        return null
+        return fileIds.distinctBy { fullHex(it) }
     }
 
-    private fun extractClassicActivityFileIdBytes(commandPayload: ByteArray): ByteArray? {
+    private fun extractClassicActivityFileIdByteList(commandPayload: ByteArray): List<ByteArray> {
         var commandType: Int? = null
         var commandSubtype: Int? = null
         var healthBytes: ByteArray? = null
@@ -2132,13 +2192,17 @@ class DirectWatchPlugin : Plugin() {
             }
         }
         if (commandType != 8 || (commandSubtype != 1 && commandSubtype != 2) || healthBytes == null) {
-            return null
+            return emptyList()
         }
 
-        var activityFileIds: ByteArray? = null
+        val activityFileIds = mutableListOf<ByteArray>()
         walkProtoFields(healthBytes!!) { fieldNumber, wireType, value ->
             if (fieldNumber == 2 && wireType == 2 && value.bytes != null && value.bytes.size >= 7) {
-                activityFileIds = value.bytes.copyOfRange(0, 7)
+                var offset = 0
+                while (offset + 7 <= value.bytes.size) {
+                    activityFileIds.add(value.bytes.copyOfRange(offset, offset + 7))
+                    offset += 7
+                }
             }
         }
         return activityFileIds
@@ -2169,6 +2233,7 @@ class DirectWatchPlugin : Plugin() {
                     subtype = subtype,
                     detailType = detailType,
                     version = version,
+                    kind = classicActivityFileKind(type, subtype, detailType),
                 ),
             )
             offset += 7
@@ -2189,6 +2254,333 @@ class DirectWatchPlugin : Plugin() {
             payloadBytes = payload.size - 4,
             label = "Файл активности ${number}/${total}",
         )
+    }
+
+    private fun parseClassicActivityFilePayload(bytes: ByteArray, isComplete: Boolean): ClassicActivityFileContent? {
+        if (bytes.size < 8) {
+            return null
+        }
+
+        val file = parseClassicActivityFileIds(bytes.copyOfRange(0, 7)).firstOrNull() ?: return null
+        val padding = bytes[7].toInt() and 0xff
+        val crcValid = if (isComplete) classicActivityCrcValid(bytes) else null
+        val dataEnd = if (isComplete && crcValid != null && bytes.size >= 4) bytes.size - 4 else bytes.size
+        val payloadBytes = (dataEnd - 8).coerceAtLeast(0)
+        val daily = parseClassicDailyDetails(bytes, file, dataEnd)
+        val summary = parseClassicDailySummary(bytes, file, dataEnd)
+
+        return ClassicActivityFileContent(
+            file = file,
+            fileKind = file.kind,
+            padding = padding,
+            payloadBytes = payloadBytes,
+            crcValid = crcValid,
+            sampleCount = daily?.sampleCount,
+            steps = daily?.steps ?: summary?.steps,
+            heartRateAvg = daily?.heartRateAvg ?: summary?.heartRateAvg,
+            heartRateMin = daily?.heartRateMin ?: summary?.heartRateMin,
+            heartRateMax = daily?.heartRateMax ?: summary?.heartRateMax,
+            heartRateResting = summary?.heartRateResting,
+            spo2Avg = daily?.spo2Avg ?: summary?.spo2Avg,
+            spo2Min = summary?.spo2Min,
+            spo2Max = summary?.spo2Max,
+            stressAvg = daily?.stressAvg ?: summary?.stressAvg,
+            stressMin = summary?.stressMin,
+            stressMax = summary?.stressMax,
+            calories = summary?.calories,
+            trainingLoadDay = summary?.trainingLoadDay,
+            trainingLoadWeek = summary?.trainingLoadWeek,
+            vitality = summary?.vitality,
+        )
+    }
+
+    private fun parseClassicDailySummary(
+        bytes: ByteArray,
+        file: ClassicActivityFileSummary,
+        dataEnd: Int,
+    ): ClassicDailySummary? {
+        if (file.type != 0 || file.subtype != 0 || file.detailType != 1 || file.version != 5) {
+            return null
+        }
+
+        var offset = 12 // 7 bytes file id + 1 padding + 4 bytes validity header.
+        fun takeByte(): Int? {
+            if (offset + 1 > dataEnd) return null
+            return bytes[offset++].toInt() and 0xff
+        }
+        fun takeShort(): Int? {
+            if (offset + 2 > dataEnd) return null
+            val value = littleEndianUInt16(bytes, offset)
+            offset += 2
+            return value
+        }
+        fun takeInt(): Long? {
+            if (offset + 4 > dataEnd) return null
+            val value = littleEndianUInt32(bytes, offset)
+            offset += 4
+            return value
+        }
+        fun skip(count: Int): Boolean {
+            if (offset + count > dataEnd) return false
+            offset += count
+            return true
+        }
+
+        val steps = takeInt()?.toInt() ?: return null
+        if (!skip(3)) return null
+        val heartRateResting = takeByte() ?: return null
+        val heartRateMax = takeByte() ?: return null
+        if (takeInt() == null) return null
+        val heartRateMin = takeByte() ?: return null
+        if (takeInt() == null) return null
+        val heartRateAvg = takeByte() ?: return null
+        val stressAvg = takeByte() ?: return null
+        val stressMax = takeByte() ?: return null
+        val stressMin = takeByte() ?: return null
+        if (!skip(3)) return null
+        val calories = takeShort() ?: return null
+        if (!skip(3)) return null
+        val spo2Max = takeByte() ?: return null
+        if (takeInt() == null) return null
+        val spo2Min = takeByte() ?: return null
+        if (takeInt() == null) return null
+        val spo2Avg = takeByte() ?: return null
+        val trainingLoadDay = takeShort() ?: return null
+        val trainingLoadWeek = takeShort() ?: return null
+        if (takeByte() == null) return null
+        if (takeByte() == null) return null
+        if (takeByte() == null) return null
+        if (takeByte() == null) return null
+        val vitality = takeShort()
+
+        return ClassicDailySummary(
+            steps = steps,
+            calories = calories,
+            heartRateResting = heartRateResting.takeIf { it in 1..254 },
+            heartRateAvg = heartRateAvg.takeIf { it in 1..254 },
+            heartRateMin = heartRateMin.takeIf { it in 1..254 },
+            heartRateMax = heartRateMax.takeIf { it in 1..254 },
+            spo2Avg = spo2Avg.takeIf { it in 1..100 },
+            spo2Min = spo2Min.takeIf { it in 1..100 },
+            spo2Max = spo2Max.takeIf { it in 1..100 },
+            stressAvg = stressAvg.takeIf { it in 0..100 },
+            stressMin = stressMin.takeIf { it in 0..100 },
+            stressMax = stressMax.takeIf { it in 0..100 },
+            trainingLoadDay = trainingLoadDay,
+            trainingLoadWeek = trainingLoadWeek,
+            vitality = vitality,
+        )
+    }
+
+    private fun parseClassicDailyDetails(
+        bytes: ByteArray,
+        file: ClassicActivityFileSummary,
+        dataEnd: Int,
+    ): ClassicDailyDetailsSummary? {
+        if (file.type != 0 || file.subtype != 0 || file.detailType != 0) {
+            return null
+        }
+
+        val headerSize = when (file.version) {
+            1, 2 -> 4
+            3 -> 5
+            4 -> 6
+            else -> return null
+        }
+        val headerStart = 8
+        val dataStart = headerStart + headerSize
+        if (bytes.size < dataStart || dataEnd <= dataStart) {
+            return null
+        }
+
+        val header = bytes.copyOfRange(headerStart, dataStart)
+        var offset = dataStart
+        var sampleCount = 0
+        var stepsTotal = 0
+        val heartRates = mutableListOf<Int>()
+        val spo2Values = mutableListOf<Int>()
+        val stressValues = mutableListOf<Int>()
+
+        while (offset < dataEnd) {
+            val parsed = parseClassicDailyDetailsSample(bytes, offset, dataEnd, header, file.version) ?: break
+            offset = parsed.nextOffset
+            sampleCount += 1
+            stepsTotal += parsed.steps ?: 0
+            if (parsed.heartRate != null && parsed.heartRate in 1..254) {
+                heartRates.add(parsed.heartRate)
+            }
+            if (parsed.spo2 != null && parsed.spo2 in 1..100) {
+                spo2Values.add(parsed.spo2)
+            }
+            if (parsed.stress != null && parsed.stress in 0..100) {
+                stressValues.add(parsed.stress)
+            }
+        }
+
+        return ClassicDailyDetailsSummary(
+            sampleCount = sampleCount,
+            steps = stepsTotal.takeIf { sampleCount > 0 },
+            heartRateAvg = averageInt(heartRates),
+            heartRateMin = heartRates.minOrNull(),
+            heartRateMax = heartRates.maxOrNull(),
+            spo2Avg = averageInt(spo2Values),
+            stressAvg = averageInt(stressValues),
+        )
+    }
+
+    private fun parseClassicDailyDetailsSample(
+        bytes: ByteArray,
+        startOffset: Int,
+        dataEnd: Int,
+        header: ByteArray,
+        version: Int,
+    ): ClassicDailyDetailsSample? {
+        var offset = startOffset
+        var group = -1
+        var includeExtraEntry = 0
+        var steps: Int? = null
+        var heartRate: Int? = null
+        var spo2: Int? = null
+        var stress: Int? = null
+
+        fun consumeGroup(nBits: Int): Int? {
+            group += 1
+            val nibble = classicDailyDetailsNibble(header, group) ?: return null
+            if ((nibble and 8) == 0) {
+                return null
+            }
+            val byteCount = nBits / 8
+            if (offset + byteCount > dataEnd) {
+                return Int.MIN_VALUE
+            }
+            val value = when (nBits) {
+                8 -> bytes[offset].toInt() and 0xff
+                16 -> littleEndianUInt16(bytes, offset)
+                else -> return Int.MIN_VALUE
+            }
+            offset += byteCount
+            return value
+        }
+
+        fun hasFlag(idx: Int): Boolean {
+            val nibble = classicDailyDetailsNibble(header, group) ?: return false
+            return (nibble and (1 shl (2 - idx))) != 0
+        }
+
+        fun extract(value: Int, idx: Int, nBits: Int, groupBits: Int): Int {
+            val shift = groupBits - idx - nBits
+            return (value and (((1 shl nBits) - 1) shl shift)) ushr shift
+        }
+
+        val stepsGroup = consumeGroup(16)
+        if (stepsGroup == Int.MIN_VALUE) return null
+        if (stepsGroup != null) {
+            if (hasFlag(1)) {
+                includeExtraEntry = extract(stepsGroup, 1, 1, 16)
+            }
+            if (hasFlag(2)) {
+                steps = extract(stepsGroup, 2, 14, 16)
+            }
+        }
+
+        val caloriesGroup = consumeGroup(8)
+        if (caloriesGroup == Int.MIN_VALUE) return null
+        val unknown1 = consumeGroup(8)
+        if (unknown1 == Int.MIN_VALUE) return null
+        val distanceGroup = consumeGroup(16)
+        if (distanceGroup == Int.MIN_VALUE) return null
+
+        val heartRateGroup = consumeGroup(8)
+        if (heartRateGroup == Int.MIN_VALUE) return null
+        if (heartRateGroup != null && hasFlag(0)) {
+            heartRate = heartRateGroup
+        }
+
+        val energyGroup = consumeGroup(8)
+        if (energyGroup == Int.MIN_VALUE) return null
+        val unknown2 = consumeGroup(16)
+        if (unknown2 == Int.MIN_VALUE) return null
+
+        if (version >= 3) {
+            val spo2Group = consumeGroup(8)
+            if (spo2Group == Int.MIN_VALUE) return null
+            if (spo2Group != null && hasFlag(0)) {
+                spo2 = spo2Group
+            }
+            val stressGroup = consumeGroup(8)
+            if (stressGroup == Int.MIN_VALUE) return null
+            if (stressGroup != null && hasFlag(0) && stressGroup != 255) {
+                stress = stressGroup
+            }
+        }
+
+        if (includeExtraEntry == 1) {
+            val extra = consumeGroup(8)
+            if (extra == Int.MIN_VALUE) return null
+        }
+
+        if (version >= 4) {
+            val light = consumeGroup(16)
+            if (light == Int.MIN_VALUE) return null
+            val momentum = consumeGroup(16)
+            if (momentum == Int.MIN_VALUE) return null
+        }
+
+        if (offset <= startOffset) {
+            return null
+        }
+
+        return ClassicDailyDetailsSample(
+            nextOffset = offset,
+            steps = steps,
+            heartRate = heartRate,
+            spo2 = spo2,
+            stress = stress,
+        )
+    }
+
+    private fun classicDailyDetailsNibble(header: ByteArray, group: Int): Int? {
+        if (group < 0 || group >= header.size * 2) {
+            return null
+        }
+        val value = header[group / 2].toInt() and 0xff
+        return if (group % 2 == 0) {
+            (value ushr 4) and 0x0f
+        } else {
+            value and 0x0f
+        }
+    }
+
+    private fun classicActivityCrcValid(bytes: ByteArray): Boolean? {
+        if (bytes.size < 12) {
+            return null
+        }
+
+        val crc = java.util.zip.CRC32()
+        crc.update(bytes, 0, bytes.size - 4)
+        val actual = crc.value and 0xffffffffL
+        val expected = littleEndianUInt32(bytes, bytes.size - 4) and 0xffffffffL
+        return actual == expected
+    }
+
+    private fun classicActivityFileKind(type: Int, subtype: Int, detailType: Int): String {
+        return when {
+            type == 0 && subtype == 0 && detailType == 0 -> "Активность по минутам"
+            type == 0 && subtype == 0 && detailType == 1 -> "Итоги дня"
+            type == 0 && subtype == 3 -> "Фазы сна"
+            type == 0 && subtype == 6 -> "Ручные замеры"
+            type == 0 && subtype == 8 -> "Сон"
+            type == 1 && detailType == 1 -> "Итог тренировки"
+            type == 1 && detailType == 2 -> "GPS тренировки"
+            else -> "Файл активности"
+        }
+    }
+
+    private fun averageInt(values: List<Int>): Int? {
+        if (values.isEmpty()) {
+            return null
+        }
+        return (values.sum().toDouble() / values.size).roundToInt()
     }
 
     private fun parseAuthCommand(payload: ByteArray): ClassicAuthProbeParse {
@@ -2965,6 +3357,7 @@ class DirectWatchPlugin : Plugin() {
         val subtype: Int,
         val detailType: Int,
         val version: Int,
+        val kind: String,
     ) {
         fun toJson(): JSObject {
             val item = JSObject()
@@ -2975,9 +3368,70 @@ class DirectWatchPlugin : Plugin() {
             item.put("subtype", subtype)
             item.put("detailType", detailType)
             item.put("version", version)
+            item.put("kind", kind)
             return item
         }
     }
+
+    private data class ClassicActivityFileContent(
+        val file: ClassicActivityFileSummary,
+        val fileKind: String,
+        val padding: Int,
+        val payloadBytes: Int,
+        val crcValid: Boolean?,
+        val sampleCount: Int?,
+        val steps: Int?,
+        val heartRateAvg: Int?,
+        val heartRateMin: Int?,
+        val heartRateMax: Int?,
+        val heartRateResting: Int?,
+        val spo2Avg: Int?,
+        val spo2Min: Int?,
+        val spo2Max: Int?,
+        val stressAvg: Int?,
+        val stressMin: Int?,
+        val stressMax: Int?,
+        val calories: Int?,
+        val trainingLoadDay: Int?,
+        val trainingLoadWeek: Int?,
+        val vitality: Int?,
+    )
+
+    private data class ClassicDailySummary(
+        val steps: Int?,
+        val calories: Int?,
+        val heartRateResting: Int?,
+        val heartRateAvg: Int?,
+        val heartRateMin: Int?,
+        val heartRateMax: Int?,
+        val spo2Avg: Int?,
+        val spo2Min: Int?,
+        val spo2Max: Int?,
+        val stressAvg: Int?,
+        val stressMin: Int?,
+        val stressMax: Int?,
+        val trainingLoadDay: Int?,
+        val trainingLoadWeek: Int?,
+        val vitality: Int?,
+    )
+
+    private data class ClassicDailyDetailsSummary(
+        val sampleCount: Int,
+        val steps: Int?,
+        val heartRateAvg: Int?,
+        val heartRateMin: Int?,
+        val heartRateMax: Int?,
+        val spo2Avg: Int?,
+        val stressAvg: Int?,
+    )
+
+    private data class ClassicDailyDetailsSample(
+        val nextOffset: Int,
+        val steps: Int?,
+        val heartRate: Int?,
+        val spo2: Int?,
+        val stress: Int?,
+    )
 
     private data class ClassicActivityChunk(
         val total: Int,
@@ -3042,7 +3496,8 @@ class DirectWatchPlugin : Plugin() {
         private const val MAX_CLASSIC_PACKET_PREVIEW_BYTES = 160
         private const val CLASSIC_PROBE_READ_MS = 6_000L
         private const val CLASSIC_POST_AUTH_READ_MS = 10_000L
-        private const val CLASSIC_ACTIVITY_FILE_READ_MS = 10_000L
+        private const val CLASSIC_ACTIVITY_FILE_READ_MS = 15_000L
+        private const val CLASSIC_ACTIVITY_FILE_PROBE_LIMIT = 10
         private const val CLASSIC_POST_AUTH_COMMAND_DELAY_MS = 120L
         private const val CLASSIC_VERSION_READ_MS = 1_200L
         private const val CLASSIC_SESSION_CONFIG_READ_MS = 1_200L
