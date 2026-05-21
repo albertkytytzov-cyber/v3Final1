@@ -433,20 +433,24 @@ export async function readDirectWatchDailySummary(
   }
 
   const packets = (probe.decryptedPackets ?? []).filter(hasDirectWatchActivityFile);
-  const dayPackets = packets.filter((packet) =>
+  const activityPackets = packets.filter((packet) =>
     getDirectWatchActivityEntryDate(packet.activityFile) === entryDate,
   );
+  const sleepPackets = packets.filter((packet) =>
+    getDirectWatchSleepEntryDate(packet) === entryDate,
+  );
+  const dayPackets = mergeDirectWatchPackets(activityPackets, sleepPackets);
 
   if (!dayPackets.length) {
     throw new Error("Часы подключились, но за выбранный день не отдали файлы активности.");
   }
 
-  const dailySummary = pickLatestDirectWatchPacket(dayPackets, (packet) =>
+  const dailySummary = pickLatestDirectWatchPacket(activityPackets, (packet) =>
     packet.activityFile?.type === 0 &&
     packet.activityFile.subtype === 0 &&
     packet.activityFile.detailType === 1,
   );
-  const minuteDetails = dayPackets.filter((packet) =>
+  const minuteDetails = activityPackets.filter((packet) =>
     packet.activityFile?.type === 0 &&
     packet.activityFile.subtype === 0 &&
     packet.activityFile.detailType === 0,
@@ -454,7 +458,7 @@ export async function readDirectWatchDailySummary(
   const detailAggregate = aggregateDirectWatchMinuteDetails(minuteDetails);
   const heartRate = buildDirectWatchHeartRateSummary(dailySummary, detailAggregate);
   const oxygenSaturation = buildDirectWatchOxygenSummary(dailySummary, detailAggregate);
-  const sleep = buildDirectWatchSleepSummary(dayPackets);
+  const sleep = buildDirectWatchSleepSummary(sleepPackets);
 
   if (!sleep && !heartRate && !oxygenSaturation && !dailySummary) {
     throw new Error("PERFORM Sync прочитал день, но пока не нашёл сон, пульс, SpO2 или итоговые показатели.");
@@ -856,17 +860,47 @@ function hasDirectWatchActivityFile(
 }
 
 function getDirectWatchActivityEntryDate(file: DirectWatchActivityFile | null | undefined) {
-  if (!file?.timestamp) {
+  return getDirectWatchTimestampEntryDate(file?.timestamp, file);
+}
+
+function getDirectWatchSleepEntryDate(packet: DirectWatchDecryptedPacket) {
+  if (packet.activityFile?.subtype !== 8 && packet.activityFile?.subtype !== 3) {
     return null;
   }
 
-  const parsedDate = new Date(file.timestamp);
+  return getDirectWatchTimestampEntryDate(packet.sleepEndTime, packet.activityFile) ??
+    getDirectWatchTimestampEntryDate(packet.sleepStartTime, packet.activityFile) ??
+    getDirectWatchActivityEntryDate(packet.activityFile);
+}
+
+function getDirectWatchTimestampEntryDate(
+  timestamp: string | null | undefined,
+  file: DirectWatchActivityFile | null | undefined,
+) {
+  if (!timestamp) {
+    return null;
+  }
+
+  const parsedDate = new Date(timestamp);
   if (Number.isNaN(parsedDate.getTime())) {
     return null;
   }
 
-  const timezoneOffsetMinutes = typeof file.timezone === "number" ? file.timezone * 15 : 0;
+  const timezoneOffsetMinutes = typeof file?.timezone === "number" ? file.timezone * 15 : 0;
   return formatLocalDateValue(new Date(parsedDate.getTime() + timezoneOffsetMinutes * 60_000));
+}
+
+function mergeDirectWatchPackets(
+  left: DirectWatchDecryptedPacket[],
+  right: DirectWatchDecryptedPacket[],
+) {
+  const result = [...left];
+  for (const packet of right) {
+    if (!result.includes(packet)) {
+      result.push(packet);
+    }
+  }
+  return result;
 }
 
 function formatLocalDateValue(value: Date) {
