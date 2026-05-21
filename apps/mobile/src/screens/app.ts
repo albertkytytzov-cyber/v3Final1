@@ -15,10 +15,16 @@ import {
   readMiFitnessHealthConnectDeviceWorkouts,
 } from "../integrations/health-connect.js";
 import {
+  addDirectWatchPacketListener,
+  addDirectWatchSessionListener,
+  getDirectWatchSessionStatus,
   inspectDirectWatchDevice,
   isDirectWatchRuntime,
   pairDirectWatchDevice,
   scanDirectWatchDevices,
+  startDirectWatchSession,
+  stopDirectWatchSession,
+  unpairDirectWatchDevice,
 } from "../integrations/direct-watch.js";
 import { readHuaweiHealthDailySummary } from "../integrations/huawei-health.js";
 import {
@@ -93,7 +99,9 @@ export function bootstrapMobileApp(root: HTMLElement) {
       devices: [],
       inspectedDeviceId: null,
       inspection: null,
+      packets: [],
       scannedAt: null,
+      session: null,
     },
     aiReviewByDay: buildCoachAiReviewByDay(initialData.coachAiReviews),
     selectedScreen: "dashboard",
@@ -114,6 +122,37 @@ export function bootstrapMobileApp(root: HTMLElement) {
     Object.assign(state, patch);
     render();
   };
+
+  if (isDirectWatchRuntime()) {
+    void addDirectWatchPacketListener((packet) => {
+      update({
+        directWatchDiagnostic: {
+          ...state.directWatchDiagnostic,
+          packets: [packet, ...state.directWatchDiagnostic.packets].slice(0, 8),
+          session: state.directWatchDiagnostic.session
+            ? {
+                ...state.directWatchDiagnostic.session,
+                lastPacket: packet,
+                packetCount: Math.max(
+                  state.directWatchDiagnostic.session.packetCount ?? 0,
+                  packet.packetIndex ?? 0,
+                ),
+              }
+            : state.directWatchDiagnostic.session,
+        },
+      });
+    });
+    void addDirectWatchSessionListener((session) => {
+      update({
+        directWatchDiagnostic: {
+          ...state.directWatchDiagnostic,
+          packets: session.packets?.length ? session.packets : state.directWatchDiagnostic.packets,
+          session,
+        },
+      });
+    });
+  }
+
   let refreshData: (silent?: boolean) => Promise<void>;
 
   const updateSelectedDayDate = (date: string, selectedScreen?: MobileScreen) => {
@@ -586,7 +625,9 @@ export function bootstrapMobileApp(root: HTMLElement) {
           devices: result.devices.filter((device) => Boolean(device.id)),
           inspectedDeviceId: null,
           inspection: null,
+          packets: state.directWatchDiagnostic.packets,
           scannedAt: result.scannedAt ?? new Date().toISOString(),
+          session: state.directWatchDiagnostic.session,
         },
         error: null,
         isBusy: false,
@@ -679,6 +720,124 @@ export function bootstrapMobileApp(root: HTMLElement) {
         isBusy: false,
         message: null,
       });
+    }
+  };
+
+  const unpairDirectWatch = async (deviceId: string) => {
+    if (!deviceId) {
+      update({ error: "Выберите часы для сброса привязки." });
+      return;
+    }
+
+    update({
+      error: null,
+      isBusy: true,
+      message: "Сбрасываю системную привязку часов на телефоне...",
+    });
+
+    try {
+      const pairing = await unpairDirectWatchDevice(deviceId);
+      const devices = state.directWatchDiagnostic.devices.map((device) =>
+        device.id === deviceId
+          ? {
+              ...device,
+              bondState: pairing.bondState ?? device.bondState,
+              bondStateCode: pairing.bondStateCode ?? device.bondStateCode,
+              name: pairing.deviceName ?? device.name,
+            }
+          : device,
+      );
+      update({
+        directWatchDiagnostic: {
+          ...state.directWatchDiagnostic,
+          devices,
+          session: null,
+        },
+        error: null,
+        isBusy: false,
+        message: formatDirectWatchUnpairMessage(pairing.status),
+      });
+    } catch (error) {
+      update({
+        error: error instanceof Error ? error.message : "Не удалось сбросить системную привязку часов.",
+        isBusy: false,
+        message: null,
+      });
+    }
+  };
+
+  const startDirectWatchConnection = async (deviceId: string) => {
+    if (!deviceId) {
+      update({ error: "Выберите часы для PERFORM Sync." });
+      return;
+    }
+
+    update({
+      error: null,
+      isBusy: true,
+      message: "Открываю PERFORM Sync-сессию и подписываюсь на BLE-каналы часов...",
+    });
+
+    try {
+      const session = await startDirectWatchSession(deviceId);
+      update({
+        directWatchDiagnostic: {
+          ...state.directWatchDiagnostic,
+          packets: session.packets ?? [],
+          session,
+        },
+        error: null,
+        isBusy: false,
+        message: formatDirectWatchSessionMessage(session),
+      });
+    } catch (error) {
+      update({
+        error: error instanceof Error ? error.message : "Не удалось открыть PERFORM Sync-сессию.",
+        isBusy: false,
+        message: null,
+      });
+    }
+  };
+
+  const stopDirectWatchConnection = async () => {
+    update({
+      error: null,
+      isBusy: true,
+      message: "Отключаю PERFORM Sync от часов...",
+    });
+
+    try {
+      const session = await stopDirectWatchSession();
+      update({
+        directWatchDiagnostic: {
+          ...state.directWatchDiagnostic,
+          session,
+        },
+        error: null,
+        isBusy: false,
+        message: "PERFORM Sync-сессия остановлена.",
+      });
+    } catch (error) {
+      update({
+        error: error instanceof Error ? error.message : "Не удалось остановить PERFORM Sync-сессию.",
+        isBusy: false,
+        message: null,
+      });
+    }
+  };
+
+  const refreshDirectWatchSession = async () => {
+    try {
+      const session = await getDirectWatchSessionStatus();
+      update({
+        directWatchDiagnostic: {
+          ...state.directWatchDiagnostic,
+          packets: session.packets?.length ? session.packets : state.directWatchDiagnostic.packets,
+          session,
+        },
+      });
+    } catch {
+      // Session refresh is diagnostic only; the visible action will report connection errors.
     }
   };
 
@@ -1358,6 +1517,30 @@ export function bootstrapMobileApp(root: HTMLElement) {
     root.querySelectorAll<HTMLButtonElement>("[data-direct-watch-pair]").forEach((button) => {
       button.addEventListener("click", () => {
         void pairDirectWatch(button.dataset.directWatchPair ?? "");
+      });
+    });
+
+    root.querySelectorAll<HTMLButtonElement>("[data-direct-watch-unpair]").forEach((button) => {
+      button.addEventListener("click", () => {
+        void unpairDirectWatch(button.dataset.directWatchUnpair ?? "");
+      });
+    });
+
+    root.querySelectorAll<HTMLButtonElement>("[data-direct-watch-session-start]").forEach((button) => {
+      button.addEventListener("click", () => {
+        void startDirectWatchConnection(button.dataset.directWatchSessionStart ?? "");
+      });
+    });
+
+    root.querySelectorAll<HTMLButtonElement>("[data-direct-watch-session-stop]").forEach((button) => {
+      button.addEventListener("click", () => {
+        void stopDirectWatchConnection();
+      });
+    });
+
+    root.querySelectorAll<HTMLButtonElement>("[data-direct-watch-session-refresh]").forEach((button) => {
+      button.addEventListener("click", () => {
+        void refreshDirectWatchSession();
       });
     });
 
@@ -2615,6 +2798,9 @@ function renderDirectWatchDiagnostics(state: MobileAppState) {
     )
     .slice(0, 8);
   const inspection = diagnostic.inspection;
+  const session = diagnostic.session;
+  const sessionPackets = diagnostic.packets.length ? diagnostic.packets : session?.packets ?? [];
+  const activeSessionDeviceId = session?.connected ? session.deviceId : null;
   const services = inspection?.services ?? [];
   const knownServices = services
     .filter((service) => service.name && service.name !== "Unknown")
@@ -2627,14 +2813,25 @@ function renderDirectWatchDiagnostics(state: MobileAppState) {
           <span>PERFORM Sync</span>
           <h3>Диагностика прямого подключения</h3>
         </div>
-        <button class="secondary-action" data-direct-watch-scan type="button" ${state.isBusy ? "disabled" : ""}>
-          Найти часы
-        </button>
+        <div class="direct-watch-header-actions">
+          ${session?.connected ? `
+            <button class="secondary-action" data-direct-watch-session-refresh type="button" ${state.isBusy ? "disabled" : ""}>
+              Обновить
+            </button>
+            <button class="secondary-action" data-direct-watch-session-stop type="button" ${state.isBusy ? "disabled" : ""}>
+              Отключить
+            </button>
+          ` : ""}
+          <button class="secondary-action" data-direct-watch-scan type="button" ${state.isBusy ? "disabled" : ""}>
+            Найти часы
+          </button>
+        </div>
       </div>
       <p>
-        Android проверяет часы напрямую по Bluetooth: поиск, сопряжение, BLE-сервисы и стандартные значения. Пока это диагностика без записи тренировки.
+        Android проверяет часы напрямую по Bluetooth: поиск, сопряжение, BLE-сервисы и сырые пакеты. Пока это диагностика без записи тренировки.
       </p>
       ${diagnostic.scannedAt ? `<p class="muted-copy">Последний поиск: ${escapeHtml(formatDateTime(diagnostic.scannedAt))}</p>` : ""}
+      ${renderDirectWatchSession(session, sessionPackets)}
       ${devices.length ? `
         <div class="direct-watch-device-list">
           ${devices.map((device) => `
@@ -2647,6 +2844,18 @@ function renderDirectWatchDiagnostics(state: MobileAppState) {
                 ${renderDirectWatchAdvertisedData(device)}
               </div>
               <div class="direct-watch-device-actions">
+                ${activeSessionDeviceId === device.id ? `
+                  <span class="direct-watch-session-pill">PERFORM Sync активен</span>
+                ` : `
+                  <button
+                    class="secondary-action"
+                    data-direct-watch-session-start="${escapeHtml(device.id)}"
+                    type="button"
+                    ${state.isBusy || session?.connected ? "disabled" : ""}
+                  >
+                    Подключить Sync
+                  </button>
+                `}
                 ${device.bondState !== "bonded" ? `
                   <button
                     class="secondary-action"
@@ -2656,7 +2865,16 @@ function renderDirectWatchDiagnostics(state: MobileAppState) {
                   >
                     Сопрячь
                   </button>
-                ` : ""}
+                ` : `
+                  <button
+                    class="secondary-action"
+                    data-direct-watch-unpair="${escapeHtml(device.id)}"
+                    type="button"
+                    ${state.isBusy || session?.connected ? "disabled" : ""}
+                  >
+                    Сбросить привязку
+                  </button>
+                `}
                 <button
                   class="secondary-action"
                   data-direct-watch-inspect="${escapeHtml(device.id)}"
@@ -2731,6 +2949,70 @@ function renderDirectWatchDiagnostics(state: MobileAppState) {
           ` : ""}
         </div>
       ` : ""}
+    </div>
+  `;
+}
+
+function renderDirectWatchSession(
+  session: MobileAppState["directWatchDiagnostic"]["session"],
+  packets: MobileAppState["directWatchDiagnostic"]["packets"],
+) {
+  if (!session?.connected && !session?.deviceId) {
+    return "";
+  }
+
+  const subscribed = session.subscribed ?? [];
+  const packetItems = packets.slice(0, 6);
+
+  return `
+    <div class="direct-watch-session ${session.connected ? "is-connected" : "is-stopped"}">
+      <div class="device-health-status ${session.connected ? "is-connected" : "is-missing"}">
+        <strong>${escapeHtml(session.connected ? "PERFORM Sync подключен" : "PERFORM Sync отключен")}</strong>
+        <span>${escapeHtml(formatDirectWatchSessionSummary(session))}</span>
+      </div>
+      <div class="device-health-diagnostics-grid">
+        <article>
+          <span>Часы</span>
+          <strong>${escapeHtml(session.deviceName || session.deviceId || "не выбраны")}</strong>
+        </article>
+        <article>
+          <span>Подписки</span>
+          <strong>${escapeHtml(`${session.subscribedCount ?? 0}/${subscribed.length}`)}</strong>
+        </article>
+        <article>
+          <span>Пакеты</span>
+          <strong>${escapeHtml(String(session.packetCount ?? packetItems.length))}</strong>
+        </article>
+        <article>
+          <span>Сервисов</span>
+          <strong>${escapeHtml(String(session.serviceCount ?? 0))}</strong>
+        </article>
+      </div>
+      ${subscribed.length ? `
+        <div class="direct-watch-reading-list">
+          ${subscribed.slice(0, 6).map((item) => `
+            <article>
+              <span>${escapeHtml(item.name || item.uuid)}</span>
+              <strong>${escapeHtml(formatDirectWatchSubscriptionStatus(item.status, item.error))}</strong>
+            </article>
+          `).join("")}
+        </div>
+      ` : ""}
+      ${packetItems.length ? `
+        <div class="direct-watch-packet-list">
+          ${packetItems.map((packet) => `
+            <article>
+              <div>
+                <strong>${escapeHtml(packet.name || packet.characteristicUuid || "BLE packet")}</strong>
+                <span>${escapeHtml(packet.receivedAt ? formatDateTime(packet.receivedAt) : "только что")} · ${escapeHtml(String(packet.byteLength ?? 0))} байт</span>
+              </div>
+              <code>${escapeHtml(packet.rawHex || "empty")}</code>
+            </article>
+          `).join("")}
+        </div>
+      ` : `
+        <p class="muted-copy">Сессия открыта. Если часы отправят данные, здесь появятся сырые пакеты для разбора протокола.</p>
+      `}
     </div>
   `;
 }
@@ -2851,6 +3133,64 @@ function formatDirectWatchInspectionMessage(
   }
 
   return "Часы подключились, но стандартные данные здоровья не найдены. Скорее всего, основные показатели закрыты протоколом Xiaomi.";
+}
+
+function formatDirectWatchSessionMessage(
+  session: NonNullable<MobileAppState["directWatchDiagnostic"]["session"]>,
+) {
+  if (!session.connected) {
+    return "PERFORM Sync не удержал подключение к часам. Повторите, когда часы в режиме сопряжения и рядом с телефоном.";
+  }
+
+  if ((session.subscribedCount ?? 0) > 0) {
+    return "PERFORM Sync подключен: подписки открыты. Теперь ждём сырые пакеты от часов для разбора протокола.";
+  }
+
+  return "PERFORM Sync подключился к часам, но Android не смог включить уведомления BLE-характеристик.";
+}
+
+function formatDirectWatchUnpairMessage(status: string | null | undefined) {
+  if (status === "unpaired" || status === "already-unpaired") {
+    return "Привязка часов сброшена. Переведите часы в режим нового сопряжения и нажмите “Найти часы”.";
+  }
+
+  if (status === "timeout") {
+    return "Android не подтвердил сброс привязки. Проверьте системное окно Bluetooth или сбросьте пару в настройках телефона.";
+  }
+
+  if (status === "still-bonded") {
+    return "Часы снова остались в системной паре. Для PERFORM Sync нужно удалить пару и включить режим нового сопряжения на часах.";
+  }
+
+  return "Сброс привязки запущен. Если часы не найдутся в BLE, переведите их в режим нового сопряжения.";
+}
+
+function formatDirectWatchSessionSummary(
+  session: NonNullable<MobileAppState["directWatchDiagnostic"]["session"]>,
+) {
+  const parts = [
+    session.startedAt ? `с ${formatDateTime(session.startedAt)}` : null,
+    `подписок: ${session.subscribedCount ?? 0}/${session.subscribed?.length ?? 0}`,
+    `пакетов: ${session.packetCount ?? 0}`,
+  ].filter((part): part is string => Boolean(part));
+
+  return parts.join(" · ");
+}
+
+function formatDirectWatchSubscriptionStatus(status: string | null | undefined, error?: string | null) {
+  if (status === "subscribed") {
+    return "слушаем";
+  }
+
+  if (status === "no-cccd") {
+    return "нет CCCD";
+  }
+
+  if (status === "error") {
+    return error || "ошибка";
+  }
+
+  return status || "ожидает";
 }
 
 function formatDirectWatchCapabilityTitle(

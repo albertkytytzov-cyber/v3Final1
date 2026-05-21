@@ -3771,6 +3771,13 @@ button {
   background: rgba(240, 253, 244, 0.82);
 }
 
+.direct-watch-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
 .direct-watch-device-list {
   display: grid;
   gap: 8px;
@@ -3793,6 +3800,17 @@ button {
   flex-wrap: wrap;
   gap: 8px;
   justify-content: flex-start;
+}
+
+.direct-watch-session-pill {
+  align-self: center;
+  padding: 7px 10px;
+  border: 1px solid rgba(22, 163, 74, 0.22);
+  border-radius: 999px;
+  background: rgba(220, 252, 231, 0.9);
+  color: #166534;
+  font-size: 0.72rem;
+  font-weight: 950;
 }
 
 .direct-watch-device-list strong,
@@ -3847,6 +3865,15 @@ button {
   gap: 10px;
 }
 
+.direct-watch-session {
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid rgba(22, 163, 74, 0.18);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.76);
+}
+
 .direct-watch-reading-list {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
@@ -3878,6 +3905,51 @@ button {
   color: var(--text);
   font-size: 0.84rem;
   font-weight: 950;
+}
+
+.direct-watch-packet-list {
+  display: grid;
+  gap: 8px;
+}
+
+.direct-watch-packet-list article {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+  min-width: 0;
+  padding: 9px;
+  border: 1px solid rgba(22, 163, 74, 0.14);
+  border-radius: 12px;
+  background: rgba(248, 250, 252, 0.92);
+}
+
+.direct-watch-packet-list strong,
+.direct-watch-packet-list span,
+.direct-watch-packet-list code {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.direct-watch-packet-list strong {
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 950;
+}
+
+.direct-watch-packet-list span {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 760;
+}
+
+.direct-watch-packet-list code {
+  padding: 7px;
+  border-radius: 9px;
+  background: rgba(15, 23, 42, 0.06);
+  color: #334155;
+  font-size: 0.72rem;
+  line-height: 1.35;
 }
 
 .direct-watch-services {

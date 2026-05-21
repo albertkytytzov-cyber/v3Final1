@@ -81,6 +81,41 @@ export interface DirectWatchPairingResult {
   status?: "already-bonded" | "bonded" | "not-bonded" | "not-started" | "timeout" | string | null;
 }
 
+export interface DirectWatchSubscribedCharacteristic {
+  error?: string | null;
+  name?: string | null;
+  properties?: string[];
+  serviceUuid?: string | null;
+  status?: "subscribed" | "no-cccd" | "error" | string | null;
+  uuid: string;
+}
+
+export interface DirectWatchSessionPacket {
+  byteLength?: number | null;
+  characteristicUuid?: string | null;
+  deviceId?: string | null;
+  deviceName?: string | null;
+  name?: string | null;
+  packetIndex?: number | null;
+  rawHex?: string | null;
+  receivedAt?: string | null;
+  serviceUuid?: string | null;
+}
+
+export interface DirectWatchSessionStatus {
+  connected?: boolean;
+  deviceId?: string | null;
+  deviceName?: string | null;
+  lastPacket?: DirectWatchSessionPacket | null;
+  packetCount?: number;
+  packets?: DirectWatchSessionPacket[];
+  serviceCount?: number;
+  startedAt?: string | null;
+  subscribed?: DirectWatchSubscribedCharacteristic[];
+  subscribedCount?: number;
+  updatedAt?: string | null;
+}
+
 export interface DirectWatchPayloadPreview {
   byteLength?: number | null;
   companyId?: number | null;
@@ -94,11 +129,23 @@ export interface DirectWatchScanResult {
 }
 
 interface DirectWatchPlugin {
+  addListener?: (
+    eventName: "directWatchPacket" | "directWatchSession",
+    listenerFunc: (event: unknown) => void,
+  ) => Promise<DirectWatchListenerHandle> | DirectWatchListenerHandle;
+  getSessionStatus?: () => Promise<DirectWatchSessionStatus>;
   inspectDevice?: (input: { deviceId: string }) => Promise<DirectWatchInspection>;
   isAvailable?: () => Promise<DirectWatchAvailability>;
   pairDevice?: (input: { deviceId: string }) => Promise<DirectWatchPairingResult>;
   requestAuthorization?: () => Promise<DirectWatchPermissionResult>;
   scanDevices?: (input?: { durationMs?: number }) => Promise<DirectWatchScanResult>;
+  startSession?: (input: { deviceId: string }) => Promise<DirectWatchSessionStatus>;
+  stopSession?: () => Promise<DirectWatchSessionStatus>;
+  unpairDevice?: (input: { deviceId: string }) => Promise<DirectWatchPairingResult>;
+}
+
+export interface DirectWatchListenerHandle {
+  remove: () => Promise<void> | void;
 }
 
 type CapacitorWithDirectWatch = {
@@ -181,6 +228,98 @@ export async function pairDirectWatchDevice(deviceId: string): Promise<DirectWat
   return normalizeDirectWatchPairing(pairing);
 }
 
+export async function unpairDirectWatchDevice(deviceId: string): Promise<DirectWatchPairingResult> {
+  const plugin = getDirectWatchPlugin();
+
+  if (!plugin?.unpairDevice) {
+    throw new Error("Сброс системного сопряжения часов доступен только в Android-сборке PERFORM.");
+  }
+
+  if (plugin.requestAuthorization) {
+    const authorization = await plugin.requestAuthorization();
+    if (!authorization.granted) {
+      throw new Error(authorization.reason || "Нужно разрешить PERFORM подключение к Bluetooth-устройствам.");
+    }
+  }
+
+  const pairing = await plugin.unpairDevice({ deviceId });
+  return normalizeDirectWatchPairing(pairing);
+}
+
+export async function startDirectWatchSession(deviceId: string): Promise<DirectWatchSessionStatus> {
+  const plugin = getDirectWatchPlugin();
+
+  if (!plugin?.startSession) {
+    throw new Error("PERFORM Sync-сессия доступна только в Android-сборке PERFORM.");
+  }
+
+  if (plugin.requestAuthorization) {
+    const authorization = await plugin.requestAuthorization();
+    if (!authorization.granted) {
+      throw new Error(authorization.reason || "Нужно разрешить PERFORM подключение к Bluetooth-устройствам.");
+    }
+  }
+
+  const status = await plugin.startSession({ deviceId });
+  return normalizeDirectWatchSessionStatus(status);
+}
+
+export async function stopDirectWatchSession(): Promise<DirectWatchSessionStatus> {
+  const plugin = getDirectWatchPlugin();
+
+  if (!plugin?.stopSession) {
+    throw new Error("PERFORM Sync-сессия доступна только в Android-сборке PERFORM.");
+  }
+
+  const status = await plugin.stopSession();
+  return normalizeDirectWatchSessionStatus(status);
+}
+
+export async function getDirectWatchSessionStatus(): Promise<DirectWatchSessionStatus> {
+  const plugin = getDirectWatchPlugin();
+
+  if (!plugin?.getSessionStatus) {
+    return { connected: false, packets: [], subscribed: [] };
+  }
+
+  const status = await plugin.getSessionStatus();
+  return normalizeDirectWatchSessionStatus(status);
+}
+
+export async function addDirectWatchPacketListener(
+  callback: (packet: DirectWatchSessionPacket) => void,
+): Promise<DirectWatchListenerHandle | null> {
+  const plugin = getDirectWatchPlugin();
+
+  if (!plugin?.addListener) {
+    return null;
+  }
+
+  const handle = await Promise.resolve(
+    plugin.addListener("directWatchPacket", (event) => {
+      callback(normalizeDirectWatchSessionPacket(event));
+    }),
+  );
+  return handle ?? null;
+}
+
+export async function addDirectWatchSessionListener(
+  callback: (status: DirectWatchSessionStatus) => void,
+): Promise<DirectWatchListenerHandle | null> {
+  const plugin = getDirectWatchPlugin();
+
+  if (!plugin?.addListener) {
+    return null;
+  }
+
+  const handle = await Promise.resolve(
+    plugin.addListener("directWatchSession", (event) => {
+      callback(normalizeDirectWatchSessionStatus(event));
+    }),
+  );
+  return handle ?? null;
+}
+
 function getDirectWatchPlugin() {
   return (globalThis as CapacitorWithDirectWatch).Capacitor?.Plugins?.DirectWatch ?? null;
 }
@@ -257,6 +396,67 @@ function normalizeDirectWatchPairing(value: unknown): DirectWatchPairingResult {
     pairedAt: normalizeString(value.pairedAt),
     pairingStarted: normalizeNullableBoolean(value.pairingStarted) ?? false,
     status: normalizeString(value.status),
+  };
+}
+
+function normalizeDirectWatchSessionStatus(value: unknown): DirectWatchSessionStatus {
+  if (!isRecord(value)) {
+    return { connected: false, packets: [], subscribed: [] };
+  }
+
+  return {
+    connected: normalizeBoolean(value.connected),
+    deviceId: normalizeString(value.deviceId),
+    deviceName: normalizeString(value.deviceName),
+    lastPacket: isRecord(value.lastPacket)
+      ? normalizeDirectWatchSessionPacket(value.lastPacket)
+      : null,
+    packetCount: normalizeNumber(value.packetCount) ?? 0,
+    packets: Array.isArray(value.packets)
+      ? value.packets.map(normalizeDirectWatchSessionPacket)
+      : [],
+    serviceCount: normalizeNumber(value.serviceCount) ?? 0,
+    startedAt: normalizeString(value.startedAt),
+    subscribed: Array.isArray(value.subscribed)
+      ? value.subscribed.map(normalizeDirectWatchSubscribedCharacteristic)
+      : [],
+    subscribedCount: normalizeNumber(value.subscribedCount) ?? 0,
+    updatedAt: normalizeString(value.updatedAt),
+  };
+}
+
+function normalizeDirectWatchSubscribedCharacteristic(value: unknown): DirectWatchSubscribedCharacteristic {
+  if (!isRecord(value)) {
+    return { uuid: "" };
+  }
+
+  return {
+    error: normalizeString(value.error),
+    name: normalizeString(value.name),
+    properties: Array.isArray(value.properties)
+      ? value.properties.map((property) => normalizeString(property)).filter((property): property is string => Boolean(property))
+      : [],
+    serviceUuid: normalizeString(value.serviceUuid),
+    status: normalizeString(value.status),
+    uuid: normalizeString(value.uuid) ?? "",
+  };
+}
+
+function normalizeDirectWatchSessionPacket(value: unknown): DirectWatchSessionPacket {
+  if (!isRecord(value)) {
+    return {};
+  }
+
+  return {
+    byteLength: normalizeNumber(value.byteLength),
+    characteristicUuid: normalizeString(value.characteristicUuid),
+    deviceId: normalizeString(value.deviceId),
+    deviceName: normalizeString(value.deviceName),
+    name: normalizeString(value.name),
+    packetIndex: normalizeNumber(value.packetIndex),
+    rawHex: normalizeString(value.rawHex),
+    receivedAt: normalizeString(value.receivedAt),
+    serviceUuid: normalizeString(value.serviceUuid),
   };
 }
 

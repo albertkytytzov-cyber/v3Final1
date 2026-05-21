@@ -40,6 +40,12 @@ import type {
   ReadinessSubmissionPayload,
   UserRole,
 } from "@training-platform/shared";
+import type {
+  DirectWatchDevice,
+  DirectWatchInspection,
+  DirectWatchSessionPacket,
+  DirectWatchSessionStatus,
+} from "../integrations/direct-watch.js";
 
 export type {
   AssignedBlockExercise,
@@ -152,70 +158,12 @@ export interface MobileAppState {
   coachAiDiagnostic: CoachAiReviewDiagnosticResponse | null;
   coachAiStatus: CoachAiReviewStatus | null;
   directWatchDiagnostic: {
-    devices: Array<{
-      bondState?: "bonded" | "bonding" | "not-bonded" | "unknown" | null;
-      bondStateCode?: number | null;
-      deviceType?: "classic" | "dual" | "le" | "unknown" | null;
-      deviceTypeCode?: number | null;
-      id: string;
-      isConnectable?: boolean | null;
-      isLikelyWatch?: boolean;
-      manufacturerData?: Array<{
-        byteLength?: number | null;
-        companyId?: number | null;
-        previewHex?: string | null;
-        uuid?: string | null;
-      }>;
-      name?: string | null;
-      rssi?: number | null;
-      serviceData?: Array<{
-        byteLength?: number | null;
-        previewHex?: string | null;
-        uuid?: string | null;
-      }>;
-      serviceUuids?: string[];
-      txPowerLevel?: number | null;
-    }>;
+    devices: DirectWatchDevice[];
     inspectedDeviceId: string | null;
-    inspection: {
-      bondState?: "bonded" | "bonding" | "not-bonded" | "unknown" | null;
-      bondStateCode?: number | null;
-      deviceId: string;
-      deviceName?: string | null;
-      deviceType?: "classic" | "dual" | "le" | "unknown" | null;
-      deviceTypeCode?: number | null;
-      canReadBatteryLevel?: boolean;
-      canReadDeviceInfo?: boolean;
-      canSubscribeHeartRate?: boolean;
-      hasBatteryService?: boolean;
-      hasDeviceInfoService?: boolean;
-      hasHeartRateService?: boolean;
-      inspectedAt?: string | null;
-      proprietaryServiceCount?: number;
-      serviceCount?: number;
-      services?: Array<{
-        uuid: string;
-        name?: string | null;
-        characteristics?: Array<{
-          uuid: string;
-          name?: string | null;
-          properties?: string[];
-        }>;
-      }>;
-      standardReadings?: Array<{
-        error?: string | null;
-        kind?: "battery" | "manufacturer" | "model" | "serial" | "firmware" | "hardware" | "software" | "body-sensor" | "unknown" | null;
-        name?: string | null;
-        numericValue?: number | null;
-        rawHex?: string | null;
-        serviceUuid?: string | null;
-        status?: string | null;
-        textValue?: string | null;
-        uuid: string;
-      }>;
-      unknownServiceCount?: number;
-    } | null;
+    inspection: DirectWatchInspection | null;
+    packets: DirectWatchSessionPacket[];
     scannedAt: string | null;
+    session: DirectWatchSessionStatus | null;
   };
   aiReviewByDay: Record<string, CoachDayAiReview>;
   selectedScreen: MobileScreen;
