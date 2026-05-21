@@ -427,7 +427,7 @@ export async function ensureSchema() {
     CREATE TABLE IF NOT EXISTS device_health_daily_summaries (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       athlete_id UUID NOT NULL REFERENCES athletes(id) ON DELETE CASCADE,
-      provider TEXT NOT NULL CHECK (provider IN ('huawei-health', 'health-connect', 'apple-health')),
+      provider TEXT NOT NULL CHECK (provider IN ('huawei-health', 'health-connect', 'apple-health', 'direct-watch')),
       entry_date DATE NOT NULL,
       source_device TEXT,
       sleep_start_time TIMESTAMPTZ,
@@ -464,7 +464,7 @@ export async function ensureSchema() {
     CREATE TABLE IF NOT EXISTS device_workouts (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       athlete_id UUID NOT NULL REFERENCES athletes(id) ON DELETE CASCADE,
-      provider TEXT NOT NULL CHECK (provider IN ('huawei-health', 'health-connect', 'apple-health')),
+      provider TEXT NOT NULL CHECK (provider IN ('huawei-health', 'health-connect', 'apple-health', 'direct-watch')),
       entry_date DATE NOT NULL,
       source_device TEXT,
       source_workout_id TEXT NOT NULL,
@@ -919,14 +919,14 @@ export async function ensureSchema() {
   await ensureColumn(
     "device_health_daily_summaries",
     "provider",
-    "TEXT NOT NULL DEFAULT 'huawei-health' CHECK (provider IN ('huawei-health', 'health-connect', 'apple-health'))",
+    "TEXT NOT NULL DEFAULT 'huawei-health' CHECK (provider IN ('huawei-health', 'health-connect', 'apple-health', 'direct-watch'))",
   );
   await pool.query(`
     ALTER TABLE device_health_daily_summaries
       DROP CONSTRAINT IF EXISTS device_health_daily_summaries_provider_check;
     ALTER TABLE device_health_daily_summaries
       ADD CONSTRAINT device_health_daily_summaries_provider_check
-      CHECK (provider IN ('huawei-health', 'health-connect', 'apple-health'));
+      CHECK (provider IN ('huawei-health', 'health-connect', 'apple-health', 'direct-watch'));
   `);
   await ensureColumn("device_health_daily_summaries", "entry_date", "DATE");
   await ensureColumn("device_health_daily_summaries", "source_device", "TEXT");
@@ -989,14 +989,14 @@ export async function ensureSchema() {
   await ensureColumn(
     "device_workouts",
     "provider",
-    "TEXT NOT NULL DEFAULT 'health-connect' CHECK (provider IN ('huawei-health', 'health-connect', 'apple-health'))",
+    "TEXT NOT NULL DEFAULT 'health-connect' CHECK (provider IN ('huawei-health', 'health-connect', 'apple-health', 'direct-watch'))",
   );
   await pool.query(`
     ALTER TABLE device_workouts
       DROP CONSTRAINT IF EXISTS device_workouts_provider_check;
     ALTER TABLE device_workouts
       ADD CONSTRAINT device_workouts_provider_check
-      CHECK (provider IN ('huawei-health', 'health-connect', 'apple-health'));
+      CHECK (provider IN ('huawei-health', 'health-connect', 'apple-health', 'direct-watch'));
   `);
   await ensureColumn("device_workouts", "entry_date", "DATE");
   await ensureColumn("device_workouts", "source_device", "TEXT");

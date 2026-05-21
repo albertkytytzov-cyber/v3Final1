@@ -12,7 +12,7 @@ import type {
 } from "@training-platform/shared";
 
 const datePattern = /^\d{4}-\d{2}-\d{2}$/;
-const providers: DeviceHealthProvider[] = ["huawei-health", "health-connect", "apple-health"];
+const providers: DeviceHealthProvider[] = ["huawei-health", "health-connect", "apple-health", "direct-watch"];
 
 export function parseDeviceHealthAthleteParams(params: unknown): { athleteId: string } {
   const athleteId = (params as { athleteId?: unknown } | null)?.athleteId;

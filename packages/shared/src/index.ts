@@ -100,7 +100,7 @@ export interface ReadinessResponse {
   entry: ReadinessEntry;
 }
 
-export type DeviceHealthProvider = "huawei-health" | "health-connect" | "apple-health";
+export type DeviceHealthProvider = "huawei-health" | "health-connect" | "apple-health" | "direct-watch";
 
 export interface DeviceHealthSleepSummary {
   awakeMinutes: number | null;

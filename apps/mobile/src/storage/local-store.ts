@@ -10,6 +10,13 @@ const SESSION_KEY = "perform.mobile.session";
 const SNAPSHOT_KEY = "perform.mobile.snapshot";
 const QUEUE_KEY = "perform.mobile.syncQueue";
 const SELECTED_ATHLETE_KEY = "perform.mobile.selectedAthleteId";
+const DIRECT_WATCH_CONFIG_KEY = "perform.mobile.directWatchConfig";
+
+export interface DirectWatchLocalConfig {
+  authKeyHex: string | null;
+  deviceId: string | null;
+  deviceName: string | null;
+}
 
 function readJson<T>(key: string, fallback: T): T {
   const rawValue = window.localStorage.getItem(key);
@@ -121,4 +128,35 @@ export function saveSelectedAthleteId(athleteId: string | null) {
   }
 
   window.localStorage.removeItem(SELECTED_ATHLETE_KEY);
+}
+
+export function loadDirectWatchConfig(): DirectWatchLocalConfig {
+  const config = readJson<Partial<DirectWatchLocalConfig>>(DIRECT_WATCH_CONFIG_KEY, {});
+
+  return {
+    authKeyHex: normalizeAuthKey(config.authKeyHex),
+    deviceId: normalizeText(config.deviceId),
+    deviceName: normalizeText(config.deviceName),
+  };
+}
+
+export function saveDirectWatchConfig(config: DirectWatchLocalConfig) {
+  writeJson(DIRECT_WATCH_CONFIG_KEY, {
+    authKeyHex: normalizeAuthKey(config.authKeyHex),
+    deviceId: normalizeText(config.deviceId),
+    deviceName: normalizeText(config.deviceName),
+  });
+}
+
+function normalizeAuthKey(value: unknown) {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalized = value.trim().replace(/[^0-9a-f]/gi, "").toLowerCase();
+  return normalized.length === 32 ? normalized : null;
+}
+
+function normalizeText(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }

@@ -22,6 +22,7 @@ import {
   isDirectWatchRuntime,
   pairDirectWatchDevice,
   probeDirectWatchClassicSession,
+  readDirectWatchDailySummary,
   scanDirectWatchDevices,
   startDirectWatchSession,
   stopDirectWatchSession,
@@ -31,10 +32,12 @@ import type { DirectWatchDecryptedPacket } from "../integrations/direct-watch.js
 import { readHuaweiHealthDailySummary } from "../integrations/huawei-health.js";
 import {
   clearSession,
+  loadDirectWatchConfig,
   loadQueue,
   loadSelectedAthleteId,
   loadSession,
   loadSnapshot,
+  saveDirectWatchConfig,
   saveSelectedAthleteId,
   saveSession,
   saveSnapshot,
@@ -75,6 +78,7 @@ import type {
 
 const runtimeConfig = readRuntimeConfig();
 const SHOW_DIRECT_WATCH_DIAGNOSTICS = true;
+const DIRECT_WATCH_AUTH_KEY_PATTERN = /^[0-9a-f]{32}$/i;
 const TRAINING_ABBREVIATION_EXPLANATIONS: Record<string, string> = {
   "АНП": "Анаэробный порог. Граница между устойчивой работой и зоной, где усталость начинает быстро накапливаться. Если в плане указана работа около АнП, держи высокую, но контролируемую интенсивность без развала техники.",
   "HR": "Пульс / частота сердечных сокращений. Используется для контроля интенсивности нагрузки. Если указан диапазон HR, держи работу примерно в этом пульсовом коридоре, не уходя сильно выше или ниже.",
@@ -567,13 +571,31 @@ export function bootstrapMobileApp(root: HTMLElement) {
       healthConnectError = error;
     }
 
+    let directWatchError: unknown = null;
+    const directWatchConfig = loadDirectWatchConfig();
+    if (isDirectWatchRuntime() && directWatchConfig.deviceId && directWatchConfig.authKeyHex) {
+      try {
+        const payload = await readDirectWatchDailySummary(
+          entryDate,
+          directWatchConfig.deviceId,
+          directWatchConfig.authKeyHex,
+        );
+        await submitDeviceHealthPayload(payload);
+        return;
+      } catch (error) {
+        directWatchError = error;
+      }
+    }
+
     try {
       const payload = await readHuaweiHealthDailySummary(entryDate);
       await submitDeviceHealthPayload(payload);
     } catch (error) {
       update({
-        error: error instanceof Error
-          ? error.message
+        error: directWatchError instanceof Error
+            ? directWatchError.message
+          : error instanceof Error
+            ? error.message
           : healthConnectError instanceof Error
             ? healthConnectError.message
             : "Данные часов недоступны.",
@@ -581,6 +603,92 @@ export function bootstrapMobileApp(root: HTMLElement) {
         message: null,
       });
     }
+  };
+
+  const syncDirectWatch = async (entryDate: string, deviceId?: string | null) => {
+    if (state.session.user?.role !== "athlete") {
+      update({
+        error: "PERFORM Sync выполняет спортсмен в своём Android-приложении.",
+        isBusy: false,
+        message: null,
+      });
+      return;
+    }
+
+    const config = loadDirectWatchConfig();
+    const targetDeviceId = deviceId || config.deviceId;
+
+    if (!targetDeviceId) {
+      update({ error: "Сначала выберите часы в блоке PERFORM Sync." });
+      return;
+    }
+
+    if (!config.authKeyHex) {
+      update({ error: "Сначала сохраните Auth Key часов в блоке PERFORM Sync." });
+      return;
+    }
+
+    const targetDevice = state.directWatchDiagnostic.devices.find((device) => device.id === targetDeviceId);
+    saveDirectWatchConfig({
+      ...config,
+      deviceId: targetDeviceId,
+      deviceName: targetDevice?.name ?? config.deviceName,
+    });
+
+    update({ error: null, isBusy: true, message: "PERFORM Sync читает день напрямую с часов..." });
+
+    try {
+      const payload = await readDirectWatchDailySummary(entryDate, targetDeviceId, config.authKeyHex);
+      await submitDeviceHealthPayload(payload);
+    } catch (error) {
+      update({
+        error: error instanceof Error ? error.message : "PERFORM Sync не смог считать день с часов.",
+        isBusy: false,
+        message: null,
+      });
+    }
+  };
+
+  const saveDirectWatchAuthKey = () => {
+    const input = root.querySelector<HTMLInputElement>("[data-direct-watch-auth-key]");
+    const rawValue = input?.value.trim() ?? "";
+    const normalized = rawValue.replace(/[^0-9a-f]/gi, "").toLowerCase();
+    const config = loadDirectWatchConfig();
+
+    if (!normalized) {
+      saveDirectWatchConfig({ ...config, authKeyHex: null });
+      update({ error: null, message: "Auth Key PERFORM Sync удалён с этого телефона." });
+      return;
+    }
+
+    if (!DIRECT_WATCH_AUTH_KEY_PATTERN.test(normalized)) {
+      update({ error: "Auth Key должен быть 32 hex-символа." });
+      return;
+    }
+
+    saveDirectWatchConfig({ ...config, authKeyHex: normalized });
+    if (input) {
+      input.value = "";
+    }
+    update({ error: null, message: "Auth Key PERFORM Sync сохранён только на этом телефоне." });
+  };
+
+  const selectDirectWatchDevice = (deviceId: string) => {
+    if (!deviceId) {
+      update({ error: "Выберите часы для PERFORM Sync." });
+      return;
+    }
+
+    const device = state.directWatchDiagnostic.devices.find((item) => item.id === deviceId);
+    saveDirectWatchConfig({
+      ...loadDirectWatchConfig(),
+      deviceId,
+      deviceName: device?.name ?? null,
+    });
+    update({
+      error: null,
+      message: `${device?.name || "Часы"} выбраны для PERFORM Sync.`,
+    });
   };
 
   const fillReadinessFromDeviceHealth = (entryDate: string) => {
@@ -1549,6 +1657,25 @@ export function bootstrapMobileApp(root: HTMLElement) {
     root.querySelectorAll<HTMLButtonElement>("[data-direct-watch-scan]").forEach((button) => {
       button.addEventListener("click", () => {
         void scanDirectWatch();
+      });
+    });
+
+    root.querySelector<HTMLButtonElement>("[data-direct-watch-auth-key-save]")?.addEventListener("click", () => {
+      saveDirectWatchAuthKey();
+    });
+
+    root.querySelectorAll<HTMLButtonElement>("[data-direct-watch-select]").forEach((button) => {
+      button.addEventListener("click", () => {
+        selectDirectWatchDevice(button.dataset.directWatchSelect ?? "");
+      });
+    });
+
+    root.querySelectorAll<HTMLButtonElement>("[data-direct-watch-sync]").forEach((button) => {
+      button.addEventListener("click", () => {
+        void syncDirectWatch(
+          button.dataset.directWatchSyncDate ?? todayValue(),
+          button.dataset.directWatchSync ?? null,
+        );
       });
     });
 
@@ -2761,7 +2888,7 @@ function renderDeviceHealthCard(
         </article>
       </div>
       ${renderHealthConnectDiagnostics(summary, options.diagnosticsCollapsed === true)}
-      ${canSync && SHOW_DIRECT_WATCH_DIAGNOSTICS && isDirectWatchRuntime() ? renderDirectWatchDiagnostics(state) : ""}
+      ${canSync && SHOW_DIRECT_WATCH_DIAGNOSTICS && isDirectWatchRuntime() ? renderDirectWatchDiagnostics(state, date) : ""}
       ${workouts.length ? `
         <div class="device-health-signal-list">
           ${workouts.map((workout) => `
@@ -2839,12 +2966,12 @@ function renderCompactDeviceHealthCard(
           </button>
         </div>
       ` : ""}
-      ${canSync && SHOW_DIRECT_WATCH_DIAGNOSTICS && isDirectWatchRuntime() ? renderDirectWatchDiagnostics(state) : ""}
+      ${canSync && SHOW_DIRECT_WATCH_DIAGNOSTICS && isDirectWatchRuntime() ? renderDirectWatchDiagnostics(state, date) : ""}
     </section>
   `;
 }
 
-function renderDirectWatchDiagnostics(state: MobileAppState) {
+function renderDirectWatchDiagnostics(state: MobileAppState, date: string) {
   const diagnostic = state.directWatchDiagnostic;
   const devices = diagnostic.devices
     .slice()
@@ -2858,6 +2985,8 @@ function renderDirectWatchDiagnostics(state: MobileAppState) {
   const classicProbe = diagnostic.classicProbe;
   const sessionPackets = diagnostic.packets.length ? diagnostic.packets : session?.packets ?? [];
   const activeSessionDeviceId = session?.connected ? session.deviceId : null;
+  const config = loadDirectWatchConfig();
+  const hasAuthKey = Boolean(config.authKeyHex);
   const services = inspection?.services ?? [];
   const knownServices = services
     .filter((service) => service.name && service.name !== "Unknown")
@@ -2885,8 +3014,39 @@ function renderDirectWatchDiagnostics(state: MobileAppState) {
         </div>
       </div>
       <p>
-        Android проверяет часы напрямую по Bluetooth: поиск, сопряжение, BLE-сервисы и сырые пакеты. Пока это диагностика без записи тренировки.
+        Android проверяет часы напрямую по Bluetooth: поиск, сопряжение, BLE-сервисы и чтение дневных файлов активности.
       </p>
+      <details class="direct-watch-services" ${hasAuthKey ? "" : "open"}>
+        <summary>Настройка PERFORM Sync</summary>
+        <div class="device-health-diagnostics-grid">
+          <article>
+            <span>Auth Key</span>
+            <strong>${escapeHtml(hasAuthKey ? "сохранён на телефоне" : "не сохранён")}</strong>
+          </article>
+          <article>
+            <span>Выбранные часы</span>
+            <strong>${escapeHtml(config.deviceName || (config.deviceId ? formatDirectWatchDeviceId(config.deviceId) : "не выбраны"))}</strong>
+          </article>
+        </div>
+        <label class="wide-field">
+          <span>Auth Key часов</span>
+          <input data-direct-watch-auth-key inputmode="text" placeholder="32 hex-символа" type="password" autocomplete="off">
+        </label>
+        <div class="device-health-actions">
+          <button class="secondary-action" data-direct-watch-auth-key-save type="button" ${state.isBusy ? "disabled" : ""}>
+            Сохранить ключ
+          </button>
+          <button
+            class="secondary-action"
+            data-direct-watch-sync="${escapeHtml(config.deviceId || "")}"
+            data-direct-watch-sync-date="${escapeHtml(date)}"
+            type="button"
+            ${state.isBusy || !config.deviceId || !hasAuthKey ? "disabled" : ""}
+          >
+            Считать выбранный день
+          </button>
+        </div>
+      </details>
       ${diagnostic.scannedAt ? `<p class="muted-copy">Последний поиск: ${escapeHtml(formatDateTime(diagnostic.scannedAt))}</p>` : ""}
       ${renderDirectWatchSession(session, sessionPackets)}
       ${renderDirectWatchClassicProbe(classicProbe)}
@@ -2914,6 +3074,23 @@ function renderDirectWatchDiagnostics(state: MobileAppState) {
                     Подключить Sync
                   </button>
                 `}
+                <button
+                  class="secondary-action"
+                  data-direct-watch-select="${escapeHtml(device.id)}"
+                  type="button"
+                  ${state.isBusy ? "disabled" : ""}
+                >
+                  Выбрать
+                </button>
+                <button
+                  class="secondary-action"
+                  data-direct-watch-sync="${escapeHtml(device.id)}"
+                  data-direct-watch-sync-date="${escapeHtml(date)}"
+                  type="button"
+                  ${state.isBusy || device.bondState !== "bonded" || !hasAuthKey ? "disabled" : ""}
+                >
+                  Считать день
+                </button>
                 ${device.bondState !== "bonded" ? `
                   <button
                     class="secondary-action"
@@ -3820,6 +3997,10 @@ function formatDeviceHealthSyncLabel(summary: DeviceHealthDailySummary | null) {
 }
 
 function formatDeviceHealthProviderLabel(summary: DeviceHealthDailySummary | null) {
+  if (summary?.provider === "direct-watch") {
+    return "PERFORM Sync";
+  }
+
   if (summary?.provider === "apple-health" || isAppleHealthRuntime()) {
     return "Apple Health";
   }
@@ -3828,6 +4009,10 @@ function formatDeviceHealthProviderLabel(summary: DeviceHealthDailySummary | nul
 }
 
 function formatDeviceHealthCardTitle(summary: DeviceHealthDailySummary | null) {
+  if (summary?.provider === "direct-watch") {
+    return "Данные часов";
+  }
+
   return summary?.provider === "apple-health" || isAppleHealthRuntime()
     ? "Данные здоровья"
     : "Данные устройства";
