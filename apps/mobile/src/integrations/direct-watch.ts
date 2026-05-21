@@ -2,6 +2,7 @@ import type {
   DeviceHealthDailySummaryPayload,
   DeviceHealthHeartRateSummary,
   DeviceHealthOxygenSaturationSummary,
+  DeviceHealthSleepSummary,
 } from "../types/models.js";
 
 export interface DirectWatchAvailability {
@@ -167,6 +168,16 @@ export interface DirectWatchDecryptedPacket {
   rawHex?: string | null;
   sequenceNumber?: number | null;
   serialNumber?: string | null;
+  sleepAwakeMinutes?: number | null;
+  sleepDeepMinutes?: number | null;
+  sleepDurationMinutes?: number | null;
+  sleepEndTime?: string | null;
+  sleepIsAwake?: boolean | null;
+  sleepLightMinutes?: number | null;
+  sleepRemMinutes?: number | null;
+  sleepScore?: number | null;
+  sleepStageCount?: number | null;
+  sleepStartTime?: string | null;
   steps?: number | null;
 }
 
@@ -443,16 +454,17 @@ export async function readDirectWatchDailySummary(
   const detailAggregate = aggregateDirectWatchMinuteDetails(minuteDetails);
   const heartRate = buildDirectWatchHeartRateSummary(dailySummary, detailAggregate);
   const oxygenSaturation = buildDirectWatchOxygenSummary(dailySummary, detailAggregate);
+  const sleep = buildDirectWatchSleepSummary(dayPackets);
 
-  if (!heartRate && !oxygenSaturation && !dailySummary) {
-    throw new Error("PERFORM Sync прочитал день, но пока не нашёл пульс, SpO2 или итоговые показатели.");
+  if (!sleep && !heartRate && !oxygenSaturation && !dailySummary) {
+    throw new Error("PERFORM Sync прочитал день, но пока не нашёл сон, пульс, SpO2 или итоговые показатели.");
   }
 
   return {
     entryDate,
     provider: "direct-watch",
     sourceDevice: probe.deviceName || "Redmi Watch / PERFORM Sync",
-    sleep: null,
+    sleep,
     heartRate,
     oxygenSaturation,
     workout: null,
@@ -697,6 +709,16 @@ function normalizeDirectWatchDecryptedPacket(value: unknown): DirectWatchDecrypt
     rawHex: normalizeString(value.rawHex),
     sequenceNumber: normalizeNumber(value.sequenceNumber),
     serialNumber: normalizeString(value.serialNumber),
+    sleepAwakeMinutes: normalizeNumber(value.sleepAwakeMinutes),
+    sleepDeepMinutes: normalizeNumber(value.sleepDeepMinutes),
+    sleepDurationMinutes: normalizeNumber(value.sleepDurationMinutes),
+    sleepEndTime: normalizeString(value.sleepEndTime),
+    sleepIsAwake: normalizeNullableBoolean(value.sleepIsAwake),
+    sleepLightMinutes: normalizeNumber(value.sleepLightMinutes),
+    sleepRemMinutes: normalizeNumber(value.sleepRemMinutes),
+    sleepScore: normalizeNumber(value.sleepScore),
+    sleepStageCount: normalizeNumber(value.sleepStageCount),
+    sleepStartTime: normalizeString(value.sleepStartTime),
     steps: normalizeNumber(value.steps),
   };
 }
@@ -946,6 +968,30 @@ function buildDirectWatchOxygenSummary(
   return hasDirectWatchOxygenData(oxygenSaturation) ? oxygenSaturation : null;
 }
 
+function buildDirectWatchSleepSummary(packets: DirectWatchDecryptedPacket[]): DeviceHealthSleepSummary | null {
+  const sleepPacket = pickLatestDirectWatchPacket(packets, (packet) =>
+    (packet.activityFile?.subtype === 8 || packet.activityFile?.subtype === 3) &&
+    Boolean(packet.sleepDurationMinutes || packet.sleepStartTime || packet.sleepEndTime),
+  );
+
+  if (!sleepPacket) {
+    return null;
+  }
+
+  const sleep: DeviceHealthSleepSummary = {
+    awakeMinutes: normalizeSleepMetric(sleepPacket.sleepAwakeMinutes),
+    deepMinutes: normalizeSleepMetric(sleepPacket.sleepDeepMinutes),
+    durationMinutes: normalizeSleepMetric(sleepPacket.sleepDurationMinutes),
+    endTime: normalizeIsoString(sleepPacket.sleepEndTime),
+    lightMinutes: normalizeSleepMetric(sleepPacket.sleepLightMinutes),
+    remMinutes: normalizeSleepMetric(sleepPacket.sleepRemMinutes),
+    score: normalizeSleepMetric(sleepPacket.sleepScore),
+    startTime: normalizeIsoString(sleepPacket.sleepStartTime),
+  };
+
+  return hasDirectWatchSleepData(sleep) ? sleep : null;
+}
+
 function buildDirectWatchRawPayload(
   probe: DirectWatchClassicProbe,
   dayPackets: DirectWatchDecryptedPacket[],
@@ -966,6 +1012,8 @@ function buildDirectWatchRawPayload(
     trainingLoadWeek: dailySummary?.activityTrainingLoadWeek ?? null,
     vitality: dailySummary?.activityVitality ?? null,
     minuteSampleCount: details.sampleCount,
+    sleepStageCount: maxDirectWatchNumber(dayPackets.map((packet) => packet.sleepStageCount)),
+    sleepIsAwake: dayPackets.find((packet) => typeof packet.sleepIsAwake === "boolean")?.sleepIsAwake ?? null,
     files: dayPackets.slice(0, 16).map((packet) => ({
       crcValid: packet.activityFileCrcValid ?? null,
       detailType: packet.activityFile?.detailType ?? null,
@@ -973,6 +1021,8 @@ function buildDirectWatchRawPayload(
       kind: packet.activityFileKind ?? packet.activityFile?.kind ?? null,
       payloadBytes: packet.activityFilePayloadBytes ?? null,
       sampleCount: packet.activitySampleCount ?? null,
+      sleepDurationMinutes: packet.sleepDurationMinutes ?? null,
+      sleepStageCount: packet.sleepStageCount ?? null,
       subtype: packet.activityFile?.subtype ?? null,
       timestamp: packet.activityFile?.timestamp ?? null,
       type: packet.activityFile?.type ?? null,
@@ -999,6 +1049,21 @@ function hasDirectWatchOxygenData(value: DeviceHealthOxygenSaturationSummary) {
       value.maxPercent,
       value.minPercent,
     ].some(isMeaningfulDirectWatchNumber);
+}
+
+function hasDirectWatchSleepData(value: DeviceHealthSleepSummary) {
+  return Boolean(
+    value.startTime ||
+      value.endTime ||
+      [
+        value.awakeMinutes,
+        value.deepMinutes,
+        value.durationMinutes,
+        value.lightMinutes,
+        value.remMinutes,
+        value.score,
+      ].some(isMeaningfulDirectWatchNumber),
+  );
 }
 
 function weightedAverageDirectWatchValue(values: Array<{ value?: number | null; weight?: number | null }>) {
@@ -1046,6 +1111,19 @@ function maxDirectWatchNumber(values: Array<number | null | undefined>) {
 
 function isMeaningfulDirectWatchNumber(value: number | null | undefined): value is number {
   return typeof value === "number" && Number.isFinite(value) && value > 0;
+}
+
+function normalizeSleepMetric(value: number | null | undefined) {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+function normalizeIsoString(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  const parsedDate = new Date(value);
+  return Number.isNaN(parsedDate.getTime()) ? null : parsedDate.toISOString();
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

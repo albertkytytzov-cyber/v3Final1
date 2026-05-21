@@ -1926,6 +1926,16 @@ class DirectWatchPlugin : Plugin() {
                                 item.put("activityTrainingLoadDay", file?.trainingLoadDay)
                                 item.put("activityTrainingLoadWeek", file?.trainingLoadWeek)
                                 item.put("activityVitality", file?.vitality)
+                                item.put("sleepStartTime", file?.sleepStartTime)
+                                item.put("sleepEndTime", file?.sleepEndTime)
+                                item.put("sleepDurationMinutes", file?.sleepDurationMinutes)
+                                item.put("sleepDeepMinutes", file?.sleepDeepMinutes)
+                                item.put("sleepLightMinutes", file?.sleepLightMinutes)
+                                item.put("sleepRemMinutes", file?.sleepRemMinutes)
+                                item.put("sleepAwakeMinutes", file?.sleepAwakeMinutes)
+                                item.put("sleepScore", file?.sleepScore)
+                                item.put("sleepStageCount", file?.sleepStageCount)
+                                item.put("sleepIsAwake", file?.sleepIsAwake)
                                 decryptedPackets.add(item)
                                 offset += packetSize.coerceAtLeast(1)
                                 continue
@@ -2268,6 +2278,7 @@ class DirectWatchPlugin : Plugin() {
         val payloadBytes = (dataEnd - 8).coerceAtLeast(0)
         val daily = parseClassicDailyDetails(bytes, file, dataEnd)
         val summary = parseClassicDailySummary(bytes, file, dataEnd)
+        val sleep = parseClassicSleepDetails(bytes, file, dataEnd) ?: parseClassicSleepStages(bytes, file, dataEnd)
 
         return ClassicActivityFileContent(
             file = file,
@@ -2291,6 +2302,195 @@ class DirectWatchPlugin : Plugin() {
             trainingLoadDay = summary?.trainingLoadDay,
             trainingLoadWeek = summary?.trainingLoadWeek,
             vitality = summary?.vitality,
+            sleepStartTime = sleep?.startTime,
+            sleepEndTime = sleep?.endTime,
+            sleepDurationMinutes = sleep?.durationMinutes,
+            sleepDeepMinutes = sleep?.deepMinutes,
+            sleepLightMinutes = sleep?.lightMinutes,
+            sleepRemMinutes = sleep?.remMinutes,
+            sleepAwakeMinutes = sleep?.awakeMinutes,
+            sleepScore = sleep?.score,
+            sleepStageCount = sleep?.stageCount,
+            sleepIsAwake = sleep?.isAwake,
+        )
+    }
+
+    private fun parseClassicSleepDetails(
+        bytes: ByteArray,
+        file: ClassicActivityFileSummary,
+        dataEnd: Int,
+    ): ClassicSleepSummary? {
+        if (file.type != 0 || file.subtype != 8 || file.version > 4) {
+            return null
+        }
+
+        var offset = 8
+        fun takeByte(): Int? {
+            if (offset + 1 > dataEnd) return null
+            return bytes[offset++].toInt() and 0xff
+        }
+        fun takeShort(): Int? {
+            if (offset + 2 > dataEnd) return null
+            val value = littleEndianUInt16(bytes, offset)
+            offset += 2
+            return value
+        }
+        fun takeInt(): Long? {
+            if (offset + 4 > dataEnd) return null
+            val value = littleEndianUInt32(bytes, offset)
+            offset += 4
+            return value
+        }
+        fun skip(count: Int): Boolean {
+            if (offset + count > dataEnd) return false
+            offset += count
+            return true
+        }
+
+        val header = takeByte() ?: return null
+        val isAwake = takeByte()?.let { it == 1 }
+        val bedTime = takeInt() ?: return null
+        val wakeupTime = takeInt() ?: return null
+        var versionDependentFields = 0
+        val score = if (file.version >= 4) {
+            versionDependentFields += 1
+            takeByte()
+        } else {
+            null
+        }
+
+        fun hasSection(bitIndex: Int): Boolean {
+            val shifted = bitIndex - versionDependentFields
+            return shifted >= 0 && (header and (1 shl shifted)) != 0
+        }
+
+        fun skipSampleSeries(bytesPerSample: Int): Boolean {
+            val count = takeShort()
+            // The first short is the unit/sample rate and is consumed by the caller.
+            if (count == null) return false
+            if (count > 0 && file.version >= 2 && !skip(4)) return false
+            return skip(count * bytesPerSample)
+        }
+
+        if (hasSection(5)) {
+            if (takeShort() == null || !skipSampleSeries(1)) return null
+        }
+        if (hasSection(4)) {
+            if (takeShort() == null || !skipSampleSeries(1)) return null
+        }
+        if (file.version >= 3 && hasSection(3)) {
+            if (takeShort() == null || !skipSampleSeries(4)) return null
+        }
+
+        var summary: ClassicSleepSummary? = null
+        var stageCount = 0
+        while (offset + 17 <= dataEnd) {
+            val headerOffset = findClassicSleepPacketHeader(bytes, offset, dataEnd) ?: break
+            offset = headerOffset + 4
+            if (offset + 13 > dataEnd) break
+
+            offset += 1 // packet header length
+            offset += 8 // packet timestamp
+            offset += 1 // parity
+            val packetType = bytes[offset++].toInt() and 0xff
+            val dataLength = bigEndianUInt16(bytes, offset)
+            offset += 2
+
+            if (packetType in CLASSIC_SLEEP_HEADER_ONLY_PACKET_TYPES) {
+                continue
+            }
+
+            if (offset + dataLength > dataEnd) {
+                break
+            }
+
+            val dataOffset = offset
+            offset += dataLength
+
+            if (packetType == 16 && dataLength >= 13) {
+                summary = ClassicSleepSummary(
+                    startTime = epochSecondsIso(bedTime),
+                    endTime = epochSecondsIso(wakeupTime),
+                    durationMinutes = bigEndianUInt16(bytes, dataOffset + 1).takeIf { it > 0 },
+                    deepMinutes = bigEndianUInt16(bytes, dataOffset + 9).takeIf { it > 0 },
+                    lightMinutes = bigEndianUInt16(bytes, dataOffset + 5).takeIf { it > 0 },
+                    remMinutes = bigEndianUInt16(bytes, dataOffset + 7).takeIf { it > 0 },
+                    awakeMinutes = bigEndianUInt16(bytes, dataOffset + 3).takeIf { it > 0 },
+                    score = score?.takeIf { it > 0 },
+                    stageCount = stageCount,
+                    isAwake = isAwake,
+                )
+            } else if (packetType == 17) {
+                stageCount += dataLength / 2
+            }
+        }
+
+        val fallbackDuration = durationMinutesBetweenEpochSeconds(bedTime, wakeupTime)
+        return summary?.copy(stageCount = maxOf(summary.stageCount ?: 0, stageCount)) ?: ClassicSleepSummary(
+            startTime = epochSecondsIso(bedTime),
+            endTime = epochSecondsIso(wakeupTime),
+            durationMinutes = fallbackDuration,
+            deepMinutes = null,
+            lightMinutes = null,
+            remMinutes = null,
+            awakeMinutes = null,
+            score = score?.takeIf { it > 0 },
+            stageCount = stageCount.takeIf { it > 0 },
+            isAwake = isAwake,
+        )
+    }
+
+    private fun parseClassicSleepStages(
+        bytes: ByteArray,
+        file: ClassicActivityFileSummary,
+        dataEnd: Int,
+    ): ClassicSleepSummary? {
+        if (file.type != 0 || file.subtype != 3 || file.detailType != 0 || file.version != 2) {
+            return null
+        }
+
+        var offset = 8
+        fun skip(count: Int): Boolean {
+            if (offset + count > dataEnd) return false
+            offset += count
+            return true
+        }
+        fun takeShort(): Int? {
+            if (offset + 2 > dataEnd) return null
+            val value = littleEndianUInt16(bytes, offset)
+            offset += 2
+            return value
+        }
+        fun takeInt(): Long? {
+            if (offset + 4 > dataEnd) return null
+            val value = littleEndianUInt32(bytes, offset)
+            offset += 4
+            return value
+        }
+
+        if (!skip(7)) return null
+        val duration = takeShort()?.takeIf { it > 0 }
+        val bedTime = takeInt() ?: return null
+        val wakeupTime = takeInt() ?: return null
+        if (!skip(3)) return null
+        val deep = takeShort()?.takeIf { it > 0 }
+        val light = takeShort()?.takeIf { it > 0 }
+        val rem = takeShort()?.takeIf { it > 0 }
+        val awake = takeShort()?.takeIf { it > 0 }
+        if (!skip(1)) return null
+        val stageCount = ((dataEnd - offset).coerceAtLeast(0) / 5).takeIf { it > 0 }
+
+        return ClassicSleepSummary(
+            startTime = epochSecondsIso(bedTime),
+            endTime = epochSecondsIso(wakeupTime),
+            durationMinutes = duration ?: durationMinutesBetweenEpochSeconds(bedTime, wakeupTime),
+            deepMinutes = deep,
+            lightMinutes = light,
+            remMinutes = rem,
+            awakeMinutes = awake,
+            score = null,
+            stageCount = stageCount,
+            isAwake = false,
         )
     }
 
@@ -2561,6 +2761,36 @@ class DirectWatchPlugin : Plugin() {
         val actual = crc.value and 0xffffffffL
         val expected = littleEndianUInt32(bytes, bytes.size - 4) and 0xffffffffL
         return actual == expected
+    }
+
+    private fun findClassicSleepPacketHeader(bytes: ByteArray, startOffset: Int, dataEnd: Int): Int? {
+        var offset = startOffset
+        while (offset + 4 <= dataEnd) {
+            if (littleEndianUInt32(bytes, offset) == CLASSIC_SLEEP_PACKET_HEADER) {
+                return offset
+            }
+            offset += 1
+        }
+        return null
+    }
+
+    private fun epochSecondsIso(seconds: Long): String? {
+        if (seconds <= 0) {
+            return null
+        }
+        return try {
+            java.time.Instant.ofEpochSecond(seconds).toString()
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun durationMinutesBetweenEpochSeconds(startSeconds: Long, endSeconds: Long): Int? {
+        if (startSeconds <= 0 || endSeconds <= startSeconds) {
+            return null
+        }
+        val minutes = ((endSeconds - startSeconds) / 60).toInt()
+        return minutes.takeIf { it in 1..(24 * 60) }
     }
 
     private fun classicActivityFileKind(type: Int, subtype: Int, detailType: Int): String {
@@ -3087,6 +3317,13 @@ class DirectWatchPlugin : Plugin() {
             ((bytes[offset + 3].toLong() and 0xffL) shl 24)
     }
 
+    private fun bigEndianUInt16(bytes: ByteArray, offset: Int): Int {
+        if (bytes.size < offset + 2) {
+            return 0
+        }
+        return ((bytes[offset].toInt() and 0xff) shl 8) or (bytes[offset + 1].toInt() and 0xff)
+    }
+
     private fun fullHex(bytes: ByteArray?): String? {
         if (bytes == null || bytes.isEmpty()) {
             return null
@@ -3395,6 +3632,16 @@ class DirectWatchPlugin : Plugin() {
         val trainingLoadDay: Int?,
         val trainingLoadWeek: Int?,
         val vitality: Int?,
+        val sleepStartTime: String?,
+        val sleepEndTime: String?,
+        val sleepDurationMinutes: Int?,
+        val sleepDeepMinutes: Int?,
+        val sleepLightMinutes: Int?,
+        val sleepRemMinutes: Int?,
+        val sleepAwakeMinutes: Int?,
+        val sleepScore: Int?,
+        val sleepStageCount: Int?,
+        val sleepIsAwake: Boolean?,
     )
 
     private data class ClassicDailySummary(
@@ -3431,6 +3678,19 @@ class DirectWatchPlugin : Plugin() {
         val heartRate: Int?,
         val spo2: Int?,
         val stress: Int?,
+    )
+
+    private data class ClassicSleepSummary(
+        val startTime: String?,
+        val endTime: String?,
+        val durationMinutes: Int?,
+        val deepMinutes: Int?,
+        val lightMinutes: Int?,
+        val remMinutes: Int?,
+        val awakeMinutes: Int?,
+        val score: Int?,
+        val stageCount: Int?,
+        val isAwake: Boolean?,
     )
 
     private data class ClassicActivityChunk(
@@ -3499,6 +3759,7 @@ class DirectWatchPlugin : Plugin() {
         private const val CLASSIC_ACTIVITY_FILE_READ_MS = 15_000L
         private const val CLASSIC_ACTIVITY_FILE_PROBE_LIMIT = 10
         private const val CLASSIC_POST_AUTH_COMMAND_DELAY_MS = 120L
+        private const val CLASSIC_SLEEP_PACKET_HEADER = 0xfffcfafbL
         private const val CLASSIC_VERSION_READ_MS = 1_200L
         private const val CLASSIC_SESSION_CONFIG_READ_MS = 1_200L
         private const val CLASSIC_PROBE_POLL_MS = 120L
@@ -3561,5 +3822,6 @@ class DirectWatchPlugin : Plugin() {
             SOFTWARE_REVISION_UUID,
         )
         private val WATCH_NAME_HINTS = listOf("redmi", "watch", "xiaomi", "mi ", "band")
+        private val CLASSIC_SLEEP_HEADER_ONLY_PACKET_TYPES = setOf(0x2, 0x3, 0x9, 0xc, 0xd, 0xe, 0xf)
     }
 }
