@@ -4879,13 +4879,18 @@ function formatHealthConnectRestingHrEstimate(rawPayload: Record<string, unknown
 }
 
 function isEstimatedRestingHrSource(source: string | null) {
-  return source === "calculated-from-sleep-heart-rate" || source === "estimated-from-sleep-heart-rate";
+  return [
+    "calculated-from-sleep-heart-rate",
+    "estimated-from-average-heart-rate",
+    "estimated-from-min-heart-rate",
+    "estimated-from-sleep-heart-rate",
+  ].includes(source ?? "");
 }
 
 function getDeviceHealthStatus(summary: DeviceHealthDailySummary | null) {
   if (!summary) {
     return {
-      missing: ["сон", "пульс покоя", "SpO2"],
+      missing: ["сон", "пульс", "SpO2"],
       present: [] as string[],
       statusLabel: "Нет синхронизации",
     };
@@ -4902,8 +4907,10 @@ function getDeviceHealthStatus(summary: DeviceHealthDailySummary | null) {
 
   if (hasDeviceRestingHeartRateData(summary)) {
     present.push("пульс покоя");
+  } else if (hasDeviceHeartRateData(summary)) {
+    present.push("пульс");
   } else {
-    missing.push("пульс покоя");
+    missing.push("пульс");
   }
 
   if (hasDeviceOxygenSaturationData(summary)) {
@@ -5006,7 +5013,7 @@ function formatCompactDeviceHealthHint(summary: DeviceHealthDailySummary | null,
     return "Показателей мало, можно заполнить вручную.";
   }
 
-  if (status.missing.includes("сон") || status.missing.includes("пульс покоя")) {
+  if (status.missing.includes("сон") || status.missing.includes("пульс")) {
     return "Главные показатели частично пришли, недостающее заполни вручную.";
   }
 
@@ -5030,7 +5037,7 @@ function getDeviceSleepHoursForReadiness(summary: DeviceHealthDailySummary | nul
 }
 
 function getDeviceRestingHrForReadiness(summary: DeviceHealthDailySummary | null) {
-  const restingHr = summary?.heartRate?.restingBpm;
+  const restingHr = getDeviceRestingHeartRateValue(summary);
 
   if (restingHr === null || restingHr === undefined || restingHr < 30 || restingHr > 140) {
     return null;
@@ -5085,8 +5092,10 @@ function formatDeviceHealthSleepDetail(summary: DeviceHealthDailySummary | null)
 
 function formatDeviceHealthRestingHrValue(summary: DeviceHealthDailySummary | null) {
   const source = readDeviceHealthRawText(summary?.rawPayload ?? {}, "restingHeartRateSource");
-  return summary?.heartRate?.restingBpm !== null && summary?.heartRate?.restingBpm !== undefined
-    ? `${isEstimatedRestingHrSource(source) ? "≈" : ""}${formatLoadValue(summary.heartRate.restingBpm)}`
+  const value = getDeviceRestingHeartRateValue(summary);
+  const isEstimated = isEstimatedRestingHrSource(source) || !hasDeviceRestingHeartRateData(summary);
+  return value !== null
+    ? `${isEstimated ? "≈" : ""}${formatLoadValue(value)}`
     : "-";
 }
 
@@ -5114,6 +5123,41 @@ function formatDeviceHealthHeartRateDetail(summary: DeviceHealthDailySummary | n
     return "получен напрямую";
   }
 
+  if (restingSource === "direct-watch-resting") {
+    return "получен с часов";
+  }
+
+  if (restingSource === "estimated-from-min-heart-rate") {
+    const parts = [
+      "≈ по минимальному пульсу",
+      summary.heartRate.averageBpm !== null ? `средний ${formatLoadValue(summary.heartRate.averageBpm)}` : null,
+      summary.heartRate.maxBpm !== null ? `макс ${formatLoadValue(summary.heartRate.maxBpm)}` : null,
+    ].filter((item): item is string => Boolean(item));
+
+    return parts.join(" · ");
+  }
+
+  if (restingSource === "estimated-from-average-heart-rate") {
+    const parts = [
+      "≈ по среднему пульсу",
+      summary.heartRate.minBpm !== null ? `мин ${formatLoadValue(summary.heartRate.minBpm)}` : null,
+      summary.heartRate.maxBpm !== null ? `макс ${formatLoadValue(summary.heartRate.maxBpm)}` : null,
+    ].filter((item): item is string => Boolean(item));
+
+    return parts.join(" · ");
+  }
+
+  if (!hasDeviceRestingHeartRateData(summary) && hasDeviceHeartRateData(summary)) {
+    const parts = [
+      summary.heartRate.minBpm !== null ? "≈ по минимальному пульсу" : "≈ по среднему пульсу",
+      summary.heartRate.averageBpm !== null ? `средний ${formatLoadValue(summary.heartRate.averageBpm)}` : null,
+      summary.heartRate.minBpm !== null ? `мин ${formatLoadValue(summary.heartRate.minBpm)}` : null,
+      summary.heartRate.maxBpm !== null ? `макс ${formatLoadValue(summary.heartRate.maxBpm)}` : null,
+    ].filter((item): item is string => Boolean(item));
+
+    return parts.join(" · ");
+  }
+
   const parts = [
     isEstimatedRestingHrSource(restingSource)
       ? "пульс покоя рассчитан"
@@ -5124,6 +5168,18 @@ function formatDeviceHealthHeartRateDetail(summary: DeviceHealthDailySummary | n
   ].filter((item): item is string => Boolean(item));
 
   return parts.length ? parts.join(" · ") : "нет пульса покоя";
+}
+
+function getDeviceRestingHeartRateValue(summary: DeviceHealthDailySummary | null) {
+  const heartRate = summary?.heartRate;
+  if (!heartRate) {
+    return null;
+  }
+
+  return heartRate.restingBpm ??
+    heartRate.minBpm ??
+    heartRate.averageBpm ??
+    null;
 }
 
 function formatDeviceHealthOxygenValue(summary: DeviceHealthDailySummary | null) {

@@ -1111,7 +1111,11 @@ function buildDirectWatchHeartRateSummary(
     hrvRmssdMs: null,
     maxBpm: dailySummary?.activityHeartRateMax ?? details.heartRateMax,
     minBpm: dailySummary?.activityHeartRateMin ?? details.heartRateMin,
-    restingBpm: dailySummary?.activityHeartRateResting ?? null,
+    restingBpm: dailySummary?.activityHeartRateResting ??
+      dailySummary?.activityHeartRateMin ??
+      details.heartRateMin ??
+      dailySummary?.activityHeartRateAvg ??
+      details.heartRateAvg,
   };
 
   return hasDirectWatchHeartRateData(heartRate) ? heartRate : null;
@@ -1172,6 +1176,7 @@ function buildDirectWatchRawPayload(
     authKeyStatus: probe.authKeyStatus ?? null,
     dataOrigin: "PERFORM Sync",
     fileCount: dayPackets.length,
+    restingHeartRateSource: getDirectWatchRestingHeartRateSource(dailySummary, details),
     calories: dailySummary?.activityCalories ?? null,
     steps: dailySummary?.activitySteps ?? details.steps,
     stressAvg: dailySummary?.activityStressAvg ?? details.stressAvg,
@@ -1198,6 +1203,28 @@ function buildDirectWatchRawPayload(
       version: packet.activityFile?.version ?? null,
     })),
   };
+}
+
+function getDirectWatchRestingHeartRateSource(
+  dailySummary: DirectWatchDecryptedPacket | null,
+  details: DirectWatchMinuteAggregate,
+) {
+  if (dailySummary?.activityHeartRateResting !== null && dailySummary?.activityHeartRateResting !== undefined) {
+    return "direct-watch-resting";
+  }
+  if (
+    dailySummary?.activityHeartRateMin !== null && dailySummary?.activityHeartRateMin !== undefined ||
+    details.heartRateMin !== null
+  ) {
+    return "estimated-from-min-heart-rate";
+  }
+  if (
+    dailySummary?.activityHeartRateAvg !== null && dailySummary?.activityHeartRateAvg !== undefined ||
+    details.heartRateAvg !== null
+  ) {
+    return "estimated-from-average-heart-rate";
+  }
+  return null;
 }
 
 function hasDirectWatchHeartRateData(value: DeviceHealthHeartRateSummary) {
