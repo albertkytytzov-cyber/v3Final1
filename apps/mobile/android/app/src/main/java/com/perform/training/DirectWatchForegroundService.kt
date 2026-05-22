@@ -201,12 +201,22 @@ class DirectWatchForegroundService : Service() {
         fun status(context: Context): JSObject {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val bridgeUntil = prefs.getString(KEY_BRIDGE_UNTIL, null)
-            val running = prefs.getBoolean(KEY_RUNNING, false) && !isExpired(bridgeUntil)
+            val expired = isExpired(bridgeUntil)
+            val running = prefs.getBoolean(KEY_RUNNING, false) && !expired
+            val activeBridgeUntil = if (expired) null else bridgeUntil
+            if (expired) {
+                prefs.edit()
+                    .putBoolean(KEY_RUNNING, false)
+                    .putString(KEY_BRIDGE_UNTIL, null)
+                    .putString(KEY_MESSAGE, "Сервис часов остановлен.")
+                    .putString(KEY_UPDATED_AT, Instant.now().toString())
+                    .apply()
+            }
             val response = JSObject()
             response.put("running", running)
             response.put("deviceId", prefs.getString(KEY_DEVICE_ID, null))
             response.put("deviceName", prefs.getString(KEY_DEVICE_NAME, null))
-            response.put("bridgeUntil", bridgeUntil)
+            response.put("bridgeUntil", activeBridgeUntil)
             response.put("message", prefs.getString(KEY_MESSAGE, null))
             response.put("updatedAt", prefs.getString(KEY_UPDATED_AT, null))
             return response

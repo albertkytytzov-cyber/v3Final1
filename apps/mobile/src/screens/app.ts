@@ -734,14 +734,18 @@ export function bootstrapMobileApp(root: HTMLElement) {
       const serviceStatus = await getDirectWatchSyncServiceStatus().catch(() => null);
       const ok = result.authKeyStatus === "valid" && result.sentTime;
       const syncedAt = result.syncedAt ?? new Date().toISOString();
-      const serviceError = result.authKeyError || result.error || "Служебная синхронизация часов не подтвердилась.";
+      const serviceIsRunning = Boolean(serviceStatus?.running || result.keptBluetoothBridge);
+      const serviceBridgeUntil = serviceIsRunning
+        ? serviceStatus?.bridgeUntil ?? result.bridgeUntil ?? null
+        : null;
+      const serviceError = result.error || result.authKeyError || "Служебная синхронизация часов не подтвердилась.";
       rememberDirectWatchConfig({
         deviceId: targetDeviceId,
         deviceName: serviceStatus?.deviceName ?? targetDevice?.name ?? config.deviceName,
-        lastServiceBridgeUntil: serviceStatus?.bridgeUntil ?? result.bridgeUntil ?? null,
+        lastServiceBridgeUntil: serviceBridgeUntil,
         lastServiceError: ok ? null : serviceError,
         lastServiceStatus: ok
-          ? serviceStatus?.running || result.keptBluetoothBridge
+          ? serviceIsRunning
             ? "running"
             : "synced"
           : "error",

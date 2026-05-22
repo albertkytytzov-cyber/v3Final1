@@ -1900,11 +1900,12 @@ class DirectWatchPlugin : Plugin() {
         response.put("sentWeatherCurrent", sentServiceCommands.contains("weather-current"))
         response.put("sentWeatherDaily", sentServiceCommands.contains("weather-daily"))
         response.put("sentWeatherHourly", sentServiceCommands.contains("weather-hourly"))
-        response.put("keptBluetoothBridge", sentServiceCommands.contains("bluetooth-bridge"))
+        val keptBluetoothBridge = sentServiceCommands.contains("bluetooth-bridge")
+        response.put("keptBluetoothBridge", keptBluetoothBridge)
         response.put("keepAliveMs", keepAliveMs)
         response.put(
             "bridgeUntil",
-            if (keepAliveMs > 0) {
+            if (keptBluetoothBridge && keepAliveMs > 0) {
                 java.time.Instant.now().plusMillis(keepAliveMs.toLong()).toString()
             } else {
                 null
