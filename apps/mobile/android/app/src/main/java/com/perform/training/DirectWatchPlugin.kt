@@ -2485,6 +2485,7 @@ class DirectWatchPlugin : Plugin() {
             ClassicPostAuthProbeCommand("battery", buildSimpleCommand(2, 1)),
             ClassicPostAuthProbeCommand("device-info", buildSimpleCommand(2, 2)),
             ClassicPostAuthProbeCommand("activity-today", buildActivityFetchTodayCommand()),
+            ClassicPostAuthProbeCommand("activity-history", buildSimpleCommand(8, 2)),
             ClassicPostAuthProbeCommand("heart-rate-config", buildSimpleCommand(8, 10)),
             ClassicPostAuthProbeCommand("spo2-config", buildSimpleCommand(8, 8)),
             ClassicPostAuthProbeCommand("stress-config", buildSimpleCommand(8, 14)),
@@ -4574,8 +4575,8 @@ class DirectWatchPlugin : Plugin() {
         private const val CLASSIC_PROBE_READ_MS = 6_000L
         private const val CLASSIC_POST_AUTH_READ_MS = 10_000L
         private const val CLASSIC_SERVICE_SYNC_READ_MS = 4_000L
-        private const val CLASSIC_ACTIVITY_FILE_READ_MS = 15_000L
-        private const val CLASSIC_ACTIVITY_FILE_PROBE_LIMIT = 10
+        private const val CLASSIC_ACTIVITY_FILE_READ_MS = 25_000L
+        private const val CLASSIC_ACTIVITY_FILE_PROBE_LIMIT = 24
         private const val CLASSIC_POST_AUTH_COMMAND_DELAY_MS = 120L
         private const val CLASSIC_SLEEP_PACKET_HEADER = 0xfffcfafbL
         private const val CLASSIC_VERSION_READ_MS = 1_200L
