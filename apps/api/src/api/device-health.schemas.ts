@@ -3,6 +3,8 @@ import type {
   DeviceHealthHeartRateSummary,
   DeviceHealthOxygenSaturationSummary,
   DeviceHealthProvider,
+  DeviceHealthSampleMetric,
+  DeviceHealthSamplePayload,
   DeviceHealthSleepSummary,
   DeviceHealthWorkoutSummary,
   DeviceWorkoutLinkPayload,
@@ -13,6 +15,7 @@ import type {
 
 const datePattern = /^\d{4}-\d{2}-\d{2}$/;
 const providers: DeviceHealthProvider[] = ["huawei-health", "health-connect", "apple-health", "direct-watch"];
+const sampleMetrics: DeviceHealthSampleMetric[] = ["heart_rate", "oxygen_saturation", "stress"];
 
 export function parseDeviceHealthAthleteParams(params: unknown): { athleteId: string } {
   const athleteId = (params as { athleteId?: unknown } | null)?.athleteId;
@@ -61,6 +64,8 @@ export function parseDeviceHealthSummaryBody(body: unknown): DeviceHealthDailySu
     workout: payload.workout === null || payload.workout === undefined
       ? null
       : readWorkoutSummary(payload.workout),
+    samples: readArray(payload.samples, "samples", MAX_DEVICE_HEALTH_SAMPLES_PER_DAY)
+      .map((sample, index) => readDeviceHealthSamplePayload(sample, index)),
     rawPayload: readRawPayload(payload.rawPayload),
     syncedAt: readNullableIsoDateTime(payload.syncedAt, "syncedAt"),
   };
@@ -68,6 +73,28 @@ export function parseDeviceHealthSummaryBody(body: unknown): DeviceHealthDailySu
 
 export function parseDeviceHealthSummariesQuery(query: unknown): { entryDate?: string } {
   return parseDeviceHealthEntryDateQuery(query);
+}
+
+export function parseDeviceHealthSamplesQuery(query: unknown): {
+  entryDate: string;
+  metric?: DeviceHealthSampleMetric;
+} {
+  const record = readRecord(query ?? {}, "query");
+  const parsed = parseDeviceHealthEntryDateQuery(record);
+  const metric = record.metric;
+
+  if (!parsed.entryDate) {
+    throw new Error("entryDate is required");
+  }
+
+  if (metric === undefined || metric === null || metric === "") {
+    return { entryDate: parsed.entryDate };
+  }
+
+  return {
+    entryDate: parsed.entryDate,
+    metric: readEnum(metric, sampleMetrics, "metric"),
+  };
 }
 
 export function parseDeviceWorkoutsQuery(query: unknown): { entryDate?: string } {
@@ -168,6 +195,17 @@ function readWorkoutSummary(value: unknown): DeviceHealthWorkoutSummary {
       workout.totalDurationMinutes,
       "workout.totalDurationMinutes",
     ),
+  };
+}
+
+function readDeviceHealthSamplePayload(value: unknown, index: number): DeviceHealthSamplePayload {
+  const sample = readRecord(value, `samples[${index}]`);
+
+  return {
+    metric: readEnum(sample.metric, sampleMetrics, `samples[${index}].metric`),
+    rawPayload: readRawPayload(sample.rawPayload),
+    sampledAt: readRequiredIsoDateTime(sample.sampledAt, `samples[${index}].sampledAt`),
+    value: readRequiredNumber(sample.value, `samples[${index}].value`),
   };
 }
 
@@ -354,6 +392,15 @@ function readNullableNumber(value: unknown, fieldName: string) {
   return numericValue;
 }
 
+function readRequiredNumber(value: unknown, fieldName: string) {
+  const numericValue = readNullableNumber(value, fieldName);
+  if (numericValue === null) {
+    throw new Error(`${fieldName} is required`);
+  }
+
+  return numericValue;
+}
+
 function readCount(value: unknown, fieldName: string) {
   const numericValue = Number(value);
 
@@ -386,3 +433,4 @@ function readEnum<T extends string>(value: unknown, allowedValues: T[], fieldNam
 
 const MAX_WORKOUTS_PER_DAY = 20;
 const MAX_SAMPLES_PER_WORKOUT = 2500;
+const MAX_DEVICE_HEALTH_SAMPLES_PER_DAY = 12000;

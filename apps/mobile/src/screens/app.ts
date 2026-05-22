@@ -71,6 +71,7 @@ import type {
   CompetitionResultPayload,
   DeviceHealthDailySummary,
   DeviceHealthDailySummaryPayload,
+  DeviceHealthSample,
   DeviceWorkout,
   DeviceWorkoutLink,
   DeviceWorkoutsSyncPayload,
@@ -1218,12 +1219,24 @@ export function bootstrapMobileApp(root: HTMLElement) {
   const submitDeviceHealthPayload = async (payload: DeviceHealthDailySummaryPayload) => {
     await submitOrQueue("device-health", payload, async (idempotencyKey) => {
       const result = await client().submitDeviceHealthSummary(payload, idempotencyKey);
+      const heartRateSamples = payload.samples?.some((sample) => sample.metric === "heart_rate")
+        ? await client().listDeviceHealthSamples(payload.entryDate, "heart_rate").catch(() => null)
+        : null;
       const snapshot = {
         ...state.data,
         deviceHealthSummaries: upsertDeviceHealthSummary(
           state.data.deviceHealthSummaries,
           result.summary,
         ),
+        deviceHealthSamples: heartRateSamples
+          ? replaceDeviceHealthSamplesForDay(
+              state.data.deviceHealthSamples,
+              heartRateSamples.samples,
+              result.summary.athleteId,
+              payload.entryDate,
+              "heart_rate",
+            )
+          : state.data.deviceHealthSamples,
         savedAt: new Date().toISOString(),
       };
       saveSnapshot(snapshot);
@@ -3231,6 +3244,7 @@ function renderWatchesScreen(state: MobileAppState) {
 
   const date = todayValue();
   const summary = getDeviceHealthSummaryForDate(state, athleteId, date);
+  const heartRateSamples = getDeviceHealthSamplesForDate(state, athleteId, date, "heart_rate");
   const workouts = getDeviceWorkoutsForDate(state, athleteId, date);
 
   return `
@@ -3240,6 +3254,7 @@ function renderWatchesScreen(state: MobileAppState) {
     </div>
     ${renderWatchSyncPanel(state, date)}
     ${renderWatchRecoveryCard(state, summary, date)}
+    ${renderWatchHeartRateChartCard(summary, heartRateSamples)}
     ${renderWatchParametersCard(summary)}
     ${renderWatchWorkoutsCard(workouts)}
     ${renderWatchSettingsPanel(state, summary, date)}
@@ -3447,6 +3462,53 @@ function renderWatchRecoveryCard(
   `;
 }
 
+function renderWatchHeartRateChartCard(
+  summary: DeviceHealthDailySummary | null,
+  samples: DeviceHealthSample[],
+) {
+  const chart = buildWatchHeartRateChart(summary, samples);
+  const fallbackDetail = summary?.heartRate
+    ? formatDeviceHealthHeartRateDetail(summary)
+    : "после считывания часов здесь появятся все точки пульса за день";
+
+  return `
+    <section class="watch-heart-rate-card ${chart ? "has-samples" : "is-empty"}">
+      <div class="watch-card-head">
+        <div>
+          <span>Пульс</span>
+          <h3>График за день</h3>
+          <p>${chart ? `${chart.sampleCountLabel} · ${chart.rangeLabel}` : escapeHtml(fallbackDetail)}</p>
+        </div>
+        <strong>${chart ? escapeHtml(chart.averageLabel) : "-"}</strong>
+      </div>
+      ${chart ? `
+        <div class="watch-heart-rate-chart">
+          <svg aria-label="График пульса за день" role="img" viewBox="0 0 100 100" preserveAspectRatio="none">
+            ${chart.sleepBand}
+            ${chart.gridLines}
+            <polyline points="${escapeHtml(chart.points)}"></polyline>
+            ${chart.peakMarker}
+          </svg>
+          <div class="watch-heart-rate-axis">
+            <span>00</span>
+            <span>06</span>
+            <span>12</span>
+            <span>18</span>
+            <span>24</span>
+          </div>
+        </div>
+        <div class="watch-heart-rate-legend">
+          <span><i></i>все точки с часов</span>
+          ${chart.sleepLabel ? `<span><i class="is-sleep"></i>${escapeHtml(chart.sleepLabel)}</span>` : ""}
+          <span><i class="is-peak"></i>${escapeHtml(chart.peakLabel)}</span>
+        </div>
+      ` : `
+        <p class="watch-empty-note">Пока есть только дневной итог. После новой синхронизации PERFORM Sync сохранит все точки пульса без усреднения.</p>
+      `}
+    </section>
+  `;
+}
+
 function renderWatchParametersCard(summary: DeviceHealthDailySummary | null) {
   const rawPayload = summary?.rawPayload ?? {};
   const stressAvg = readDeviceHealthRawNumber(rawPayload, "stressAvg");
@@ -3569,6 +3631,127 @@ function renderWatchSettingsPanel(
       </div>
     </details>
   `;
+}
+
+function buildWatchHeartRateChart(
+  summary: DeviceHealthDailySummary | null,
+  samples: DeviceHealthSample[],
+) {
+  const entryDate = summary?.entryDate ?? samples[0]?.entryDate;
+  if (!entryDate) {
+    return null;
+  }
+
+  const dayBounds = getLocalDayBounds(entryDate);
+  if (!dayBounds) {
+    return null;
+  }
+
+  const points = samples
+    .map((sample) => {
+      const sampledAt = new Date(sample.sampledAt);
+      const value = sample.value;
+      if (
+        Number.isNaN(sampledAt.getTime()) ||
+        sampledAt.getTime() < dayBounds.start.getTime() ||
+        sampledAt.getTime() > dayBounds.end.getTime() ||
+        value < 25 ||
+        value > 240
+      ) {
+        return null;
+      }
+
+      return {
+        sampledAt,
+        value,
+      };
+    })
+    .filter((sample): sample is { sampledAt: Date; value: number } => Boolean(sample));
+
+  if (points.length < 2) {
+    return null;
+  }
+
+  const values = points.map((point) => point.value);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const average = values.reduce((sum, value) => sum + value, 0) / values.length;
+  const lower = Math.max(30, Math.floor((min - 8) / 10) * 10);
+  const upper = Math.min(230, Math.ceil((max + 8) / 10) * 10);
+  const range = Math.max(20, upper - lower);
+  const chartUpper = lower + range;
+  const dayMs = dayBounds.end.getTime() - dayBounds.start.getTime();
+  const valueToY = (value: number) => 94 - ((value - lower) / (chartUpper - lower)) * 84;
+  const timeToX = (value: Date) => ((value.getTime() - dayBounds.start.getTime()) / dayMs) * 100;
+  const svgPoints = points
+    .map((point) => `${timeToX(point.sampledAt).toFixed(2)},${valueToY(point.value).toFixed(2)}`)
+    .join(" ");
+  const gridValues = [chartUpper, Math.round((chartUpper + lower) / 2), lower];
+  const gridLines = gridValues.map((value) => {
+    const y = valueToY(value).toFixed(2);
+    return `<line class="grid" x1="0" x2="100" y1="${y}" y2="${y}"></line>`;
+  }).join("");
+  const peak = points.reduce((current, point) => point.value > current.value ? point : current, points[0]);
+  const peakX = timeToX(peak.sampledAt).toFixed(2);
+  const peakY = valueToY(peak.value).toFixed(2);
+  const sleepBand = buildWatchSleepBand(summary, dayBounds);
+  const sleepLabel = formatWatchSleepBandLabel(summary);
+
+  return {
+    averageLabel: `${Math.round(average)}`,
+    gridLines,
+    peakLabel: `пик ${Math.round(peak.value)} · ${formatTime(peak.sampledAt.toISOString())}`,
+    peakMarker: `
+      <line class="peak-line" x1="${peakX}" x2="${peakX}" y1="${peakY}" y2="96"></line>
+      <circle class="peak-dot" cx="${peakX}" cy="${peakY}" r="1.8"></circle>
+    `,
+    points: svgPoints,
+    rangeLabel: `${Math.round(min)}-${Math.round(max)} уд/мин`,
+    sampleCountLabel: `${points.length} точек`,
+    sleepBand,
+    sleepLabel,
+  };
+}
+
+function getLocalDayBounds(entryDate: string) {
+  const [year, month, day] = entryDate.split("-").map(Number);
+  if (!year || !month || !day) {
+    return null;
+  }
+
+  const start = new Date(year, month - 1, day, 0, 0, 0, 0);
+  const end = new Date(year, month - 1, day + 1, 0, 0, 0, 0);
+  return { end, start };
+}
+
+function buildWatchSleepBand(
+  summary: DeviceHealthDailySummary | null,
+  dayBounds: { start: Date; end: Date },
+) {
+  const start = summary?.sleep?.startTime ? new Date(summary.sleep.startTime) : null;
+  const end = summary?.sleep?.endTime ? new Date(summary.sleep.endTime) : null;
+  if (!start || !end || Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    return "";
+  }
+
+  const clampedStart = Math.max(start.getTime(), dayBounds.start.getTime());
+  const clampedEnd = Math.min(end.getTime(), dayBounds.end.getTime());
+  if (clampedEnd <= clampedStart) {
+    return "";
+  }
+
+  const dayMs = dayBounds.end.getTime() - dayBounds.start.getTime();
+  const x = ((clampedStart - dayBounds.start.getTime()) / dayMs) * 100;
+  const width = ((clampedEnd - clampedStart) / dayMs) * 100;
+  return `<rect class="sleep-band" x="${x.toFixed(2)}" y="6" width="${width.toFixed(2)}" height="88"></rect>`;
+}
+
+function formatWatchSleepBandLabel(summary: DeviceHealthDailySummary | null) {
+  if (!summary?.sleep?.startTime || !summary.sleep.endTime) {
+    return null;
+  }
+
+  return `сон ${formatTime(summary.sleep.startTime)}-${formatTime(summary.sleep.endTime)}`;
 }
 
 function renderReadinessWatchSummaryCard(state: MobileAppState, athleteId: string, date: string) {
@@ -8794,6 +8977,21 @@ function getDeviceWorkoutsForDate(
     .sort((left, right) => left.startTime.localeCompare(right.startTime));
 }
 
+function getDeviceHealthSamplesForDate(
+  state: MobileAppState,
+  athleteId: string | null,
+  date: string,
+  metric: DeviceHealthSample["metric"],
+) {
+  return state.data.deviceHealthSamples
+    .filter((sample) =>
+      sample.entryDate === date &&
+      sample.metric === metric &&
+      (!athleteId || sample.athleteId === athleteId)
+    )
+    .sort((left, right) => left.sampledAt.localeCompare(right.sampledAt));
+}
+
 function getDeviceWorkoutLinksForDate(
   state: MobileAppState,
   athleteId: string | null,
@@ -9859,6 +10057,28 @@ function upsertDeviceHealthSummary(
   return nextItems
     .sort((left, right) => right.entryDate.localeCompare(left.entryDate))
     .slice(0, 120);
+}
+
+function replaceDeviceHealthSamplesForDay(
+  items: DeviceHealthSample[],
+  samples: DeviceHealthSample[],
+  athleteId: string,
+  entryDate: string,
+  metric: DeviceHealthSample["metric"],
+) {
+  const nextItems = items.filter((item) =>
+    item.athleteId !== athleteId ||
+    item.entryDate !== entryDate ||
+    item.metric !== metric
+  );
+  nextItems.push(...samples);
+  return nextItems
+    .sort((left, right) =>
+      right.entryDate.localeCompare(left.entryDate) ||
+      left.metric.localeCompare(right.metric) ||
+      left.sampledAt.localeCompare(right.sampledAt),
+    )
+    .slice(0, 5000);
 }
 
 function upsertDeviceWorkouts(items: DeviceWorkout[], workouts: DeviceWorkout[]) {

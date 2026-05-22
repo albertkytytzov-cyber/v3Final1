@@ -23,6 +23,10 @@ import type {
   DeviceHealthDailySummaryResponse,
   DeviceHealthHeartRateSummary,
   DeviceHealthOxygenSaturationSummary,
+  DeviceHealthSample,
+  DeviceHealthSampleMetric,
+  DeviceHealthSamplePayload,
+  DeviceHealthSamplesResponse,
   DeviceHealthSleepSummary,
   DeviceHealthWorkoutSummary,
   DeviceWorkout,
@@ -75,6 +79,10 @@ export type {
   DeviceHealthDailySummaryResponse,
   DeviceHealthHeartRateSummary,
   DeviceHealthOxygenSaturationSummary,
+  DeviceHealthSample,
+  DeviceHealthSampleMetric,
+  DeviceHealthSamplePayload,
+  DeviceHealthSamplesResponse,
   DeviceHealthSleepSummary,
   DeviceHealthWorkoutSummary,
   DeviceWorkout,
@@ -117,6 +125,7 @@ export interface MobileDataSnapshot {
   coachDiaryEntries: CoachDiaryEntry[];
   coachAiReviews: CoachDayAiReview[];
   deviceHealthSummaries: DeviceHealthDailySummary[];
+  deviceHealthSamples: DeviceHealthSample[];
   deviceWorkoutLinks: DeviceWorkoutLink[];
   deviceWorkouts: DeviceWorkout[];
   readinessEntry: ReadinessEntry | null;
@@ -195,6 +204,7 @@ export function createEmptySnapshot(): MobileDataSnapshot {
     competitions: [],
     competitionPlans: [],
     deviceHealthSummaries: [],
+    deviceHealthSamples: [],
     deviceWorkoutLinks: [],
     deviceWorkouts: [],
     readinessEntry: null,

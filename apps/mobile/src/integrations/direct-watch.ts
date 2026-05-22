@@ -2,6 +2,7 @@ import type {
   DeviceHealthDailySummaryPayload,
   DeviceHealthHeartRateSummary,
   DeviceHealthOxygenSaturationSummary,
+  DeviceHealthSamplePayload,
   DeviceHealthSleepSummary,
 } from "../types/models.js";
 import type { DirectWatchWeatherPayload } from "./watch-weather.js";
@@ -135,6 +136,7 @@ export interface DirectWatchDecryptedPacket {
   activityFilePadding?: number | null;
   activityFilePayloadBytes?: number | null;
   activityFiles?: DirectWatchActivityFile[];
+  activitySamples?: DirectWatchActivitySample[];
   activityCalories?: number | null;
   activityHeartRateAvg?: number | null;
   activityHeartRateMax?: number | null;
@@ -182,6 +184,14 @@ export interface DirectWatchDecryptedPacket {
   sleepStageCount?: number | null;
   sleepStartTime?: string | null;
   steps?: number | null;
+}
+
+export interface DirectWatchActivitySample {
+  heartRate?: number | null;
+  sampleTime?: string | null;
+  spo2?: number | null;
+  steps?: number | null;
+  stress?: number | null;
 }
 
 export interface DirectWatchSessionStatus {
@@ -550,6 +560,7 @@ export async function readDirectWatchDailySummary(
   const heartRate = buildDirectWatchHeartRateSummary(dailySummary, detailAggregate);
   const oxygenSaturation = buildDirectWatchOxygenSummary(dailySummary, detailAggregate);
   const sleep = buildDirectWatchSleepSummary(sleepPackets);
+  const samples = buildDirectWatchSamples(dayPackets);
 
   if (!sleep && !heartRate && !oxygenSaturation && !dailySummary) {
     throw new Error("PERFORM Sync прочитал день, но пока не нашёл сон, пульс, SpO2 или итоговые показатели.");
@@ -563,6 +574,7 @@ export async function readDirectWatchDailySummary(
     heartRate,
     oxygenSaturation,
     workout: null,
+    samples,
     rawPayload: buildDirectWatchRawPayload(probe, dayPackets, dailySummary, detailAggregate),
     syncedAt: new Date().toISOString(),
   };
@@ -812,6 +824,9 @@ function normalizeDirectWatchDecryptedPacket(value: unknown): DirectWatchDecrypt
     activityFiles: Array.isArray(value.activityFiles)
       ? value.activityFiles.map(normalizeDirectWatchActivityFile)
       : [],
+    activitySamples: Array.isArray(value.activitySamples)
+      ? value.activitySamples.map(normalizeDirectWatchActivitySample)
+      : [],
     activityCalories: normalizeNumber(value.activityCalories),
     activityHeartRateAvg: normalizeNumber(value.activityHeartRateAvg),
     activityHeartRateMax: normalizeNumber(value.activityHeartRateMax),
@@ -859,6 +874,20 @@ function normalizeDirectWatchDecryptedPacket(value: unknown): DirectWatchDecrypt
     sleepStageCount: normalizeNumber(value.sleepStageCount),
     sleepStartTime: normalizeString(value.sleepStartTime),
     steps: normalizeNumber(value.steps),
+  };
+}
+
+function normalizeDirectWatchActivitySample(value: unknown): DirectWatchActivitySample {
+  if (!isRecord(value)) {
+    return {};
+  }
+
+  return {
+    heartRate: normalizeNumber(value.heartRate),
+    sampleTime: normalizeString(value.sampleTime),
+    spo2: normalizeNumber(value.spo2),
+    steps: normalizeNumber(value.steps),
+    stress: normalizeNumber(value.stress),
   };
 }
 
@@ -1163,6 +1192,66 @@ function buildDirectWatchSleepSummary(packets: DirectWatchDecryptedPacket[]): De
   };
 
   return hasDirectWatchSleepData(sleep) ? sleep : null;
+}
+
+function buildDirectWatchSamples(packets: DirectWatchDecryptedPacket[]): DeviceHealthSamplePayload[] {
+  const samples = new Map<string, DeviceHealthSamplePayload>();
+
+  packets.forEach((packet) => {
+    packet.activitySamples?.forEach((sample) => {
+      const sampledAt = normalizeIsoString(sample.sampleTime);
+      if (!sampledAt) {
+        return;
+      }
+
+      addDirectWatchSample(samples, {
+        metric: "heart_rate",
+        sampledAt,
+        value: sample.heartRate,
+        rawPayload: {
+          source: "direct-watch-activity-file",
+          fileId: packet.activityFile?.idHex ?? null,
+          steps: sample.steps ?? null,
+        },
+      });
+      addDirectWatchSample(samples, {
+        metric: "oxygen_saturation",
+        sampledAt,
+        value: sample.spo2,
+        rawPayload: {
+          source: "direct-watch-activity-file",
+          fileId: packet.activityFile?.idHex ?? null,
+        },
+      });
+      addDirectWatchSample(samples, {
+        metric: "stress",
+        sampledAt,
+        value: sample.stress,
+        rawPayload: {
+          source: "direct-watch-activity-file",
+          fileId: packet.activityFile?.idHex ?? null,
+        },
+      });
+    });
+  });
+
+  return Array.from(samples.values()).sort((left, right) =>
+    left.metric.localeCompare(right.metric) || left.sampledAt.localeCompare(right.sampledAt),
+  );
+}
+
+function addDirectWatchSample(
+  samples: Map<string, DeviceHealthSamplePayload>,
+  sample: Omit<DeviceHealthSamplePayload, "value"> & { value?: number | null },
+) {
+  if (sample.value === null || sample.value === undefined || !Number.isFinite(sample.value)) {
+    return;
+  }
+
+  samples.set(`${sample.metric}:${sample.sampledAt}`, {
+    ...sample,
+    value: sample.value,
+  });
 }
 
 function buildDirectWatchRawPayload(

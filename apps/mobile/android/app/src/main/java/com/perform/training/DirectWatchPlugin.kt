@@ -2256,6 +2256,7 @@ class DirectWatchPlugin : Plugin() {
                                 item.put("activityTrainingLoadDay", file?.trainingLoadDay)
                                 item.put("activityTrainingLoadWeek", file?.trainingLoadWeek)
                                 item.put("activityVitality", file?.vitality)
+                                item.put("activitySamples", JSArray(file?.activitySamples?.map { sample -> sample.toJson() } ?: emptyList<JSObject>()))
                                 item.put("sleepStartTime", file?.sleepStartTime)
                                 item.put("sleepEndTime", file?.sleepEndTime)
                                 item.put("sleepDurationMinutes", file?.sleepDurationMinutes)
@@ -2996,6 +2997,7 @@ class DirectWatchPlugin : Plugin() {
             sleepScore = sleep?.score,
             sleepStageCount = sleep?.stageCount,
             sleepIsAwake = sleep?.isAwake,
+            activitySamples = daily?.samples ?: emptyList(),
         )
     }
 
@@ -3284,10 +3286,17 @@ class DirectWatchPlugin : Plugin() {
         val heartRates = mutableListOf<Int>()
         val spo2Values = mutableListOf<Int>()
         val stressValues = mutableListOf<Int>()
+        val samples = mutableListOf<ClassicActivitySample>()
+        val sampleStart = try {
+            java.time.Instant.parse(file.timestamp)
+        } catch (_: Exception) {
+            null
+        }
 
         while (offset < dataEnd) {
             val parsed = parseClassicDailyDetailsSample(bytes, offset, dataEnd, header, file.version) ?: break
             offset = parsed.nextOffset
+            val sampleTime = sampleStart?.plusSeconds(sampleCount.toLong() * 60L)?.toString()
             sampleCount += 1
             stepsTotal += parsed.steps ?: 0
             if (parsed.heartRate != null && parsed.heartRate in 1..254) {
@@ -3299,6 +3308,24 @@ class DirectWatchPlugin : Plugin() {
             if (parsed.stress != null && parsed.stress in 0..100) {
                 stressValues.add(parsed.stress)
             }
+            if (
+                sampleTime != null &&
+                (
+                    parsed.heartRate?.let { it in 1..254 } == true ||
+                        parsed.spo2?.let { it in 1..100 } == true ||
+                        parsed.stress?.let { it in 0..100 } == true
+                    )
+            ) {
+                samples.add(
+                    ClassicActivitySample(
+                        sampleTime = sampleTime,
+                        heartRate = parsed.heartRate?.takeIf { it in 1..254 },
+                        spo2 = parsed.spo2?.takeIf { it in 1..100 },
+                        stress = parsed.stress?.takeIf { it in 0..100 },
+                        steps = parsed.steps,
+                    ),
+                )
+            }
         }
 
         return ClassicDailyDetailsSummary(
@@ -3309,6 +3336,7 @@ class DirectWatchPlugin : Plugin() {
             heartRateMax = heartRates.maxOrNull(),
             spo2Avg = averageInt(spo2Values),
             stressAvg = averageInt(stressValues),
+            samples = samples,
         )
     }
 
@@ -4459,6 +4487,7 @@ class DirectWatchPlugin : Plugin() {
         val sleepScore: Int?,
         val sleepStageCount: Int?,
         val sleepIsAwake: Boolean?,
+        val activitySamples: List<ClassicActivitySample>,
     )
 
     private data class ClassicDailySummary(
@@ -4487,6 +4516,7 @@ class DirectWatchPlugin : Plugin() {
         val heartRateMax: Int?,
         val spo2Avg: Int?,
         val stressAvg: Int?,
+        val samples: List<ClassicActivitySample>,
     )
 
     private data class ClassicDailyDetailsSample(
@@ -4496,6 +4526,24 @@ class DirectWatchPlugin : Plugin() {
         val spo2: Int?,
         val stress: Int?,
     )
+
+    private data class ClassicActivitySample(
+        val sampleTime: String,
+        val heartRate: Int?,
+        val spo2: Int?,
+        val stress: Int?,
+        val steps: Int?,
+    ) {
+        fun toJson(): JSObject {
+            val item = JSObject()
+            item.put("sampleTime", sampleTime)
+            item.put("heartRate", heartRate)
+            item.put("spo2", spo2)
+            item.put("stress", stress)
+            item.put("steps", steps)
+            return item
+        }
+    }
 
     private data class ClassicSleepSummary(
         val startTime: String?,

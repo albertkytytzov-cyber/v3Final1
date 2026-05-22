@@ -4,6 +4,9 @@ import type {
   DeviceHealthDailySummaryPayload,
   DeviceHealthOxygenSaturationSummary,
   DeviceHealthProvider,
+  DeviceHealthSample,
+  DeviceHealthSampleMetric,
+  DeviceHealthSamplePayload,
   DeviceWorkout,
   DeviceWorkoutLink,
   DeviceWorkoutLinkPayload,
@@ -86,6 +89,20 @@ interface DeviceWorkoutSampleRow {
   pace_seconds_per_km: string | null;
   oxygen_saturation_percent: string | null;
   raw_payload_json: Record<string, unknown> | null;
+  created_at: string;
+}
+
+interface DeviceHealthSampleRow {
+  id: string;
+  athlete_id: string;
+  provider: DeviceHealthProvider;
+  entry_date: string;
+  source_device: string | null;
+  metric: DeviceHealthSampleMetric;
+  sampled_at: string;
+  value_numeric: string;
+  raw_payload_json: Record<string, unknown> | null;
+  synced_at: string;
   created_at: string;
 }
 
@@ -243,6 +260,22 @@ function mapDeviceWorkoutSample(row: DeviceWorkoutSampleRow): DeviceWorkoutSampl
   };
 }
 
+function mapDeviceHealthSample(row: DeviceHealthSampleRow): DeviceHealthSample {
+  return {
+    id: row.id,
+    athleteId: row.athlete_id,
+    createdAt: row.created_at,
+    entryDate: row.entry_date,
+    metric: row.metric,
+    provider: row.provider,
+    rawPayload: row.raw_payload_json,
+    sampledAt: row.sampled_at,
+    sourceDevice: row.source_device,
+    syncedAt: row.synced_at,
+    value: Number(row.value_numeric),
+  };
+}
+
 function mapDeviceWorkout(
   row: DeviceWorkoutRow,
   samples: DeviceWorkoutSample[] = [],
@@ -350,6 +383,41 @@ export async function listDeviceHealthDailySummariesForAthlete(
   );
 
   return result.rows.map(mapDeviceHealthDailySummary);
+}
+
+export async function listDeviceHealthSamplesForAthlete(input: {
+  athleteId: string;
+  entryDate: string;
+  metric?: DeviceHealthSampleMetric;
+}): Promise<DeviceHealthSample[]> {
+  const values: unknown[] = [input.athleteId, input.entryDate];
+  const metricFilter = input.metric ? `AND metric = $${values.push(input.metric)}` : "";
+
+  const result = await pool.query<DeviceHealthSampleRow>(
+    `
+      SELECT
+        id,
+        athlete_id,
+        provider,
+        entry_date::text,
+        source_device,
+        metric,
+        sampled_at::text,
+        value_numeric::text,
+        raw_payload_json,
+        synced_at::text,
+        created_at::text
+      FROM device_health_samples
+      WHERE athlete_id = $1
+        AND entry_date = $2::date
+        ${metricFilter}
+      ORDER BY metric, sampled_at
+      LIMIT 20000
+    `,
+    values,
+  );
+
+  return result.rows.map(mapDeviceHealthSample);
 }
 
 export async function upsertDeviceHealthDailySummary(input: {
@@ -539,6 +607,17 @@ export async function upsertDeviceHealthDailySummary(input: {
 
   const summary = mapDeviceHealthDailySummary(result.rows[0]);
 
+  if (input.payload.samples?.length) {
+    await replaceDeviceHealthSamples({
+      athleteId: input.athleteId,
+      entryDate: summary.entryDate,
+      provider: input.payload.provider,
+      samples: input.payload.samples,
+      sourceDevice: input.payload.sourceDevice,
+      syncedAt,
+    });
+  }
+
   await markCoachTeamDayDirtyForAthlete({
     athleteId: input.athleteId,
     entryDate: summary.entryDate,
@@ -546,6 +625,92 @@ export async function upsertDeviceHealthDailySummary(input: {
   });
 
   return summary;
+}
+
+async function replaceDeviceHealthSamples(input: {
+  athleteId: string;
+  entryDate: string;
+  provider: DeviceHealthProvider;
+  samples: DeviceHealthSamplePayload[];
+  sourceDevice: string | null;
+  syncedAt: string;
+}) {
+  const samples = input.samples
+    .filter((sample) => Number.isFinite(sample.value))
+    .slice(0, 12000);
+  const metrics = Array.from(new Set(samples.map((sample) => sample.metric)));
+
+  if (metrics.length === 0) {
+    return;
+  }
+
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+    await client.query(
+      `
+        DELETE FROM device_health_samples
+        WHERE athlete_id = $1
+          AND provider = $2
+          AND entry_date = $3::date
+          AND metric = ANY($4::text[])
+      `,
+      [input.athleteId, input.provider, input.entryDate, metrics],
+    );
+
+    for (let offset = 0; offset < samples.length; offset += 500) {
+      const chunk = samples.slice(offset, offset + 500);
+      const values: unknown[] = [];
+      const rows = chunk.map((sample, index) => {
+        const base = index * 9;
+        values.push(
+          input.athleteId,
+          input.provider,
+          input.entryDate,
+          input.sourceDevice,
+          sample.metric,
+          sample.sampledAt,
+          sample.value,
+          JSON.stringify(sample.rawPayload ?? {}),
+          input.syncedAt,
+        );
+        return `($${base + 1}, $${base + 2}, $${base + 3}::date, $${base + 4}, $${base + 5}, $${base + 6}::timestamptz, $${base + 7}, $${base + 8}::jsonb, $${base + 9}::timestamptz)`;
+      });
+
+      await client.query(
+        `
+          INSERT INTO device_health_samples (
+            athlete_id,
+            provider,
+            entry_date,
+            source_device,
+            metric,
+            sampled_at,
+            value_numeric,
+            raw_payload_json,
+            synced_at
+          )
+          VALUES ${rows.join(", ")}
+          ON CONFLICT (athlete_id, provider, metric, sampled_at)
+          DO UPDATE SET
+            entry_date = EXCLUDED.entry_date,
+            source_device = EXCLUDED.source_device,
+            value_numeric = EXCLUDED.value_numeric,
+            raw_payload_json = EXCLUDED.raw_payload_json,
+            synced_at = EXCLUDED.synced_at
+        `,
+        values,
+      );
+    }
+
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 export async function listDeviceWorkoutsForAthlete(

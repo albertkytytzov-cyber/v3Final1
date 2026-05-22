@@ -109,6 +109,13 @@ function compactSnapshotForStorage(snapshot: MobileDataSnapshot): MobileDataSnap
       ...summary,
       rawPayload: null,
     })),
+    deviceHealthSamples: snapshot.deviceHealthSamples
+      .filter((sample) => sample.metric === "heart_rate")
+      .slice(-5000)
+      .map((sample) => ({
+        ...sample,
+        rawPayload: null,
+      })),
     deviceWorkouts: snapshot.deviceWorkouts.map((workout) => ({
       ...workout,
       rawPayload: null,

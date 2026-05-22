@@ -3767,6 +3767,7 @@ button {
 }
 
 .watch-recovery-card,
+.watch-heart-rate-card,
 .watch-sync-panel,
 .watch-parameters-card,
 .watch-workouts-card,
@@ -4209,6 +4210,101 @@ button {
   font-size: 0.8rem;
   font-weight: 780;
   line-height: 1.35;
+}
+
+.watch-heart-rate-card {
+  background:
+    linear-gradient(135deg, rgba(248, 250, 252, 0.96), rgba(255, 255, 255, 0.94)),
+    #ffffff;
+}
+
+.watch-heart-rate-chart {
+  display: grid;
+  gap: 7px;
+  padding: 10px 8px 8px;
+  border: 1px solid rgba(15, 118, 110, 0.12);
+  border-radius: 15px;
+  background: rgba(255, 255, 255, 0.86);
+}
+
+.watch-heart-rate-chart svg {
+  display: block;
+  width: 100%;
+  height: 170px;
+}
+
+.watch-heart-rate-chart .sleep-band {
+  fill: rgba(66, 111, 157, 0.16);
+}
+
+.watch-heart-rate-chart .grid {
+  stroke: rgba(15, 118, 110, 0.12);
+  stroke-width: 0.6;
+}
+
+.watch-heart-rate-chart polyline {
+  fill: none;
+  stroke: var(--accent);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.9;
+}
+
+.watch-heart-rate-chart .peak-line {
+  stroke: rgba(169, 99, 42, 0.74);
+  stroke-dasharray: 2 2;
+  stroke-width: 0.8;
+}
+
+.watch-heart-rate-chart .peak-dot {
+  fill: #a9632a;
+}
+
+.watch-heart-rate-axis,
+.watch-heart-rate-legend {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 850;
+}
+
+.watch-heart-rate-legend {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+}
+
+.watch-heart-rate-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 5px 8px;
+  border: 1px solid rgba(15, 118, 110, 0.12);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 850;
+  line-height: 1.15;
+}
+
+.watch-heart-rate-legend i {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+.watch-heart-rate-legend i.is-sleep {
+  background: #426f9d;
+}
+
+.watch-heart-rate-legend i.is-peak {
+  background: #a9632a;
 }
 
 .watch-actions,

@@ -15,6 +15,7 @@ import type {
   DeviceHealthDailySummariesResponse,
   DeviceHealthDailySummaryPayload,
   DeviceHealthDailySummaryResponse,
+  DeviceHealthSamplesResponse,
   DeviceWorkout,
   DeviceWorkoutLink,
   DeviceWorkoutLinkPayload,
@@ -123,6 +124,7 @@ export class MobileApiClient {
       coachAiReviews,
       coachDiary,
       deviceHealth,
+      deviceHealthSamples,
       deviceWorkouts,
       readiness,
       readinessHistory,
@@ -152,6 +154,11 @@ export class MobileApiClient {
         ? this.request<DeviceHealthDailySummariesResponse>("/device-health/daily-summaries")
             .catch(() => ({ summaries: [] }))
         : Promise.resolve({ summaries: [] }),
+      userRole === "athlete"
+        ? this.request<DeviceHealthSamplesResponse>(
+            withEntryDate("/device-health/samples?metric=heart_rate", selectedEntryDate ?? localDateValue()),
+          ).catch(() => ({ samples: [] }))
+        : Promise.resolve({ samples: [] }),
       userRole === "athlete"
         ? this.request<DeviceWorkoutsResponse>("/device-health/workouts")
             .catch(() => ({ workouts: [] }))
@@ -210,6 +217,13 @@ export class MobileApiClient {
       competitionPlans: competitionPlans.competitionPlans,
       competitions: competitions.competitions,
       deviceHealthSummaries,
+      deviceHealthSamples: userRole === "coach" || userRole === "admin"
+        ? await this.loadCoachDeviceHealthSamples(
+            assignedPlans.assignedPlans,
+            athletes.athletes,
+            selectedEntryDate,
+          )
+        : deviceHealthSamples.samples,
       deviceWorkoutLinks: deviceWorkoutData.links,
       deviceWorkouts: deviceWorkoutData.workouts,
       executionResults,
@@ -287,6 +301,30 @@ export class MobileApiClient {
     return responses.flatMap((response) => response.summaries);
   }
 
+  private async loadCoachDeviceHealthSamples(
+    assignedPlans: AssignedPlanSummary[],
+    athletes: CoachAthleteSummary[],
+    selectedEntryDate?: string,
+  ) {
+    if (!selectedEntryDate) {
+      return [];
+    }
+
+    const athleteIds = Array.from(new Set([
+      ...assignedPlans.map((plan) => plan.athleteId),
+      ...athletes.map((athlete) => athlete.athleteId),
+    ].filter(Boolean)));
+    const responses = await Promise.all(
+      athleteIds.map((athleteId) =>
+        this.request<DeviceHealthSamplesResponse>(
+          `/coach/athletes/${encodeURIComponent(athleteId)}/device-health/samples?entryDate=${encodeURIComponent(selectedEntryDate)}&metric=heart_rate`,
+        ).catch(() => ({ samples: [] })),
+      ),
+    );
+
+    return responses.flatMap((response) => response.samples);
+  }
+
   private async loadCoachDeviceWorkouts(
     assignedPlans: AssignedPlanSummary[],
     athletes: CoachAthleteSummary[],
@@ -344,6 +382,12 @@ export class MobileApiClient {
       idempotencyKey,
       method: "POST",
     });
+  }
+
+  listDeviceHealthSamples(entryDate: string, metric = "heart_rate") {
+    return this.request<DeviceHealthSamplesResponse>(
+      `/device-health/samples?entryDate=${encodeURIComponent(entryDate)}&metric=${encodeURIComponent(metric)}`,
+    );
   }
 
   submitDeviceWorkouts(payload: DeviceWorkoutsSyncPayload, idempotencyKey: string) {
@@ -416,7 +460,19 @@ export class MobileApiClient {
 }
 
 function withEntryDate(path: string, entryDate?: string) {
-  return entryDate ? `${path}?entryDate=${encodeURIComponent(entryDate)}` : path;
+  if (!entryDate) {
+    return path;
+  }
+
+  const separator = path.includes("?") ? "&" : "?";
+  return `${path}${separator}entryDate=${encodeURIComponent(entryDate)}`;
+}
+
+function localDateValue(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 async function readErrorMessage(response: Response) {

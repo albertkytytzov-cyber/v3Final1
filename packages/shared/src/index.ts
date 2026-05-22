@@ -101,6 +101,7 @@ export interface ReadinessResponse {
 }
 
 export type DeviceHealthProvider = "huawei-health" | "health-connect" | "apple-health" | "direct-watch";
+export type DeviceHealthSampleMetric = "heart_rate" | "oxygen_saturation" | "stress";
 
 export interface DeviceHealthSleepSummary {
   awakeMinutes: number | null;
@@ -146,6 +147,7 @@ export interface DeviceHealthDailySummaryPayload {
   heartRate: DeviceHealthHeartRateSummary | null;
   oxygenSaturation: DeviceHealthOxygenSaturationSummary | null;
   workout: DeviceHealthWorkoutSummary | null;
+  samples?: DeviceHealthSamplePayload[];
   rawPayload?: Record<string, unknown> | null;
   syncedAt?: string | null;
 }
@@ -164,6 +166,27 @@ export interface DeviceHealthDailySummariesResponse {
 
 export interface DeviceHealthDailySummaryResponse {
   summary: DeviceHealthDailySummary;
+}
+
+export interface DeviceHealthSamplePayload {
+  metric: DeviceHealthSampleMetric;
+  rawPayload?: Record<string, unknown> | null;
+  sampledAt: string;
+  value: number;
+}
+
+export interface DeviceHealthSample extends DeviceHealthSamplePayload {
+  id: string;
+  athleteId: string;
+  createdAt: string;
+  entryDate: string;
+  provider: DeviceHealthProvider;
+  sourceDevice: string | null;
+  syncedAt: string;
+}
+
+export interface DeviceHealthSamplesResponse {
+  samples: DeviceHealthSample[];
 }
 
 export interface DeviceWorkoutSamplePayload {

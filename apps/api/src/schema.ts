@@ -484,6 +484,21 @@ export async function ensureSchema() {
       UNIQUE (athlete_id, provider, source_workout_id)
     );
 
+    CREATE TABLE IF NOT EXISTS device_health_samples (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      athlete_id UUID NOT NULL REFERENCES athletes(id) ON DELETE CASCADE,
+      provider TEXT NOT NULL CHECK (provider IN ('huawei-health', 'health-connect', 'apple-health', 'direct-watch')),
+      entry_date DATE NOT NULL,
+      source_device TEXT,
+      metric TEXT NOT NULL CHECK (metric IN ('heart_rate', 'oxygen_saturation', 'stress')),
+      sampled_at TIMESTAMPTZ NOT NULL,
+      value_numeric NUMERIC(8, 2) NOT NULL,
+      raw_payload_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+      synced_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (athlete_id, provider, metric, sampled_at)
+    );
+
     CREATE TABLE IF NOT EXISTS device_workout_samples (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       device_workout_id UUID NOT NULL REFERENCES device_workouts(id) ON DELETE CASCADE,
@@ -978,6 +993,37 @@ export async function ensureSchema() {
   await ensureColumn("device_health_daily_summaries", "synced_at", "TIMESTAMPTZ NOT NULL DEFAULT NOW()");
   await ensureColumn("device_health_daily_summaries", "created_at", "TIMESTAMPTZ NOT NULL DEFAULT NOW()");
   await ensureColumn("device_health_daily_summaries", "updated_at", "TIMESTAMPTZ NOT NULL DEFAULT NOW()");
+  await ensureUuidDefault("device_health_samples");
+  await ensureColumn(
+    "device_health_samples",
+    "athlete_id",
+    "UUID REFERENCES athletes(id) ON DELETE CASCADE",
+  );
+  await ensureColumn(
+    "device_health_samples",
+    "provider",
+    "TEXT NOT NULL DEFAULT 'direct-watch' CHECK (provider IN ('huawei-health', 'health-connect', 'apple-health', 'direct-watch'))",
+  );
+  await pool.query(`
+    ALTER TABLE device_health_samples
+      DROP CONSTRAINT IF EXISTS device_health_samples_provider_check;
+    ALTER TABLE device_health_samples
+      ADD CONSTRAINT device_health_samples_provider_check
+      CHECK (provider IN ('huawei-health', 'health-connect', 'apple-health', 'direct-watch'));
+    ALTER TABLE device_health_samples
+      DROP CONSTRAINT IF EXISTS device_health_samples_metric_check;
+    ALTER TABLE device_health_samples
+      ADD CONSTRAINT device_health_samples_metric_check
+      CHECK (metric IN ('heart_rate', 'oxygen_saturation', 'stress'));
+  `);
+  await ensureColumn("device_health_samples", "entry_date", "DATE");
+  await ensureColumn("device_health_samples", "source_device", "TEXT");
+  await ensureColumn("device_health_samples", "metric", "TEXT NOT NULL DEFAULT 'heart_rate'");
+  await ensureColumn("device_health_samples", "sampled_at", "TIMESTAMPTZ");
+  await ensureColumn("device_health_samples", "value_numeric", "NUMERIC(8, 2) NOT NULL DEFAULT 0");
+  await ensureColumn("device_health_samples", "raw_payload_json", "JSONB NOT NULL DEFAULT '{}'::jsonb");
+  await ensureColumn("device_health_samples", "synced_at", "TIMESTAMPTZ NOT NULL DEFAULT NOW()");
+  await ensureColumn("device_health_samples", "created_at", "TIMESTAMPTZ NOT NULL DEFAULT NOW()");
   await ensureUuidDefault("device_workouts");
   await ensureUuidDefault("device_workout_samples");
   await ensureUuidDefault("training_plan_device_links");
@@ -1141,6 +1187,8 @@ export async function ensureSchema() {
       WHERE client_request_id IS NOT NULL;
     CREATE UNIQUE INDEX IF NOT EXISTS idx_device_health_daily_provider_date
       ON device_health_daily_summaries (athlete_id, provider, entry_date);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_device_health_samples_athlete_provider_metric_time
+      ON device_health_samples (athlete_id, provider, metric, sampled_at);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_device_workouts_athlete_provider_source
       ON device_workouts (athlete_id, provider, source_workout_id);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_device_workout_samples_workout_time_unique
@@ -1456,6 +1504,8 @@ export async function ensureSchema() {
       ON coach_ai_day_reviews (coach_user_id, generated_at DESC);
     CREATE INDEX IF NOT EXISTS idx_device_health_daily_athlete_date
       ON device_health_daily_summaries (athlete_id, entry_date DESC);
+    CREATE INDEX IF NOT EXISTS idx_device_health_samples_athlete_date_metric
+      ON device_health_samples (athlete_id, entry_date DESC, metric, sampled_at);
     CREATE INDEX IF NOT EXISTS idx_device_workouts_athlete_date
       ON device_workouts (athlete_id, entry_date DESC, start_time DESC);
     CREATE INDEX IF NOT EXISTS idx_device_workout_samples_workout_time

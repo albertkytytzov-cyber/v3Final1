@@ -3,6 +3,7 @@ import {
   deleteDeviceWorkoutLink,
   linkDeviceWorkoutToPlanBlock,
   listDeviceHealthDailySummariesForAthlete,
+  listDeviceHealthSamplesForAthlete,
   listDeviceWorkoutLinksForAthlete,
   listDeviceWorkoutsForAthlete,
   syncDeviceWorkouts,
@@ -11,6 +12,7 @@ import {
 import type { ApiGuards, HttpErrorFactory } from "./guards";
 import {
   parseDeviceHealthAthleteParams,
+  parseDeviceHealthSamplesQuery,
   parseDeviceHealthSummariesQuery,
   parseDeviceHealthSummaryBody,
   parseDeviceWorkoutLinkBody,
@@ -37,6 +39,29 @@ export function registerDeviceHealthRoutes(
 
     return {
       summaries: await listDeviceHealthDailySummariesForAthlete(user.athlete_id),
+    };
+  });
+
+  app.get("/api/v1/device-health/samples", async (request) => {
+    const user = await dependencies.guards.requireUser(request);
+
+    if (!user.athlete_id) {
+      throw dependencies.httpError(403, "Only athlete accounts can view device health samples");
+    }
+
+    let query;
+    try {
+      query = parseDeviceHealthSamplesQuery(request.query);
+    } catch (error) {
+      throw dependencies.httpError(400, (error as Error).message);
+    }
+
+    return {
+      samples: await listDeviceHealthSamplesForAthlete({
+        athleteId: user.athlete_id,
+        entryDate: query.entryDate,
+        metric: query.metric,
+      }),
     };
   });
 
@@ -130,6 +155,36 @@ export function registerDeviceHealthRoutes(
         query.entryDate ? 1 : undefined,
         query.entryDate,
       ),
+    };
+  });
+
+  app.get("/api/v1/coach/athletes/:athleteId/device-health/samples", async (request) => {
+    const user = await dependencies.guards.requireUser(request);
+
+    if (user.role !== "coach" && user.role !== "admin") {
+      throw dependencies.httpError(
+        403,
+        "Only coach or admin accounts can view athlete device health samples",
+      );
+    }
+
+    let athleteId: string;
+    let query;
+    try {
+      athleteId = parseDeviceHealthAthleteParams(request.params).athleteId;
+      query = parseDeviceHealthSamplesQuery(request.query);
+    } catch (error) {
+      throw dependencies.httpError(400, (error as Error).message);
+    }
+
+    await dependencies.guards.assertAthleteAccess(user, athleteId);
+
+    return {
+      samples: await listDeviceHealthSamplesForAthlete({
+        athleteId,
+        entryDate: query.entryDate,
+        metric: query.metric,
+      }),
     };
   });
 
