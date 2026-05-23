@@ -6621,46 +6621,21 @@ td {
 
 .planning-template-exercise-table th:nth-child(1),
 .planning-template-exercise-table td:nth-child(1) {
-  width: 19%;
+  width: 18%;
 }
 
 .planning-template-exercise-table th:nth-child(2),
 .planning-template-exercise-table td:nth-child(2) {
-  width: 26%;
+  width: 45%;
 }
 
 .planning-template-exercise-table th:nth-child(3),
 .planning-template-exercise-table td:nth-child(3) {
-  width: 22%;
+  width: 29%;
 }
 
 .planning-template-exercise-table th:nth-child(4),
 .planning-template-exercise-table td:nth-child(4) {
-  width: 25%;
-}
-
-.planning-template-exercise-table th:nth-child(5),
-.planning-template-exercise-table td:nth-child(5) {
-  width: 8%;
-}
-
-.planning-template-exercise-table.is-imported-template th:nth-child(1),
-.planning-template-exercise-table.is-imported-template td:nth-child(1) {
-  width: 20%;
-}
-
-.planning-template-exercise-table.is-imported-template th:nth-child(2),
-.planning-template-exercise-table.is-imported-template td:nth-child(2) {
-  width: 38%;
-}
-
-.planning-template-exercise-table.is-imported-template th:nth-child(3),
-.planning-template-exercise-table.is-imported-template td:nth-child(3) {
-  width: 34%;
-}
-
-.planning-template-exercise-table.is-imported-template th:nth-child(4),
-.planning-template-exercise-table.is-imported-template td:nth-child(4) {
   width: 8%;
 }
 
@@ -7369,18 +7344,6 @@ td {
     grid-column: 1 / -1;
   }
 
-  .planning-template-exercise-table td:nth-child(1)::before {
-    content: "Упр.";
-  }
-
-  .planning-template-exercise-table td:nth-child(2)::before {
-    content: "Подходы";
-  }
-
-  .planning-template-exercise-table td:nth-child(3)::before {
-    content: "Контроль";
-  }
-
   .planning-template-exercise-action-cell {
     align-self: end;
     justify-items: end;
@@ -7402,9 +7365,6 @@ td {
     content: "Объём";
   }
 
-  .planning-template-exercise-table td:nth-child(4)::before {
-    content: "Контроль";
-  }
 }
 
 .planning-assigned-session-list {

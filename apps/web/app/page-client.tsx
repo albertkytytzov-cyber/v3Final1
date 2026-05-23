@@ -2917,7 +2917,7 @@ const PLAN_BLOCK_ROW_KIND_LABELS: Record<PlanBlockRowKind, Record<Language, stri
   workout: { en: "Workout", ru: "Тренировка", bg: "Тренировка" },
   exercise: { en: "Exercise", ru: "Упражнение", bg: "Упражнение" },
   instruction: { en: "Instruction", ru: "Инструкция", bg: "Инструкция" },
-  control: { en: "Control", ru: "Контроль", bg: "Контрол" },
+  control: { en: "Metric", ru: "Показатель", bg: "Показател" },
   note: { en: "Note", ru: "Заметка", bg: "Бележка" },
   recovery: { en: "Recovery", ru: "Восстановление", bg: "Възстановяване" },
 };
@@ -6334,13 +6334,6 @@ function formatExercisePresetVolume(preset: BlockExercisePreset, language: Langu
   });
 }
 
-function formatExercisePresetControl(preset: BlockExercisePreset, language: Language) {
-  const control = preset.targetRpe ? `RPE ${preset.targetRpe}` : "";
-  const notes = copyFor(language, preset.notes);
-
-  return control ? `${control} / ${notes}` : notes;
-}
-
 function buildPreparationRowFromPreset(
   preset: BlockExercisePreset,
   language: Language,
@@ -6348,8 +6341,11 @@ function buildPreparationRowFromPreset(
   return {
     block: copyFor(language, preset.label),
     volume: formatExercisePresetVolume(preset, language),
-    control: formatExercisePresetControl(preset, language),
   };
+}
+
+function getPreparationSessionDisplayColumns(session: PreparationPlanReference["weeks"][number]["days"][number]["sessions"][number]) {
+  return [session.columns[0] || "Блок", session.columns[1] || "Объём"];
 }
 
 function buildEmptyBlockExercise(language: Language, blockType: PlanBlockType): PlanExerciseInput {
@@ -6460,7 +6456,6 @@ function createEmptyPreparationPlanDraft(language: Language): PreparationPlanRef
                 columns: [
                   copyFor(language, { en: "Exercise", ru: "Упражнение", bg: "Упражнение" }),
                   copyFor(language, { en: "Volume", ru: "Объём", bg: "Обем" }),
-                  copyFor(language, { en: "Control", ru: "Контроль", bg: "Контрол" }),
                 ],
                 rows: [],
               },
@@ -10022,14 +10017,6 @@ export function PageClient({
     return exercise ? formatExerciseWorkCell(exercise, language).replace(/^-$/u, "") : "";
   }
 
-  function formatTemplateBlockControlCell(
-    block: PlanTemplatePayload["blocks"][number],
-    blockIndex: number,
-  ) {
-    const exercise = getTemplateBlockPrimaryExercise(block, blockIndex);
-    return exercise ? formatExerciseControlCell(exercise, language).replace(/^-$/u, "") : "";
-  }
-
   function updateTemplateBlockRow(
     dayIndex: number,
     sessionIndex: number,
@@ -10037,7 +10024,6 @@ export function PageClient({
     patch: Partial<{
       name: string;
       work: string;
-      control: string;
       rowKind: PlanBlockRowKind;
     }>,
   ) {
@@ -10048,7 +10034,7 @@ export function PageClient({
           return block;
         }
 
-        if (patch.rowKind && patch.name === undefined && patch.work === undefined && patch.control === undefined) {
+        if (patch.rowKind && patch.name === undefined && patch.work === undefined) {
           return {
             ...block,
             rowKind: patch.rowKind,
@@ -10059,7 +10045,7 @@ export function PageClient({
         const parsedBlock = createImportedPlanBlock(
           nextName,
           patch.work ?? formatTemplateBlockWorkCell(block, blockIndex),
-          patch.control ?? (importedPlanDraft ? "" : formatTemplateBlockControlCell(block, blockIndex)),
+          "",
           blockIndex,
         );
 
@@ -11121,12 +11107,11 @@ export function PageClient({
                 sessions: [
                   {
                     title: copyFor(language, { en: "Session", ru: "Сессия", bg: "Сесия" }),
-                    columns: ["Блок", "Объём", "Контроль"],
+                    columns: ["Блок", "Объём"],
                     rows: [
                       {
                         block: copyFor(language, { en: "Block", ru: "Блок", bg: "Блок" }),
                         volume: "",
-                        control: "",
                       },
                     ],
                   },
@@ -11157,12 +11142,11 @@ export function PageClient({
                   sessions: [
                     {
                       title: copyFor(language, { en: "Session", ru: "Сессия", bg: "Сесия" }),
-                      columns: ["Блок", "Объём", "Контроль"],
+                      columns: ["Блок", "Объём"],
                       rows: [
                         {
                           block: copyFor(language, { en: "Block", ru: "Блок", bg: "Блок" }),
                           volume: "",
-                          control: "",
                         },
                       ],
                     },
@@ -11192,12 +11176,11 @@ export function PageClient({
                         ...day.sessions,
                         {
                           title: copyFor(language, { en: "Session", ru: "Сессия", bg: "Сесия" }),
-                          columns: ["Блок", "Объём", "Контроль"],
+                          columns: ["Блок", "Объём"],
                           rows: [
                             {
                               block: copyFor(language, { en: "Block", ru: "Блок", bg: "Блок" }),
                               volume: "",
-                              control: "",
                             },
                           ],
                         },
@@ -11232,7 +11215,6 @@ export function PageClient({
                                 {
                                   block: copyFor(language, { en: "Block", ru: "Блок", bg: "Блок" }),
                                   volume: "",
-                                  control: "",
                                 },
                               ],
                             }
@@ -19066,13 +19048,6 @@ export function PageClient({
                                     onChange={(event) => updatePreparationRow(rowIndex, { volume: event.target.value })}
                                   />
                                 </label>
-                                <label className="field preparation-session-control-field">
-                                  <span>{copyFor(language, { en: "Control", ru: "Контроль", bg: "Контрол" })}</span>
-                                  <input
-                                    value={row.control}
-                                    onChange={(event) => updatePreparationRow(rowIndex, { control: event.target.value })}
-                                  />
-                                </label>
                               </div>
                             </article>
                           ))}
@@ -19189,7 +19164,7 @@ export function PageClient({
                             <table>
                               <thead>
                                 <tr>
-                                  {session.columns.map((column) => (
+                                  {getPreparationSessionDisplayColumns(session).map((column) => (
                                     <th key={column}>{column}</th>
                                   ))}
                                 </tr>
@@ -19199,7 +19174,6 @@ export function PageClient({
                                   <tr key={`${session.title}-${row.block}-${row.volume}`}>
                                     <td>{row.block}</td>
                                     <td>{row.volume}</td>
-                                    <td>{row.control}</td>
                                   </tr>
                                 ))}
                               </tbody>
@@ -21919,11 +21893,6 @@ export function PageClient({
                                           <th>
                                             {copyFor(language, { en: "Sets", ru: "Подходы", bg: "Серии" })}
                                           </th>
-                                          {importedPlanDraft ? null : (
-                                            <th>
-                                              {copyFor(language, { en: "Control", ru: "Контроль", bg: "Контрол" })}
-                                            </th>
-                                          )}
                                           <th aria-label={copyFor(language, { en: "Actions", ru: "Действия", bg: "Действия" })} />
                                         </tr>
                                       </thead>
@@ -21979,21 +21948,6 @@ export function PageClient({
                                                 }
                                               />
                                             </td>
-                                            {importedPlanDraft ? null : (
-                                              <td>
-                                                <input
-                                                  value={formatTemplateBlockControlCell(block, blockIndex)}
-                                                  onChange={(event) =>
-                                                    updateTemplateBlockRow(
-                                                      normalizedSelectedTemplateDayIndex,
-                                                      sessionIndex,
-                                                      blockIndex,
-                                                      { control: event.target.value },
-                                                    )
-                                                  }
-                                                />
-                                              </td>
-                                            )}
                                             <td className="planning-template-exercise-action-cell">
                                               <button
                                                 aria-label={copyFor(language, {

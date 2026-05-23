@@ -3,12 +3,11 @@ export type PreparationPlanNoteTone = "note" | "recovery" | "alert" | "analysis"
 export interface PreparationPlanTableRow {
   block: string;
   volume: string;
-  control: string;
 }
 
 export interface PreparationPlanSession {
   title: string;
-  columns: [string, string, string];
+  columns: [string, string];
   rows: PreparationPlanTableRow[];
   notes?: Array<{
     tone: PreparationPlanNoteTone;
@@ -147,21 +146,21 @@ export const PREPARATION_PLAN_REFERENCE: PreparationPlanReference = {
           sessions: [
             {
               title: "Утро — аэробный вход",
-              columns: ["Блок", "Объем", "Контроль"],
+              columns: ["Блок", "Объём"],
               rows: [
-                { block: "Кросс", volume: "4 км", control: "Z2 • 135-145" },
-                { block: "Ускорения", volume: "4x60 м", control: "70-75%" },
-                { block: "Дыхание / ходьба", volume: "6-8 мин", control: "после бега" },
+                { block: "Кросс", volume: "4 км / Z2 • 135-145" },
+                { block: "Ускорения", volume: "4x60 м / 70-75%" },
+                { block: "Дыхание / ходьба", volume: "6-8 мин / после бега" },
               ],
             },
             {
               title: "Вечер — круговая ОФП",
-              columns: ["Упражнение", "Повторы / время", "Примечание"],
+              columns: ["Блок", "Объём"],
               rows: [
-                { block: "Подтягивания", volume: "8-10", control: "без отказа" },
-                { block: "Отжимания", volume: "15", control: "ритм" },
-                { block: "Приседания", volume: "15", control: "собственный вес" },
-                { block: "Пресс", volume: "20", control: "контроль корпуса" },
+                { block: "Подтягивания", volume: "8-10 / без отказа" },
+                { block: "Отжимания", volume: "15 / ритм" },
+                { block: "Приседания", volume: "15 / собственный вес" },
+                { block: "Пресс", volume: "20 / контроль корпуса" },
               ],
             },
           ],
@@ -172,21 +171,21 @@ export const PREPARATION_PLAN_REFERENCE: PreparationPlanReference = {
           sessions: [
             {
               title: "Утро — сила низ",
-              columns: ["Упражнение", "Подходы", "Вес"],
+              columns: ["Блок", "Объём"],
               rows: [
-                { block: "Присед до 90°", volume: "4x4", control: "100 кг • 80%" },
-                { block: "Становая классика", volume: "4x4", control: "88 кг • 80%" },
-                { block: "Румынская тяга", volume: "3x5", control: "77 кг • 70%" },
-                { block: "Планка с весом", volume: "3x45 сек", control: "+10 кг" },
+                { block: "Присед до 90°", volume: "4x4 / 100 кг • 80%" },
+                { block: "Становая классика", volume: "4x4 / 88 кг • 80%" },
+                { block: "Румынская тяга", volume: "3x5 / 77 кг • 70%" },
+                { block: "Планка с весом", volume: "3x45 сек / +10 кг" },
               ],
             },
             {
               title: "Вечер — контрастный взрыв",
-              columns: ["Упражнение", "Подходы", "Примечание"],
+              columns: ["Блок", "Объём"],
               rows: [
-                { block: "Прыжки на тумбу", volume: "4x5", control: "55-60 см" },
-                { block: "Броски медбола", volume: "4x6", control: "5 кг" },
-                { block: "Спринты", volume: "6x20 м", control: "полный отдых" },
+                { block: "Прыжки на тумбу", volume: "4x5 / 55-60 см" },
+                { block: "Броски медбола", volume: "4x6 / 5 кг" },
+                { block: "Спринты", volume: "6x20 м / полный отдых" },
               ],
             },
           ],
@@ -197,12 +196,12 @@ export const PREPARATION_PLAN_REFERENCE: PreparationPlanReference = {
           sessions: [
             {
               title: "Ключевая сессия",
-              columns: ["Блок", "Объем", "Интенсивность"],
+              columns: ["Блок", "Объём"],
               rows: [
-                { block: "Техника в темпе", volume: "20 мин", control: "75-80%" },
-                { block: "Схватки", volume: "6x3 мин", control: "85-90%" },
-                { block: "Отдых между схватками", volume: "2 мин", control: "активный" },
-                { block: "Финишный блок", volume: "6x30 сек / 30 сек", control: "резина / проходы / канат" },
+                { block: "Техника в темпе", volume: "20 мин / 75-80%" },
+                { block: "Схватки", volume: "6x3 мин / 85-90%" },
+                { block: "Отдых между схватками", volume: "2 мин / активный" },
+                { block: "Финишный блок", volume: "6x30 сек / 30 сек / резина / проходы / канат" },
               ],
               notes: [
                 {
@@ -219,20 +218,20 @@ export const PREPARATION_PLAN_REFERENCE: PreparationPlanReference = {
           sessions: [
             {
               title: "Утро — хват",
-              columns: ["Упражнение", "Подходы", "Нагрузка"],
+              columns: ["Блок", "Объём"],
               rows: [
-                { block: "Канат без ног", volume: "5xмакс", control: "качество" },
-                { block: "Фермерская ходьба", volume: "4x40 м", control: "34-36 кг" },
-                { block: "Вис на полотенцах", volume: "4x35-40 сек", control: "плотный хват" },
+                { block: "Канат без ног", volume: "5xмакс / качество" },
+                { block: "Фермерская ходьба", volume: "4x40 м / 34-36 кг" },
+                { block: "Вис на полотенцах", volume: "4x35-40 сек / плотный хват" },
               ],
             },
             {
               title: "Вечер — сила верха",
-              columns: ["Упражнение", "Подходы", "Вес"],
+              columns: ["Блок", "Объём"],
               rows: [
-                { block: "Жим лежа", volume: "4x4", control: "49 кг • 75%" },
-                { block: "Подтягивания с весом", volume: "5x5", control: "+8 кг" },
-                { block: "Тяга штанги в наклоне", volume: "4x6", control: "50 кг" },
+                { block: "Жим лежа", volume: "4x4 / 49 кг • 75%" },
+                { block: "Подтягивания с весом", volume: "5x5 / +8 кг" },
+                { block: "Тяга штанги в наклоне", volume: "4x6 / 50 кг" },
               ],
             },
           ],
@@ -243,11 +242,11 @@ export const PREPARATION_PLAN_REFERENCE: PreparationPlanReference = {
           sessions: [
             {
               title: "Восстановительный день",
-              columns: ["Блок", "Объем", "Контроль"],
+              columns: ["Блок", "Объём"],
               rows: [
-                { block: "Прогулка", volume: "30-40 мин", control: "спокойно" },
-                { block: "Мобилити", volume: "15-20 мин", control: "без боли" },
-                { block: "Сон", volume: "приоритет", control: "полное снятие усталости" },
+                { block: "Прогулка", volume: "30-40 мин / спокойно" },
+                { block: "Мобилити", volume: "15-20 мин / без боли" },
+                { block: "Сон", volume: "приоритет / полное снятие усталости" },
               ],
               notes: [{ tone: "recovery", text: "Вечером без тяжелой соленой пищи и без большого объема углеводов." }],
             },
@@ -269,20 +268,20 @@ export const PREPARATION_PLAN_REFERENCE: PreparationPlanReference = {
           sessions: [
             {
               title: "Утро — сила",
-              columns: ["Упражнение", "Подходы", "Вес"],
+              columns: ["Блок", "Объём"],
               rows: [
-                { block: "Присед до 90°", volume: "5x3", control: "104 кг • 83%" },
-                { block: "Становая", volume: "5x3", control: "91 кг • 83%" },
-                { block: "Болгарский сплит-присед", volume: "3x6/6", control: "умеренно" },
+                { block: "Присед до 90°", volume: "5x3 / 104 кг • 83%" },
+                { block: "Становая", volume: "5x3 / 91 кг • 83%" },
+                { block: "Болгарский сплит-присед", volume: "3x6/6 / умеренно" },
               ],
             },
             {
               title: "Вечер — финишная мощность",
-              columns: ["Блок", "Объем", "Контроль"],
+              columns: ["Блок", "Объём"],
               rows: [
-                { block: "Интервальный блок", volume: "4x20 сек / 40 сек", control: "резина -> проход -> клинч" },
-                { block: "Пульс", volume: "170-185", control: "без развала техники" },
-                { block: "Дожим", volume: "убран", control: "не перегрузить 07.04" },
+                { block: "Интервальный блок", volume: "4x20 сек / 40 сек / резина -> проход -> клинч" },
+                { block: "Пульс", volume: "170-185 / без развала техники" },
+                { block: "Дожим", volume: "убран / не перегрузить 07.04" },
               ],
               notes: [{ tone: "analysis", text: "Главный приоритет — качество, а не добивание объемом." }],
             },
@@ -299,11 +298,11 @@ export const PREPARATION_PLAN_REFERENCE: PreparationPlanReference = {
           sessions: [
             {
               title: "Ключевая сессия",
-              columns: ["Блок", "Объем", "Интенсивность"],
+              columns: ["Блок", "Объём"],
               rows: [
-                { block: "Техника + входы в ноги", volume: "25 мин", control: "75-80%" },
-                { block: "Схватки", volume: "4x4 мин", control: "88-92%" },
-                { block: "Последний отрезок", volume: "1x2 мин", control: "агрессивно, но без хаоса" },
+                { block: "Техника + входы в ноги", volume: "25 мин / 75-80%" },
+                { block: "Схватки", volume: "4x4 мин / 88-92%" },
+                { block: "Последний отрезок", volume: "1x2 мин / агрессивно, но без хаоса" },
               ],
             },
           ],
@@ -314,11 +313,11 @@ export const PREPARATION_PLAN_REFERENCE: PreparationPlanReference = {
           sessions: [
             {
               title: "Легкая база",
-              columns: ["Блок", "Объем", "Контроль"],
+              columns: ["Блок", "Объём"],
               rows: [
-                { block: "Кросс", volume: "5 км", control: "Z2 • 135-145" },
-                { block: "Мобилити", volume: "20 мин", control: "таз / грудной / плечи" },
-                { block: "Растяжка", volume: "10-12 мин", control: "спокойно" },
+                { block: "Кросс", volume: "5 км / Z2 • 135-145" },
+                { block: "Мобилити", volume: "20 мин / таз / грудной / плечи" },
+                { block: "Растяжка", volume: "10-12 мин / спокойно" },
               ],
             },
           ],
@@ -329,20 +328,20 @@ export const PREPARATION_PLAN_REFERENCE: PreparationPlanReference = {
           sessions: [
             {
               title: "Утро — взрыв",
-              columns: ["Упражнение", "Подходы", "Контроль"],
+              columns: ["Блок", "Объём"],
               rows: [
-                { block: "Прыжки на тумбу", volume: "4x4", control: "быстро" },
-                { block: "Броски медбола", volume: "5x5", control: "взрыв" },
-                { block: "Спринты", volume: "5x20 м", control: "полный отдых" },
+                { block: "Прыжки на тумбу", volume: "4x4 / быстро" },
+                { block: "Броски медбола", volume: "5x5 / взрыв" },
+                { block: "Спринты", volume: "5x20 м / полный отдых" },
               ],
             },
             {
               title: "Вечер — хват",
-              columns: ["Упражнение", "Подходы", "Нагрузка"],
+              columns: ["Блок", "Объём"],
               rows: [
-                { block: "Канат", volume: "5xмакс", control: "без отказа в хлам" },
-                { block: "Фермерская", volume: "4x35 м", control: "34 кг" },
-                { block: "Вис на полотенцах", volume: "4x35 сек", control: "жесткий хват" },
+                { block: "Канат", volume: "5xмакс / без отказа в хлам" },
+                { block: "Фермерская", volume: "4x35 м / 34 кг" },
+                { block: "Вис на полотенцах", volume: "4x35 сек / жесткий хват" },
               ],
             },
           ],
@@ -358,11 +357,11 @@ export const PREPARATION_PLAN_REFERENCE: PreparationPlanReference = {
           sessions: [
             {
               title: "Соревновательная работа",
-              columns: ["Блок", "Объем", "Контроль"],
+              columns: ["Блок", "Объём"],
               rows: [
-                { block: "Разминка", volume: "20 мин", control: "как на турнире" },
-                { block: "Схватки", volume: "4x3 мин", control: "турнирный отдых" },
-                { block: "Разбор", volume: "после 2-й и 4-й", control: "коротко" },
+                { block: "Разминка", volume: "20 мин / как на турнире" },
+                { block: "Схватки", volume: "4x3 мин / турнирный отдых" },
+                { block: "Разбор", volume: "после 2-й и 4-й / коротко" },
               ],
             },
           ],
@@ -378,11 +377,11 @@ export const PREPARATION_PLAN_REFERENCE: PreparationPlanReference = {
           sessions: [
             {
               title: "Контрольный день",
-              columns: ["Блок", "Объем", "Примечание"],
+              columns: ["Блок", "Объём"],
               rows: [
-                { block: "Разминка", volume: "20 мин", control: "как на турнире" },
-                { block: "Схватки", volume: "2-3x3 мин", control: "качество, не добивание" },
-                { block: "Заминка", volume: "12 мин", control: "обязательна" },
+                { block: "Разминка", volume: "20 мин / как на турнире" },
+                { block: "Схватки", volume: "2-3x3 мин / качество, не добивание" },
+                { block: "Заминка", volume: "12 мин / обязательна" },
               ],
             },
           ],
@@ -393,10 +392,10 @@ export const PREPARATION_PLAN_REFERENCE: PreparationPlanReference = {
           sessions: [
             {
               title: "Сброс",
-              columns: ["Блок", "Объем", "Контроль"],
+              columns: ["Блок", "Объём"],
               rows: [
-                { block: "Сон", volume: "приоритет", control: "без тренировочного стресса" },
-                { block: "Ходьба", volume: "по самочувствию", control: "легко" },
+                { block: "Сон", volume: "приоритет / без тренировочного стресса" },
+                { block: "Ходьба", volume: "по самочувствию / легко" },
               ],
             },
           ],
@@ -412,11 +411,11 @@ export const PREPARATION_PLAN_REFERENCE: PreparationPlanReference = {
           sessions: [
             {
               title: "Легкое восстановление",
-              columns: ["Блок", "Объем", "Контроль"],
+              columns: ["Блок", "Объём"],
               rows: [
-                { block: "Кросс", volume: "3 км", control: "Z1-Z2" },
-                { block: "Мобилити + растяжка", volume: "25 мин", control: "без боли" },
-                { block: "Дыхание", volume: "5-6 мин", control: "спокойный выдох" },
+                { block: "Кросс", volume: "3 км / Z1-Z2" },
+                { block: "Мобилити + растяжка", volume: "25 мин / без боли" },
+                { block: "Дыхание", volume: "5-6 мин / спокойный выдох" },
               ],
             },
           ],
@@ -427,14 +426,14 @@ export const PREPARATION_PLAN_REFERENCE: PreparationPlanReference = {
           sessions: [
             {
               title: "Поддержание силы",
-              columns: ["Упражнение", "Подходы", "Вес"],
+              columns: ["Блок", "Объём"],
               rows: [
-                { block: "Присед", volume: "4x3", control: "101 кг • 81%" },
-                { block: "Становая", volume: "4x3", control: "88 кг • 80%" },
-                { block: "Жим лежа", volume: "4x3", control: "49 кг • 75%" },
-                { block: "Подтягивания с весом", volume: "4x4", control: "+8 кг" },
+                { block: "Присед", volume: "4x3 / 101 кг • 81%" },
+                { block: "Становая", volume: "4x3 / 88 кг • 80%" },
+                { block: "Жим лежа", volume: "4x3 / 49 кг • 75%" },
+                { block: "Подтягивания с весом", volume: "4x4 / +8 кг" },
               ],
-              notes: [{ tone: "note", text: "Объем уже ниже. Задача — сохранить силу, а не развивать ее." }],
+              notes: [{ tone: "note", text: "Объём уже ниже. Задача — сохранить силу, а не развивать ее." }],
             },
           ],
         },
@@ -449,11 +448,11 @@ export const PREPARATION_PLAN_REFERENCE: PreparationPlanReference = {
           sessions: [
             {
               title: "Контроль темпа",
-              columns: ["Блок", "Объем", "Интенсивность"],
+              columns: ["Блок", "Объём"],
               rows: [
-                { block: "Предутомление", volume: "3x90 сек", control: "резина + спрол + канат" },
-                { block: "После каждого блока", volume: "1x3 мин схватка", control: "85-90%" },
-                { block: "Итого схваток", volume: "2x3 мин", control: "под контроль темпа" },
+                { block: "Предутомление", volume: "3x90 сек / резина + спрол + канат" },
+                { block: "После каждого блока", volume: "1x3 мин схватка / 85-90%" },
+                { block: "Итого схваток", volume: "2x3 мин / под контроль темпа" },
               ],
             },
           ],
@@ -464,17 +463,17 @@ export const PREPARATION_PLAN_REFERENCE: PreparationPlanReference = {
           sessions: [
             {
               title: "Утро — хват",
-              columns: ["Упражнение", "Подходы", "Примечание"],
+              columns: ["Блок", "Объём"],
               rows: [
-                { block: "Канат", volume: "4xмакс", control: "без отказа в хлам" },
-                { block: "Фермерская", volume: "4x30 м", control: "34 кг" },
-                { block: "Вис на полотенцах", volume: "3x40 сек", control: "жесткий хват" },
+                { block: "Канат", volume: "4xмакс / без отказа в хлам" },
+                { block: "Фермерская", volume: "4x30 м / 34 кг" },
+                { block: "Вис на полотенцах", volume: "3x40 сек / жесткий хват" },
               ],
             },
             {
               title: "Вечер — восстановление",
-              columns: ["Блок", "Объем", "Контроль"],
-              rows: [{ block: "Растяжка + массаж", volume: "25 мин", control: "предплечья и спина" }],
+              columns: ["Блок", "Объём"],
+              rows: [{ block: "Растяжка + массаж", volume: "25 мин / предплечья и спина" }],
             },
           ],
         },
@@ -489,11 +488,11 @@ export const PREPARATION_PLAN_REFERENCE: PreparationPlanReference = {
           sessions: [
             {
               title: "Контроль",
-              columns: ["Блок", "Объем", "Контроль"],
+              columns: ["Блок", "Объём"],
               rows: [
-                { block: "Схватки", volume: "3x4 мин", control: "1-я контроль, 2-я соревновательно, 3-я финиш" },
-                { block: "Отдых", volume: "3 мин", control: "активный" },
-                { block: "После 3-й", volume: "4x20 сек", control: "максимум только при свежести" },
+                { block: "Схватки", volume: "3x4 мин / 1-я контроль, 2-я соревновательно, 3-я финиш" },
+                { block: "Отдых", volume: "3 мин / активный" },
+                { block: "После 3-й", volume: "4x20 сек / максимум только при свежести" },
               ],
             },
           ],
@@ -504,11 +503,11 @@ export const PREPARATION_PLAN_REFERENCE: PreparationPlanReference = {
           sessions: [
             {
               title: "Минимальная активация",
-              columns: ["Упражнение", "Подходы", "Контроль"],
+              columns: ["Блок", "Объём"],
               rows: [
-                { block: "Броски медбола", volume: "3x3", control: "легкая скорость" },
-                { block: "Прыжки на тумбу", volume: "2x3", control: "без накопления усталости" },
-                { block: "Спринты", volume: "2x15 м", control: "ощущение скорости" },
+                { block: "Броски медбола", volume: "3x3 / легкая скорость" },
+                { block: "Прыжки на тумбу", volume: "2x3 / без накопления усталости" },
+                { block: "Спринты", volume: "2x15 м / ощущение скорости" },
               ],
             },
           ],
@@ -519,10 +518,10 @@ export const PREPARATION_PLAN_REFERENCE: PreparationPlanReference = {
           sessions: [
             {
               title: "Свободный день",
-              columns: ["Блок", "Объем", "Контроль"],
+              columns: ["Блок", "Объём"],
               rows: [
-                { block: "Ходьба", volume: "по самочувствию", control: "без нагрузки" },
-                { block: "Питание / сон", volume: "приоритет", control: "гидратация и восстановление" },
+                { block: "Ходьба", volume: "по самочувствию / без нагрузки" },
+                { block: "Питание / сон", volume: "приоритет / гидратация и восстановление" },
               ],
             },
           ],
@@ -543,13 +542,13 @@ export const PREPARATION_PLAN_REFERENCE: PreparationPlanReference = {
           sessions: [
             {
               title: "Единая сессия • 30-35 мин",
-              columns: ["Упражнение", "Подходы", "Контроль"],
+              columns: ["Блок", "Объём"],
               rows: [
-                { block: "Прыжки на тумбу", volume: "3x4", control: "свежо, без тяжести" },
-                { block: "Броски медбола", volume: "3x5", control: "взрыв" },
-                { block: "Подтягивания", volume: "3x3", control: "без отказа" },
-                { block: "Резина на скорость", volume: "3x10", control: "резко" },
-                { block: "Растяжка / заминка", volume: "8-10 мин", control: "обязательно" },
+                { block: "Прыжки на тумбу", volume: "3x4 / свежо, без тяжести" },
+                { block: "Броски медбола", volume: "3x5 / взрыв" },
+                { block: "Подтягивания", volume: "3x3 / без отказа" },
+                { block: "Резина на скорость", volume: "3x10 / резко" },
+                { block: "Растяжка / заминка", volume: "8-10 мин / обязательно" },
               ],
               notes: [{ tone: "final", text: "Тяжелой силовой здесь больше нет. Только активация нервной системы." }],
             },
@@ -566,12 +565,12 @@ export const PREPARATION_PLAN_REFERENCE: PreparationPlanReference = {
           sessions: [
             {
               title: "День дороги • короткая активация",
-              columns: ["Блок", "Объем", "Интенсивность"],
+              columns: ["Блок", "Объём"],
               rows: [
-                { block: "Техника / разминка", volume: "15-20 мин", control: "очень легко" },
-                { block: "Входы в ноги", volume: "2-3x10-15 сек", control: "скорость без закисления" },
-                { block: "Мобилити", volume: "8-10 мин", control: "таз, спина, плечи" },
-                { block: "Во время дороги", volume: "каждые 60-90 мин", control: "встать и пройтись" },
+                { block: "Техника / разминка", volume: "15-20 мин / очень легко" },
+                { block: "Входы в ноги", volume: "2-3x10-15 сек / скорость без закисления" },
+                { block: "Мобилити", volume: "8-10 мин / таз, спина, плечи" },
+                { block: "Во время дороги", volume: "каждые 60-90 мин / встать и пройтись" },
               ],
               notes: [{ tone: "final", text: "Задача — доехать свежими, не забить ноги и не потерять резкость." }],
             },
@@ -583,11 +582,11 @@ export const PREPARATION_PLAN_REFERENCE: PreparationPlanReference = {
           sessions: [
             {
               title: "Короткая активация • 20-25 мин",
-              columns: ["Блок", "Объем", "Контроль"],
+              columns: ["Блок", "Объём"],
               rows: [
-                { block: "Разминка", volume: "10-12 мин", control: "легкая" },
-                { block: "Ускорения", volume: "2-3x20-30 м", control: "70-80%" },
-                { block: "Мобилити / растяжка", volume: "8-10 мин", control: "без кросса" },
+                { block: "Разминка", volume: "10-12 мин / легкая" },
+                { block: "Ускорения", volume: "2-3x20-30 м / 70-80%" },
+                { block: "Мобилити / растяжка", volume: "8-10 мин / без кросса" },
               ],
               notes: [{ tone: "alert", text: "За сутки до старта нужен не объем, а легкость." }],
             },
@@ -599,12 +598,12 @@ export const PREPARATION_PLAN_REFERENCE: PreparationPlanReference = {
           sessions: [
             {
               title: "Предстартовая активация",
-              columns: ["Блок", "Объем", "Цель"],
+              columns: ["Блок", "Объём"],
               rows: [
-                { block: "Стандартная разминка", volume: "15-20 мин", control: "войти в боевое состояние" },
-                { block: "Ускорения", volume: "5-7 коротких", control: "поднять нервную систему" },
-                { block: "Входы в ноги / атаки", volume: "2-3 коротких серии", control: "почувствовать резкость" },
-                { block: "Между схватками", volume: "ходьба + дыхание", control: "не остывать" },
+                { block: "Стандартная разминка", volume: "15-20 мин / войти в боевое состояние" },
+                { block: "Ускорения", volume: "5-7 коротких / поднять нервную систему" },
+                { block: "Входы в ноги / атаки", volume: "2-3 коротких серии / почувствовать резкость" },
+                { block: "Между схватками", volume: "ходьба + дыхание / не остывать" },
               ],
               notes: [{ tone: "final", text: "В день турнира только активация и сохранение свежести." }],
             },
