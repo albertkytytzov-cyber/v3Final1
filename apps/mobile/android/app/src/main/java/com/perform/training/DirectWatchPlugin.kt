@@ -619,6 +619,7 @@ class DirectWatchPlugin : Plugin() {
         val authStep1 = call.getBoolean("authStep1") ?: false
         val postAuthProbe = call.getBoolean("postAuthProbe") ?: false
         val authKeyHex = call.getString("authKeyHex")?.trim()?.takeIf { it.isNotBlank() }
+        val entryDate = call.getString("entryDate")?.trim()?.takeIf { isClassicEntryDate(it) }
         if (address.isNullOrBlank()) {
             call.reject("deviceId is required")
             return
@@ -756,8 +757,10 @@ class DirectWatchPlugin : Plugin() {
                             sentPostAuthProbe = true
                             errorMessage = readClassicPackets(socket, packets, combined, CLASSIC_POST_AUTH_READ_MS) ?: errorMessage
 
-                            val activityFileIds = classicActivityFileIds(combined.toByteArray(), authStep2.decryptionKey)
-                                .take(CLASSIC_ACTIVITY_FILE_PROBE_LIMIT)
+                            val activityFileIds = selectClassicActivityFileIdsForEntryDate(
+                                classicActivityFileIds(combined.toByteArray(), authStep2.decryptionKey),
+                                entryDate,
+                            ).take(CLASSIC_ACTIVITY_FILE_PROBE_LIMIT)
                             if (activityFileIds.isNotEmpty()) {
                                 activityFileIds.forEachIndexed { index, fileId ->
                                     socket.outputStream.write(
@@ -2934,6 +2937,58 @@ class DirectWatchPlugin : Plugin() {
             offset += 7
         }
         return files
+    }
+
+    private fun selectClassicActivityFileIdsForEntryDate(
+        fileIds: List<ByteArray>,
+        entryDate: String?,
+    ): List<ByteArray> {
+        if (entryDate.isNullOrBlank()) {
+            return fileIds
+        }
+
+        val previousEntryDate = try {
+            java.time.LocalDate.parse(entryDate).minusDays(1).toString()
+        } catch (_: Exception) {
+            null
+        }
+        val selected = fileIds.filter { fileId ->
+            val file = parseClassicActivityFileIds(fileId).firstOrNull() ?: return@filter false
+            val fileEntryDate = classicActivityFileEntryDate(file) ?: return@filter false
+            fileEntryDate == entryDate ||
+                (
+                    previousEntryDate != null &&
+                        fileEntryDate == previousEntryDate &&
+                        isClassicSleepActivityFile(file)
+                    )
+        }
+
+        return selected.ifEmpty { fileIds }
+    }
+
+    private fun classicActivityFileEntryDate(file: ClassicActivityFileSummary): String? {
+        return try {
+            java.time.Instant.parse(file.timestamp)
+                .plusSeconds(file.timezone.toLong() * 15L * 60L)
+                .atOffset(java.time.ZoneOffset.UTC)
+                .toLocalDate()
+                .toString()
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun isClassicSleepActivityFile(file: ClassicActivityFileSummary): Boolean {
+        return file.type == 0 && (file.subtype == 8 || file.subtype == 3)
+    }
+
+    private fun isClassicEntryDate(value: String): Boolean {
+        return try {
+            java.time.LocalDate.parse(value)
+            true
+        } catch (_: Exception) {
+            false
+        }
     }
 
     private fun parseClassicActivityChunk(payload: ByteArray): ClassicActivityChunk? {

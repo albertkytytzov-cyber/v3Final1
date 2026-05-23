@@ -289,7 +289,13 @@ interface DirectWatchPlugin {
   inspectDevice?: (input: { deviceId: string }) => Promise<DirectWatchInspection>;
   isAvailable?: () => Promise<DirectWatchAvailability>;
   pairDevice?: (input: { deviceId: string }) => Promise<DirectWatchPairingResult>;
-  probeClassicSession?: (input: { authKeyHex?: string; authStep1?: boolean; deviceId: string; postAuthProbe?: boolean }) => Promise<DirectWatchClassicProbe>;
+  probeClassicSession?: (input: {
+    authKeyHex?: string;
+    authStep1?: boolean;
+    deviceId: string;
+    entryDate?: string;
+    postAuthProbe?: boolean;
+  }) => Promise<DirectWatchClassicProbe>;
   requestAuthorization?: () => Promise<DirectWatchPermissionResult>;
   scanDevices?: (input?: { durationMs?: number }) => Promise<DirectWatchScanResult>;
   startSession?: (input: { deviceId: string }) => Promise<DirectWatchSessionStatus>;
@@ -475,6 +481,7 @@ export async function probeDirectWatchClassicSession(
   authStep1 = false,
   authKeyHex?: string,
   postAuthProbe = false,
+  entryDate?: string,
 ): Promise<DirectWatchClassicProbe> {
   const plugin = getDirectWatchPlugin();
 
@@ -489,7 +496,7 @@ export async function probeDirectWatchClassicSession(
     }
   }
 
-  const probe = await plugin.probeClassicSession({ authKeyHex, authStep1, deviceId, postAuthProbe });
+  const probe = await plugin.probeClassicSession({ authKeyHex, authStep1, deviceId, entryDate, postAuthProbe });
   return normalizeDirectWatchClassicProbe(probe);
 }
 
@@ -527,7 +534,7 @@ export async function readDirectWatchDailySummary(
   deviceId: string,
   authKeyHex: string,
 ): Promise<DeviceHealthDailySummaryPayload> {
-  const probe = await probeDirectWatchClassicSession(deviceId, true, authKeyHex, true);
+  const probe = await probeDirectWatchClassicSession(deviceId, true, authKeyHex, true, entryDate);
 
   if (probe.authKeyStatus !== "valid" || !probe.sentActivityFileProbe) {
     throw new Error(probe.authKeyError || probe.error || "PERFORM Sync не смог авторизоваться на часах.");
