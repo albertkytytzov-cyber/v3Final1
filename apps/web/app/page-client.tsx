@@ -7534,6 +7534,7 @@ export function PageClient({
   const [readinessEntryDate, setReadinessEntryDate] = useState(
     getDateInputValue(),
   );
+  const [readinessEditDate, setReadinessEditDate] = useState("");
   const [user, setUser] = useState<AuthUser | null>(previewState?.user ?? null);
   const [todayEntry, setTodayEntry] = useState<ReadinessEntry | null>(null);
   const [coachAthletes, setCoachAthletes] = useState<CoachAthleteSummary[]>(
@@ -8021,6 +8022,9 @@ export function PageClient({
         feverFlag: { en: "Fever", ru: "Температура", bg: "Температура" },
       }[field.key][language],
   }));
+  const readinessSavedForSelectedDate = todayEntry?.entryDate === readinessEntryDate;
+  const isReadinessLocked =
+    readinessSavedForSelectedDate && readinessEditDate !== readinessEntryDate;
   const readinessCacheSavedAt =
     previewState?.cacheSavedAt.readiness ??
     importedReadCachedData<{ entry: ReadinessEntry | null }>(
@@ -9607,6 +9611,7 @@ export function PageClient({
       });
       setTodayEntry(response.entry);
       setReadinessEntryDate(response.entry.entryDate);
+      setReadinessEditDate("");
       importedWriteCachedData(OFFLINE_STORAGE_KEYS.readiness, {
         entry: response.entry,
         entryDate: response.entry.entryDate,
@@ -9639,6 +9644,7 @@ export function PageClient({
 
   function handleReadinessDateChange(entryDate: string) {
     setReadinessEntryDate(entryDate);
+    setReadinessEditDate("");
     void loadReadiness(entryDate);
   }
 
@@ -15298,6 +15304,7 @@ export function PageClient({
                             {field.type === "boolean" ? (
                               <input
                                 checked={Boolean(readinessForm[field.key])}
+                                disabled={isReadinessLocked}
                                 onChange={(event) =>
                                   setReadinessForm((current) => ({
                                     ...current,
@@ -15311,6 +15318,7 @@ export function PageClient({
                                 min={field.min}
                                 max={field.max}
                                 step={field.step}
+                                disabled={isReadinessLocked}
                                 type="number"
                                 value={String(readinessForm[field.key])}
                                 onChange={(event) =>
@@ -15324,9 +15332,30 @@ export function PageClient({
                           </label>
                         ))}
 
-                        <button className="primary-button" disabled={busy} type="submit">
-                          {busy ? ui("syncingNow") : t("saveReadiness")}
-                        </button>
+                        {isReadinessLocked ? (
+                          <button
+                            className="primary-button"
+                            disabled={busy}
+                            onClick={() => setReadinessEditDate(readinessEntryDate)}
+                            type="button"
+                          >
+                            {copyFor(language, {
+                              en: "Edit readiness",
+                              ru: "Редактировать готовность",
+                              bg: "Редактирай готовността",
+                            })}
+                          </button>
+                        ) : (
+                          <button className="primary-button" disabled={busy} type="submit">
+                            {busy ? ui("syncingNow") : readinessSavedForSelectedDate
+                              ? copyFor(language, {
+                                  en: "Save changes",
+                                  ru: "Сохранить изменения",
+                                  bg: "Запази промените",
+                                })
+                              : t("saveReadiness")}
+                          </button>
+                        )}
                       </form>
                     </div>
                   ) : null}
