@@ -3701,8 +3701,8 @@ function buildWatchHeartRateChart(
   const max = Math.max(...values);
   const average = values.reduce((sum, value) => sum + value, 0) / values.length;
   const estimatedHeartRateMax = getEstimatedHeartRateMax(max);
-  const lower = Math.min(min, estimatedHeartRateMax * 0.5);
-  const upper = Math.max(max, estimatedHeartRateMax);
+  const scale = buildAdaptiveHeartRateScale(min, max);
+  const { lower, upper } = scale;
   const range = Math.max(1, upper - lower);
   const dayMs = dayBounds.end.getTime() - dayBounds.start.getTime();
   const valueToY = (value: number) => 92 - ((value - lower) / range) * 84;
@@ -3721,22 +3721,19 @@ function buildWatchHeartRateChart(
     valueLabel: (value) => `${Math.round(value)} уд/мин`,
   };
   const heartRateZones = buildDeviceWorkoutHeartRateZones(zoneSeries, estimatedHeartRateMax);
-  const gridValues = [
-    estimatedHeartRateMax,
-    estimatedHeartRateMax * 0.9,
-    estimatedHeartRateMax * 0.8,
-    estimatedHeartRateMax * 0.7,
-    estimatedHeartRateMax * 0.6,
-    estimatedHeartRateMax * 0.5,
-    lower,
-  ].filter((value, index, values) => index === 0 || Math.round(value) !== Math.round(values[index - 1]));
+  const gridValues = scale.axisValues;
   const gridLines = gridValues.map((value) => {
     const y = valueToY(value).toFixed(2);
     return `<line class="grid" x1="0" x2="100" y1="${y}" y2="${y}"></line>`;
   }).join("");
   const zoneStrips = heartRateZones.map((zone) => {
-    const zoneTop = valueToY(zone.upper);
-    const zoneBottom = valueToY(zone.zone === 1 ? lower : zone.lower);
+    const visibleTop = Math.min(upper, zone.upper);
+    const visibleBottom = Math.max(lower, zone.zone === 1 ? 0 : zone.lower);
+    if (visibleBottom >= visibleTop) {
+      return "";
+    }
+    const zoneTop = valueToY(visibleTop);
+    const zoneBottom = valueToY(visibleBottom);
     return `<rect class="hr-zone-strip z${zone.zone}" height="${Math.max(0, zoneBottom - zoneTop).toFixed(2)}" width="1.7" x="0" y="${zoneTop.toFixed(2)}"></rect>`;
   }).join("");
   const peak = points.reduce((current, point) => point.value > current.value ? point : current, points[0]);
@@ -5703,6 +5700,51 @@ function getEstimatedHeartRateMax(maxWorkoutHeartRate: number) {
   return Math.max(180, Math.round(maxWorkoutHeartRate / 0.9));
 }
 
+function buildAdaptiveHeartRateScale(minValue: number, maxValue: number) {
+  const rawRange = Math.max(1, maxValue - minValue);
+  const lowerPadding = Math.max(8, rawRange * 0.18);
+  const upperPadding = Math.max(12, rawRange * 0.24);
+  let lower = Math.max(30, Math.floor((minValue - lowerPadding) / 10) * 10);
+  let upper = Math.min(230, Math.ceil((maxValue + upperPadding) / 10) * 10);
+
+  if (maxValue <= 100) {
+    upper = Math.max(upper, 120);
+  } else if (maxValue <= 120) {
+    upper = Math.max(upper, 130);
+  } else if (maxValue <= 150) {
+    upper = Math.max(upper, 160);
+  }
+
+  if (upper - lower < 50) {
+    upper = Math.min(230, lower + 50);
+  }
+
+  const steps = [10, 20, 30, 40, 50];
+  let step = steps[steps.length - 1];
+
+  for (const candidate of steps) {
+    const count = Math.floor((upper - lower) / candidate) + 1;
+    if (count <= 6) {
+      step = candidate;
+      break;
+    }
+  }
+
+  lower = Math.max(30, Math.floor(lower / step) * step);
+  upper = Math.min(240, Math.ceil(upper / step) * step);
+
+  const axisValues: number[] = [];
+  for (let value = upper; value >= lower; value -= step) {
+    axisValues.push(value);
+  }
+
+  return {
+    axisValues,
+    lower,
+    upper,
+  };
+}
+
 function getDeviceWorkoutHeartRateZone(value: number, estimatedMax: number) {
   const ratio = value / estimatedMax;
   if (ratio >= 0.9) {
@@ -5780,8 +5822,9 @@ function renderDeviceWorkoutSeriesGraph(series: DeviceWorkoutGraphSeries, workou
   const isHeartRate = series.key === "heartRate";
   const estimatedHeartRateMax = isHeartRate ? getEstimatedHeartRateMax(max) : null;
   const rawRange = Math.max(1, max - min);
-  const lower = isHeartRate && estimatedHeartRateMax !== null ? Math.min(min, estimatedHeartRateMax * 0.5) : min - rawRange * 0.08;
-  const upper = isHeartRate && estimatedHeartRateMax !== null ? Math.max(max, estimatedHeartRateMax) : max + rawRange * 0.08;
+  const heartRateScale = isHeartRate ? buildAdaptiveHeartRateScale(min, max) : null;
+  const lower = heartRateScale !== null ? heartRateScale.lower : min - rawRange * 0.08;
+  const upper = heartRateScale !== null ? heartRateScale.upper : max + rawRange * 0.08;
   const range = Math.max(1, upper - lower);
   const sampleStartTime = getDeviceWorkoutGraphTime(series.samples[0]?.sampleTime ?? "");
   const sampleEndTime = getDeviceWorkoutGraphTime(series.samples[series.samples.length - 1]?.sampleTime ?? "");
@@ -5829,16 +5872,8 @@ function renderDeviceWorkoutSeriesGraph(series: DeviceWorkoutGraphSeries, workou
       ? buildDeviceWorkoutHeartRateZones(series, estimatedHeartRateMax)
       : [];
   const heartRateGridValues =
-    estimatedHeartRateMax !== null
-      ? [
-          estimatedHeartRateMax,
-          estimatedHeartRateMax * 0.9,
-          estimatedHeartRateMax * 0.8,
-          estimatedHeartRateMax * 0.7,
-          estimatedHeartRateMax * 0.6,
-          estimatedHeartRateMax * 0.5,
-          lower,
-        ].filter((value, index, values) => index === 0 || Math.round(value) !== Math.round(values[index - 1]))
+    heartRateScale !== null
+      ? heartRateScale.axisValues
       : [];
   const axisLabels = isHeartRate
     ? heartRateGridValues.map((value) => String(Math.round(value)))
@@ -5883,8 +5918,13 @@ function renderDeviceWorkoutSeriesGraph(series: DeviceWorkoutGraphSeries, workou
       <div class="device-workout-chart-plot">
         <svg aria-label="${escapeHtml(series.label)}" role="img" viewBox="0 0 100 100" preserveAspectRatio="none">
           ${isHeartRate ? heartRateZones.map((zone) => {
-            const zoneTop = valueToY(zone.upper);
-            const zoneBottom = valueToY(zone.zone === 1 ? lower : zone.lower);
+            const visibleTop = Math.min(upper, zone.upper);
+            const visibleBottom = Math.max(lower, zone.zone === 1 ? 0 : zone.lower);
+            if (visibleBottom >= visibleTop) {
+              return "";
+            }
+            const zoneTop = valueToY(visibleTop);
+            const zoneBottom = valueToY(visibleBottom);
             return `<rect class="hr-zone-strip z${zone.zone}" height="${Math.max(0, zoneBottom - zoneTop).toFixed(2)}" width="1.6" x="0" y="${zoneTop.toFixed(2)}"></rect>`;
           }).join("") : ""}
           ${gridValues.map((value) => `<line class="grid" x1="0" x2="100" y1="${valueToY(value).toFixed(2)}" y2="${valueToY(value).toFixed(2)}"></line>`).join("")}
