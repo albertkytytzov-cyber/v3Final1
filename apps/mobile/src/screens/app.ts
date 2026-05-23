@@ -3248,14 +3248,9 @@ function renderWatchesScreen(state: MobileAppState) {
   const workouts = getDeviceWorkoutsForDate(state, athleteId, date);
 
   return `
-    <div class="screen-head watches-head">
-      <h2>Часы</h2>
-      <p>Сон, восстановление и PERFORM Sync за сегодня.</p>
-    </div>
-    ${renderWatchSyncPanel(state, date)}
-    ${renderWatchRecoveryCard(state, summary, date)}
-    ${renderWatchHeartRateChartCard(summary, heartRateSamples)}
     ${renderWatchParametersCard(summary)}
+    ${renderWatchHeartRateChartCard(summary, heartRateSamples)}
+    ${renderWatchSyncPanel(state, date)}
     ${renderWatchWorkoutsCard(workouts)}
     ${renderWatchSettingsPanel(state, summary, date)}
   `;
@@ -3284,25 +3279,11 @@ function renderWatchSyncPanel(state: MobileAppState, date: string) {
     <section class="watch-sync-panel is-${escapeHtml(statusKind)}">
       <div class="watch-sync-head">
         <div>
-          <span>PERFORM Sync</span>
-          <h3>Служебная синхронизация часов</h3>
-          <p>${escapeHtml(bridgeLabel)}</p>
+          <span>Обновление</span>
+          <h3>Данные часов</h3>
+          <p>${escapeHtml(deviceLabel)} · ${escapeHtml(lastSyncLabel)}</p>
         </div>
         <strong class="watch-sync-status">${escapeHtml(statusLabel)}</strong>
-      </div>
-      <div class="watch-sync-grid">
-        <article>
-          <span>Часы</span>
-          <strong>${escapeHtml(deviceLabel)}</strong>
-        </article>
-        <article>
-          <span>Последний запуск</span>
-          <strong>${escapeHtml(lastSyncLabel)}</strong>
-        </article>
-        <article>
-          <span>Город погоды</span>
-          <strong>${escapeHtml(weatherLocation.city)}</strong>
-        </article>
       </div>
       ${config.lastServiceError ? `<p class="watch-sync-error">${escapeHtml(config.lastServiceError)}</p>` : ""}
       <div class="watch-sync-actions">
@@ -3312,7 +3293,7 @@ function renderWatchSyncPanel(state: MobileAppState, date: string) {
           type="button"
           ${state.isBusy || !canServiceSync ? "disabled" : ""}
         >
-          Синхронизировать часы
+          Обновить данные
         </button>
         <button
           class="secondary-action"
@@ -3326,18 +3307,24 @@ function renderWatchSyncPanel(state: MobileAppState, date: string) {
         <button class="secondary-action" data-direct-watch-service-status type="button" ${state.isBusy ? "disabled" : ""}>
           Обновить статус
         </button>
-        <button
-          class="secondary-action"
-          data-direct-watch-service-stop
-          type="button"
-          ${state.isBusy || !isRunning ? "disabled" : ""}
-        >
-          Остановить службу
-        </button>
       </div>
       <details class="watch-sync-setup" ${setupOpen ? "open" : ""}>
-        <summary>Настройки подключения</summary>
+        <summary>Настройки</summary>
         <div class="watch-sync-setup-body">
+          <div class="watch-sync-grid">
+            <article>
+              <span>Часы</span>
+              <strong>${escapeHtml(deviceLabel)}</strong>
+            </article>
+            <article>
+              <span>Погода</span>
+              <strong>${escapeHtml(weatherLocation.city)}</strong>
+            </article>
+            <article>
+              <span>Канал</span>
+              <strong>${escapeHtml(bridgeLabel)}</strong>
+            </article>
+          </div>
           <div class="watch-sync-setup-grid">
             <label class="wide-field">
               <span>Город погоды</span>
@@ -3357,6 +3344,14 @@ function renderWatchSyncPanel(state: MobileAppState, date: string) {
             </button>
             <button class="secondary-action" data-direct-watch-scan type="button" ${state.isBusy ? "disabled" : ""}>
               Найти часы
+            </button>
+            <button
+              class="secondary-action"
+              data-direct-watch-service-stop
+              type="button"
+              ${state.isBusy || !isRunning ? "disabled" : ""}
+            >
+              Остановить службу
             </button>
           </div>
           ${renderWatchSyncDevicePicker(state, config)}
@@ -3520,11 +3515,6 @@ function renderWatchHeartRateChartCard(
             `).join("")}
           </aside>
         </div>
-        <p class="watch-heart-rate-approved-caption">${escapeHtml(chart.coverageNote)}</p>
-        <div class="watch-heart-rate-approved-note">
-          <strong>Вывод проверки</strong>
-          <span>${escapeHtml(chart.checkNote)}</span>
-        </div>
       ` : `
         <p class="watch-empty-note">Пока есть только дневной итог. После новой синхронизации PERFORM Sync сохранит все точки пульса без усреднения.</p>
       `}
@@ -3537,17 +3527,21 @@ function renderWatchParametersCard(summary: DeviceHealthDailySummary | null) {
   const stressAvg = readDeviceHealthRawNumber(rawPayload, "stressAvg");
   const trainingLoadDay = readDeviceHealthRawNumber(rawPayload, "trainingLoadDay");
   const vitality = readDeviceHealthRawNumber(rawPayload, "vitality");
+  const statusLabel = summary ? "обновлено" : "нет данных";
+  const sourceLabel = summary
+    ? `Источник: ${formatWatchProviderLabel(summary)} · ${formatDateTime(summary.syncedAt)}`
+    : "Источник появится после синхронизации";
 
   const rows = [
-    {
-      detail: formatDeviceHealthSleepDetail(summary),
-      label: "Сон",
-      value: formatDeviceHealthSleepValue(summary),
-    },
     {
       detail: formatDeviceHealthHeartRateDetail(summary),
       label: "Пульс покоя",
       value: formatDeviceHealthRestingHrValue(summary),
+    },
+    {
+      detail: formatDeviceHealthSleepDetail(summary),
+      label: "Сон",
+      value: formatDeviceHealthSleepValue(summary),
     },
     {
       detail: formatDeviceHealthOxygenDetail(summary),
@@ -3577,9 +3571,11 @@ function renderWatchParametersCard(summary: DeviceHealthDailySummary | null) {
     <section class="watch-parameters-card">
       <div class="watch-card-head">
         <div>
-          <span>Параметры</span>
-          <h3>Что пришло с часов</h3>
+          <span>Сегодня</span>
+          <h3>Показатели</h3>
+          <p>Главные данные с часов</p>
         </div>
+        <strong>${escapeHtml(statusLabel)}</strong>
       </div>
       <div class="watch-parameter-list">
         ${rows.map((row) => `
@@ -3590,6 +3586,7 @@ function renderWatchParametersCard(summary: DeviceHealthDailySummary | null) {
           </article>
         `).join("")}
       </div>
+      <p class="watch-parameters-source">${escapeHtml(sourceLabel)}</p>
     </section>
   `;
 }

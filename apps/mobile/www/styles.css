@@ -3794,10 +3794,29 @@ button {
     #ffffff;
 }
 
-.watch-sync-panel {
+.watch-parameters-card {
   border-color: rgba(15, 118, 110, 0.18);
   background:
-    linear-gradient(135deg, rgba(236, 253, 245, 0.95), rgba(255, 255, 255, 0.94)),
+    linear-gradient(135deg, rgba(240, 253, 250, 0.96), rgba(255, 255, 255, 0.94)),
+    #ffffff;
+}
+
+.watch-parameters-card .watch-card-head > div > span {
+  color: var(--accent-dark);
+}
+
+.watch-parameters-source {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 840;
+  line-height: 1.25;
+}
+
+.watch-sync-panel {
+  border-color: rgba(148, 163, 184, 0.18);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.94)),
     #ffffff;
 }
 
@@ -4681,19 +4700,32 @@ button {
 
 .watch-parameter-list {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
 
 .watch-parameter-row {
   display: grid;
-  grid-template-columns: minmax(0, 0.75fr) minmax(0, 0.65fr) minmax(0, 1.1fr);
-  gap: 8px;
-  align-items: center;
+  gap: 5px;
+  align-content: start;
   min-width: 0;
-  padding: 10px;
-  border: 1px solid rgba(148, 163, 184, 0.18);
+  min-height: 92px;
+  padding: 12px;
+  border: 1px solid rgba(15, 118, 110, 0.12);
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.76);
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.watch-parameter-row strong {
+  margin-top: 3px;
+  font-size: 1.88rem;
+  line-height: 1;
+}
+
+.watch-parameter-row small {
+  margin-top: 2px;
+  font-size: 0.74rem;
+  font-weight: 820;
 }
 
 .watch-workout-list {
