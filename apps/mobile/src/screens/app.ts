@@ -207,7 +207,11 @@ export function bootstrapMobileApp(root: HTMLElement) {
 
   let refreshData: (silent?: boolean) => Promise<void>;
 
-  const updateSelectedDayDate = (date: string, selectedScreen?: MobileScreen) => {
+  const updateSelectedDayDate = (
+    date: string,
+    selectedScreen?: MobileScreen,
+    selectedAthleteId?: string | null,
+  ) => {
     const selectedDayDate = normalizeDateValue(date) ?? todayValue();
     const shouldReloadDayData = isCoachRole(state.session.user?.role) &&
       selectedDayDate !== state.selectedDayDate;
@@ -216,6 +220,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
       executionDateFilter: selectedDayDate,
       planDateFilter: selectedDayDate,
       ...(selectedScreen ? { selectedScreen } : {}),
+      ...(selectedAthleteId !== undefined ? { selectedAthleteId } : {}),
       selectedDayDate,
     });
 
@@ -2168,7 +2173,15 @@ export function bootstrapMobileApp(root: HTMLElement) {
     root.querySelectorAll<HTMLButtonElement>("[data-coach-open-day]").forEach((button) => {
       button.addEventListener("click", () => {
         const selectedScreen = (button.dataset.coachOpenScreen as MobileScreen | undefined) ?? "dashboard";
-        updateSelectedDayDate(button.dataset.coachOpenDay ?? state.selectedDayDate, selectedScreen);
+        const selectedAthleteId = button.dataset.coachOpenAthlete ?? undefined;
+        if (selectedAthleteId) {
+          saveSelectedAthleteId(selectedAthleteId);
+        }
+        updateSelectedDayDate(
+          button.dataset.coachOpenDay ?? state.selectedDayDate,
+          selectedScreen,
+          selectedAthleteId,
+        );
       });
     });
 
@@ -3217,7 +3230,14 @@ function renderCoachTeamDayPanel(state: MobileAppState, selectedDayDate: string)
               <span>Нагр. ${formatLoadValue(dayData.summary.actualLoad)} / ${formatLoadValue(dayData.summary.plannedLoad)}</span>
               <span>Устр. ${deviceWorkouts ? `${linkedWorkouts}/${deviceWorkouts}` : "нет"}</span>
             </div>
-            <button data-athlete-card="${escapeHtml(athlete.athleteId)}" type="button">Открыть день</button>
+            <button
+              data-coach-open-athlete="${escapeHtml(athlete.athleteId)}"
+              data-coach-open-day="${escapeHtml(selectedDayDate)}"
+              data-coach-open-screen="dashboard"
+              type="button"
+            >
+              Открыть день
+            </button>
           </article>
         `).join("")}
       </div>

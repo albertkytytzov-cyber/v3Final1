@@ -9194,7 +9194,7 @@ export function PageClient({
       assignedExerciseIds: [],
     }));
     startTransition(() => {
-      setActiveWorkspace("coach-review");
+      setActiveWorkspace("coach-dashboard");
       setCoachView("execution");
     });
     scrollViewportToTop();
@@ -13497,13 +13497,11 @@ export function PageClient({
         plannedLoad: selectedCoachPlannedLoad,
       })
     : [];
-  const selectedCoachAiSummary = latestCoachAiReview
-    ? `${formatCoachAiReviewSource(latestCoachAiReview.source, language)} · ${latestCoachAiReview.observation}`
-    : copyFor(language, {
-        en: "AI review has not been generated",
-        ru: "ИИ-разбор не сформирован",
-        bg: "AI анализът не е генериран",
-      });
+  const selectedCoachCommentSummary = latestCoachDiaryEntry?.notes.trim() || copyFor(language, {
+    en: "No coach note for this day",
+    ru: "записи тренера за этот день пока нет",
+    bg: "няма треньорски запис за този ден",
+  });
   const selectedCoachDayPrimaryAction =
     selectedCoachDayDataQuality?.actions[0] ??
     latestCoachAiReview?.tomorrowActions[0] ??
@@ -17066,13 +17064,13 @@ export function PageClient({
                               </small>
                             </article>
                             <article>
-                              <span>{copyFor(language, { en: "AI and comment", ru: "ИИ и комментарий", bg: "AI и коментар" })}</span>
+                              <span>{copyFor(language, { en: "Coach note", ru: "Запись тренера", bg: "Треньорски запис" })}</span>
                               <strong>
                                 {latestCoachDiaryEntry
                                   ? copyFor(language, { en: "coach comment exists", ru: "комментарий есть", bg: "има коментар" })
                                   : copyFor(language, { en: "no coach comment", ru: "нет комментария", bg: "няма коментар" })}
                               </strong>
-                              <small>{selectedCoachAiSummary}</small>
+                              <small>{selectedCoachCommentSummary}</small>
                             </article>
                           </div>
                           <details className="coach-review-details-panel coach-review-load-details">
@@ -17260,9 +17258,9 @@ export function PageClient({
                             {selectedCoachDeviceWorkouts.length === 0 ? (
                               <p className="device-workout-empty">
                                 {copyFor(language, {
-                                  en: "The selector becomes active after the athlete syncs detailed Mi Fitness / Health Connect workouts for this date.",
-                                  ru: "Выбор станет активным после того, как спортсмен синхронизирует детальные тренировки Mi Fitness / Health Connect за эту дату.",
-                                  bg: "Изборът става активен след като спортистът синхронизира детайлни тренировки Mi Fitness / Health Connect за тази дата.",
+                                  en: "The selector becomes active after the athlete syncs detailed device workouts for this date.",
+                                  ru: "Выбор станет активным после того, как спортсмен синхронизирует детальные тренировки с устройства за эту дату.",
+                                  bg: "Изборът става активен след като спортистът синхронизира детайлни тренировки от устройство за тази дата.",
                                 })}
                               </p>
                             ) : null}
