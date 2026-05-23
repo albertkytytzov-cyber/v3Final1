@@ -2809,20 +2809,12 @@ function renderCoachDayStatusCard(
 ) {
   const summary = dayData.summary;
   const readiness = dayData.readinessEntry;
-  const deviceHealth = dayData.deviceHealthSummary;
   const dataQuality = buildCoachDayDataQuality(dayData);
   const completionRate = summary.exerciseCount > 0
     ? Math.round(((summary.completedExerciseCount + summary.partialExerciseCount * 0.5) / summary.exerciseCount) * 100)
     : summary.blockCount > 0
       ? Math.round(((summary.completedBlockCount + summary.partialBlockCount * 0.5) / summary.blockCount) * 100)
       : 0;
-  const recoverySummary = deviceHealth
-    ? [
-        `сон ${formatDeviceHealthSleepValue(deviceHealth)}`,
-        `пульс покоя ${formatDeviceHealthRestingHrValue(deviceHealth)}`,
-        `SpO2 ${formatDeviceHealthOxygenValue(deviceHealth)}`,
-      ].join(" · ")
-    : "данные восстановления с устройства не пришли";
   const primaryAction = dataQuality.actions[0] ??
     aiReview?.tomorrowActions[0] ??
     "День можно разбирать по текущим данным.";
@@ -2850,6 +2842,11 @@ function renderCoachDayStatusCard(
         </div>
         <div class="coach-day-status-brief-grid">
           <article>
+            <span>Готовность</span>
+            <strong>${readiness ? `${readiness.score} · ${formatReadinessStatus(readiness.status)}` : "нет записи"}</strong>
+            <small>${escapeHtml(readiness ? formatReadinessFlags(readiness) : "спортсмен ещё не отправил")}</small>
+          </article>
+          <article>
             <span>Выполнение</span>
             <strong>${escapeHtml(executionValue)}</strong>
             <small>${completionRate}% по дню · ${escapeHtml(formatCoachTodayExerciseBreakdown(summary))}</small>
@@ -2858,11 +2855,6 @@ function renderCoachDayStatusCard(
             <span>Нагрузка</span>
             <strong>${escapeHtml(formatLoadValue(summary.actualLoad))} / ${escapeHtml(formatLoadValue(summary.plannedLoad))}</strong>
             <small>${escapeHtml(formatCoachTodayLoadDelta(summary))}</small>
-          </article>
-          <article>
-            <span>Восстановление</span>
-            <strong>${escapeHtml(formatDeviceHealthBriefValue(deviceHealth))}</strong>
-            <small>${escapeHtml(recoverySummary)}</small>
           </article>
         </div>
       </div>
@@ -3190,20 +3182,19 @@ function renderCoachTeamDayPanel(state: MobileAppState, selectedDayDate: string)
   const rows = state.data.athletes.map((athlete) => {
     const dayData = getCoachDayCleanSummary(state, athlete.athleteId, selectedDayDate);
     const dataQuality = buildCoachDayDataQuality(dayData);
-    const linkedWorkouts = dayData.deviceWorkoutLinks.length;
-    const deviceWorkouts = dayData.deviceWorkouts.length;
     const executionValue = dayData.summary.exerciseCount > 0
       ? `${dayData.summary.completedExerciseCount}/${dayData.summary.exerciseCount}`
       : `${dayData.summary.completedBlockCount}/${dayData.summary.blockCount || 0}`;
     const readinessValue = dayData.readinessEntry ? String(dayData.readinessEntry.score) : "-";
+    const planValue = formatCoachTodayPlanCount(dayData.summary);
 
     return {
       athlete,
+      attentionLabel: dataQuality.actions[0] ?? dayData.summary.statusLabel,
       dataQuality,
       dayData,
-      deviceWorkouts,
       executionValue,
-      linkedWorkouts,
+      planValue,
       readinessValue,
     };
   });
@@ -3218,18 +3209,18 @@ function renderCoachTeamDayPanel(state: MobileAppState, selectedDayDate: string)
         <strong>${rows.length}</strong>
       </div>
       <div class="coach-team-day-list">
-        ${rows.map(({ athlete, dataQuality, dayData, deviceWorkouts, executionValue, linkedWorkouts, readinessValue }) => `
+        ${rows.map(({ athlete, attentionLabel, dataQuality, dayData, executionValue, planValue, readinessValue }) => `
           <article class="coach-team-day-row is-${dataQuality.status}">
             <div>
               <strong>${escapeHtml(athlete.fullName)}</strong>
-              <span>${escapeHtml(dayData.summary.statusLabel)} · ${escapeHtml(dataQuality.statusLabel)}</span>
+              <span>${escapeHtml(dayData.summary.statusLabel)}</span>
             </div>
             <div class="coach-team-day-metrics">
               <span>Гот. ${readinessValue}</span>
+              <span>План ${escapeHtml(planValue)}</span>
               <span>Вып. ${escapeHtml(executionValue)}</span>
-              <span>Нагр. ${formatLoadValue(dayData.summary.actualLoad)} / ${formatLoadValue(dayData.summary.plannedLoad)}</span>
-              <span>Устр. ${deviceWorkouts ? `${linkedWorkouts}/${deviceWorkouts}` : "нет"}</span>
             </div>
+            <p>${escapeHtml(attentionLabel)}</p>
             <button
               data-coach-open-athlete="${escapeHtml(athlete.athleteId)}"
               data-coach-open-day="${escapeHtml(selectedDayDate)}"
@@ -3341,15 +3332,7 @@ function renderCoachAthleteDayBrief(state: MobileAppState, athleteId: string) {
   const dayData = getCoachDayCleanSummary(state, athleteId, selectedDayDate);
   const entry = dayData.readinessEntry;
   const daySummary = dayData.summary;
-  const deviceHealth = dayData.deviceHealthSummary;
-  const nextStart = getNextCompetitionPlan(getCompetitionPlansForAthlete(state, athleteId));
-  const aiReview = state.aiReviewByDay[getCoachDayAiReviewKey(athleteId, selectedDayDate)] ??
-    getCoachAiReviewsForDay(state.data.coachAiReviews, athleteId, selectedDayDate)[0] ??
-    null;
   const cardStateClass = entry ? `readiness-${escapeHtml(entry.status)}` : "is-missing-readiness";
-  const startLabel = nextStart
-    ? `${formatShortDate(nextStart.competitionStartDate)} · через ${daysUntil(nextStart.competitionStartDate)} дн.`
-    : "стартов нет";
 
   return `
     <section class="athlete-day-brief-card ${cardStateClass}">
@@ -3362,12 +3345,10 @@ function renderCoachAthleteDayBrief(state: MobileAppState, athleteId: string) {
         <strong>${entry ? entry.score : "-"}</strong>
       </div>
       <div class="athlete-day-brief-grid">
+        ${renderCoachAthleteBriefMetric("Готовность", entry ? String(entry.score) : "-", entry ? formatReadinessStatus(entry.status) : "нет записи")}
         ${renderCoachAthleteBriefMetric("План на день", formatCoachTodayPlanCount(daySummary), formatCoachTodayPlanNames(daySummary))}
         ${renderCoachAthleteBriefMetric("Выполнение", `${daySummary.completedExerciseCount}/${daySummary.exerciseCount || 0}`, formatCoachTodayExerciseBreakdown(daySummary))}
         ${renderCoachAthleteBriefMetric("Нагрузка", `${formatLoadValue(daySummary.actualLoad)} / ${formatLoadValue(daySummary.plannedLoad)}`, formatCoachTodayLoadDelta(daySummary))}
-        ${renderCoachAthleteBriefMetric("Устройство", formatDeviceHealthBriefValue(deviceHealth), formatDeviceHealthBriefDetail(deviceHealth))}
-        ${renderCoachAthleteBriefMetric("ИИ", formatCoachAiBriefValue(aiReview), formatCoachAiBriefDetail(aiReview))}
-        ${renderCoachAthleteBriefMetric("Ближайший старт", nextStart ? formatShortDate(nextStart.competitionStartDate) : "-", startLabel)}
       </div>
       <p class="athlete-day-brief-note">Комментарий: ${escapeHtml(dayData.coachNote)}</p>
       <div class="athlete-day-brief-actions" aria-label="Быстрые действия по спортсмену">

@@ -17985,54 +17985,51 @@ export function PageClient({
                     </label>
                   </div>
                   <div className="coach-team-day-table coach-team-day-table-compact">
-                    <div className="coach-team-day-header" aria-hidden="true">
-                      <span>{copyFor(language, { en: "Athlete", ru: "Спортсмен", bg: "Спортист" })}</span>
-                      <span>{copyFor(language, { en: "Readiness", ru: "Готовн.", bg: "Готовн." })}</span>
-                      <span>{copyFor(language, { en: "Plan", ru: "План", bg: "План" })}</span>
-                      <span>{copyFor(language, { en: "Execution", ru: "Выполнение", bg: "Изпълнение" })}</span>
-                      <span>{copyFor(language, { en: "Load", ru: "Нагрузка", bg: "Натовар." })}</span>
-                      <span>{copyFor(language, { en: "Next step", ru: "Следующий шаг", bg: "Следваща стъпка" })}</span>
-                      <span />
-                    </div>
                     {coachTeamDayRows.map((row) => (
                       <article className={`coach-team-day-row ${row.dataQuality.status}`} key={row.athlete.athleteId}>
-                        <div>
+                        <div className="coach-team-day-athlete">
                           <strong>{row.athlete.fullName}</strong>
                           <span>{row.statusLabel}</span>
                         </div>
-                        <span>
-                          {row.readinessEntry
-                            ? `${row.readinessEntry.score} · ${readinessMeta[row.readinessEntry.status].label}`
-                            : copyFor(language, { en: "Not submitted", ru: "Не отправлена", bg: "Не е подадена" })}
-                        </span>
-                        <span>
-                          {row.plannedBlocks > 0
-                            ? `${row.plannedBlocks} ${copyFor(language, {
-                                en: "blocks",
-                                ru: "блоков",
-                                bg: "блока",
-                              })}`
-                            : copyFor(language, { en: "No plan", ru: "Нет плана", bg: "Няма план" })}
-                        </span>
-                        <span>
-                          {row.plannedBlocks > 0
-                            ? `${row.completedBlocks}/${row.plannedBlocks}${
-                                row.partialBlocks > 0
-                                  ? ` · ${row.partialBlocks} ${copyFor(language, {
-                                      en: "partial",
-                                      ru: "частично",
-                                      bg: "частично",
-                                    })}`
-                                  : ""
-                              }`
-                            : "-"}
-                        </span>
-                        <span>
-                          {formatCoachDayLoadValue(row.actualLoad)} / {formatCoachDayLoadValue(row.plannedLoad)}
-                        </span>
-                        <p>
-                          {row.attentionLabel}
-                        </p>
+                        <div className="coach-team-day-metrics">
+                          <span>
+                            <small>{copyFor(language, { en: "Readiness", ru: "Готовность", bg: "Готовност" })}</small>
+                            <strong>
+                              {row.readinessEntry
+                                ? `${row.readinessEntry.score} · ${readinessMeta[row.readinessEntry.status].label}`
+                                : copyFor(language, { en: "No entry", ru: "Нет записи", bg: "Няма запис" })}
+                            </strong>
+                          </span>
+                          <span>
+                            <small>{copyFor(language, { en: "Plan", ru: "План", bg: "План" })}</small>
+                            <strong>
+                              {row.plannedBlocks > 0
+                                ? `${row.plannedBlocks} ${copyFor(language, {
+                                    en: "blocks",
+                                    ru: "блоков",
+                                    bg: "блока",
+                                  })}`
+                                : copyFor(language, { en: "No plan", ru: "Нет плана", bg: "Няма план" })}
+                            </strong>
+                          </span>
+                          <span>
+                            <small>{copyFor(language, { en: "Execution", ru: "Выполнение", bg: "Изпълнение" })}</small>
+                            <strong>
+                              {row.plannedBlocks > 0
+                                ? `${row.completedBlocks}/${row.plannedBlocks}${
+                                    row.partialBlocks > 0
+                                      ? ` · ${row.partialBlocks} ${copyFor(language, {
+                                          en: "partial",
+                                          ru: "частично",
+                                          bg: "частично",
+                                        })}`
+                                      : ""
+                                  }`
+                                : "-"}
+                            </strong>
+                          </span>
+                        </div>
+                        <p className="coach-team-day-attention">{row.attentionLabel}</p>
                         <button
                           className="secondary-button"
                           disabled={busy}
