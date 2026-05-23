@@ -3286,38 +3286,6 @@ button {
   font-size: 0.78rem;
 }
 
-.device-workout-series-stats {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px;
-  min-width: 0;
-}
-
-.device-workout-series-stats span {
-  display: grid;
-  gap: 3px;
-  min-width: 0;
-  padding: 8px;
-  border: 1px solid rgba(15, 118, 110, 0.12);
-  border-radius: 11px;
-  background: rgba(255, 255, 255, 0.78);
-}
-
-.device-workout-series-stats small {
-  color: var(--muted);
-  font-size: 0.64rem;
-  font-weight: 900;
-  line-height: 1;
-  text-transform: uppercase;
-}
-
-.device-workout-series-stats strong {
-  color: var(--text);
-  font-size: 0.78rem;
-  font-weight: 950;
-  line-height: 1.1;
-}
-
 .device-workout-chart-column {
   display: grid;
   gap: 6px;
@@ -3382,17 +3350,6 @@ button {
   stroke-linecap: round;
   stroke-width: 4;
   vector-effect: non-scaling-stroke;
-}
-
-.device-workout-chart-plot .peak-line {
-  stroke: rgba(169, 99, 42, 0.7);
-  stroke-dasharray: 2 2;
-  stroke-width: 0.8;
-  vector-effect: non-scaling-stroke;
-}
-
-.device-workout-chart-plot .peak-dot {
-  fill: #a9632a;
 }
 
 .device-workout-chart-plot polyline {
@@ -3550,7 +3507,7 @@ button {
 }
 
 .device-workout-series.heartRate .device-workout-chart-plot polyline {
-  stroke: var(--accent);
+  stroke: #e11d48;
 }
 
 .device-workout-series.pace .device-workout-chart-plot polyline,
@@ -4261,39 +4218,6 @@ button {
     #ffffff;
 }
 
-.watch-heart-rate-stats {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-  margin: 12px 0;
-}
-
-.watch-heart-rate-stats article {
-  min-width: 0;
-  padding: 10px 9px;
-  border: 1px solid rgba(15, 118, 110, 0.12);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.84);
-}
-
-.watch-heart-rate-stats span {
-  display: block;
-  color: var(--muted);
-  font-size: 0.7rem;
-  font-weight: 900;
-  line-height: 1.15;
-  text-transform: uppercase;
-}
-
-.watch-heart-rate-stats strong {
-  display: block;
-  margin-top: 4px;
-  color: var(--text);
-  font-size: 1.06rem;
-  font-weight: 950;
-  line-height: 1.05;
-}
-
 .watch-heart-rate-chart {
   display: grid;
   gap: 7px;
@@ -4306,7 +4230,7 @@ button {
 .watch-heart-rate-chart svg {
   display: block;
   width: 100%;
-  height: 182px;
+  height: 170px;
 }
 
 .watch-heart-rate-chart .sleep-band {
@@ -4323,14 +4247,7 @@ button {
   stroke: var(--accent);
   stroke-linecap: round;
   stroke-linejoin: round;
-  stroke-width: 2.05;
-}
-
-.watch-heart-rate-chart .average-line {
-  stroke: rgba(15, 118, 110, 0.36);
-  stroke-dasharray: 4 4;
-  stroke-linecap: round;
-  stroke-width: 0.9;
+  stroke-width: 1.9;
 }
 
 .watch-heart-rate-chart .peak-line {
@@ -4386,20 +4303,8 @@ button {
   background: #426f9d;
 }
 
-.watch-heart-rate-legend i.is-average {
-  background: rgba(15, 118, 110, 0.58);
-}
-
 .watch-heart-rate-legend i.is-peak {
   background: #a9632a;
-}
-
-.watch-heart-rate-note {
-  margin: 8px 0 0;
-  color: var(--muted);
-  font-size: 0.76rem;
-  font-weight: 760;
-  line-height: 1.35;
 }
 
 .watch-actions,
