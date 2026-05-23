@@ -8668,10 +8668,12 @@ function renderExecutionPlanGroup(
           <span>${compactAthlete
             ? `${formatAthleteExerciseCount(exerciseCount)}`
             : `${escapeHtml(group.plan.templateName)} · ${formatPlanUnitCount(displayUnitCount)} · ${exerciseCount} упр.`}</span>
-          <div class="execution-day-meta">
-            <span class="execution-day-status is-${daySummary.status}">${escapeHtml(daySummary.statusLabel)}</span>
-            <span>${displayCompletion.completedCount}/${displayCompletion.totalCount} отмечено</span>
-            ${compactAthlete ? "" : `
+          <div class="execution-day-meta ${compactAthlete ? "is-athlete-compact" : ""}">
+            ${compactAthlete
+              ? `<span>${displayCompletion.completedCount}/${displayCompletion.totalCount} отмечено</span>`
+              : `
+              <span class="execution-day-status is-${daySummary.status}">${escapeHtml(daySummary.statusLabel)}</span>
+              <span>${displayCompletion.completedCount}/${displayCompletion.totalCount} отмечено</span>
               <span>Факт нагрузки: ${formatLoadValue(daySummary.actualLoad)}</span>
               <span>План: ${formatLoadValue(daySummary.plannedLoad)}</span>
             `}
@@ -8770,7 +8772,7 @@ function renderExecutionSessionNoteField(
     ? `Дневник тренировки: ${sessionName}`
     : `Комментарий спортсмена: ${sessionName}`;
   const hint = athleteDiary
-    ? "Одна общая заметка только по этой тренировке. Она не относится к другой сессии дня."
+    ? ""
     : "Заметка спортсмена только по этой тренировке, без комментариев под каждым упражнением.";
   const placeholder = athleteDiary
     ? "Как прошла эта тренировка: что получилось, что было тяжело, самочувствие после"
@@ -8779,7 +8781,7 @@ function renderExecutionSessionNoteField(
   return `
     <label class="execution-day-note ${athleteDiary ? "is-athlete-diary" : ""}">
       <span>${label}</span>
-      <small>${hint}</small>
+      ${hint ? `<small>${hint}</small>` : ""}
       <textarea data-execution-session-notes rows="3" placeholder="${placeholder}" ${disabled ? "disabled" : ""}>${escapeHtml(getExecutionSessionNote(state, plan.id, session))}</textarea>
     </label>
   `;

@@ -15710,16 +15710,14 @@ export function PageClient({
                     ) : null}
                     {activeAthleteTrainingSessions.map((session, sessionIndex) => (
                       <details
-                        className="session-card athlete-execution-session"
+                        className="athlete-execution-session"
                         key={session.id}
                         open={activeAthleteTrainingSessions.length === 1 || sessionIndex === 0}
                       >
                         <summary className="athlete-execution-session-summary">
                           <span>
                             <strong>{renderTrainingTextWithTooltips(session.name)}</strong>
-                            <small>
-                              {activeAthleteTrainingDayLabel} / {blocksCountLabel(session.blocks.length, language)}
-                            </small>
+                            <small>{blocksCountLabel(session.blocks.length, language)}</small>
                           </span>
                         </summary>
                         <div className="athlete-execution-session-body">
@@ -15741,7 +15739,7 @@ export function PageClient({
 
                           return (
                             <div
-                              className={`entry-summary athlete-execution-block athlete-execution-select-card ${
+                              className={`athlete-execution-block athlete-execution-select-card ${
                                 blockSelected ? "is-selected" : ""
                               }`}
                               key={block.id}
@@ -15783,9 +15781,9 @@ export function PageClient({
                             </span>
                             <small>
                               {copyFor(language, {
-                                en: "One general note for this workout only. The coach sees it separately from the other session.",
-                                ru: "Одна общая заметка только по этой тренировке. Тренер видит её отдельно от другой сессии.",
-                                bg: "Една обща бележка само за тази тренировка. Треньорът я вижда отделно от другата сесия.",
+                                en: "One note for this workout.",
+                                ru: "Одна заметка по этой тренировке.",
+                                bg: "Една бележка за тази тренировка.",
                               })}
                             </small>
                             <textarea

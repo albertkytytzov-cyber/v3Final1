@@ -1092,6 +1092,10 @@ button {
   margin-top: 4px;
 }
 
+.execution-plan-group summary .execution-day-meta.is-athlete-compact {
+  margin-top: 6px;
+}
+
 .execution-plan-group summary .execution-day-meta span {
   display: inline-flex;
   min-height: 28px;
@@ -1103,6 +1107,12 @@ button {
   font-size: 0.72rem;
   font-weight: 900;
   line-height: 1.1;
+}
+
+.execution-plan-group summary .execution-day-meta.is-athlete-compact span {
+  border: 1px solid rgba(15, 118, 110, 0.18);
+  background: #dff2ef;
+  color: var(--accent-dark);
 }
 
 .execution-day-meta .execution-day-status {
@@ -1285,6 +1295,34 @@ button {
   min-width: 0;
   padding: 14px 8px 14px 12px;
   border-left: 4px solid #31a6d8;
+}
+
+.mobile-execution-day-card.is-athlete-compact {
+  background: #f7fbfa;
+}
+
+.mobile-execution-day-card.is-athlete-compact .mobile-plan-day-card-head {
+  border-bottom-color: rgba(15, 118, 110, 0.34);
+  background: rgba(255, 255, 255, 0.94);
+}
+
+.mobile-execution-day-card.is-athlete-compact .mobile-plan-day-card-body {
+  gap: 12px;
+  padding: 12px;
+  border-left: 0;
+}
+
+.mobile-execution-day-card.is-athlete-compact .mobile-plan-session {
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.mobile-execution-day-card.is-athlete-compact .mobile-plan-session h4 {
+  color: var(--text);
+  font-size: 0.9rem;
 }
 
 .mobile-plan-session {
