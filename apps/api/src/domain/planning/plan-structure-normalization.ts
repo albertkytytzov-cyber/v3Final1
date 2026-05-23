@@ -35,7 +35,7 @@ function isDescriptionPlanRow(block: Pick<NormalizablePlanBlock, "rowKind" | "na
   const normalizedName = block.name.toLowerCase();
 
   return ["instruction", "control", "note"].includes(rowKind) ||
-    /^(?:маршрут|дистанц|спуск|подъ[её]м|пульс|чсс|hr|rpe|темп|зона|контроль)/u.test(normalizedName);
+    /^(?:маршрут|дистанц|спуск|подъ[её]м|пульс|чсс|hr|rpe|темп|зона)/u.test(normalizedName);
 }
 
 function isRecoveryPlanRow(block: Pick<NormalizablePlanBlock, "rowKind" | "name">) {

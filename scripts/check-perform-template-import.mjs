@@ -4,7 +4,9 @@ import { dirname, join } from "node:path";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const fixturePath = join(__dirname, "..", "docs", "examples", "perform-template-v1-import-check.html");
+const samplePath = join(__dirname, "..", "docs", "examples", "perform-template-v1-one-day.html");
 const html = readFileSync(fixturePath, "utf8");
+const sampleHtml = readFileSync(samplePath, "utf8");
 
 const expectedDays = [
   {
@@ -73,6 +75,13 @@ function extractRows(tableHtml) {
 }
 
 const cards = extractCards(html);
+const sampleHeaders = [...sampleHtml.matchAll(/<th[^>]*>([\s\S]*?)<\/th>/giu)].map((match) =>
+  normalizeText(match[1]),
+);
+
+if (sampleHeaders.includes("Контроль")) {
+  fail("one-day PERFORM_TEMPLATE_V1 sample still contains the old Контроль column");
+}
 
 for (const expectedDay of expectedDays) {
   const card = cards.find((item) => item.includes(`<span class="title">${expectedDay.label}</span>`));
