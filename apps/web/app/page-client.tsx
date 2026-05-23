@@ -7590,6 +7590,7 @@ export function PageClient({
   const [selectedAssignedPlanIds, setSelectedAssignedPlanIds] = useState<string[]>([]);
   const [selectedAssignedPlanPreviewId, setSelectedAssignedPlanPreviewId] = useState("");
   const [selectedAthleteTrainingPlanId, setSelectedAthleteTrainingPlanId] = useState("");
+  const [executionEditPlanId, setExecutionEditPlanId] = useState("");
   const [competitions, setCompetitions] = useState<CompetitionSummary[]>(
     previewState?.competitions ?? [],
   );
@@ -8376,6 +8377,7 @@ export function PageClient({
         setAdaptedPlan(null);
         setExecutionResults([]);
         setExecutionDrafts({});
+        setExecutionEditPlanId("");
         setAnalyticsOverview(null);
         resetCoachAthleteSelection();
         setActiveWorkspace("coach-dashboard");
@@ -8405,6 +8407,7 @@ export function PageClient({
         setAdaptedPlan(null);
         setExecutionResults([]);
         setExecutionDrafts({});
+        setExecutionEditPlanId("");
         setAnalyticsOverview(null);
         resetCoachAthleteSelection();
         setCompetitions([]);
@@ -9465,6 +9468,7 @@ export function PageClient({
       next.unshift(response.result);
       return next;
     });
+    setExecutionEditPlanId("");
     setExecutionDrafts((current) => ({
       ...current,
       [assignedBlockId]: toExecutionDraft(response.result),
@@ -9519,6 +9523,7 @@ export function PageClient({
         setAdaptedPlan(null);
         setExecutionResults([]);
         setExecutionDrafts({});
+        setExecutionEditPlanId("");
         setAnalyticsOverview(null);
         resetCoachAthleteSelection();
         setActiveWorkspace("coach-dashboard");
@@ -9561,6 +9566,7 @@ export function PageClient({
       setAdaptedPlan(null);
       setExecutionResults([]);
       setExecutionDrafts({});
+      setExecutionEditPlanId("");
       setAnalyticsOverview(null);
       resetCoachAthleteSelection();
       setCompetitions([]);
@@ -9739,6 +9745,7 @@ export function PageClient({
       if (results.every((result) => result === "saved")) {
         setStatusMessage(ui("executionSaved"));
       }
+      setExecutionEditPlanId("");
     } finally {
       setBusy(false);
     }
@@ -13721,8 +13728,14 @@ export function PageClient({
     activeAthleteTrainingSessions.flatMap((session) => session.blocks.map((block) => block.id)),
   );
   const activeAthleteTrainingResults = executionResults.filter((item) =>
+    item.assignedPlanId === activeAthleteTrainingPlanId &&
     activeAthleteTrainingBlockIds.has(item.assignedBlockId)
   );
+  const activeAthleteExecutionHasSaved = activeAthleteTrainingResults.length > 0;
+  const isActiveAthleteExecutionLocked =
+    Boolean(activeAthleteTrainingPlanId) &&
+    activeAthleteExecutionHasSaved &&
+    executionEditPlanId !== activeAthleteTrainingPlanId;
   const athleteExecutionCompletedBlocks = activeAthleteTrainingResults.filter((item) => item.completed).length;
   const athletePlannedBlocksCount =
     activeAthleteTrainingSessions.reduce((sum, session) => sum + session.blocks.length, 0);
@@ -15725,6 +15738,7 @@ export function PageClient({
                               <label className="athlete-execution-select-toggle">
                                 <input
                                   checked={blockSelected}
+                                  disabled={busy || isActiveAthleteExecutionLocked}
                                   onChange={(event) =>
                                     updateExecutionBlockCompleted(block, event.target.checked)
                                   }
@@ -15764,7 +15778,7 @@ export function PageClient({
                               })}
                             </small>
                             <textarea
-                              disabled={busy}
+                              disabled={busy || isActiveAthleteExecutionLocked}
                               onChange={(event) =>
                                 updateExecutionSessionDraftNote(session, event.target.value)
                               }
@@ -15781,19 +15795,40 @@ export function PageClient({
                       </details>
                     ))}
                     <div className="athlete-execution-actions">
-                      <button
-                        className="primary-button"
-                        disabled={busy}
-                        onClick={() =>
-                          void handleExecutionDaySave(
-                            activeAthleteTrainingPlanId,
-                            activeAthleteTrainingSessions,
-                          )
-                        }
-                        type="button"
-                      >
-                        {busy ? ui("syncingNow") : t("saveExecution")}
-                      </button>
+                      {isActiveAthleteExecutionLocked ? (
+                        <button
+                          className="primary-button"
+                          disabled={busy}
+                          onClick={() => setExecutionEditPlanId(activeAthleteTrainingPlanId)}
+                          type="button"
+                        >
+                          {copyFor(language, {
+                            en: "Edit execution",
+                            ru: "Редактировать выполнение",
+                            bg: "Редактирай изпълнението",
+                          })}
+                        </button>
+                      ) : (
+                        <button
+                          className="primary-button"
+                          disabled={busy}
+                          onClick={() =>
+                            void handleExecutionDaySave(
+                              activeAthleteTrainingPlanId,
+                              activeAthleteTrainingSessions,
+                            )
+                          }
+                          type="button"
+                        >
+                          {busy ? ui("syncingNow") : activeAthleteExecutionHasSaved
+                            ? copyFor(language, {
+                                en: "Save changes",
+                                ru: "Сохранить изменения",
+                                bg: "Запази промените",
+                              })
+                            : t("saveExecution")}
+                        </button>
+                      )}
                     </div>
                   </div>
                 )}
