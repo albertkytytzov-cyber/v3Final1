@@ -3476,16 +3476,31 @@ function renderWatchHeartRateChartCard(
       <div class="watch-card-head">
         <div>
           <span>Пульс</span>
-          <h3>График за день</h3>
+          <h3>Дневной профиль</h3>
           <p>${chart ? `${chart.sampleCountLabel} · ${chart.rangeLabel}` : escapeHtml(fallbackDetail)}</p>
         </div>
-        <strong>${chart ? escapeHtml(chart.averageLabel) : "-"}</strong>
+        <strong>${chart ? escapeHtml(chart.averageValueLabel) : "-"}</strong>
       </div>
       ${chart ? `
+        <div class="watch-heart-rate-stats">
+          <article>
+            <span>Мин</span>
+            <strong>${escapeHtml(chart.minValueLabel)}</strong>
+          </article>
+          <article>
+            <span>Сред</span>
+            <strong>${escapeHtml(chart.averageValueLabel)}</strong>
+          </article>
+          <article>
+            <span>Пик</span>
+            <strong>${escapeHtml(chart.maxValueLabel)}</strong>
+          </article>
+        </div>
         <div class="watch-heart-rate-chart">
           <svg aria-label="График пульса за день" role="img" viewBox="0 0 100 100" preserveAspectRatio="none">
             ${chart.sleepBand}
             ${chart.gridLines}
+            ${chart.averageLine}
             <polyline points="${escapeHtml(chart.points)}"></polyline>
             ${chart.peakMarker}
           </svg>
@@ -3498,10 +3513,12 @@ function renderWatchHeartRateChartCard(
           </div>
         </div>
         <div class="watch-heart-rate-legend">
-          <span><i></i>все точки с часов</span>
+          <span><i></i>${escapeHtml(chart.visiblePointLabel)}</span>
+          <span><i class="is-average"></i>${escapeHtml(chart.averageLabel)}</span>
           ${chart.sleepLabel ? `<span><i class="is-sleep"></i>${escapeHtml(chart.sleepLabel)}</span>` : ""}
           <span><i class="is-peak"></i>${escapeHtml(chart.peakLabel)}</span>
         </div>
+        <p class="watch-heart-rate-note">${escapeHtml(chart.detailLabel)}</p>
       ` : `
         <p class="watch-empty-note">Пока есть только дневной итог. После новой синхронизации PERFORM Sync сохранит все точки пульса без усреднения.</p>
       `}
@@ -3666,7 +3683,8 @@ function buildWatchHeartRateChart(
         value,
       };
     })
-    .filter((sample): sample is { sampledAt: Date; value: number } => Boolean(sample));
+    .filter((sample): sample is { sampledAt: Date; value: number } => Boolean(sample))
+    .sort((left, right) => left.sampledAt.getTime() - right.sampledAt.getTime());
 
   if (points.length < 2) {
     return null;
@@ -3683,7 +3701,8 @@ function buildWatchHeartRateChart(
   const dayMs = dayBounds.end.getTime() - dayBounds.start.getTime();
   const valueToY = (value: number) => 94 - ((value - lower) / (chartUpper - lower)) * 84;
   const timeToX = (value: Date) => ((value.getTime() - dayBounds.start.getTime()) / dayMs) * 100;
-  const svgPoints = points
+  const visiblePoints = limitDeviceWorkoutSamples(points, 260);
+  const svgPoints = visiblePoints
     .map((point) => `${timeToX(point.sampledAt).toFixed(2)},${valueToY(point.value).toFixed(2)}`)
     .join(" ");
   const gridValues = [chartUpper, Math.round((chartUpper + lower) / 2), lower];
@@ -3694,12 +3713,21 @@ function buildWatchHeartRateChart(
   const peak = points.reduce((current, point) => point.value > current.value ? point : current, points[0]);
   const peakX = timeToX(peak.sampledAt).toFixed(2);
   const peakY = valueToY(peak.value).toFixed(2);
+  const averageY = valueToY(average).toFixed(2);
   const sleepBand = buildWatchSleepBand(summary, dayBounds);
   const sleepLabel = formatWatchSleepBandLabel(summary);
+  const hiddenPointCount = points.length - visiblePoints.length;
 
   return {
-    averageLabel: `${Math.round(average)}`,
+    averageLabel: `средний ${Math.round(average)} уд/мин`,
+    averageLine: `<line class="average-line" x1="0" x2="100" y1="${averageY}" y2="${averageY}"></line>`,
+    averageValueLabel: `${Math.round(average)}`,
+    detailLabel: hiddenPointCount > 0
+      ? `Все точки сохранены: ${points.length}. Линия показывает ключевые пики и провалы, чтобы день читался без шума.`
+      : "На графике показаны все точки, которые часы передали за день.",
     gridLines,
+    maxValueLabel: `${Math.round(max)}`,
+    minValueLabel: `${Math.round(min)}`,
     peakLabel: `пик ${Math.round(peak.value)} · ${formatTime(peak.sampledAt.toISOString())}`,
     peakMarker: `
       <line class="peak-line" x1="${peakX}" x2="${peakX}" y1="${peakY}" y2="96"></line>
@@ -3707,9 +3735,10 @@ function buildWatchHeartRateChart(
     `,
     points: svgPoints,
     rangeLabel: `${Math.round(min)}-${Math.round(max)} уд/мин`,
-    sampleCountLabel: `${points.length} точек`,
+    sampleCountLabel: `точек с часов: ${points.length}`,
     sleepBand,
     sleepLabel,
+    visiblePointLabel: hiddenPointCount > 0 ? `ключевые точки: ${visiblePoints.length}` : "все точки с часов",
   };
 }
 
@@ -5694,8 +5723,14 @@ function buildDeviceWorkoutHeartRateZones(series: DeviceWorkoutGraphSeries, esti
 }
 
 function renderDeviceWorkoutSeriesGraph(series: DeviceWorkoutGraphSeries, workout: DeviceWorkout) {
-  const shownSamples = limitDeviceWorkoutSamples(series.samples);
-  const values = series.samples.map((sample) => sample.value);
+  const orderedSamples = [...series.samples].sort((left, right) => {
+    const leftTime = getDeviceWorkoutGraphTime(left.sampleTime) ?? 0;
+    const rightTime = getDeviceWorkoutGraphTime(right.sampleTime) ?? 0;
+    return leftTime - rightTime;
+  });
+  const orderedSeries = { ...series, samples: orderedSamples };
+  const shownSamples = limitDeviceWorkoutSamples(orderedSamples);
+  const values = orderedSamples.map((sample) => sample.value);
   const min = Math.min(...values);
   const max = Math.max(...values);
   const average = values.reduce((total, value) => total + value, 0) / values.length;
@@ -5705,8 +5740,8 @@ function renderDeviceWorkoutSeriesGraph(series: DeviceWorkoutGraphSeries, workou
   const lower = isHeartRate && estimatedHeartRateMax !== null ? Math.min(min, estimatedHeartRateMax * 0.5) : min - rawRange * 0.08;
   const upper = isHeartRate && estimatedHeartRateMax !== null ? Math.max(max, estimatedHeartRateMax) : max + rawRange * 0.08;
   const range = Math.max(1, upper - lower);
-  const sampleStartTime = getDeviceWorkoutGraphTime(series.samples[0]?.sampleTime ?? "");
-  const sampleEndTime = getDeviceWorkoutGraphTime(series.samples[series.samples.length - 1]?.sampleTime ?? "");
+  const sampleStartTime = getDeviceWorkoutGraphTime(orderedSamples[0]?.sampleTime ?? "");
+  const sampleEndTime = getDeviceWorkoutGraphTime(orderedSamples[orderedSamples.length - 1]?.sampleTime ?? "");
   const workoutStartTime = getDeviceWorkoutGraphTime(workout.startTime);
   const workoutEndTime = getDeviceWorkoutGraphTime(workout.endTime);
   let axisStartTime = workoutStartTime ?? sampleStartTime;
@@ -5746,9 +5781,21 @@ function renderDeviceWorkoutSeriesGraph(series: DeviceWorkoutGraphSeries, workou
     const y = valueToY(sample.value);
     return `${x.toFixed(2)},${y.toFixed(2)}`;
   }).join(" ");
+  const peakSample = isHeartRate
+    ? orderedSamples.reduce((current, sample) => sample.value > current.value ? sample : current, orderedSamples[0])
+    : null;
+  const peakSampleIndex = peakSample ? orderedSamples.indexOf(peakSample) : -1;
+  const peakSampleTime = peakSample ? getDeviceWorkoutGraphTime(peakSample.sampleTime) : null;
+  const peakX =
+    peakSample && axis !== null && peakSampleTime !== null
+      ? clampDeviceWorkoutGraphX(((peakSampleTime - axis.start) / axis.duration) * 100)
+      : peakSample && orderedSamples.length > 1
+        ? (peakSampleIndex / (orderedSamples.length - 1)) * 100
+        : null;
+  const peakY = peakSample ? valueToY(peakSample.value) : null;
   const heartRateZones =
     isHeartRate && estimatedHeartRateMax !== null
-      ? buildDeviceWorkoutHeartRateZones(series, estimatedHeartRateMax)
+      ? buildDeviceWorkoutHeartRateZones(orderedSeries, estimatedHeartRateMax)
       : [];
   const heartRateGridValues =
     estimatedHeartRateMax !== null
@@ -5787,9 +5834,21 @@ function renderDeviceWorkoutSeriesGraph(series: DeviceWorkoutGraphSeries, workou
         ]
       : [];
   const coverageNote = isHeartRate && dataCoveragePercent !== null ? `Покрытие данных: ${Math.round(dataCoveragePercent)}%` : "";
+  const pointNote = isHeartRate && orderedSamples.length > shownSamples.length
+    ? `Все точки сохранены: ${orderedSamples.length}. Линия показывает ${shownSamples.length} ключевых точек.`
+    : "";
   const captionDetail = isHeartRate
-    ? "ЧСС, уд/мин"
+    ? `точек с тренировки: ${orderedSamples.length}`
     : `мин ${series.valueLabel(min)} · сред ${series.valueLabel(average)} · макс ${series.valueLabel(max)}`;
+  const stats = isHeartRate
+    ? `
+      <div class="device-workout-series-stats">
+        <span><small>Мин</small><strong>${escapeHtml(series.valueLabel(min))}</strong></span>
+        <span><small>Сред</small><strong>${escapeHtml(series.valueLabel(average))}</strong></span>
+        <span><small>Пик</small><strong>${escapeHtml(series.valueLabel(max))}</strong></span>
+      </div>
+    `
+    : "";
 
   const caption = `
     <div class="device-workout-series-caption">
@@ -5813,6 +5872,10 @@ function renderDeviceWorkoutSeriesGraph(series: DeviceWorkoutGraphSeries, workou
           <line class="average" x1="0" x2="100" y1="${averageY.toFixed(2)}" y2="${averageY.toFixed(2)}"></line>
           ${coverageStartX !== null && coverageEndX !== null ? `<line class="coverage" x1="${coverageStartX.toFixed(2)}" x2="${coverageEndX.toFixed(2)}" y1="97" y2="97"></line>` : ""}
           <polyline fill="none" points="${escapeHtml(points)}"></polyline>
+          ${peakX !== null && peakY !== null ? `
+            <line class="peak-line" x1="${peakX.toFixed(2)}" x2="${peakX.toFixed(2)}" y1="${peakY.toFixed(2)}" y2="96"></line>
+            <circle class="peak-dot" cx="${peakX.toFixed(2)}" cy="${peakY.toFixed(2)}" r="1.8"></circle>
+          ` : ""}
         </svg>
       </div>
       ${timeLabels.length > 0
@@ -5824,6 +5887,7 @@ function renderDeviceWorkoutSeriesGraph(series: DeviceWorkoutGraphSeries, workou
     <div class="device-workout-chart-column">
       ${chart}
       ${coverageNote ? `<small class="device-workout-coverage-note">${escapeHtml(coverageNote)}</small>` : ""}
+      ${pointNote ? `<small class="device-workout-coverage-note">${escapeHtml(pointNote)}</small>` : ""}
     </div>
   `;
   const zonePanel = `
@@ -5856,6 +5920,7 @@ function renderDeviceWorkoutSeriesGraph(series: DeviceWorkoutGraphSeries, workou
   return `
     <div class="device-workout-series ${escapeHtml(series.key)}">
       ${caption}
+      ${stats}
       <div class="device-workout-heart-rate-layout">
         ${chartColumn}
         ${zonePanel}
