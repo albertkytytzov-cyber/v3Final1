@@ -4218,6 +4218,345 @@ button {
     #ffffff;
 }
 
+.watch-heart-rate-approved-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+}
+
+.watch-heart-rate-approved-head span,
+.watch-heart-rate-approved-metrics span {
+  color: var(--muted);
+  font-size: 0.66rem;
+  font-weight: 900;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+
+.watch-heart-rate-approved-head > div > span {
+  color: var(--accent-dark);
+}
+
+.watch-heart-rate-approved-head h3 {
+  margin: 4px 0 3px;
+  color: var(--text);
+  font-size: 1.22rem;
+  font-weight: 950;
+  line-height: 1.1;
+}
+
+.watch-heart-rate-approved-head p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 760;
+  line-height: 1.25;
+}
+
+.watch-heart-rate-approved-head > strong {
+  min-width: 72px;
+  padding: 9px 8px 8px;
+  border-radius: 8px;
+  background: #d6f5ee;
+  color: var(--accent-dark);
+  font-size: 1.42rem;
+  font-weight: 950;
+  line-height: 1;
+  text-align: center;
+}
+
+.watch-heart-rate-approved-head > strong span {
+  display: block;
+  margin-top: 3px;
+  color: var(--accent-dark);
+  font-size: 0.52rem;
+  line-height: 1;
+}
+
+.watch-heart-rate-approved-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.watch-heart-rate-approved-metrics article {
+  min-width: 0;
+  padding: 10px 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.76);
+}
+
+.watch-heart-rate-approved-metrics strong {
+  display: block;
+  margin-top: 5px;
+  color: var(--text);
+  font-size: 1.22rem;
+  font-weight: 950;
+  line-height: 1;
+}
+
+.watch-heart-rate-approved-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 104px;
+  gap: 10px;
+  align-items: start;
+  margin-top: 14px;
+}
+
+.watch-heart-rate-approved-chart {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  grid-template-areas:
+    "axis-y plot"
+    ". axis-x";
+  gap: 6px 7px;
+  min-width: 0;
+}
+
+.watch-heart-rate-approved-axis-y {
+  grid-area: axis-y;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-width: 0;
+  height: 236px;
+  color: var(--muted);
+  font-size: 0.64rem;
+  font-weight: 780;
+  line-height: 1;
+  text-align: right;
+}
+
+.watch-heart-rate-approved-plot {
+  grid-area: plot;
+  min-width: 0;
+}
+
+.watch-heart-rate-approved-plot svg {
+  display: block;
+  width: 100%;
+  height: 236px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfdfc;
+}
+
+.watch-heart-rate-approved-plot .grid {
+  stroke: #dce8e5;
+  stroke-width: 0.65;
+  vector-effect: non-scaling-stroke;
+}
+
+.watch-heart-rate-approved-plot .average {
+  stroke: #ad6a15;
+  stroke-dasharray: 3 3;
+  stroke-width: 0.8;
+  vector-effect: non-scaling-stroke;
+}
+
+.watch-heart-rate-approved-plot .coverage {
+  stroke: var(--accent);
+  stroke-linecap: round;
+  stroke-width: 2.6;
+  vector-effect: non-scaling-stroke;
+}
+
+.watch-heart-rate-approved-plot polyline {
+  fill: none;
+  stroke: var(--accent);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+  vector-effect: non-scaling-stroke;
+}
+
+.watch-heart-rate-approved-plot .sleep-band {
+  fill: rgba(66, 111, 157, 0.18);
+}
+
+.watch-heart-rate-approved-plot .hr-zone-strip {
+  opacity: 0.9;
+}
+
+.watch-heart-rate-approved-plot .hr-zone-strip.z1 {
+  fill: #cbd5e1;
+}
+
+.watch-heart-rate-approved-plot .hr-zone-strip.z2 {
+  fill: #38bdf8;
+}
+
+.watch-heart-rate-approved-plot .hr-zone-strip.z3 {
+  fill: #84cc16;
+}
+
+.watch-heart-rate-approved-plot .hr-zone-strip.z4 {
+  fill: #facc15;
+}
+
+.watch-heart-rate-approved-plot .hr-zone-strip.z5 {
+  fill: #e11d48;
+}
+
+.watch-heart-rate-approved-plot .peak-line {
+  stroke: rgba(169, 99, 42, 0.74);
+  stroke-dasharray: 2 2;
+  stroke-width: 0.8;
+  vector-effect: non-scaling-stroke;
+}
+
+.watch-heart-rate-approved-plot .peak-dot {
+  fill: #a9632a;
+}
+
+.watch-heart-rate-approved-axis-x {
+  grid-area: axis-x;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.64rem;
+  font-weight: 780;
+  line-height: 1;
+}
+
+.watch-heart-rate-approved-axis-x span:nth-child(2) {
+  text-align: center;
+}
+
+.watch-heart-rate-approved-axis-x span:nth-child(3) {
+  text-align: right;
+}
+
+.watch-heart-rate-approved-zones {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfdfc;
+}
+
+.watch-heart-rate-approved-zones > strong {
+  color: var(--text);
+  font-size: 0.78rem;
+  font-weight: 950;
+  line-height: 1.15;
+}
+
+.watch-heart-rate-approved-zone-row {
+  display: grid;
+  grid-template-columns: 18px 32px 44px;
+  gap: 5px;
+  align-items: center;
+  min-width: 0;
+}
+
+.watch-heart-rate-approved-zone-row span {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  color: #10211d;
+  font-size: 0.58rem;
+  font-weight: 950;
+}
+
+.watch-heart-rate-approved-zone-row i {
+  position: relative;
+  display: block;
+  height: 18px;
+  min-width: 0;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e8efed;
+}
+
+.watch-heart-rate-approved-zone-row b {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+}
+
+.watch-heart-rate-approved-zone-row em {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #10211d;
+  font-size: 0.5rem;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.watch-heart-rate-approved-zone-row strong {
+  color: var(--text);
+  font-size: 0.54rem;
+  font-weight: 900;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.watch-heart-rate-approved-zone-row.z1 span,
+.watch-heart-rate-approved-zone-row.z1 b {
+  background: #94a3b8;
+}
+
+.watch-heart-rate-approved-zone-row.z2 span,
+.watch-heart-rate-approved-zone-row.z2 b {
+  background: #38bdf8;
+}
+
+.watch-heart-rate-approved-zone-row.z3 span,
+.watch-heart-rate-approved-zone-row.z3 b {
+  background: #84cc16;
+}
+
+.watch-heart-rate-approved-zone-row.z4 span,
+.watch-heart-rate-approved-zone-row.z4 b {
+  background: #facc15;
+}
+
+.watch-heart-rate-approved-zone-row.z5 span,
+.watch-heart-rate-approved-zone-row.z5 b {
+  background: #e11d48;
+}
+
+.watch-heart-rate-approved-caption {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 760;
+  line-height: 1.28;
+}
+
+.watch-heart-rate-approved-note {
+  display: grid;
+  gap: 3px;
+  margin-top: 10px;
+  padding: 11px;
+  border: 1px solid rgba(15, 118, 110, 0.18);
+  border-radius: 8px;
+  background: rgba(240, 253, 250, 0.84);
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 760;
+  line-height: 1.32;
+}
+
+.watch-heart-rate-approved-note strong {
+  color: var(--text);
+  font-size: 0.78rem;
+  font-weight: 950;
+}
+
 .watch-heart-rate-chart {
   display: grid;
   gap: 7px;

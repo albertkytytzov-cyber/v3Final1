@@ -3473,34 +3473,57 @@ function renderWatchHeartRateChartCard(
 
   return `
     <section class="watch-heart-rate-card ${chart ? "has-samples" : "is-empty"}">
-      <div class="watch-card-head">
+      <div class="watch-heart-rate-approved-head">
         <div>
-          <span>Пульс</span>
-          <h3>График за день</h3>
-          <p>${chart ? `${chart.sampleCountLabel} · ${chart.rangeLabel}` : escapeHtml(fallbackDetail)}</p>
+          <span>PERFORM SYNC</span>
+          <h3>Пульс за день</h3>
+          <p>${chart ? `${chart.sampleCountLabel} · ${chart.visiblePointLabel}` : escapeHtml(fallbackDetail)}</p>
         </div>
-        <strong>${chart ? escapeHtml(chart.averageLabel) : "-"}</strong>
+        <strong>${chart ? escapeHtml(chart.averageLabel) : "-"}<span>средний</span></strong>
       </div>
       ${chart ? `
-        <div class="watch-heart-rate-chart">
-          <svg aria-label="График пульса за день" role="img" viewBox="0 0 100 100" preserveAspectRatio="none">
-            ${chart.sleepBand}
-            ${chart.gridLines}
-            <polyline points="${escapeHtml(chart.points)}"></polyline>
-            ${chart.peakMarker}
-          </svg>
-          <div class="watch-heart-rate-axis">
-            <span>00</span>
-            <span>06</span>
-            <span>12</span>
-            <span>18</span>
-            <span>24</span>
-          </div>
+        <div class="watch-heart-rate-approved-metrics">
+          <article><span>Мин</span><strong>${escapeHtml(chart.minLabel)}</strong></article>
+          <article><span>Сред</span><strong>${escapeHtml(chart.averageLabel)}</strong></article>
+          <article><span>Макс</span><strong>${escapeHtml(chart.maxLabel)}</strong></article>
         </div>
-        <div class="watch-heart-rate-legend">
-          <span><i></i>все точки с часов</span>
-          ${chart.sleepLabel ? `<span><i class="is-sleep"></i>${escapeHtml(chart.sleepLabel)}</span>` : ""}
-          <span><i class="is-peak"></i>${escapeHtml(chart.peakLabel)}</span>
+        <div class="watch-heart-rate-approved-layout">
+          <div class="watch-heart-rate-approved-chart">
+            <div class="watch-heart-rate-approved-axis-y" aria-hidden="true">
+              ${chart.axisLabels.map((label) => `<span>${escapeHtml(label)}</span>`).join("")}
+            </div>
+            <div class="watch-heart-rate-approved-plot">
+              <svg aria-label="График пульса за день" role="img" viewBox="0 0 100 100" preserveAspectRatio="none">
+                ${chart.zoneStrips}
+                ${chart.sleepBand}
+                ${chart.gridLines}
+                <line class="average" x1="0" x2="100" y1="${escapeHtml(chart.averageY)}" y2="${escapeHtml(chart.averageY)}"></line>
+                ${chart.coverageLine}
+                <polyline fill="none" points="${escapeHtml(chart.points)}"></polyline>
+                ${chart.peakMarker}
+              </svg>
+            </div>
+            <div class="watch-heart-rate-approved-axis-x" aria-hidden="true">
+              <span>00</span>
+              <span>12</span>
+              <span>24</span>
+            </div>
+          </div>
+          <aside class="watch-heart-rate-approved-zones">
+            <strong>Зоны ЧСС</strong>
+            ${chart.zoneRows.map((zone) => `
+              <div class="watch-heart-rate-approved-zone-row z${zone.zone}">
+                <span>${zone.zone}</span>
+                <i><b style="width: ${zone.width}"></b><em>${zone.percentLabel}</em></i>
+                <strong>${escapeHtml(zone.durationLabel)}</strong>
+              </div>
+            `).join("")}
+          </aside>
+        </div>
+        <p class="watch-heart-rate-approved-caption">${escapeHtml(chart.coverageNote)}</p>
+        <div class="watch-heart-rate-approved-note">
+          <strong>Вывод проверки</strong>
+          <span>${escapeHtml(chart.checkNote)}</span>
         </div>
       ` : `
         <p class="watch-empty-note">Пока есть только дневной итог. После новой синхронизации PERFORM Sync сохранит все точки пульса без усреднения.</p>
@@ -3666,7 +3689,8 @@ function buildWatchHeartRateChart(
         value,
       };
     })
-    .filter((sample): sample is { sampledAt: Date; value: number } => Boolean(sample));
+    .filter((sample): sample is { sampledAt: Date; value: number } => Boolean(sample))
+    .sort((left, right) => left.sampledAt.getTime() - right.sampledAt.getTime());
 
   if (points.length < 2) {
     return null;
@@ -3676,30 +3700,64 @@ function buildWatchHeartRateChart(
   const min = Math.min(...values);
   const max = Math.max(...values);
   const average = values.reduce((sum, value) => sum + value, 0) / values.length;
-  const lower = Math.max(30, Math.floor((min - 8) / 10) * 10);
-  const upper = Math.min(230, Math.ceil((max + 8) / 10) * 10);
-  const range = Math.max(20, upper - lower);
-  const chartUpper = lower + range;
+  const estimatedHeartRateMax = getEstimatedHeartRateMax(max);
+  const lower = Math.min(min, estimatedHeartRateMax * 0.5);
+  const upper = Math.max(max, estimatedHeartRateMax);
+  const range = Math.max(1, upper - lower);
   const dayMs = dayBounds.end.getTime() - dayBounds.start.getTime();
-  const valueToY = (value: number) => 94 - ((value - lower) / (chartUpper - lower)) * 84;
+  const valueToY = (value: number) => 92 - ((value - lower) / range) * 84;
   const timeToX = (value: Date) => ((value.getTime() - dayBounds.start.getTime()) / dayMs) * 100;
-  const svgPoints = points
+  const visiblePoints = limitDeviceWorkoutSamples(points, 260);
+  const svgPoints = visiblePoints
     .map((point) => `${timeToX(point.sampledAt).toFixed(2)},${valueToY(point.value).toFixed(2)}`)
     .join(" ");
-  const gridValues = [chartUpper, Math.round((chartUpper + lower) / 2), lower];
+  const zoneSeries: DeviceWorkoutGraphSeries = {
+    key: "heartRate",
+    label: "Пульс",
+    samples: points.map((point) => ({
+      sampleTime: point.sampledAt.toISOString(),
+      value: point.value,
+    })),
+    valueLabel: (value) => `${Math.round(value)} уд/мин`,
+  };
+  const heartRateZones = buildDeviceWorkoutHeartRateZones(zoneSeries, estimatedHeartRateMax);
+  const gridValues = [
+    estimatedHeartRateMax,
+    estimatedHeartRateMax * 0.9,
+    estimatedHeartRateMax * 0.8,
+    estimatedHeartRateMax * 0.7,
+    estimatedHeartRateMax * 0.6,
+    estimatedHeartRateMax * 0.5,
+    lower,
+  ].filter((value, index, values) => index === 0 || Math.round(value) !== Math.round(values[index - 1]));
   const gridLines = gridValues.map((value) => {
     const y = valueToY(value).toFixed(2);
     return `<line class="grid" x1="0" x2="100" y1="${y}" y2="${y}"></line>`;
   }).join("");
+  const zoneStrips = heartRateZones.map((zone) => {
+    const zoneTop = valueToY(zone.upper);
+    const zoneBottom = valueToY(zone.zone === 1 ? lower : zone.lower);
+    return `<rect class="hr-zone-strip z${zone.zone}" height="${Math.max(0, zoneBottom - zoneTop).toFixed(2)}" width="1.7" x="0" y="${zoneTop.toFixed(2)}"></rect>`;
+  }).join("");
   const peak = points.reduce((current, point) => point.value > current.value ? point : current, points[0]);
   const peakX = timeToX(peak.sampledAt).toFixed(2);
   const peakY = valueToY(peak.value).toFixed(2);
+  const sampleStartX = timeToX(points[0].sampledAt);
+  const sampleEndX = timeToX(points[points.length - 1].sampledAt);
+  const coveragePercent = Math.max(0, Math.min(100, sampleEndX - sampleStartX));
   const sleepBand = buildWatchSleepBand(summary, dayBounds);
-  const sleepLabel = formatWatchSleepBandLabel(summary);
+  const averageY = valueToY(average).toFixed(2);
 
   return {
+    averageY,
     averageLabel: `${Math.round(average)}`,
+    axisLabels: gridValues.map((value) => String(Math.round(value))),
+    checkNote: "Пульс с часов сохраняется и уже отрисовывается в утверждённом формате.",
+    coverageLine: `<line class="coverage" x1="${Math.max(0, Math.min(100, sampleStartX)).toFixed(2)}" x2="${Math.max(0, Math.min(100, sampleEndX)).toFixed(2)}" y1="97" y2="97"></line>`,
+    coverageNote: `Покрытие данных: ${Math.round(coveragePercent)}%. Точки не теряются, но для экрана берутся min/max по бакетам, чтобы график не лагал.`,
     gridLines,
+    maxLabel: `${Math.round(max)}`,
+    minLabel: `${Math.round(min)}`,
     peakLabel: `пик ${Math.round(peak.value)} · ${formatTime(peak.sampledAt.toISOString())}`,
     peakMarker: `
       <line class="peak-line" x1="${peakX}" x2="${peakX}" y1="${peakY}" y2="96"></line>
@@ -3707,10 +3765,30 @@ function buildWatchHeartRateChart(
     `,
     points: svgPoints,
     rangeLabel: `${Math.round(min)}-${Math.round(max)} уд/мин`,
-    sampleCountLabel: `${points.length} точек`,
+    sampleCountLabel: `${points.length} точек ЧСС`,
     sleepBand,
-    sleepLabel,
+    visiblePointLabel: `на графике ${visiblePoints.length} ключевых точек`,
+    zoneRows: heartRateZones.map((zone) => ({
+      durationLabel: formatHeartRateZoneCompactDurationMs(zone.durationMs),
+      percentLabel: `${Math.round(zone.percent)}%`,
+      width: zone.percent > 0 ? `${Math.max(2, zone.percent).toFixed(1)}%` : "0%",
+      zone: zone.zone,
+    })),
+    zoneStrips,
   };
+}
+
+function formatHeartRateZoneCompactDurationMs(value: number) {
+  const totalSeconds = Math.max(0, Math.round(value / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (hours > 0) {
+    return `${hours}:${minutes.toString().padStart(2, "0")}`;
+  }
+
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
 function getLocalDayBounds(entryDate: string) {
