@@ -15,6 +15,7 @@ import type {
   DeviceHealthDailySummariesResponse,
   DeviceHealthDailySummaryPayload,
   DeviceHealthDailySummaryResponse,
+  DeviceHealthSampleMetric,
   DeviceHealthSamplesResponse,
   DeviceWorkout,
   DeviceWorkoutLink,
@@ -28,6 +29,8 @@ import type {
   ReadinessSubmissionPayload,
 } from "../types/models.js";
 import { translateApiErrorMessage } from "../permissions.js";
+
+const DEVICE_HEALTH_SAMPLE_METRICS: DeviceHealthSampleMetric[] = ["heart_rate", "oxygen_saturation", "stress"];
 
 export class MobileApiError extends Error {
   constructor(
@@ -155,9 +158,7 @@ export class MobileApiClient {
             .catch(() => ({ summaries: [] }))
         : Promise.resolve({ summaries: [] }),
       userRole === "athlete"
-        ? this.request<DeviceHealthSamplesResponse>(
-            withEntryDate("/device-health/samples?metric=heart_rate", selectedEntryDate ?? localDateValue()),
-          ).catch(() => ({ samples: [] }))
+        ? this.loadDeviceHealthSamples(selectedEntryDate ?? localDateValue())
         : Promise.resolve({ samples: [] }),
       userRole === "athlete"
         ? this.request<DeviceWorkoutsResponse>("/device-health/workouts")
@@ -384,7 +385,21 @@ export class MobileApiClient {
     });
   }
 
-  listDeviceHealthSamples(entryDate: string, metric = "heart_rate") {
+  private async loadDeviceHealthSamples(entryDate: string) {
+    const responses = await Promise.all(
+      DEVICE_HEALTH_SAMPLE_METRICS.map((metric) =>
+        this.request<DeviceHealthSamplesResponse>(
+          withEntryDate(`/device-health/samples?metric=${encodeURIComponent(metric)}`, entryDate),
+        ).catch(() => ({ samples: [] })),
+      ),
+    );
+
+    return {
+      samples: responses.flatMap((response) => response.samples),
+    };
+  }
+
+  listDeviceHealthSamples(entryDate: string, metric: DeviceHealthSampleMetric = "heart_rate") {
     return this.request<DeviceHealthSamplesResponse>(
       `/device-health/samples?entryDate=${encodeURIComponent(entryDate)}&metric=${encodeURIComponent(metric)}`,
     );

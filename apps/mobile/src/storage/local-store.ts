@@ -16,6 +16,16 @@ export interface DirectWatchLocalConfig {
   authKeyHex: string | null;
   deviceId: string | null;
   deviceName: string | null;
+  lastHistorySyncCompletedDays: number | null;
+  lastHistorySyncAvailableDays: number | null;
+  lastHistorySyncCurrentDate: string | null;
+  lastHistorySyncError: string | null;
+  lastHistorySyncFileCount: number | null;
+  lastHistorySyncStartedAt: string | null;
+  lastHistorySyncStatus: "completed" | "error" | "partial" | "running" | null;
+  lastHistorySyncSuccessDays: number | null;
+  lastHistorySyncTotalDays: number | null;
+  lastHistorySyncedAt: string | null;
   lastServiceBridgeUntil: string | null;
   lastServiceError: string | null;
   lastServiceStatus: "error" | "running" | "stopped" | "synced" | null;
@@ -110,8 +120,13 @@ function compactSnapshotForStorage(snapshot: MobileDataSnapshot): MobileDataSnap
       rawPayload: null,
     })),
     deviceHealthSamples: snapshot.deviceHealthSamples
-      .filter((sample) => sample.metric === "heart_rate")
-      .slice(-5000)
+      .filter((sample) => sample.metric === "heart_rate" || sample.metric === "oxygen_saturation" || sample.metric === "stress")
+      .sort((left, right) =>
+        right.entryDate.localeCompare(left.entryDate) ||
+        left.metric.localeCompare(right.metric) ||
+        left.sampledAt.localeCompare(right.sampledAt),
+      )
+      .slice(0, 6000)
       .map((sample) => ({
         ...sample,
         rawPayload: null,
@@ -152,6 +167,16 @@ export function loadDirectWatchConfig(): DirectWatchLocalConfig {
     authKeyHex: normalizeAuthKey(config.authKeyHex),
     deviceId: normalizeText(config.deviceId),
     deviceName: normalizeText(config.deviceName),
+    lastHistorySyncAvailableDays: normalizeNonNegativeNumber(config.lastHistorySyncAvailableDays),
+    lastHistorySyncCompletedDays: normalizeNonNegativeNumber(config.lastHistorySyncCompletedDays),
+    lastHistorySyncCurrentDate: normalizeText(config.lastHistorySyncCurrentDate),
+    lastHistorySyncError: normalizeText(config.lastHistorySyncError),
+    lastHistorySyncFileCount: normalizeNonNegativeNumber(config.lastHistorySyncFileCount),
+    lastHistorySyncStartedAt: normalizeText(config.lastHistorySyncStartedAt),
+    lastHistorySyncStatus: normalizeDirectWatchHistoryStatus(config.lastHistorySyncStatus),
+    lastHistorySyncSuccessDays: normalizeNonNegativeNumber(config.lastHistorySyncSuccessDays),
+    lastHistorySyncTotalDays: normalizeNonNegativeNumber(config.lastHistorySyncTotalDays),
+    lastHistorySyncedAt: normalizeText(config.lastHistorySyncedAt),
     lastServiceBridgeUntil: normalizeText(config.lastServiceBridgeUntil),
     lastServiceError: normalizeText(config.lastServiceError),
     lastServiceStatus: normalizeDirectWatchServiceStatus(config.lastServiceStatus),
@@ -168,6 +193,16 @@ export function saveDirectWatchConfig(config: DirectWatchLocalConfig) {
     authKeyHex: normalizeAuthKey(config.authKeyHex),
     deviceId: normalizeText(config.deviceId),
     deviceName: normalizeText(config.deviceName),
+    lastHistorySyncAvailableDays: normalizeNonNegativeNumber(config.lastHistorySyncAvailableDays),
+    lastHistorySyncCompletedDays: normalizeNonNegativeNumber(config.lastHistorySyncCompletedDays),
+    lastHistorySyncCurrentDate: normalizeText(config.lastHistorySyncCurrentDate),
+    lastHistorySyncError: normalizeText(config.lastHistorySyncError),
+    lastHistorySyncFileCount: normalizeNonNegativeNumber(config.lastHistorySyncFileCount),
+    lastHistorySyncStartedAt: normalizeText(config.lastHistorySyncStartedAt),
+    lastHistorySyncStatus: normalizeDirectWatchHistoryStatus(config.lastHistorySyncStatus),
+    lastHistorySyncSuccessDays: normalizeNonNegativeNumber(config.lastHistorySyncSuccessDays),
+    lastHistorySyncTotalDays: normalizeNonNegativeNumber(config.lastHistorySyncTotalDays),
+    lastHistorySyncedAt: normalizeText(config.lastHistorySyncedAt),
     lastServiceBridgeUntil: normalizeText(config.lastServiceBridgeUntil),
     lastServiceError: normalizeText(config.lastServiceError),
     lastServiceStatus: normalizeDirectWatchServiceStatus(config.lastServiceStatus),
@@ -198,7 +233,22 @@ function normalizeDirectWatchServiceStatus(value: unknown) {
     : null;
 }
 
+function normalizeDirectWatchHistoryStatus(value: unknown) {
+  return value === "completed" || value === "error" || value === "partial" || value === "running"
+    ? value
+    : null;
+}
+
 function normalizeNumber(value: unknown) {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+
   const numberValue = typeof value === "number" ? value : Number(value);
   return Number.isFinite(numberValue) ? numberValue : null;
+}
+
+function normalizeNonNegativeNumber(value: unknown) {
+  const numberValue = normalizeNumber(value);
+  return numberValue !== null && numberValue >= 0 ? numberValue : null;
 }

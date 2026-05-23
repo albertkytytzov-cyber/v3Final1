@@ -75,6 +75,8 @@ apps/web/public/downloads/*.apk
 /*.gif
 .codex-*.png
 tmp*.png
+1778425134325log/
+mockups/
 
 # OS and editor files
 .DS_Store

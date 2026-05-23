@@ -110,6 +110,9 @@ export type MobileScreen =
   | "readiness"
   | "watches";
 
+export type WatchDetailMetric = "pulse" | "sleep" | "oxygen" | "steps" | "stress" | "load";
+export type WatchDetailPeriod = "day" | "week" | "month";
+
 export interface MobileSessionState {
   apiBaseUrl: string;
   sessionToken: string | null;
@@ -187,6 +190,9 @@ export interface MobileAppState {
   executionEditDate: string | null;
   planDateFilter: string | null;
   readinessEditMode: boolean;
+  watchDetailMetric: WatchDetailMetric | null;
+  watchDetailPeriod: WatchDetailPeriod;
+  watchSettingsOpen: boolean;
   isOnline: boolean;
   isBusy: boolean;
   isSyncing: boolean;

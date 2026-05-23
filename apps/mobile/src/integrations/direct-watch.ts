@@ -240,6 +240,13 @@ export interface DirectWatchClassicProbe {
   watchNonceHex?: string | null;
 }
 
+export interface DirectWatchActivityInventory {
+  entryDates: string[];
+  fileCount: number;
+  files: DirectWatchActivityFile[];
+  probe: DirectWatchClassicProbe;
+}
+
 export interface DirectWatchServiceSyncResult extends DirectWatchClassicProbe {
   sentServiceSync?: boolean;
   sentTime?: boolean;
@@ -498,6 +505,22 @@ export async function probeDirectWatchClassicSession(
 
   const probe = await plugin.probeClassicSession({ authKeyHex, authStep1, deviceId, entryDate, postAuthProbe });
   return normalizeDirectWatchClassicProbe(probe);
+}
+
+export async function readDirectWatchActivityInventory(
+  deviceId: string,
+  authKeyHex: string,
+): Promise<DirectWatchActivityInventory> {
+  const probe = await probeDirectWatchClassicSession(deviceId, true, authKeyHex, true, formatLocalDateValue(new Date()));
+  const files = collectDirectWatchActivityFiles(probe);
+  const entryDates = collectDirectWatchInventoryEntryDates(files);
+
+  return {
+    entryDates,
+    fileCount: files.length,
+    files,
+    probe,
+  };
 }
 
 export async function syncDirectWatchService(
@@ -1299,6 +1322,60 @@ function buildDirectWatchRawPayload(
       version: packet.activityFile?.version ?? null,
     })),
   };
+}
+
+function collectDirectWatchActivityFiles(probe: DirectWatchClassicProbe) {
+  const files = new Map<string, DirectWatchActivityFile>();
+
+  probe.decryptedPackets?.forEach((packet) => {
+    packet.activityFiles?.forEach((file) => {
+      addDirectWatchInventoryFile(files, file);
+    });
+
+    if (packet.activityFile) {
+      addDirectWatchInventoryFile(files, packet.activityFile);
+    }
+  });
+
+  return Array.from(files.values()).sort((left, right) =>
+    String(right.timestamp ?? "").localeCompare(String(left.timestamp ?? "")) ||
+    String(left.idHex ?? "").localeCompare(String(right.idHex ?? "")),
+  );
+}
+
+function addDirectWatchInventoryFile(files: Map<string, DirectWatchActivityFile>, file: DirectWatchActivityFile) {
+  const key = file.idHex || `${file.timestamp ?? ""}:${file.type ?? ""}:${file.subtype ?? ""}:${file.detailType ?? ""}`;
+  if (key.trim()) {
+    files.set(key, file);
+  }
+}
+
+function collectDirectWatchInventoryEntryDates(files: DirectWatchActivityFile[]) {
+  const dates = new Set<string>();
+
+  files.forEach((file) => {
+    const entryDate = getDirectWatchActivityEntryDate(file);
+    if (!entryDate) {
+      return;
+    }
+
+    dates.add(entryDate);
+
+    if (file.subtype === 8 || file.subtype === 3) {
+      dates.add(addLocalDateDays(entryDate, 1));
+    }
+  });
+
+  return Array.from(dates).sort((left, right) => right.localeCompare(left));
+}
+
+function addLocalDateDays(dateValue: string, days: number) {
+  const date = new Date(`${dateValue}T00:00:00.000Z`);
+  if (Number.isNaN(date.getTime())) {
+    return dateValue;
+  }
+  date.setUTCDate(date.getUTCDate() + days);
+  return formatLocalDateValue(date);
 }
 
 function getDirectWatchRestingHeartRateSource(
