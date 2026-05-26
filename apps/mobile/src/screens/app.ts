@@ -35,6 +35,7 @@ import {
   markDirectWatchRawCacheSubmitted,
   pairDirectWatchDevice,
   probeDirectWatchClassicSession,
+  buildDirectWatchDailySyncPayloadFromProbe,
   readDirectWatchActivityInventory,
   readDirectWatchDailySync,
   scanDirectWatchDevices,
@@ -680,11 +681,16 @@ export function bootstrapMobileApp(root: HTMLElement) {
     if (isDirectWatchRuntime() && directWatchConfig.deviceId && directWatchConfig.authKeyHex) {
       try {
         update({ error: null, isBusy: true, message: "PERFORM Sync читает день напрямую с часов..." });
-        const payload = await readDirectWatchDailySync(
+        const { payload, payloadError } = await readDirectWatchDailyWithServiceSession(
           entryDate,
           directWatchConfig.deviceId,
-          directWatchConfig.authKeyHex,
+          directWatchConfig,
         );
+        if (!payload) {
+          throw payloadError instanceof Error
+            ? payloadError
+            : new Error("PERFORM Sync не смог считать день с часов.");
+        }
         await submitDirectWatchSyncPayload(payload, { silent: true });
         await refreshData(true).catch(() => undefined);
         update({
@@ -729,6 +735,41 @@ export function bootstrapMobileApp(root: HTMLElement) {
         message: null,
       });
     }
+  };
+
+  const readDirectWatchDailyWithServiceSession = async (
+    entryDate: string,
+    targetDeviceId: string,
+    _config: ReturnType<typeof loadDirectWatchConfig>,
+  ) => {
+    let payload: DirectWatchDailySyncPayload | null = null;
+    let payloadError: unknown = null;
+    let serviceResult: DirectWatchServiceSyncResult | null = null;
+    const serviceOk = await syncDirectWatchServiceSettings(targetDeviceId, {
+      entryDate,
+      fetchActivity: true,
+      includeSleep: shouldFetchDirectWatchSleep(state.data, entryDate),
+      silent: true,
+      onResult: (result) => {
+        serviceResult = result;
+      },
+    });
+
+    if (serviceResult) {
+      try {
+        payload = buildDirectWatchDailySyncPayloadFromProbe(entryDate, targetDeviceId, serviceResult);
+      } catch (error) {
+        payloadError = error;
+      }
+    } else if (!serviceOk) {
+      payloadError = new Error(loadDirectWatchConfig().lastServiceError || "PERFORM Sync не смог открыть прямую сессию часов.");
+    }
+
+    return {
+      payload,
+      payloadError,
+      serviceOk,
+    };
   };
 
   const syncDirectWatch = async (
@@ -776,9 +817,12 @@ export function bootstrapMobileApp(root: HTMLElement) {
     }
 
     try {
-      const payload = await readDirectWatchDailySync(entryDate, targetDeviceId, config.authKeyHex, {
-        includeSleep: shouldFetchDirectWatchSleep(state.data, entryDate),
-      });
+      const { payload, payloadError } = await readDirectWatchDailyWithServiceSession(entryDate, targetDeviceId, config);
+      if (!payload) {
+        throw payloadError instanceof Error
+          ? payloadError
+          : new Error("PERFORM Sync не смог считать день с часов.");
+      }
       await submitDirectWatchSyncPayload(payload, { silent: true });
       if (!options.silent) {
         await refreshData(true).catch(() => undefined);
@@ -832,16 +876,14 @@ export function bootstrapMobileApp(root: HTMLElement) {
 
     let payload: DirectWatchDailySyncPayload | null = null;
     let payloadError: unknown = null;
-    try {
-      payload = await readDirectWatchDailySync(entryDate, targetDeviceId, config.authKeyHex, {
-        includeSleep: shouldFetchDirectWatchSleep(state.data, entryDate),
-      });
-      await submitDirectWatchSyncPayload(payload, { silent: true });
-    } catch (error) {
-      payloadError = error;
-    }
+    const serviceResult = await readDirectWatchDailyWithServiceSession(entryDate, targetDeviceId, config);
+    payload = serviceResult.payload;
+    payloadError = serviceResult.payloadError;
+    const serviceOk = serviceResult.serviceOk;
 
-    const serviceOk = await syncDirectWatchServiceSettings(targetDeviceId, { silent: true });
+    if (payload) {
+      await submitDirectWatchSyncPayload(payload, { silent: true });
+    }
 
     if (payload) {
       await refreshData(true).catch(() => undefined);
@@ -1079,7 +1121,14 @@ export function bootstrapMobileApp(root: HTMLElement) {
 
   const syncDirectWatchServiceSettings = async (
     deviceId?: string | null,
-    options: { silent?: boolean } = {},
+    options: {
+      entryDate?: string;
+      fetchActivity?: boolean;
+      includeHistory?: boolean;
+      includeSleep?: boolean;
+      onResult?: (result: DirectWatchServiceSyncResult) => void;
+      silent?: boolean;
+    } = {},
   ) => {
     if (state.session.user?.role !== "athlete") {
       if (!options.silent) {
@@ -1139,7 +1188,14 @@ export function bootstrapMobileApp(root: HTMLElement) {
         config.authKeyHex,
         weatherPayload,
         DIRECT_WATCH_SERVICE_KEEP_ALIVE_MS,
+        {
+          entryDate: options.entryDate,
+          fetchActivity: options.fetchActivity,
+          includeHistory: options.includeHistory ?? true,
+          includeSleep: options.includeSleep ?? true,
+        },
       );
+      options.onResult?.(result);
       const serviceStatus = await getDirectWatchSyncServiceStatus().catch(() => null);
       const ok = result.authKeyStatus === "valid" && result.sentTime;
       const syncedAt = result.syncedAt ?? new Date().toISOString();
@@ -7762,8 +7818,12 @@ function renderWatchWorkoutParameterPanel(
 
 function buildWatchWorkoutExtendedMetricCards(workout: DeviceWorkout): WatchWorkoutMetricCard[] {
   const summary = readWatchWorkoutSummaryRawPayload(workout);
-  const paceAvg = readDeviceHealthRawNumber(summary ?? {}, "paceAvgSecondsPerKm");
-  const speedAvg = readDeviceHealthRawNumber(summary ?? {}, "speedAvgKmh");
+  const summaryDistanceMeters = readDeviceHealthRawNumber(summary ?? {}, "distanceMeters") ?? workout.distanceMeters;
+  const summaryDurationMinutes = readDeviceHealthRawNumber(summary ?? {}, "durationMinutes") ?? workout.durationMinutes;
+  const paceAvg = readDeviceHealthRawNumber(summary ?? {}, "paceAvgSecondsPerKm") ??
+    deriveWatchWorkoutPaceSecondsPerKm(summaryDistanceMeters, summaryDurationMinutes);
+  const speedAvg = readDeviceHealthRawNumber(summary ?? {}, "speedAvgKmh") ??
+    deriveWatchWorkoutSpeedKmh(summaryDistanceMeters, summaryDurationMinutes);
   const cadenceAvg = readDeviceHealthRawNumber(summary ?? {}, "cadenceAvg") ??
     readDeviceHealthRawNumber(summary ?? {}, "stepRateAvg");
   const strokes = readDeviceHealthRawNumber(summary ?? {}, "strokes");
@@ -7866,6 +7926,44 @@ function buildWatchWorkoutExtendedMetricCards(workout: DeviceWorkout): WatchWork
 function readPositiveDeviceHealthRawNumber(rawPayload: Record<string, unknown>, key: string) {
   const value = readDeviceHealthRawNumber(rawPayload, key);
   return value !== null && value > 0 ? value : null;
+}
+
+function deriveWatchWorkoutSpeedKmh(
+  distanceMeters: number | null | undefined,
+  durationMinutes: number | null | undefined,
+) {
+  if (
+    typeof distanceMeters !== "number" ||
+    typeof durationMinutes !== "number" ||
+    !Number.isFinite(distanceMeters) ||
+    !Number.isFinite(durationMinutes) ||
+    distanceMeters <= 0 ||
+    durationMinutes <= 0
+  ) {
+    return null;
+  }
+
+  const speedKmh = distanceMeters / 1000 / (durationMinutes / 60);
+  return speedKmh > 0 && speedKmh <= 80 ? speedKmh : null;
+}
+
+function deriveWatchWorkoutPaceSecondsPerKm(
+  distanceMeters: number | null | undefined,
+  durationMinutes: number | null | undefined,
+) {
+  if (
+    typeof distanceMeters !== "number" ||
+    typeof durationMinutes !== "number" ||
+    !Number.isFinite(distanceMeters) ||
+    !Number.isFinite(durationMinutes) ||
+    distanceMeters <= 0 ||
+    durationMinutes <= 0
+  ) {
+    return null;
+  }
+
+  const paceSeconds = Math.round((durationMinutes * 60) / (distanceMeters / 1000));
+  return paceSeconds >= 60 && paceSeconds <= 7200 ? paceSeconds : null;
 }
 
 function shouldRenderWatchWorkoutMetricCard(

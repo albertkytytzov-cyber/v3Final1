@@ -694,14 +694,7 @@ class DirectWatchPlugin : Plugin() {
                     // Discovery cancellation is best-effort.
                 }
 
-                socket = try {
-                    device.createRfcommSocketToServiceRecord(SPP_SERVICE_UUID)
-                } catch (error: IOException) {
-                    throw IOException("Android не смог создать SPP-сокет для часов.", error)
-                }
-
-                activeClassicSocket = socket
-                socket.connect()
+                socket = openClassicSocketWithRetry(device, "activity-ack")
                 connected = true
 
                 socket.outputStream.write(CLASSIC_SPP_V1_VERSION_REQUEST)
@@ -792,7 +785,7 @@ class DirectWatchPlugin : Plugin() {
                     }
                 }
             } catch (error: IOException) {
-                errorMessage = safeMessage(error)
+                errorMessage = classicSocketUserMessage(error)
             } catch (error: SecurityException) {
                 errorMessage = "Нет разрешения Bluetooth для Classic/SPP-подключения."
             } catch (error: InterruptedException) {
@@ -901,14 +894,7 @@ class DirectWatchPlugin : Plugin() {
                     // Discovery cancellation is best-effort; connection will report a clearer error if permission is gone.
                 }
 
-                socket = try {
-                    device.createRfcommSocketToServiceRecord(SPP_SERVICE_UUID)
-                } catch (error: IOException) {
-                    throw IOException("Android не смог создать SPP-сокет для часов.", error)
-                }
-
-                activeClassicSocket = socket
-                socket.connect()
+                socket = openClassicSocketWithRetry(device, "activity-probe")
                 connected = true
 
                 val versionRequest = CLASSIC_SPP_V1_VERSION_REQUEST
@@ -1051,7 +1037,7 @@ class DirectWatchPlugin : Plugin() {
                     errorMessage = readClassicPackets(socket, packets, combined, CLASSIC_PROBE_READ_MS) ?: errorMessage
                 }
             } catch (error: IOException) {
-                errorMessage = safeMessage(error)
+                errorMessage = classicSocketUserMessage(error)
             } catch (error: SecurityException) {
                 errorMessage = "Нет разрешения Bluetooth для Classic/SPP-подключения."
             } catch (error: InterruptedException) {
@@ -1104,6 +1090,10 @@ class DirectWatchPlugin : Plugin() {
         val address = call.getString("deviceId")
         val authKeyHex = call.getString("authKeyHex")?.trim()?.takeIf { it.isNotBlank() }
         val weatherPayload = call.data.optJSONObject("weather")
+        val entryDate = call.getString("entryDate")?.trim()?.takeIf { it.isNotBlank() }
+        val fetchActivity = call.getBoolean("fetchActivity") ?: false
+        val includeHistory = call.getBoolean("includeHistory") ?: true
+        val includeSleep = call.getBoolean("includeSleep") ?: true
         val keepAliveMs = (call.getInt("keepAliveMs") ?: 0).coerceIn(0, CLASSIC_SERVICE_BRIDGE_MAX_MS)
         val timeOffsetMinutes = (call.getInt("timeOffsetMinutes") ?: 0).coerceIn(-720, 720)
         if (address.isNullOrBlank()) {
@@ -1157,6 +1147,11 @@ class DirectWatchPlugin : Plugin() {
             var resolved = false
             var nextServiceSequence = 2
             var foregroundServiceStarted = false
+            var sentActivityFileProbe = false
+            var activityFileProbeCount = 0
+            var activityFileProbeCompletedCount = 0
+            var activityFileProbeFailedCount = 0
+            val activityFileProbeRequests = mutableListOf<JSObject>()
             val combined = java.io.ByteArrayOutputStream()
 
             fun resolveNow() {
@@ -1179,6 +1174,11 @@ class DirectWatchPlugin : Plugin() {
                     packets = packets,
                     combinedBytes = combined.toByteArray(),
                     error = errorMessage,
+                    sentActivityFileProbe = sentActivityFileProbe,
+                    activityFileProbeCount = activityFileProbeCount,
+                    activityFileProbeCompletedCount = activityFileProbeCompletedCount,
+                    activityFileProbeFailedCount = activityFileProbeFailedCount,
+                    activityFileProbeRequests = activityFileProbeRequests,
                 )
                 mainHandler.post {
                     call.resolve(response)
@@ -1192,14 +1192,7 @@ class DirectWatchPlugin : Plugin() {
                     // Discovery cancellation is best-effort.
                 }
 
-                socket = try {
-                    device.createRfcommSocketToServiceRecord(SPP_SERVICE_UUID)
-                } catch (error: IOException) {
-                    throw IOException("Android не смог создать SPP-сокет для часов.", error)
-                }
-
-                activeClassicSocket = socket
-                socket.connect()
+                socket = openClassicSocketWithRetry(device, "service-sync")
                 connected = true
 
                 socket.outputStream.write(CLASSIC_SPP_V1_VERSION_REQUEST)
@@ -1271,19 +1264,87 @@ class DirectWatchPlugin : Plugin() {
                             socket.outputStream.flush()
                         }
 
+                        if (fetchActivity) {
+                            val postAuthCommands = buildClassicPostAuthProbeCommands(includeHistory)
+                            postAuthCommands.forEach { command ->
+                                socket.outputStream.write(
+                                    buildClassicV2EncryptedCommandPacket(
+                                        command = command.payload,
+                                        sequenceNumber = nextServiceSequence++,
+                                        encryptionKey = authStep2.encryptionKey,
+                                    ),
+                                )
+                                Thread.sleep(CLASSIC_POST_AUTH_COMMAND_DELAY_MS)
+                            }
+                            socket.outputStream.flush()
+                            val postAuthReadMs = if (includeHistory) {
+                                CLASSIC_POST_AUTH_HISTORY_READ_MS
+                            } else {
+                                CLASSIC_POST_AUTH_READ_MS
+                            }
+                            val inventoryError = if (includeHistory) {
+                                readClassicPackets(socket, packets, combined, postAuthReadMs)
+                            } else {
+                                readClassicPacketsUntilActivitySelection(
+                                    socket,
+                                    packets,
+                                    combined,
+                                    authStep2.decryptionKey,
+                                    entryDate,
+                                    includeSleep,
+                                    postAuthReadMs,
+                                )
+                            }
+                            if (inventoryError != null) {
+                                Log.w(TAG, "classic service activity inventory warning: $inventoryError")
+                            }
+
+                            val allActivityFileIds = classicActivityFileIds(combined.toByteArray(), authStep2.decryptionKey)
+                            val activityFileIds = selectClassicActivityFileIdsForEntryDate(allActivityFileIds, entryDate, includeSleep)
+                            val allActivityFiles = allActivityFileIds.mapNotNull { parseClassicActivityFileIds(it).firstOrNull() }
+                            val selectedActivityFiles = activityFileIds.mapNotNull { parseClassicActivityFileIds(it).firstOrNull() }
+                            Log.i(
+                                TAG,
+                                "classic service activity inventory entryDate=$entryDate total=${allActivityFileIds.size} " +
+                                    "selected=${activityFileIds.size} breakdown=${describeClassicActivityInventoryFiles(allActivityFiles)} " +
+                                    "selectedBreakdown=${describeClassicActivityInventoryFiles(selectedActivityFiles)} " +
+                                    "ids=${activityFileIds.take(12).joinToString(",") { fullHex(it) ?: "-" }}",
+                            )
+                            if (activityFileIds.isNotEmpty()) {
+                                val fetchResult = requestClassicActivityFilesSequentially(
+                                    socket = socket,
+                                    packets = packets,
+                                    combined = combined,
+                                    fileIds = activityFileIds,
+                                    entryDate = entryDate,
+                                    encryptionKey = authStep2.encryptionKey,
+                                    decryptionKey = authStep2.decryptionKey,
+                                    initialSequenceNumber = nextServiceSequence,
+                                )
+                                nextServiceSequence = fetchResult.nextSequenceNumber
+                                sentActivityFileProbe = true
+                                activityFileProbeCount = fetchResult.requestedCount
+                                activityFileProbeCompletedCount = fetchResult.completedCount
+                                activityFileProbeFailedCount = fetchResult.failedCount
+                                activityFileProbeRequests.addAll(fetchResult.requests)
+                                if (fetchResult.completedCount == 0 && fetchResult.error != null) {
+                                    Log.w(TAG, "classic service activity fetch warning: ${fetchResult.error}")
+                                }
+                            }
+                        }
+
                         val serviceSyncCommands = buildClassicServiceSyncCommands(weatherPayload, timeOffsetMinutes)
-                        serviceSyncCommands.forEachIndexed { index, command ->
+                        serviceSyncCommands.forEach { command ->
                             socket.outputStream.write(
                                 buildClassicV2EncryptedCommandPacket(
                                     command = command.payload,
-                                    sequenceNumber = 2 + index,
+                                    sequenceNumber = nextServiceSequence++,
                                     encryptionKey = authStep2.encryptionKey,
                                 ),
                             )
                             serviceCommands.add(command.label)
                             Thread.sleep(CLASSIC_POST_AUTH_COMMAND_DELAY_MS)
                         }
-                        nextServiceSequence = 2 + serviceSyncCommands.size
                         socket.outputStream.flush()
                         errorMessage = readClassicPackets(socket, packets, combined, CLASSIC_SERVICE_SYNC_READ_MS) ?: errorMessage
                         if (keepAliveMs > 0 && errorMessage == null) {
@@ -1311,7 +1372,7 @@ class DirectWatchPlugin : Plugin() {
                     }
                 }
             } catch (error: IOException) {
-                errorMessage = safeMessage(error)
+                errorMessage = classicSocketUserMessage(error)
             } catch (error: SecurityException) {
                 errorMessage = "Нет разрешения Bluetooth для Classic/SPP-подключения."
             } catch (error: InterruptedException) {
@@ -2149,6 +2210,11 @@ class DirectWatchPlugin : Plugin() {
         packets: List<JSObject>,
         combinedBytes: ByteArray,
         error: String?,
+        sentActivityFileProbe: Boolean,
+        activityFileProbeCount: Int,
+        activityFileProbeCompletedCount: Int,
+        activityFileProbeFailedCount: Int,
+        activityFileProbeRequests: List<JSObject>,
     ): JSObject {
         val response = buildClassicProbeResponse(
             device = device,
@@ -2157,12 +2223,12 @@ class DirectWatchPlugin : Plugin() {
             sentSessionConfig = sentSessionConfig,
             sentAuthStep1 = sentAuthStep1,
             sentAuthStep2 = sentAuthStep2,
-            sentPostAuthProbe = sentServiceCommands.isNotEmpty(),
-            sentActivityFileProbe = false,
-            activityFileProbeCount = 0,
-            activityFileProbeCompletedCount = 0,
-            activityFileProbeFailedCount = 0,
-            activityFileProbeRequests = emptyList(),
+            sentPostAuthProbe = sentServiceCommands.isNotEmpty() || sentActivityFileProbe,
+            sentActivityFileProbe = sentActivityFileProbe,
+            activityFileProbeCount = activityFileProbeCount,
+            activityFileProbeCompletedCount = activityFileProbeCompletedCount,
+            activityFileProbeFailedCount = activityFileProbeFailedCount,
+            activityFileProbeRequests = activityFileProbeRequests,
             phoneNonce = phoneNonce,
             authKeyHex = authKeyHex,
             postAuthDecryptionKey = postAuthDecryptionKey,
@@ -2269,7 +2335,7 @@ class DirectWatchPlugin : Plugin() {
         }
 
         if (phoneNonce == null || parsed.watchNonceHex == null || parsed.watchHmacHex == null) {
-            return ClassicAuthKeyCheck(status = "no-watch-nonce", error = "Часы ещё не отдали watch nonce для проверки ключа.")
+            return ClassicAuthKeyCheck(status = "no-watch-nonce", error = CLASSIC_WATCH_NONCE_MISSING_MESSAGE)
         }
 
         val watchNonce = parseHexBytes(parsed.watchNonceHex)
@@ -2300,7 +2366,7 @@ class DirectWatchPlugin : Plugin() {
         }
 
         if (phoneNonce == null || parsed.watchNonceHex == null || parsed.watchHmacHex == null) {
-            return ClassicAuthStep2Material(status = "no-watch-nonce", error = "Часы ещё не отдали watch nonce для проверки ключа.", authStep3Command = null)
+            return ClassicAuthStep2Material(status = "no-watch-nonce", error = CLASSIC_WATCH_NONCE_MISSING_MESSAGE, authStep3Command = null)
         }
 
         val watchNonce = parseHexBytes(parsed.watchNonceHex)
@@ -6251,8 +6317,88 @@ class DirectWatchPlugin : Plugin() {
     }
 
     private fun shouldUseClassicSppV2(versionHex: String?): Boolean {
-        val majorHex = versionHex?.take(2) ?: return false
+        val dottedMajor = versionHex
+            ?.split(".")
+            ?.firstOrNull()
+            ?.toIntOrNull()
+        if (dottedMajor != null) {
+            return dottedMajor >= 2
+        }
+        val majorHex = versionHex?.take(2) ?: return true
         return majorHex.toIntOrNull(16)?.let { it >= 2 } == true
+    }
+
+    private fun openClassicSocketWithRetry(device: BluetoothDevice, label: String): BluetoothSocket {
+        var lastError: IOException? = null
+        for (attempt in 1..CLASSIC_SOCKET_CONNECT_ATTEMPTS) {
+            if (Thread.currentThread().isInterrupted) {
+                throw InterruptedException()
+            }
+
+            val socket = try {
+                createClassicSocketForAttempt(device, attempt)
+            } catch (error: IOException) {
+                lastError = error
+                Log.w(TAG, "classic spp socket create failed label=$label attempt=$attempt: ${safeMessage(error)}")
+                sleepBeforeClassicReconnect(attempt)
+                continue
+            }
+
+            activeClassicSocket = socket
+            try {
+                Log.i(TAG, "classic spp connect start label=$label attempt=$attempt")
+                socket.connect()
+                Log.i(TAG, "classic spp connect ok label=$label attempt=$attempt connected=${socket.isConnected}")
+                return socket
+            } catch (error: IOException) {
+                lastError = error
+                Log.w(TAG, "classic spp connect failed label=$label attempt=$attempt: ${safeMessage(error)}")
+                if (activeClassicSocket == socket) {
+                    activeClassicSocket = null
+                }
+                try {
+                    socket.close()
+                } catch (_: IOException) {
+                    // Socket already failed.
+                }
+                sleepBeforeClassicReconnect(attempt)
+            }
+        }
+
+        val message = lastError?.let { safeMessage(it) } ?: "unknown"
+        throw IOException("Не удалось открыть SPP-соединение с часами после $CLASSIC_SOCKET_CONNECT_ATTEMPTS попыток: $message", lastError)
+    }
+
+    private fun createClassicSocketForAttempt(device: BluetoothDevice, attempt: Int): BluetoothSocket {
+        if (attempt >= CLASSIC_SOCKET_DIRECT_CHANNEL_ATTEMPT) {
+            val directSocket = createClassicSocketForChannel(device, CLASSIC_SPP_RFCOMM_CHANNEL)
+            if (directSocket != null) {
+                Log.i(TAG, "classic spp using direct RFCOMM channel $CLASSIC_SPP_RFCOMM_CHANNEL attempt=$attempt")
+                return directSocket
+            }
+        }
+
+        return device.createRfcommSocketToServiceRecord(SPP_SERVICE_UUID)
+    }
+
+    private fun createClassicSocketForChannel(device: BluetoothDevice, channel: Int): BluetoothSocket? {
+        return try {
+            val method = device.javaClass.getMethod("createRfcommSocket", Int::class.javaPrimitiveType)
+            method.invoke(device, channel) as? BluetoothSocket
+        } catch (error: ReflectiveOperationException) {
+            Log.w(TAG, "classic spp direct RFCOMM channel unavailable: ${safeMessage(error)}")
+            null
+        } catch (error: RuntimeException) {
+            Log.w(TAG, "classic spp direct RFCOMM channel failed: ${safeMessage(error)}")
+            null
+        }
+    }
+
+    private fun sleepBeforeClassicReconnect(attempt: Int) {
+        if (attempt >= CLASSIC_SOCKET_CONNECT_ATTEMPTS) {
+            return
+        }
+        Thread.sleep(CLASSIC_SOCKET_RETRY_DELAY_MS * attempt)
     }
 
     private fun computeClassicAuthStepHmac(secretKey: ByteArray, phoneNonce: ByteArray, watchNonce: ByteArray): ByteArray {
@@ -6426,7 +6572,31 @@ class DirectWatchPlugin : Plugin() {
                 return lastError
             }
         }
-        return lastError
+        return lastError ?: classicAuthStageTimeoutMessage(targetStage)
+    }
+
+    private fun classicAuthStageTimeoutMessage(targetStage: String): String {
+        return when (targetStage) {
+            "watch-nonce" ->
+                CLASSIC_WATCH_NONCE_MISSING_MESSAGE
+            "authenticated" ->
+                "Часы не завершили auth. Проверьте Auth Key и что SPP-канал не занят другим приложением."
+            else ->
+                "Часы не ответили на SPP-запрос за отведенное время."
+        }
+    }
+
+    private fun classicSocketUserMessage(error: IOException): String {
+        val message = safeMessage(error)
+        return if (
+            message.contains("Broken pipe", ignoreCase = true) ||
+            message.contains("socket closed", ignoreCase = true) ||
+            message.contains("bt socket closed", ignoreCase = true)
+        ) {
+            CLASSIC_WATCH_NONCE_MISSING_MESSAGE
+        } else {
+            message
+        }
     }
 
     private fun readClassicPacketsUntilActivitySelection(
@@ -7595,6 +7765,12 @@ class DirectWatchPlugin : Plugin() {
         private const val CLASSIC_VERSION_READ_MS = 1_200L
         private const val CLASSIC_SESSION_CONFIG_READ_MS = 1_200L
         private const val CLASSIC_PROBE_POLL_MS = 120L
+        private const val CLASSIC_WATCH_NONCE_MISSING_MESSAGE =
+            "Часы не ответили на auth-запрос: SPP-канал занят Mi Fitness или системным Xiaomi Mi Connect. Для прямого PERFORM Sync нужен телефон без активного Xiaomi Mi Connect либо отключение этого системного companion-сервиса."
+        private const val CLASSIC_SOCKET_CONNECT_ATTEMPTS = 4
+        private const val CLASSIC_SOCKET_RETRY_DELAY_MS = 1_500L
+        private const val CLASSIC_SOCKET_DIRECT_CHANNEL_ATTEMPT = 3
+        private const val CLASSIC_SPP_RFCOMM_CHANNEL = 5
         private const val CLASSIC_SERVICE_BRIDGE_MAX_MS = 2 * 60 * 60 * 1000
         private const val CLASSIC_SERVICE_BRIDGE_POLL_MS = 1_000L
         private const val CLASSIC_SERVICE_BRIDGE_REFRESH_MS = 15 * 60 * 1000L

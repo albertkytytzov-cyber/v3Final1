@@ -455,6 +455,10 @@ interface DirectWatchPlugin {
   syncService?: (input: {
     authKeyHex: string;
     deviceId: string;
+    entryDate?: string;
+    fetchActivity?: boolean;
+    includeHistory?: boolean;
+    includeSleep?: boolean;
     keepAliveMs?: number;
     timeOffsetMinutes?: number;
     weather?: DirectWatchWeatherPayload;
@@ -716,6 +720,12 @@ export async function syncDirectWatchService(
   authKeyHex: string,
   weather?: DirectWatchWeatherPayload | null,
   keepAliveMs?: number,
+  options: {
+    entryDate?: string;
+    fetchActivity?: boolean;
+    includeHistory?: boolean;
+    includeSleep?: boolean;
+  } = {},
 ): Promise<DirectWatchServiceSyncResult> {
   const plugin = getDirectWatchPlugin();
 
@@ -733,6 +743,10 @@ export async function syncDirectWatchService(
   const result = await plugin.syncService({
     authKeyHex,
     deviceId,
+    ...(options.entryDate ? { entryDate: options.entryDate } : {}),
+    ...(options.fetchActivity ? { fetchActivity: true } : {}),
+    ...(options.includeHistory !== undefined ? { includeHistory: options.includeHistory } : {}),
+    ...(options.includeSleep !== undefined ? { includeSleep: options.includeSleep } : {}),
     ...(keepAliveMs ? { keepAliveMs } : {}),
     timeOffsetMinutes: DIRECT_WATCH_TIME_OFFSET_MINUTES,
     ...(weather ? { weather } : {}),
@@ -781,12 +795,22 @@ export async function readDirectWatchDailySync(
   return attachDirectWatchRawCacheId(payload, rawCacheId);
 }
 
+export function buildDirectWatchDailySyncPayloadFromProbe(
+  entryDate: string,
+  deviceId: string,
+  probe: DirectWatchClassicProbe,
+): DirectWatchDailySyncPayload {
+  const payload = buildDirectWatchDailySyncPayload(entryDate, probe);
+  const rawCacheId = saveDirectWatchRawSyncCache(entryDate, deviceId, probe, payload);
+  return attachDirectWatchRawCacheId(payload, rawCacheId);
+}
+
 function buildDirectWatchDailySyncPayload(
   entryDate: string,
   probe: DirectWatchClassicProbe,
 ): DirectWatchDailySyncPayload {
   if (probe.authKeyStatus !== "valid") {
-    throw new Error(probe.authKeyError || probe.error || "PERFORM Sync не смог авторизоваться на часах.");
+    throw new Error(formatDirectWatchAuthFailure(probe));
   }
   if (!probe.sentActivityFileProbe) {
     throw new Error("За выбранный день часы не отдали отдельные файлы активности.");
@@ -843,6 +867,14 @@ function buildDirectWatchDailySyncPayload(
     },
     workouts,
   };
+}
+
+function formatDirectWatchAuthFailure(probe: DirectWatchClassicProbe) {
+  if (probe.authKeyStatus === "no-watch-nonce" && probe.error) {
+    return probe.error;
+  }
+
+  return probe.authKeyError || probe.error || "PERFORM Sync не смог авторизоваться на часах.";
 }
 
 function dedupeDirectWatchActivityPackets(packets: DirectWatchDecryptedPacket[]) {
@@ -2161,6 +2193,10 @@ function buildDirectWatchDeviceWorkout(
   ].filter(isMeaningfulDirectWatchNumber);
   const activeCalories = summaryPacket?.activityCalories ?? sumDirectWatchNumbers(packets.map((packet) => packet.activityCalories));
   const steps = summaryPacket?.activityWorkoutSteps ?? summaryPacket?.activitySteps ?? null;
+  const averagePaceSecondsPerKm = summaryPacket?.activityWorkoutPaceAvgSecondsPerKm ??
+    deriveDirectWatchWorkoutPaceSecondsPerKm(distanceMeters, durationMinutes);
+  const averageSpeedKmh = summaryPacket?.activityWorkoutSpeedAvgKmh ??
+    deriveDirectWatchWorkoutSpeedKmh(distanceMeters, durationMinutes);
   const zoneSeconds = {
     aerobic: summaryPacket?.activityWorkoutHeartRateZoneAerobicSeconds ?? null,
     anaerobic: summaryPacket?.activityWorkoutHeartRateZoneAnaerobicSeconds ?? null,
@@ -2242,11 +2278,11 @@ function buildDirectWatchDeviceWorkout(
         jumpRateMax: summaryPacket?.activityWorkoutJumpRateMax ?? null,
         jumps: summaryPacket?.activityWorkoutJumps ?? null,
         laps: summaryPacket?.activityWorkoutLaps ?? null,
-        paceAvgSecondsPerKm: summaryPacket?.activityWorkoutPaceAvgSecondsPerKm ?? null,
+        paceAvgSecondsPerKm: averagePaceSecondsPerKm,
         paceMaxSecondsPerKm: summaryPacket?.activityWorkoutPaceMaxSecondsPerKm ?? null,
         paceMinSecondsPerKm: summaryPacket?.activityWorkoutPaceMinSecondsPerKm ?? null,
         recoveryTimeHours: summaryPacket?.activityWorkoutRecoveryTimeHours ?? null,
-        speedAvgKmh: summaryPacket?.activityWorkoutSpeedAvgKmh ?? null,
+        speedAvgKmh: averageSpeedKmh,
         speedMaxKmh: summaryPacket?.activityWorkoutSpeedMaxKmh ?? null,
         startTime: summaryStart ?? null,
         stepLengthAvgCm: summaryPacket?.activityWorkoutStepLengthAvgCm ?? null,
@@ -2599,6 +2635,44 @@ function normalizeWorkoutSpeed(value: number | null | undefined) {
 
 function normalizeWorkoutDistance(value: number | null | undefined) {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 500_000 ? value : null;
+}
+
+function deriveDirectWatchWorkoutSpeedKmh(
+  distanceMeters: number | null | undefined,
+  durationMinutes: number | null | undefined,
+) {
+  if (
+    typeof distanceMeters !== "number" ||
+    typeof durationMinutes !== "number" ||
+    !Number.isFinite(distanceMeters) ||
+    !Number.isFinite(durationMinutes) ||
+    distanceMeters <= 0 ||
+    durationMinutes <= 0
+  ) {
+    return null;
+  }
+
+  const speedKmh = distanceMeters / 1000 / (durationMinutes / 60);
+  return speedKmh > 0 && speedKmh <= 200 ? speedKmh : null;
+}
+
+function deriveDirectWatchWorkoutPaceSecondsPerKm(
+  distanceMeters: number | null | undefined,
+  durationMinutes: number | null | undefined,
+) {
+  if (
+    typeof distanceMeters !== "number" ||
+    typeof durationMinutes !== "number" ||
+    !Number.isFinite(distanceMeters) ||
+    !Number.isFinite(durationMinutes) ||
+    distanceMeters <= 0 ||
+    durationMinutes <= 0
+  ) {
+    return null;
+  }
+
+  const paceSeconds = Math.round((durationMinutes * 60) / (distanceMeters / 1000));
+  return paceSeconds >= 60 && paceSeconds <= 7200 ? paceSeconds : null;
 }
 
 function buildDirectWatchRawPayload(
