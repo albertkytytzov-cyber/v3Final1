@@ -779,6 +779,23 @@ parser по реальным raw-файлам.
   samples: `dataCompleteness=complete`, `missingMetrics=[]`,
   `workoutProfile.id=gym`.
 
+Повторная проверка 26.05 на новой свежей тренировке:
+
+- Авто-синхронизация PERFORM Sync сама забрала тренировку до ручного probe:
+  summary `8C41156A0C0AA1` (`type=1`, `subtype=8`, `detailType=1`,
+  `version=10`) и details `8C41156A0C03A0` (`type=1`, `subtype=8`,
+  `detailType=0`, `version=3`).
+- Оба sports-файла пришли полностью: `crc=true`, `parsed=true`; details дал
+  `193` точки пульса. API сохранил тренировку 26.05:
+  duration `3` мин, calories `12`, HR `58/62/67`, samples `193`.
+- Новая запись сразу создана текущей логикой корректно:
+  `workoutType=freestyle`, `workoutProfile.id=gym`,
+  `dataCompleteness=complete`, `missingMetrics=[]`.
+- Raw cache подтвердил цепочку `captured -> submitted -> acked`; sports-файлы
+  вошли в `ackFileIds`. Поэтому последующий ручной probe по тому же дню уже
+  увидел только дневной summary-файл. Это ожидаемо и подтверждает, что ACK
+  работает.
+
 Приоритет 3 - сон и история:
 
 - Логировать unsupported sleep file versions.
