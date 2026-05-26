@@ -4721,6 +4721,59 @@ button.watch-settings-entry-card:focus-visible {
   font-weight: 850;
 }
 
+.watch-sync-diagnostic {
+  display: grid;
+  gap: 5px;
+  padding: 10px;
+  border: 1px solid rgba(15, 118, 110, 0.14);
+  border-radius: 14px;
+  background:
+    linear-gradient(135deg, rgba(240, 253, 250, 0.82), rgba(255, 255, 255, 0.9)),
+    #ffffff;
+}
+
+.watch-sync-diagnostic.is-warning {
+  border-color: rgba(180, 83, 9, 0.18);
+  background:
+    linear-gradient(135deg, rgba(255, 251, 235, 0.88), rgba(255, 255, 255, 0.92)),
+    #ffffff;
+}
+
+.watch-sync-diagnostic.is-error {
+  border-color: rgba(185, 28, 28, 0.18);
+  background:
+    linear-gradient(135deg, rgba(254, 242, 242, 0.88), rgba(255, 255, 255, 0.92)),
+    #ffffff;
+}
+
+.watch-sync-diagnostic div {
+  display: grid;
+  gap: 2px;
+}
+
+.watch-sync-diagnostic span,
+.watch-sync-diagnostic small {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 850;
+  line-height: 1.25;
+}
+
+.watch-sync-diagnostic strong {
+  color: var(--text);
+  font-size: 0.9rem;
+  font-weight: 950;
+  line-height: 1.15;
+}
+
+.watch-sync-diagnostic p {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.8rem;
+  font-weight: 780;
+  line-height: 1.35;
+}
+
 .watch-sync-actions,
 .watch-sync-setup-actions {
   display: grid;

@@ -681,7 +681,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
     if (isDirectWatchRuntime() && directWatchConfig.deviceId && directWatchConfig.authKeyHex) {
       try {
         update({ error: null, isBusy: true, message: "PERFORM Sync читает день напрямую с часов..." });
-        const { payload, payloadError } = await readDirectWatchDailyWithServiceSession(
+        const { payload, payloadError, serviceResult } = await readDirectWatchDailyWithServiceSession(
           entryDate,
           directWatchConfig.deviceId,
           directWatchConfig,
@@ -696,7 +696,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
         update({
           error: null,
           isBusy: false,
-          message: formatDirectWatchDailySyncResultMessage(payload),
+          message: formatDirectWatchDailySyncResultMessage(payload, serviceResult),
         });
         return;
       } catch (error) {
@@ -765,10 +765,21 @@ export function bootstrapMobileApp(root: HTMLElement) {
       payloadError = new Error(loadDirectWatchConfig().lastServiceError || "PERFORM Sync не смог открыть прямую сессию часов.");
     }
 
+    const activityDiagnostic = buildDirectWatchActivitySyncDiagnostic(payload, serviceResult, payloadError);
+    rememberDirectWatchConfig({
+      lastActivitySyncAt: activityDiagnostic.syncedAt,
+      lastActivitySyncDiagnostic: activityDiagnostic.message,
+      lastActivitySyncFileCount: activityDiagnostic.fileCount,
+      lastActivitySyncSportsFileCount: activityDiagnostic.sportsFileCount,
+      lastActivitySyncStatus: activityDiagnostic.status,
+      lastActivitySyncWorkoutCount: activityDiagnostic.workoutCount,
+    });
+
     return {
       payload,
       payloadError,
       serviceOk,
+      serviceResult,
     };
   };
 
@@ -817,7 +828,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
     }
 
     try {
-      const { payload, payloadError } = await readDirectWatchDailyWithServiceSession(entryDate, targetDeviceId, config);
+      const { payload, payloadError, serviceResult } = await readDirectWatchDailyWithServiceSession(entryDate, targetDeviceId, config);
       if (!payload) {
         throw payloadError instanceof Error
           ? payloadError
@@ -829,7 +840,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
         update({
           error: null,
           isBusy: false,
-          message: formatDirectWatchDailySyncResultMessage(payload),
+          message: formatDirectWatchDailySyncResultMessage(payload, serviceResult),
         });
       }
       return true;
@@ -890,7 +901,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
       update({
         error: serviceOk ? null : loadDirectWatchConfig().lastServiceError,
         isBusy: false,
-        message: formatDirectWatchDailySyncResultMessage(payload),
+        message: formatDirectWatchDailySyncResultMessage(payload, serviceResult.serviceResult),
       });
       return;
     }
@@ -1296,7 +1307,6 @@ export function bootstrapMobileApp(root: HTMLElement) {
 
     try {
       await syncDirectWatch(todayValue(), config.deviceId, { silent: true });
-      await syncDirectWatchServiceSettings(config.deviceId, { silent: true });
     } finally {
       directWatchAutoSyncInFlight = false;
     }
@@ -4802,6 +4812,7 @@ function renderWatchSyncPanel(state: MobileAppState, date: string) {
         <strong class="watch-sync-status">${escapeHtml(statusLabel)}</strong>
       </div>
       ${config.lastServiceError ? `<p class="watch-sync-error">${escapeHtml(config.lastServiceError)}</p>` : ""}
+      ${renderWatchActivitySyncDiagnostic(config)}
       <div class="watch-sync-grid">
         <article>
           <span>Часы</span>
@@ -4903,6 +4914,36 @@ function renderWatchSyncPanel(state: MobileAppState, date: string) {
         <span>Источник данных, синхронизация, погода и служба часов находятся в этом блоке.</span>
       </article>
     </section>
+  `;
+}
+
+function renderWatchActivitySyncDiagnostic(config: DirectWatchLocalConfig) {
+  if (!config.lastActivitySyncDiagnostic) {
+    return "";
+  }
+
+  const status = config.lastActivitySyncStatus ?? "warning";
+  const title = status === "ok"
+    ? "Данные считаны"
+    : status === "error"
+      ? "Ошибка чтения данных"
+      : "Нужна проверка тренировки";
+  const meta = [
+    config.lastActivitySyncAt ? formatDateTime(config.lastActivitySyncAt) : null,
+    config.lastActivitySyncFileCount !== null ? `файлов ${config.lastActivitySyncFileCount}` : null,
+    config.lastActivitySyncSportsFileCount !== null ? `SPORTS ${config.lastActivitySyncSportsFileCount}` : null,
+    config.lastActivitySyncWorkoutCount !== null ? `тренировок ${config.lastActivitySyncWorkoutCount}` : null,
+  ].filter((item): item is string => Boolean(item));
+
+  return `
+    <article class="watch-sync-diagnostic is-${escapeHtml(status)}">
+      <div>
+        <span>Последнее чтение данных</span>
+        <strong>${escapeHtml(title)}</strong>
+      </div>
+      <p>${escapeHtml(config.lastActivitySyncDiagnostic)}</p>
+      ${meta.length ? `<small>${escapeHtml(meta.join(" · "))}</small>` : ""}
+    </article>
   `;
 }
 
@@ -6667,7 +6708,126 @@ function formatDirectWatchServiceSyncMessage(
   return [baseMessage, bridgeMessage, weatherMessage].filter(Boolean).join(" ");
 }
 
-function formatDirectWatchDailySyncResultMessage(payload: {
+type DirectWatchActivitySyncStatus = "error" | "ok" | "warning";
+
+interface DirectWatchActivitySyncDiagnostic {
+  dailyFileCount: number;
+  fileCount: number;
+  message: string;
+  sportsFileCount: number;
+  status: DirectWatchActivitySyncStatus;
+  syncedAt: string;
+  workoutCount: number;
+}
+
+function buildDirectWatchActivitySyncDiagnostic(
+  payload: {
+    summary: DeviceHealthDailySummaryPayload;
+    workouts: DeviceWorkoutsSyncPayload;
+  } | null,
+  probe: DirectWatchServiceSyncResult | null,
+  error?: unknown,
+): DirectWatchActivitySyncDiagnostic {
+  const requests = probe?.activityFileProbeRequests ?? [];
+  const files = requests
+    .map((request) => request.activityFile ?? request)
+    .filter((file): file is NonNullable<typeof file> => Boolean(file));
+  const fileCount = requests.length || files.length;
+  const dailyFileCount = files.filter((file) => file.type === 0).length;
+  const sportsFileCount = files.filter(isDirectWatchSportsActivityFile).length;
+  const completedCount = requests.filter((request) => request.status === "complete").length;
+  const failedCount = requests.filter((request) => request.status && request.status !== "complete").length;
+  const crcErrorCount = requests.filter((request) => request.crcValid === false).length;
+  const unparsedSportsCount = requests.filter((request) =>
+    isDirectWatchSportsActivityFile(request.activityFile ?? request) &&
+    request.status === "complete" &&
+    request.parsed === false
+  ).length;
+  const workoutCount = payload?.workouts.workouts.length ?? 0;
+  const metricLabels = payload ? getDirectWatchSyncedMetricLabels(payload) : [];
+  const syncedAt = probe?.syncedAt ?? new Date().toISOString();
+  const errorMessage = error instanceof Error ? error.message : typeof error === "string" ? error : null;
+
+  if (!payload && errorMessage) {
+    return {
+      dailyFileCount,
+      fileCount,
+      message: fileCount > 0
+        ? `Файлы активности получены (${fileCount}), но день не собрался: ${errorMessage}`
+        : `Синхронизация не завершилась: ${errorMessage}`,
+      sportsFileCount,
+      status: "error",
+      syncedAt,
+      workoutCount,
+    };
+  }
+
+  if (crcErrorCount > 0 || failedCount > 0) {
+    return {
+      dailyFileCount,
+      fileCount,
+      message: `Часы ответили, но есть ошибки чтения: ${failedCount} не завершено, ${crcErrorCount} с ошибкой CRC. Повторите синхронизацию рядом с часами.`,
+      sportsFileCount,
+      status: "warning",
+      syncedAt,
+      workoutCount,
+    };
+  }
+
+  if (workoutCount > 0) {
+    return {
+      dailyFileCount,
+      fileCount,
+      message: `Тренировки: ${workoutCount}. Файлы: ${fileCount || completedCount}, SPORTS: ${sportsFileCount}.`,
+      sportsFileCount,
+      status: "ok",
+      syncedAt,
+      workoutCount,
+    };
+  }
+
+  if (sportsFileCount > 0) {
+    return {
+      dailyFileCount,
+      fileCount,
+      message: unparsedSportsCount > 0
+        ? `SPORTS-файлы пришли (${sportsFileCount}), но часть не распознана. Нужно проверить parser этого типа тренировки.`
+        : `SPORTS-файлы пришли (${sportsFileCount}), но тренировка не сохранилась. Нужно проверить сопоставление summary/details.`,
+      sportsFileCount,
+      status: "warning",
+      syncedAt,
+      workoutCount,
+    };
+  }
+
+  if (dailyFileCount > 0 || metricLabels.length > 0) {
+    return {
+      dailyFileCount,
+      fileCount,
+      message: "Дневные данные пришли, но SPORTS-файлов нет. Если тренировка есть на часах, ее могло уже считать другое приложение.",
+      sportsFileCount,
+      status: "warning",
+      syncedAt,
+      workoutCount,
+    };
+  }
+
+  return {
+    dailyFileCount,
+    fileCount,
+    message: "Часы подключились, но activity-файлы за выбранный день не пришли. Проверьте дату, заряд часов и что другое приложение не забрало данные раньше.",
+    sportsFileCount,
+    status: "warning",
+    syncedAt,
+    workoutCount,
+  };
+}
+
+function isDirectWatchSportsActivityFile(file: { type?: number | null } | null | undefined) {
+  return file?.type === 1;
+}
+
+function getDirectWatchSyncedMetricLabels(payload: {
   summary: DeviceHealthDailySummaryPayload;
   workouts: DeviceWorkoutsSyncPayload;
 }) {
@@ -6677,10 +6837,22 @@ function formatDirectWatchDailySyncResultMessage(payload: {
     payload.summary.oxygenSaturation ? "SpO2" : null,
     payload.summary.samples?.some((sample) => sample.metric === "stress") ? "стресс" : null,
   ].filter((item): item is string => Boolean(item));
+  return metricLabels;
+}
+
+function formatDirectWatchDailySyncResultMessage(
+  payload: {
+    summary: DeviceHealthDailySummaryPayload;
+    workouts: DeviceWorkoutsSyncPayload;
+  },
+  probe?: DirectWatchServiceSyncResult | null,
+) {
+  const metricLabels = getDirectWatchSyncedMetricLabels(payload);
   const workoutsCount = payload.workouts.workouts.length;
+  const diagnostic = buildDirectWatchActivitySyncDiagnostic(payload, probe ?? null);
   const workoutLabel = workoutsCount > 0
     ? `${workoutsCount} ${formatRussianCount(workoutsCount, "тренировка", "тренировки", "тренировок")}`
-    : "новых тренировок в ответе нет";
+    : diagnostic.message;
 
   return [
     "Данные часов обновлены.",

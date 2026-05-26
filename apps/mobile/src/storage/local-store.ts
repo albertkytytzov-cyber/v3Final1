@@ -26,6 +26,12 @@ export interface DirectWatchLocalConfig {
   lastHistorySyncSuccessDays: number | null;
   lastHistorySyncTotalDays: number | null;
   lastHistorySyncedAt: string | null;
+  lastActivitySyncAt: string | null;
+  lastActivitySyncDiagnostic: string | null;
+  lastActivitySyncFileCount: number | null;
+  lastActivitySyncSportsFileCount: number | null;
+  lastActivitySyncStatus: "error" | "ok" | "warning" | null;
+  lastActivitySyncWorkoutCount: number | null;
   lastServiceBridgeUntil: string | null;
   lastServiceError: string | null;
   lastServiceStatus: "error" | "running" | "stopped" | "synced" | null;
@@ -177,6 +183,12 @@ export function loadDirectWatchConfig(): DirectWatchLocalConfig {
     lastHistorySyncSuccessDays: normalizeNonNegativeNumber(config.lastHistorySyncSuccessDays),
     lastHistorySyncTotalDays: normalizeNonNegativeNumber(config.lastHistorySyncTotalDays),
     lastHistorySyncedAt: normalizeText(config.lastHistorySyncedAt),
+    lastActivitySyncAt: normalizeText(config.lastActivitySyncAt),
+    lastActivitySyncDiagnostic: normalizeText(config.lastActivitySyncDiagnostic),
+    lastActivitySyncFileCount: normalizeNonNegativeNumber(config.lastActivitySyncFileCount),
+    lastActivitySyncSportsFileCount: normalizeNonNegativeNumber(config.lastActivitySyncSportsFileCount),
+    lastActivitySyncStatus: normalizeDirectWatchActivitySyncStatus(config.lastActivitySyncStatus),
+    lastActivitySyncWorkoutCount: normalizeNonNegativeNumber(config.lastActivitySyncWorkoutCount),
     lastServiceBridgeUntil: normalizeText(config.lastServiceBridgeUntil),
     lastServiceError: normalizeText(config.lastServiceError),
     lastServiceStatus: normalizeDirectWatchServiceStatus(config.lastServiceStatus),
@@ -203,6 +215,12 @@ export function saveDirectWatchConfig(config: DirectWatchLocalConfig) {
     lastHistorySyncSuccessDays: normalizeNonNegativeNumber(config.lastHistorySyncSuccessDays),
     lastHistorySyncTotalDays: normalizeNonNegativeNumber(config.lastHistorySyncTotalDays),
     lastHistorySyncedAt: normalizeText(config.lastHistorySyncedAt),
+    lastActivitySyncAt: normalizeText(config.lastActivitySyncAt),
+    lastActivitySyncDiagnostic: normalizeText(config.lastActivitySyncDiagnostic),
+    lastActivitySyncFileCount: normalizeNonNegativeNumber(config.lastActivitySyncFileCount),
+    lastActivitySyncSportsFileCount: normalizeNonNegativeNumber(config.lastActivitySyncSportsFileCount),
+    lastActivitySyncStatus: normalizeDirectWatchActivitySyncStatus(config.lastActivitySyncStatus),
+    lastActivitySyncWorkoutCount: normalizeNonNegativeNumber(config.lastActivitySyncWorkoutCount),
     lastServiceBridgeUntil: normalizeText(config.lastServiceBridgeUntil),
     lastServiceError: normalizeText(config.lastServiceError),
     lastServiceStatus: normalizeDirectWatchServiceStatus(config.lastServiceStatus),
@@ -237,6 +255,10 @@ function normalizeDirectWatchHistoryStatus(value: unknown) {
   return value === "completed" || value === "error" || value === "partial" || value === "running"
     ? value
     : null;
+}
+
+function normalizeDirectWatchActivitySyncStatus(value: unknown) {
+  return value === "error" || value === "ok" || value === "warning" ? value : null;
 }
 
 function normalizeNumber(value: unknown) {
