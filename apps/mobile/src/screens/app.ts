@@ -6250,9 +6250,7 @@ function renderWatchSleepStages(summary: DeviceHealthDailySummary | null) {
 
 function getWatchStepCount(summary: DeviceHealthDailySummary | null) {
   const rawPayload = summary?.rawPayload ?? {};
-  return readDeviceHealthRawNumber(rawPayload, "steps") ??
-    readDeviceHealthRawNumber(rawPayload, "stepCount") ??
-    readDeviceHealthRawNumber(rawPayload, "totalSteps");
+  return readBestDeviceHealthStepCount(rawPayload);
 }
 
 function formatWatchStepsValue(summary: DeviceHealthDailySummary | null) {
@@ -14036,17 +14034,222 @@ function upsertCoachAiReviewHistory(items: CoachDayAiReview[], review: CoachDayA
     .slice(0, 300);
 }
 
+function isDeviceHealthRawRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+const deviceHealthStepKeys = ["steps", "stepCount", "totalSteps"] as const;
+
+function readBestDeviceHealthStepCount(rawPayload: Record<string, unknown>) {
+  const values = deviceHealthStepKeys
+    .map((key) => readDeviceHealthRawNumber(rawPayload, key))
+    .filter((value): value is number => value !== null);
+
+  return values.length ? Math.max(...values) : null;
+}
+
+function keepMaxDeviceHealthRawNumber(
+  merged: Record<string, unknown>,
+  existing: Record<string, unknown>,
+  incoming: Record<string, unknown>,
+  key: string,
+) {
+  const existingValue = readDeviceHealthRawNumber(existing, key);
+  const incomingValue = readDeviceHealthRawNumber(incoming, key);
+  if (existingValue === null && incomingValue === null) {
+    return;
+  }
+
+  merged[key] = Math.max(existingValue ?? Number.NEGATIVE_INFINITY, incomingValue ?? Number.NEGATIVE_INFINITY);
+}
+
+function keepBestDeviceHealthRawSteps(
+  merged: Record<string, unknown>,
+  existing: Record<string, unknown>,
+  incoming: Record<string, unknown>,
+) {
+  const existingSteps = readBestDeviceHealthStepCount(existing);
+  const incomingSteps = readBestDeviceHealthStepCount(incoming);
+  const incomingSource = typeof incoming.stepsSource === "string" ? incoming.stepsSource : null;
+
+  if (incomingSource === "minute-details-partial") {
+    if (existingSteps !== null) {
+      deviceHealthStepKeys.forEach((key) => {
+        merged[key] = existingSteps;
+      });
+      merged.stepsSource = existing.stepsSource ?? "preserved-existing";
+    } else {
+      deviceHealthStepKeys.forEach((key) => {
+        delete merged[key];
+      });
+    }
+    return;
+  }
+
+  const bestSteps = Math.max(existingSteps ?? Number.NEGATIVE_INFINITY, incomingSteps ?? Number.NEGATIVE_INFINITY);
+  if (!Number.isFinite(bestSteps)) {
+    return;
+  }
+
+  deviceHealthStepKeys.forEach((key) => {
+    merged[key] = bestSteps;
+  });
+
+  if (existingSteps !== null && existingSteps > (incomingSteps ?? Number.NEGATIVE_INFINITY)) {
+    merged.stepsSource = existing.stepsSource ?? "preserved-existing";
+  }
+}
+
+function mergeDeviceHealthRawPayloadForStorage(
+  existingRawPayload: Record<string, unknown> | null | undefined,
+  incomingRawPayload: Record<string, unknown> | null | undefined,
+) {
+  const existing = isDeviceHealthRawRecord(existingRawPayload) ? existingRawPayload : {};
+  const incoming = isDeviceHealthRawRecord(incomingRawPayload) ? incomingRawPayload : {};
+  const merged = { ...existing, ...incoming };
+
+  keepBestDeviceHealthRawSteps(merged, existing, incoming);
+  ["calories", "trainingLoadDay", "trainingLoadWeek", "vitality"].forEach((key) => {
+    keepMaxDeviceHealthRawNumber(merged, existing, incoming, key);
+  });
+
+  return Object.keys(merged).length ? merged : null;
+}
+
+function mergeValue<T>(incoming: T | null | undefined, existing: T | null | undefined) {
+  return incoming ?? existing ?? null;
+}
+
+function mergeMinValue(
+  incoming: number | null | undefined,
+  existing: number | null | undefined,
+) {
+  if (typeof incoming === "number" && typeof existing === "number") {
+    return Math.min(incoming, existing);
+  }
+
+  return incoming ?? existing ?? null;
+}
+
+function mergeMaxValue(
+  incoming: number | null | undefined,
+  existing: number | null | undefined,
+) {
+  if (typeof incoming === "number" && typeof existing === "number") {
+    return Math.max(incoming, existing);
+  }
+
+  return incoming ?? existing ?? null;
+}
+
+function mergeDeviceHealthSleepSummary(
+  existing: DeviceHealthDailySummary["sleep"],
+  incoming: DeviceHealthDailySummary["sleep"],
+) {
+  if (!existing || !incoming) {
+    return incoming ?? existing ?? null;
+  }
+
+  return {
+    awakeMinutes: mergeValue(incoming.awakeMinutes, existing.awakeMinutes),
+    deepMinutes: mergeValue(incoming.deepMinutes, existing.deepMinutes),
+    durationMinutes: mergeValue(incoming.durationMinutes, existing.durationMinutes),
+    endTime: mergeValue(incoming.endTime, existing.endTime),
+    lightMinutes: mergeValue(incoming.lightMinutes, existing.lightMinutes),
+    remMinutes: mergeValue(incoming.remMinutes, existing.remMinutes),
+    score: mergeValue(incoming.score, existing.score),
+    startTime: mergeValue(incoming.startTime, existing.startTime),
+  };
+}
+
+function mergeDeviceHealthHeartRateSummary(
+  existing: DeviceHealthDailySummary["heartRate"],
+  incoming: DeviceHealthDailySummary["heartRate"],
+) {
+  if (!existing || !incoming) {
+    return incoming ?? existing ?? null;
+  }
+
+  return {
+    averageBpm: mergeValue(incoming.averageBpm, existing.averageBpm),
+    hrvRmssdMs: mergeValue(incoming.hrvRmssdMs, existing.hrvRmssdMs),
+    maxBpm: mergeMaxValue(incoming.maxBpm, existing.maxBpm),
+    minBpm: mergeMinValue(incoming.minBpm, existing.minBpm),
+    restingBpm: mergeValue(incoming.restingBpm, existing.restingBpm),
+  };
+}
+
+function mergeDeviceHealthOxygenSaturationSummary(
+  existing: DeviceHealthDailySummary["oxygenSaturation"],
+  incoming: DeviceHealthDailySummary["oxygenSaturation"],
+) {
+  if (!existing || !incoming) {
+    return incoming ?? existing ?? null;
+  }
+
+  return {
+    averagePercent: mergeValue(incoming.averagePercent, existing.averagePercent),
+    latestPercent: mergeValue(incoming.latestPercent, existing.latestPercent),
+    maxPercent: mergeMaxValue(incoming.maxPercent, existing.maxPercent),
+    minPercent: mergeMinValue(incoming.minPercent, existing.minPercent),
+    sampleCount: Math.max(existing.sampleCount ?? 0, incoming.sampleCount ?? 0),
+  };
+}
+
+function mergeDeviceHealthWorkoutSummary(
+  existing: DeviceHealthDailySummary["workout"],
+  incoming: DeviceHealthDailySummary["workout"],
+) {
+  if (!existing || !incoming) {
+    return incoming ?? existing ?? null;
+  }
+
+  return {
+    activeCalories: mergeMaxValue(incoming.activeCalories, existing.activeCalories),
+    averageHeartRateBpm: mergeValue(incoming.averageHeartRateBpm, existing.averageHeartRateBpm),
+    count: Math.max(existing.count ?? 0, incoming.count ?? 0),
+    maxHeartRateBpm: mergeMaxValue(incoming.maxHeartRateBpm, existing.maxHeartRateBpm),
+    totalDistanceMeters: mergeMaxValue(incoming.totalDistanceMeters, existing.totalDistanceMeters),
+    totalDurationMinutes: mergeMaxValue(incoming.totalDurationMinutes, existing.totalDurationMinutes),
+  };
+}
+
+function mergeDeviceHealthSummaryForStorage(
+  existing: DeviceHealthDailySummary,
+  incoming: DeviceHealthDailySummary,
+): DeviceHealthDailySummary {
+  return {
+    ...existing,
+    ...incoming,
+    heartRate: mergeDeviceHealthHeartRateSummary(existing.heartRate, incoming.heartRate),
+    oxygenSaturation: mergeDeviceHealthOxygenSaturationSummary(existing.oxygenSaturation, incoming.oxygenSaturation),
+    rawPayload: mergeDeviceHealthRawPayloadForStorage(existing.rawPayload, incoming.rawPayload),
+    sleep: mergeDeviceHealthSleepSummary(existing.sleep, incoming.sleep),
+    sourceDevice: incoming.sourceDevice ?? existing.sourceDevice,
+    workout: mergeDeviceHealthWorkoutSummary(existing.workout, incoming.workout),
+  };
+}
+
 function upsertDeviceHealthSummary(
   items: DeviceHealthDailySummary[],
   summary: DeviceHealthDailySummary,
 ) {
-  const nextItems = items.filter((item) =>
-    item.id !== summary.id &&
-    (item.athleteId !== summary.athleteId ||
-      item.provider !== summary.provider ||
-      item.entryDate !== summary.entryDate)
+  const existingSummary = items.find((item) =>
+    item.id === summary.id ||
+    (item.athleteId === summary.athleteId &&
+      item.provider === summary.provider &&
+      item.entryDate === summary.entryDate)
   );
-  nextItems.unshift(summary);
+  const mergedSummary = existingSummary
+    ? mergeDeviceHealthSummaryForStorage(existingSummary, summary)
+    : summary;
+  const nextItems = items.filter((item) =>
+    item.id !== mergedSummary.id &&
+    (item.athleteId !== mergedSummary.athleteId ||
+      item.provider !== mergedSummary.provider ||
+      item.entryDate !== mergedSummary.entryDate)
+  );
+  nextItems.unshift(mergedSummary);
   return nextItems
     .sort((left, right) => right.entryDate.localeCompare(left.entryDate))
     .slice(0, 120);

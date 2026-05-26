@@ -274,21 +274,35 @@ function keepMaxRawNumber(
   merged[key] = Math.max(existingValue ?? Number.NEGATIVE_INFINITY, incomingValue ?? Number.NEGATIVE_INFINITY);
 }
 
+const rawStepKeys = ["steps", "stepCount", "totalSteps"] as const;
+
+function readBestRawSteps(rawPayload: Record<string, unknown>) {
+  const values = rawStepKeys
+    .map((key) => readRawNumber(rawPayload[key]))
+    .filter((value): value is number => value !== null);
+
+  return values.length ? Math.max(...values) : null;
+}
+
 function keepBestRawSteps(
   merged: Record<string, unknown>,
   existing: Record<string, unknown>,
   incoming: Record<string, unknown>,
 ) {
-  const existingSteps = readRawNumber(existing.steps);
-  const incomingSteps = readRawNumber(incoming.steps);
+  const existingSteps = readBestRawSteps(existing);
+  const incomingSteps = readBestRawSteps(incoming);
   const incomingSource = typeof incoming.stepsSource === "string" ? incoming.stepsSource : null;
 
   if (incomingSource === "minute-details-partial") {
     if (existingSteps !== null) {
-      merged.steps = existingSteps;
+      rawStepKeys.forEach((key) => {
+        merged[key] = existingSteps;
+      });
       merged.stepsSource = existing.stepsSource ?? "preserved-existing";
     } else {
-      delete merged.steps;
+      rawStepKeys.forEach((key) => {
+        delete merged[key];
+      });
     }
     return;
   }
@@ -298,12 +312,17 @@ function keepBestRawSteps(
   }
 
   if (incomingSteps !== null && existingSteps !== null && existingSteps > incomingSteps) {
-    merged.steps = existingSteps;
+    rawStepKeys.forEach((key) => {
+      merged[key] = existingSteps;
+    });
     merged.stepsSource = existing.stepsSource ?? "preserved-existing";
     return;
   }
 
-  merged.steps = incomingSteps ?? existingSteps;
+  const bestSteps = incomingSteps ?? existingSteps;
+  rawStepKeys.forEach((key) => {
+    merged[key] = bestSteps;
+  });
 }
 
 function mergeDeviceHealthRawPayload(
@@ -315,7 +334,7 @@ function mergeDeviceHealthRawPayload(
   const merged = { ...existing, ...incoming };
 
   keepBestRawSteps(merged, existing, incoming);
-  ["stepCount", "totalSteps", "calories", "trainingLoadDay", "trainingLoadWeek", "vitality"].forEach((key) => {
+  ["calories", "trainingLoadDay", "trainingLoadWeek", "vitality"].forEach((key) => {
     keepMaxRawNumber(merged, existing, incoming, key);
   });
 
@@ -624,25 +643,25 @@ export async function upsertDeviceHealthDailySummary(input: {
       )
       ON CONFLICT (athlete_id, provider, entry_date)
       DO UPDATE SET
-        source_device = EXCLUDED.source_device,
-        sleep_start_time = CASE WHEN $31 THEN EXCLUDED.sleep_start_time ELSE device_health_daily_summaries.sleep_start_time END,
-        sleep_end_time = CASE WHEN $31 THEN EXCLUDED.sleep_end_time ELSE device_health_daily_summaries.sleep_end_time END,
-        sleep_duration_minutes = CASE WHEN $31 THEN EXCLUDED.sleep_duration_minutes ELSE device_health_daily_summaries.sleep_duration_minutes END,
-        deep_sleep_minutes = CASE WHEN $31 THEN EXCLUDED.deep_sleep_minutes ELSE device_health_daily_summaries.deep_sleep_minutes END,
-        light_sleep_minutes = CASE WHEN $31 THEN EXCLUDED.light_sleep_minutes ELSE device_health_daily_summaries.light_sleep_minutes END,
-        rem_sleep_minutes = CASE WHEN $31 THEN EXCLUDED.rem_sleep_minutes ELSE device_health_daily_summaries.rem_sleep_minutes END,
-        awake_minutes = CASE WHEN $31 THEN EXCLUDED.awake_minutes ELSE device_health_daily_summaries.awake_minutes END,
-        sleep_score = CASE WHEN $31 THEN EXCLUDED.sleep_score ELSE device_health_daily_summaries.sleep_score END,
-        resting_hr = CASE WHEN $32 THEN EXCLUDED.resting_hr ELSE device_health_daily_summaries.resting_hr END,
-        average_hr = CASE WHEN $32 THEN EXCLUDED.average_hr ELSE device_health_daily_summaries.average_hr END,
-        min_hr = CASE WHEN $32 THEN EXCLUDED.min_hr ELSE device_health_daily_summaries.min_hr END,
-        max_hr = CASE WHEN $32 THEN EXCLUDED.max_hr ELSE device_health_daily_summaries.max_hr END,
-        hrv_rmssd_ms = CASE WHEN $32 THEN EXCLUDED.hrv_rmssd_ms ELSE device_health_daily_summaries.hrv_rmssd_ms END,
-        oxygen_saturation_avg_percent = CASE WHEN $33 THEN EXCLUDED.oxygen_saturation_avg_percent ELSE device_health_daily_summaries.oxygen_saturation_avg_percent END,
-        oxygen_saturation_min_percent = CASE WHEN $33 THEN EXCLUDED.oxygen_saturation_min_percent ELSE device_health_daily_summaries.oxygen_saturation_min_percent END,
-        oxygen_saturation_max_percent = CASE WHEN $33 THEN EXCLUDED.oxygen_saturation_max_percent ELSE device_health_daily_summaries.oxygen_saturation_max_percent END,
-        oxygen_saturation_latest_percent = CASE WHEN $33 THEN EXCLUDED.oxygen_saturation_latest_percent ELSE device_health_daily_summaries.oxygen_saturation_latest_percent END,
-        oxygen_saturation_sample_count = CASE WHEN $33 THEN EXCLUDED.oxygen_saturation_sample_count ELSE device_health_daily_summaries.oxygen_saturation_sample_count END,
+        source_device = COALESCE(EXCLUDED.source_device, device_health_daily_summaries.source_device),
+        sleep_start_time = CASE WHEN $31 THEN COALESCE(EXCLUDED.sleep_start_time, device_health_daily_summaries.sleep_start_time) ELSE device_health_daily_summaries.sleep_start_time END,
+        sleep_end_time = CASE WHEN $31 THEN COALESCE(EXCLUDED.sleep_end_time, device_health_daily_summaries.sleep_end_time) ELSE device_health_daily_summaries.sleep_end_time END,
+        sleep_duration_minutes = CASE WHEN $31 THEN COALESCE(EXCLUDED.sleep_duration_minutes, device_health_daily_summaries.sleep_duration_minutes) ELSE device_health_daily_summaries.sleep_duration_minutes END,
+        deep_sleep_minutes = CASE WHEN $31 THEN COALESCE(EXCLUDED.deep_sleep_minutes, device_health_daily_summaries.deep_sleep_minutes) ELSE device_health_daily_summaries.deep_sleep_minutes END,
+        light_sleep_minutes = CASE WHEN $31 THEN COALESCE(EXCLUDED.light_sleep_minutes, device_health_daily_summaries.light_sleep_minutes) ELSE device_health_daily_summaries.light_sleep_minutes END,
+        rem_sleep_minutes = CASE WHEN $31 THEN COALESCE(EXCLUDED.rem_sleep_minutes, device_health_daily_summaries.rem_sleep_minutes) ELSE device_health_daily_summaries.rem_sleep_minutes END,
+        awake_minutes = CASE WHEN $31 THEN COALESCE(EXCLUDED.awake_minutes, device_health_daily_summaries.awake_minutes) ELSE device_health_daily_summaries.awake_minutes END,
+        sleep_score = CASE WHEN $31 THEN COALESCE(EXCLUDED.sleep_score, device_health_daily_summaries.sleep_score) ELSE device_health_daily_summaries.sleep_score END,
+        resting_hr = CASE WHEN $32 THEN COALESCE(EXCLUDED.resting_hr, device_health_daily_summaries.resting_hr) ELSE device_health_daily_summaries.resting_hr END,
+        average_hr = CASE WHEN $32 THEN COALESCE(EXCLUDED.average_hr, device_health_daily_summaries.average_hr) ELSE device_health_daily_summaries.average_hr END,
+        min_hr = CASE WHEN $32 THEN COALESCE(LEAST(device_health_daily_summaries.min_hr, EXCLUDED.min_hr), EXCLUDED.min_hr, device_health_daily_summaries.min_hr) ELSE device_health_daily_summaries.min_hr END,
+        max_hr = CASE WHEN $32 THEN COALESCE(GREATEST(device_health_daily_summaries.max_hr, EXCLUDED.max_hr), EXCLUDED.max_hr, device_health_daily_summaries.max_hr) ELSE device_health_daily_summaries.max_hr END,
+        hrv_rmssd_ms = CASE WHEN $32 THEN COALESCE(EXCLUDED.hrv_rmssd_ms, device_health_daily_summaries.hrv_rmssd_ms) ELSE device_health_daily_summaries.hrv_rmssd_ms END,
+        oxygen_saturation_avg_percent = CASE WHEN $33 THEN COALESCE(EXCLUDED.oxygen_saturation_avg_percent, device_health_daily_summaries.oxygen_saturation_avg_percent) ELSE device_health_daily_summaries.oxygen_saturation_avg_percent END,
+        oxygen_saturation_min_percent = CASE WHEN $33 THEN COALESCE(LEAST(device_health_daily_summaries.oxygen_saturation_min_percent, EXCLUDED.oxygen_saturation_min_percent), EXCLUDED.oxygen_saturation_min_percent, device_health_daily_summaries.oxygen_saturation_min_percent) ELSE device_health_daily_summaries.oxygen_saturation_min_percent END,
+        oxygen_saturation_max_percent = CASE WHEN $33 THEN COALESCE(GREATEST(device_health_daily_summaries.oxygen_saturation_max_percent, EXCLUDED.oxygen_saturation_max_percent), EXCLUDED.oxygen_saturation_max_percent, device_health_daily_summaries.oxygen_saturation_max_percent) ELSE device_health_daily_summaries.oxygen_saturation_max_percent END,
+        oxygen_saturation_latest_percent = CASE WHEN $33 THEN COALESCE(EXCLUDED.oxygen_saturation_latest_percent, device_health_daily_summaries.oxygen_saturation_latest_percent) ELSE device_health_daily_summaries.oxygen_saturation_latest_percent END,
+        oxygen_saturation_sample_count = CASE WHEN $33 THEN GREATEST(device_health_daily_summaries.oxygen_saturation_sample_count, EXCLUDED.oxygen_saturation_sample_count) ELSE device_health_daily_summaries.oxygen_saturation_sample_count END,
         workout_count = CASE WHEN $34 THEN GREATEST(device_health_daily_summaries.workout_count, EXCLUDED.workout_count) ELSE device_health_daily_summaries.workout_count END,
         workout_duration_minutes = CASE WHEN $34 THEN COALESCE(GREATEST(device_health_daily_summaries.workout_duration_minutes, EXCLUDED.workout_duration_minutes), EXCLUDED.workout_duration_minutes, device_health_daily_summaries.workout_duration_minutes) ELSE device_health_daily_summaries.workout_duration_minutes END,
         workout_distance_meters = CASE WHEN $34 THEN COALESCE(GREATEST(device_health_daily_summaries.workout_distance_meters, EXCLUDED.workout_distance_meters), EXCLUDED.workout_distance_meters, device_health_daily_summaries.workout_distance_meters) ELSE device_health_daily_summaries.workout_distance_meters END,
