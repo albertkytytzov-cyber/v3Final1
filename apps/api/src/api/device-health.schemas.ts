@@ -97,8 +97,18 @@ export function parseDeviceHealthSamplesQuery(query: unknown): {
   };
 }
 
-export function parseDeviceWorkoutsQuery(query: unknown): { entryDate?: string } {
-  return parseDeviceHealthEntryDateQuery(query);
+export function parseDeviceWorkoutsQuery(query: unknown): {
+  entryDate?: string;
+  includeSamples?: boolean;
+} {
+  const record = readRecord(query ?? {}, "query");
+  const parsed = parseDeviceHealthEntryDateQuery(record);
+  const includeSamples = readOptionalQueryBoolean(record.includeSamples, "includeSamples");
+
+  return {
+    ...parsed,
+    ...(includeSamples === undefined ? {} : { includeSamples }),
+  };
 }
 
 function parseDeviceHealthEntryDateQuery(query: unknown): { entryDate?: string } {
@@ -431,6 +441,22 @@ function readEnum<T extends string>(value: unknown, allowedValues: T[], fieldNam
   return value as T;
 }
 
+function readOptionalQueryBoolean(value: unknown, fieldName: string) {
+  if (value === undefined || value === null || value === "") {
+    return undefined;
+  }
+
+  if (value === true || value === "true" || value === "1") {
+    return true;
+  }
+
+  if (value === false || value === "false" || value === "0") {
+    return false;
+  }
+
+  throw new Error(`${fieldName} must be true or false`);
+}
+
 const MAX_WORKOUTS_PER_DAY = 20;
-const MAX_SAMPLES_PER_WORKOUT = 2500;
+const MAX_SAMPLES_PER_WORKOUT = 30000;
 const MAX_DEVICE_HEALTH_SAMPLES_PER_DAY = 12000;

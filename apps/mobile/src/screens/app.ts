@@ -15,16 +15,22 @@ import {
   readMiFitnessHealthConnectDeviceWorkouts,
 } from "../integrations/health-connect.js";
 import {
+  ackDirectWatchActivityFiles,
   addDirectWatchPacketListener,
   addDirectWatchSessionListener,
   getDirectWatchSessionStatus,
   getDirectWatchSyncServiceStatus,
   inspectDirectWatchDevice,
   isDirectWatchRuntime,
+  loadDirectWatchRawCacheEntries,
+  markDirectWatchRawCacheAcked,
+  markDirectWatchRawCacheAckError,
+  markDirectWatchRawCacheQueued,
+  markDirectWatchRawCacheSubmitted,
   pairDirectWatchDevice,
   probeDirectWatchClassicSession,
   readDirectWatchActivityInventory,
-  readDirectWatchDailySummary,
+  readDirectWatchDailySync,
   scanDirectWatchDevices,
   startDirectWatchSession,
   stopDirectWatchSession,
@@ -32,7 +38,11 @@ import {
   syncDirectWatchService,
   unpairDirectWatchDevice,
 } from "../integrations/direct-watch.js";
-import type { DirectWatchDecryptedPacket, DirectWatchServiceSyncResult } from "../integrations/direct-watch.js";
+import type {
+  DirectWatchDailySyncPayload,
+  DirectWatchDecryptedPacket,
+  DirectWatchServiceSyncResult,
+} from "../integrations/direct-watch.js";
 import { readHuaweiHealthDailySummary } from "../integrations/huawei-health.js";
 import {
   buildDirectWatchWeatherLocationPayload,
@@ -91,6 +101,8 @@ import type {
   WatchDetailPeriod,
 } from "../types/models.js";
 
+type SubmitOrQueueResult = "queued" | "skipped" | "submitted";
+
 const runtimeConfig = readRuntimeConfig();
 const SHOW_DIRECT_WATCH_DIAGNOSTICS = false;
 const DIRECT_WATCH_AUTH_KEY_PATTERN = /^[0-9a-f]{32}$/i;
@@ -99,6 +111,43 @@ const DIRECT_WATCH_AUTO_SYNC_INTERVAL_MS = 30 * 60 * 1000;
 const DIRECT_WATCH_AUTO_SYNC_START_DELAY_MS = 10 * 1000;
 const DIRECT_WATCH_HISTORY_SYNC_DAYS = 30;
 const DIRECT_WATCH_HISTORY_SYNC_DAY_DELAY_MS = 350;
+
+interface UPlotInstance {
+  destroy: () => void;
+  setSize: (size: { height: number; width: number }) => void;
+}
+
+interface UPlotConstructor {
+  new(options: Record<string, unknown>, data: number[][], target: HTMLElement): UPlotInstance;
+}
+
+interface UPlotWindow extends Window {
+  uPlot?: UPlotConstructor;
+}
+
+interface MobileUPlotPayload {
+  average?: number | null;
+  color: string;
+  format?: "decimal" | "integer" | "pace" | "percent";
+  highColor?: string;
+  label: string;
+  lower: number;
+  title: string;
+  unit: string;
+  upper: number;
+  valueDecimals?: number;
+  x: number[];
+  y: number[];
+}
+
+let mobileUPlotPayloadSequence = 0;
+const mobileUPlotPayloads = new Map<string, MobileUPlotPayload>();
+const mobileUPlotTimeFormatter = new Intl.DateTimeFormat("ru-RU", {
+  hour: "2-digit",
+  minute: "2-digit",
+});
+const deviceWorkoutGraphTimeCache = new Map<string, number | null>();
+
 const TRAINING_ABBREVIATION_EXPLANATIONS: Record<string, string> = {
   "АНП": "Анаэробный порог. Граница между устойчивой работой и зоной, где усталость начинает быстро накапливаться. Если в плане указана работа около АнП, держи высокую, но контролируемую интенсивность без развала техники.",
   "HR": "Пульс / частота сердечных сокращений. Используется для контроля интенсивности нагрузки. Если указан диапазон HR, держи работу примерно в этом пульсовом коридоре, не уходя сильно выше или ниже.",
@@ -114,7 +163,11 @@ const TRAINING_ABBREVIATION_PATTERN =
 type MobileAssignedPlanSession = AssignedPlanSummary["day"]["sessions"][number];
 
 export function bootstrapMobileApp(root: HTMLElement) {
-  const initialData = loadSnapshot();
+  const storedData = loadSnapshot();
+  const initialData = normalizeMobileDataSnapshot(storedData);
+  if (initialData.deviceWorkouts.length !== storedData.deviceWorkouts.length) {
+    saveSnapshot(initialData);
+  }
   const state: MobileAppState = {
     session: loadSession(runtimeConfig.apiBaseUrl),
     data: initialData,
@@ -141,6 +194,9 @@ export function bootstrapMobileApp(root: HTMLElement) {
     readinessEditMode: false,
     watchDetailMetric: null,
     watchDetailPeriod: "day",
+    watchExpandedWorkoutId: null,
+    watchExpandedWorkoutGraphId: null,
+    watchWorkoutDetailId: null,
     watchSettingsOpen: false,
     isOnline: navigator.onLine,
     isBusy: false,
@@ -326,10 +382,15 @@ export function bootstrapMobileApp(root: HTMLElement) {
     state.session.apiBaseUrl,
     state.session.sessionToken,
   );
+  let mountedUPlotCharts: UPlotInstance[] = [];
 
   const render = () => {
+    mountedUPlotCharts.forEach((chart) => chart.destroy());
+    mountedUPlotCharts = [];
+    resetMobileUPlotPayloads();
     root.innerHTML = state.session.user ? renderAppShell(state) : renderLogin(state);
     bindEvents();
+    mountedUPlotCharts = mountMobileUPlotCharts(root);
   };
 
   refreshData = async (silent = false) => {
@@ -362,11 +423,11 @@ export function bootstrapMobileApp(root: HTMLElement) {
         return;
       }
 
-      const snapshot: MobileDataSnapshot = {
+      const snapshot = normalizeMobileDataSnapshot({
         ...state.data,
         ...loadedData,
         savedAt: new Date().toISOString(),
-      };
+      });
       const storedAiReviewsByDay = buildCoachAiReviewByDay(snapshot.coachAiReviews);
       const nextSession = {
         ...state.session,
@@ -422,6 +483,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
     });
 
     if (result.syncedCount > 0) {
+      await ackDirectWatchRawCachesAfterQueueFlush().catch(() => undefined);
       await refreshData(true);
     }
   };
@@ -611,12 +673,18 @@ export function bootstrapMobileApp(root: HTMLElement) {
     if (isDirectWatchRuntime() && directWatchConfig.deviceId && directWatchConfig.authKeyHex) {
       try {
         update({ error: null, isBusy: true, message: "PERFORM Sync читает день напрямую с часов..." });
-        const payload = await readDirectWatchDailySummary(
+        const payload = await readDirectWatchDailySync(
           entryDate,
           directWatchConfig.deviceId,
           directWatchConfig.authKeyHex,
         );
-        await submitDeviceHealthPayload(payload);
+        await submitDirectWatchSyncPayload(payload, { silent: true });
+        await refreshData(true).catch(() => undefined);
+        update({
+          error: null,
+          isBusy: false,
+          message: formatDirectWatchDailySyncResultMessage(payload),
+        });
         return;
       } catch (error) {
         directWatchError = error;
@@ -701,8 +769,18 @@ export function bootstrapMobileApp(root: HTMLElement) {
     }
 
     try {
-      const payload = await readDirectWatchDailySummary(entryDate, targetDeviceId, config.authKeyHex);
-      await submitDeviceHealthPayload(payload, options);
+      const payload = await readDirectWatchDailySync(entryDate, targetDeviceId, config.authKeyHex, {
+        includeSleep: shouldFetchDirectWatchSleep(state.data, entryDate),
+      });
+      await submitDirectWatchSyncPayload(payload, { silent: true });
+      if (!options.silent) {
+        await refreshData(true).catch(() => undefined);
+        update({
+          error: null,
+          isBusy: false,
+          message: formatDirectWatchDailySyncResultMessage(payload),
+        });
+      }
       return true;
     } catch (error) {
       if (!options.silent) {
@@ -714,6 +792,73 @@ export function bootstrapMobileApp(root: HTMLElement) {
       }
       return false;
     }
+  };
+
+  const syncDirectWatchFull = async (entryDate: string, deviceId?: string | null) => {
+    if (state.session.user?.role !== "athlete") {
+      update({
+        error: "PERFORM Sync выполняет спортсмен в своём Android-приложении.",
+        isBusy: false,
+        message: null,
+      });
+      return;
+    }
+
+    const config = loadDirectWatchConfig();
+    const targetDeviceId = deviceId || config.deviceId;
+
+    if (!targetDeviceId) {
+      update({ error: "Сначала выберите часы в настройке часов." });
+      return;
+    }
+
+    if (!config.authKeyHex) {
+      update({ error: "Сначала сохраните Auth Key часов в настройке часов." });
+      return;
+    }
+
+    update({
+      error: null,
+      isBusy: true,
+      message: "Синхронизирую часы: время, погода, показатели и тренировки...",
+    });
+
+    let payload: DirectWatchDailySyncPayload | null = null;
+    let payloadError: unknown = null;
+    try {
+      payload = await readDirectWatchDailySync(entryDate, targetDeviceId, config.authKeyHex, {
+        includeSleep: shouldFetchDirectWatchSleep(state.data, entryDate),
+      });
+      await submitDirectWatchSyncPayload(payload, { silent: true });
+    } catch (error) {
+      payloadError = error;
+    }
+
+    const serviceOk = await syncDirectWatchServiceSettings(targetDeviceId, { silent: true });
+
+    if (payload) {
+      await refreshData(true).catch(() => undefined);
+      update({
+        error: serviceOk ? null : loadDirectWatchConfig().lastServiceError,
+        isBusy: false,
+        message: formatDirectWatchDailySyncResultMessage(payload),
+      });
+      return;
+    }
+
+    const errorMessage = payloadError instanceof Error
+      ? payloadError.message
+      : "PERFORM Sync не смог считать данные часов.";
+    const isNoDailyFiles = errorMessage.includes("не отдали отдельные файлы активности");
+    update({
+      error: isNoDailyFiles && serviceOk ? null : errorMessage,
+      isBusy: false,
+      message: isNoDailyFiles && serviceOk
+        ? "Время и погода обновлены. За выбранный день часы не отдали отдельные файлы, показатели не менял."
+        : serviceOk
+          ? null
+          : "Время и погода обновились, но показатели с часов не считались.",
+    });
   };
 
   const syncDirectWatchHistory = async (deviceId?: string | null) => {
@@ -840,8 +985,10 @@ export function bootstrapMobileApp(root: HTMLElement) {
         });
 
         try {
-          const payload = await readDirectWatchDailySummary(entryDate, targetDeviceId, config.authKeyHex);
-          await submitDeviceHealthPayload(payload, { silent: true });
+          const payload = await readDirectWatchDailySync(entryDate, targetDeviceId, config.authKeyHex, {
+            includeSleep: true,
+          });
+          await submitDirectWatchSyncPayload(payload, { silent: true });
           successDays += 1;
         } catch (error) {
           lastError = error instanceof Error
@@ -1085,8 +1232,8 @@ export function bootstrapMobileApp(root: HTMLElement) {
     directWatchAutoSyncInFlight = true;
 
     try {
-      await syncDirectWatchServiceSettings(config.deviceId, { silent: true });
       await syncDirectWatch(todayValue(), config.deviceId, { silent: true });
+      await syncDirectWatchServiceSettings(config.deviceId, { silent: true });
     } finally {
       directWatchAutoSyncInFlight = false;
     }
@@ -1150,8 +1297,12 @@ export function bootstrapMobileApp(root: HTMLElement) {
     const config = loadDirectWatchConfig();
 
     if (!normalized) {
-      saveDirectWatchConfig({ ...config, authKeyHex: null });
-      update({ error: null, message: "Auth Key PERFORM Sync удалён с этого телефона." });
+      update({
+        error: config.authKeyHex ? null : "Введите Auth Key часов, чтобы включить PERFORM Sync.",
+        message: config.authKeyHex
+          ? "Auth Key уже сохранён. Введите новый ключ только если нужно заменить старый."
+          : null,
+      });
       return;
     }
 
@@ -1522,8 +1673,8 @@ export function bootstrapMobileApp(root: HTMLElement) {
   const submitDeviceHealthPayload = async (
     payload: DeviceHealthDailySummaryPayload,
     options: { silent?: boolean } = {},
-  ) => {
-    await submitOrQueue("device-health", payload, async (idempotencyKey) => {
+  ): Promise<SubmitOrQueueResult> => {
+    return submitOrQueue("device-health", payload, async (idempotencyKey) => {
       const result = await client().submitDeviceHealthSummary(payload, idempotencyKey);
       const sampleMetrics = Array.from(new Set(payload.samples?.map((sample) => sample.metric) ?? []));
       const sampleResponses = sampleMetrics.length
@@ -1559,8 +1710,11 @@ export function bootstrapMobileApp(root: HTMLElement) {
     }, options);
   };
 
-  const submitDeviceWorkoutsPayload = async (payload: DeviceWorkoutsSyncPayload) => {
-    await submitOrQueue("device-workouts", payload, async (idempotencyKey) => {
+  const submitDeviceWorkoutsPayload = async (
+    payload: DeviceWorkoutsSyncPayload,
+    options: { silent?: boolean } = {},
+  ): Promise<SubmitOrQueueResult> => {
+    return submitOrQueue("device-workouts", payload, async (idempotencyKey) => {
       const result = await client().submitDeviceWorkouts(payload, idempotencyKey);
       const snapshot = {
         ...state.data,
@@ -1573,7 +1727,100 @@ export function bootstrapMobileApp(root: HTMLElement) {
       };
       saveSnapshot(snapshot);
       update({ data: snapshot });
-    });
+    }, options);
+  };
+
+  const hydrateDeviceWorkoutSamples = async (workoutId: string) => {
+    const athleteId = state.session.user?.athleteId ?? null;
+    const workout = getDeviceWorkoutById(state, athleteId, workoutId);
+    if (!workout || workout.sampleCount <= workout.samples.length) {
+      return;
+    }
+
+    try {
+      const result = await client().listDeviceWorkouts(workout.entryDate, true);
+      const snapshot = {
+        ...state.data,
+        deviceWorkoutLinks: upsertDeviceWorkoutLinks(
+          state.data.deviceWorkoutLinks,
+          result.links ?? [],
+        ),
+        deviceWorkouts: upsertDeviceWorkouts(state.data.deviceWorkouts, result.workouts),
+        savedAt: new Date().toISOString(),
+      };
+      saveSnapshot(snapshot);
+      update({ data: snapshot });
+    } catch (error) {
+      update({ error: toFriendlyError(error) });
+    }
+  };
+
+  const submitDirectWatchSyncPayload = async (
+    payload: DirectWatchDailySyncPayload,
+    options: { silent?: boolean } = {},
+  ): Promise<boolean> => {
+    const healthResult = await submitDeviceHealthPayload(payload.summary, options);
+    let workoutsResult: SubmitOrQueueResult = "submitted";
+    if (payload.workouts.workouts.length > 0) {
+      workoutsResult = await submitDeviceWorkoutsPayload(payload.workouts, options);
+    }
+
+    const didSubmitToServer = healthResult === "submitted" && workoutsResult === "submitted";
+    const ackFileIds = collectDirectWatchAckFileIdsForSubmit(payload);
+    if (!didSubmitToServer) {
+      if (ackFileIds.length > 0) {
+        markDirectWatchRawCacheQueued(payload.rawCacheId);
+      }
+      return false;
+    }
+
+    if (didSubmitToServer && ackFileIds.length > 0) {
+      const config = loadDirectWatchConfig();
+      if (config.deviceId && config.authKeyHex) {
+        markDirectWatchRawCacheSubmitted(payload.rawCacheId);
+        try {
+          const ack = await ackDirectWatchActivityFiles(config.deviceId, config.authKeyHex, ackFileIds);
+          markDirectWatchRawCacheAcked(payload.rawCacheId, ack.activityFileAckIds ?? ackFileIds);
+        } catch (error) {
+          markDirectWatchRawCacheAckError(payload.rawCacheId, error);
+        }
+      }
+    }
+
+    return didSubmitToServer;
+  };
+
+  const collectDirectWatchAckFileIdsForSubmit = (payload: DirectWatchDailySyncPayload) => {
+    return Array.from(new Set(payload.ackFileIds.map((fileId) => fileId.trim()).filter(Boolean)));
+  };
+
+  const ackDirectWatchRawCachesAfterQueueFlush = async () => {
+    if (state.session.user?.role !== "athlete") {
+      return;
+    }
+
+    const config = loadDirectWatchConfig();
+    if (!config.deviceId || !config.authKeyHex) {
+      return;
+    }
+
+    const queue = loadQueue();
+    const candidates = loadDirectWatchRawCacheEntries().filter((entry) =>
+      entry.deviceId === config.deviceId &&
+      entry.ackFileIds.length > 0 &&
+      (entry.status === "queued" || entry.status === "submitted" || entry.status === "ack-error") &&
+      !queue.some((action) => pendingActionReferencesDirectWatchRawCache(action, entry.id))
+    );
+
+    for (const entry of candidates) {
+      markDirectWatchRawCacheSubmitted(entry.id);
+      try {
+        const ack = await ackDirectWatchActivityFiles(config.deviceId, config.authKeyHex, entry.ackFileIds);
+        markDirectWatchRawCacheAcked(entry.id, ack.activityFileAckIds ?? entry.ackFileIds);
+      } catch (error) {
+        markDirectWatchRawCacheAckError(entry.id, error);
+      }
+    }
   };
 
   const linkDeviceWorkoutToBlock = async (select: HTMLSelectElement) => {
@@ -1954,7 +2201,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
       | CoachDiaryEntryPayload,
     submit: (idempotencyKey: string) => Promise<void>,
     options: { silent?: boolean } = {},
-  ) => {
+  ): Promise<SubmitOrQueueResult> => {
     const userRole = state.session.user?.role ?? null;
 
     if (!canSubmitSyncAction(userRole, kind)) {
@@ -1966,7 +2213,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
           queue: loadQueue(),
         });
       }
-      return;
+      return "skipped";
     }
 
     const pendingAction = createPendingAction(
@@ -1989,7 +2236,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
             message: "Сохранено локально. Отправим при появлении интернета.",
             queue,
           });
-      return;
+      return "queued";
     }
 
     try {
@@ -2004,6 +2251,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
       if (!options.silent) {
         await refreshData(true);
       }
+      return "submitted";
     } catch (error) {
       if (error instanceof MobileApiError && error.statusCode !== null && error.statusCode < 500) {
         if (!options.silent) {
@@ -2012,7 +2260,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
             isBusy: false,
           });
         }
-        return;
+        return "skipped";
       }
 
       const queue = enqueueAction({
@@ -2027,6 +2275,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
             message: "Сервер недоступен. Данные сохранены локально.",
             queue,
           });
+      return "queued";
     }
   };
 
@@ -2055,11 +2304,25 @@ export function bootstrapMobileApp(root: HTMLElement) {
         const selectedScreen = button.dataset.screen as MobileScreen;
 
         if (!getScreensForRole(state.session.user?.role).some((screen) => screen.id === selectedScreen)) {
-          update({ selectedScreen: "dashboard", watchDetailMetric: null, watchSettingsOpen: false });
+          update({
+            selectedScreen: "dashboard",
+            watchDetailMetric: null,
+            watchExpandedWorkoutId: null,
+            watchExpandedWorkoutGraphId: null,
+            watchWorkoutDetailId: null,
+            watchSettingsOpen: false,
+          });
           return;
         }
 
-        update({ selectedScreen, watchDetailMetric: null, watchSettingsOpen: false });
+        update({
+          selectedScreen,
+          watchDetailMetric: null,
+          watchExpandedWorkoutId: null,
+          watchExpandedWorkoutGraphId: null,
+          watchWorkoutDetailId: null,
+          watchSettingsOpen: false,
+        });
       });
     });
 
@@ -2068,6 +2331,9 @@ export function bootstrapMobileApp(root: HTMLElement) {
         update({
           watchDetailMetric: (button.dataset.watchDetail as WatchDetailMetric) || null,
           watchDetailPeriod: "day",
+          watchExpandedWorkoutId: null,
+          watchExpandedWorkoutGraphId: null,
+          watchWorkoutDetailId: null,
           watchSettingsOpen: false,
         });
       });
@@ -2075,25 +2341,83 @@ export function bootstrapMobileApp(root: HTMLElement) {
 
     root.querySelectorAll<HTMLButtonElement>("[data-watch-detail-back]").forEach((button) => {
       button.addEventListener("click", () => {
-        update({ watchDetailMetric: null });
+        update({
+          watchDetailMetric: null,
+          watchExpandedWorkoutId: null,
+          watchExpandedWorkoutGraphId: null,
+          watchWorkoutDetailId: null,
+        });
       });
     });
 
     root.querySelectorAll<HTMLButtonElement>("[data-watch-settings-open]").forEach((button) => {
       button.addEventListener("click", () => {
-        update({ watchDetailMetric: null, watchSettingsOpen: true });
+        update({
+          watchDetailMetric: null,
+          watchExpandedWorkoutId: null,
+          watchExpandedWorkoutGraphId: null,
+          watchWorkoutDetailId: null,
+          watchSettingsOpen: true,
+        });
       });
     });
 
     root.querySelectorAll<HTMLButtonElement>("[data-watch-settings-back]").forEach((button) => {
       button.addEventListener("click", () => {
-        update({ watchSettingsOpen: false });
+        update({
+          watchExpandedWorkoutId: null,
+          watchExpandedWorkoutGraphId: null,
+          watchWorkoutDetailId: null,
+          watchSettingsOpen: false,
+        });
       });
     });
 
     root.querySelectorAll<HTMLButtonElement>("[data-watch-detail-period]").forEach((button) => {
       button.addEventListener("click", () => {
         update({ watchDetailPeriod: (button.dataset.watchDetailPeriod as WatchDetailPeriod) || "day" });
+      });
+    });
+
+    root.querySelectorAll<HTMLButtonElement>("[data-watch-workout-toggle]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const workoutId = button.dataset.watchWorkoutToggle;
+        if (!workoutId) {
+          return;
+        }
+
+        const isOpening = state.watchExpandedWorkoutId !== workoutId;
+        update({
+          watchExpandedWorkoutId: isOpening ? workoutId : null,
+          watchExpandedWorkoutGraphId: null,
+          watchWorkoutDetailId: null,
+        });
+        if (isOpening) {
+          void hydrateDeviceWorkoutSamples(workoutId);
+        }
+      });
+    });
+
+    root.querySelectorAll<HTMLButtonElement>("[data-watch-workout-graph]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const workoutId = button.dataset.watchWorkoutGraph;
+        if (!workoutId) {
+          return;
+        }
+
+        update({
+          watchDetailMetric: null,
+          watchExpandedWorkoutId: workoutId,
+          watchExpandedWorkoutGraphId: null,
+          watchWorkoutDetailId: workoutId,
+        });
+        void hydrateDeviceWorkoutSamples(workoutId);
+      });
+    });
+
+    root.querySelectorAll<HTMLButtonElement>("[data-watch-workout-detail-back]").forEach((button) => {
+      button.addEventListener("click", () => {
+        update({ watchWorkoutDetailId: null });
       });
     });
 
@@ -2289,6 +2613,15 @@ export function bootstrapMobileApp(root: HTMLElement) {
     root.querySelectorAll<HTMLButtonElement>("[data-direct-watch-select]").forEach((button) => {
       button.addEventListener("click", () => {
         selectDirectWatchDevice(button.dataset.directWatchSelect ?? "");
+      });
+    });
+
+    root.querySelectorAll<HTMLButtonElement>("[data-direct-watch-full-sync]").forEach((button) => {
+      button.addEventListener("click", () => {
+        void syncDirectWatchFull(
+          button.dataset.directWatchFullSyncDate || todayValue(),
+          button.dataset.directWatchFullSync || null,
+        );
       });
     });
 
@@ -3611,10 +3944,16 @@ function renderWatchesScreen(state: MobileAppState) {
   const date = todayValue();
   const summary = getDeviceHealthSummaryForDate(state, athleteId, date);
   const heartRateSamples = getDeviceHealthSamplesForDate(state, athleteId, date, "heart_rate");
-  const workouts = getDeviceWorkoutsForDate(state, athleteId, date);
+  const todayWorkouts = getDeviceWorkoutsForDate(state, athleteId, date);
+  const workouts = todayWorkouts.length ? todayWorkouts : getRecentDeviceWorkouts(state, athleteId, date, 3);
+  const showingRecentWorkouts = todayWorkouts.length === 0 && workouts.length > 0;
 
   if (state.watchDetailMetric) {
     return renderWatchMetricDetailScreen(state, athleteId, date);
+  }
+
+  if (state.watchWorkoutDetailId) {
+    return renderWatchWorkoutDetailScreen(state, athleteId, state.watchWorkoutDetailId);
   }
 
   if (state.watchSettingsOpen) {
@@ -3622,10 +3961,25 @@ function renderWatchesScreen(state: MobileAppState) {
   }
 
   return `
-    ${renderWatchParametersCard(summary, heartRateSamples)}
-    ${renderWatchWorkoutsCard(workouts)}
+    ${renderWatchParametersCard(summary, heartRateSamples, state, date)}
+    ${renderWatchWorkoutsCard(
+      workouts,
+      state,
+      athleteId,
+      date,
+      showingRecentWorkouts,
+      state.watchExpandedWorkoutId,
+      state.watchExpandedWorkoutGraphId,
+    )}
     ${renderWatchSettingsEntryCard(state, summary)}
   `;
+}
+
+interface WatchWorkoutContext {
+  heartRateSamples: DeviceHealthSample[];
+  oxygenSamples: DeviceHealthSample[];
+  stressSamples: DeviceHealthSample[];
+  summary: DeviceHealthDailySummary | null;
 }
 
 type WatchMetricStat = {
@@ -3695,6 +4049,50 @@ function renderWatchMetricDetailScreen(state: MobileAppState, athleteId: string,
         `).join("")}
       </div>
       ${renderWatchMetricDetailBody(metric, period, summary, summaries, periodDates, detailSamples)}
+    </section>
+  `;
+}
+
+function renderWatchWorkoutDetailScreen(state: MobileAppState, athleteId: string, workoutId: string) {
+  const workout = getDeviceWorkoutById(state, athleteId, workoutId);
+  if (!workout) {
+    return `
+      <section class="watch-detail-screen">
+        <div class="watch-detail-title-row">
+          <button aria-label="Назад" class="watch-detail-back-button" data-watch-workout-detail-back type="button">‹</button>
+          <h3>Тренировка</h3>
+        </div>
+        ${renderEmpty("Тренировка не найдена", "Синхронизируйте часы ещё раз, чтобы обновить список тренировок.")}
+      </section>
+    `;
+  }
+
+  const context = getWatchWorkoutContextForDate(state, athleteId, workout.entryDate);
+  const graphSeries = buildDeviceWorkoutGraphSeries(workout, context);
+  const primarySeries = graphSeries[0] ?? null;
+  const secondarySeries = graphSeries.slice(1);
+  const detailTitle = primarySeries
+    ? formatDeviceWorkoutDetailTitle(primarySeries)
+    : "Тренировка";
+
+  return `
+    <section class="watch-detail-screen">
+      <div class="watch-detail-title-row">
+        <button aria-label="Назад" class="watch-detail-back-button" data-watch-workout-detail-back type="button">‹</button>
+        <h3>${escapeHtml(detailTitle)}</h3>
+      </div>
+      <p class="watch-detail-date">${escapeHtml(`${formatDate(workout.entryDate)} · ${formatDeviceWorkoutTitle(workout)}`)}</p>
+      ${renderWatchWorkoutParameterPanel(workout, context, graphSeries)}
+      <section class="watch-detail-card">
+        ${primarySeries
+          ? renderDeviceWorkoutSeriesUPlotGraph(primarySeries, workout)
+          : renderDeviceWorkoutGraph(workout, context, graphSeries)}
+        ${secondarySeries.length > 0 ? `
+          <div class="device-workout-secondary-series">
+            ${secondarySeries.map((item) => `<span>${escapeHtml(item.label)}</span>`).join("")}
+          </div>
+        ` : ""}
+      </section>
     </section>
   `;
 }
@@ -3826,35 +4224,185 @@ function buildWatchMetricTrend(
   });
 }
 
+function renderMobileUPlotChart(payload: MobileUPlotPayload, className: string, height: number) {
+  const chartId = registerMobileUPlotPayload(payload);
+
+  return `
+    <div
+      class="mobile-uplot-chart ${escapeHtml(className)}"
+      data-uplot-chart-id="${escapeHtml(chartId)}"
+      data-uplot-height="${height}"
+    >
+      <div class="mobile-uplot-plot" role="img" aria-label="${escapeHtml(payload.title)}"></div>
+    </div>
+  `;
+}
+
+function renderMobileBarsChart(payload: MobileUPlotPayload, className: string, height: number) {
+  if (payload.x.length < 2 || payload.y.length < 2 || payload.x.length !== payload.y.length) {
+    return `<p class="watch-empty-note">Недостаточно точек для графика.</p>`;
+  }
+
+  const yRange = Math.max(1, payload.upper - payload.lower);
+  const visibleSamples = limitDeviceWorkoutSamples(
+    payload.x.map((xValue, index) => ({ sampleTime: xValue, value: payload.y[index] })),
+    54,
+  );
+  const bars = visibleSamples.map((sample) => {
+    const valueRatio = Math.max(0.04, Math.min(1, (sample.value - payload.lower) / yRange));
+    return `<i style="height: ${(valueRatio * 100).toFixed(1)}%"></i>`;
+  }).join("");
+  const averageBottom = payload.average !== null && payload.average !== undefined
+    ? Math.max(0, Math.min(100, ((payload.average - payload.lower) / yRange) * 100))
+    : null;
+  const averageLine = averageBottom !== null
+    ? `<span class="mobile-bars-average" style="bottom: ${averageBottom.toFixed(1)}%"></span>`
+    : "";
+
+  return `
+    <div
+      class="mobile-uplot-chart mobile-bars-chart ${escapeHtml(className)}"
+      style="--mobile-bars-height: ${height}px"
+    >
+      <div class="mobile-bars-plot" role="img" aria-label="${escapeHtml(payload.title)}">
+        ${averageLine}
+        ${bars}
+      </div>
+    </div>
+  `;
+}
+
+function registerMobileUPlotPayload(payload: MobileUPlotPayload) {
+  mobileUPlotPayloadSequence += 1;
+  const chartId = `chart-${mobileUPlotPayloadSequence}`;
+  mobileUPlotPayloads.set(chartId, payload);
+  return chartId;
+}
+
+function resetMobileUPlotPayloads() {
+  mobileUPlotPayloadSequence = 0;
+  mobileUPlotPayloads.clear();
+}
+
+function buildWatchHeartRateUPlotPayload(
+  summary: DeviceHealthDailySummary | null,
+  samples: DeviceHealthSample[],
+): MobileUPlotPayload | null {
+  const entryDate = summary?.entryDate ?? samples[0]?.entryDate;
+  if (!entryDate) {
+    return null;
+  }
+
+  const dayBounds = getLocalDayBounds(entryDate);
+  if (!dayBounds) {
+    return null;
+  }
+
+  const points = buildWatchTimedPoints(samples, dayBounds, 25, 240);
+  if (points.length < 2) {
+    return null;
+  }
+
+  const values = points.map((point) => point.value);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const average = values.reduce((sum, value) => sum + value, 0) / values.length;
+  const scale = buildAdaptiveHeartRateScale(min, max);
+  const visiblePoints = limitDeviceWorkoutSamples(points, 900);
+
+  return {
+    average,
+    color: "#0f766e",
+    format: "integer",
+    label: "Пульс",
+    lower: scale.lower,
+    title: "График пульса",
+    unit: "уд/мин",
+    upper: scale.upper,
+    x: visiblePoints.map((point) => Math.round(point.sampledAt.getTime() / 1000)),
+    y: visiblePoints.map((point) => point.value),
+  };
+}
+
+function buildWatchSampleUPlotPayload(
+  metric: WatchDetailMetric,
+  entryDate: string | null,
+  samples: DeviceHealthSample[],
+): MobileUPlotPayload | null {
+  if (!entryDate) {
+    return null;
+  }
+
+  const dayBounds = getLocalDayBounds(entryDate);
+  if (!dayBounds) {
+    return null;
+  }
+
+  const points = buildWatchTimedPoints(samples, dayBounds, Number.NEGATIVE_INFINITY, Number.POSITIVE_INFINITY);
+  if (points.length < 2) {
+    return null;
+  }
+
+  const values = points.map((point) => point.value);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const average = values.reduce((sum, value) => sum + value, 0) / values.length;
+  const scale = buildWatchSampleScale(metric, min, max);
+  const visiblePoints = limitDeviceWorkoutSamples(points, 900);
+  const isOxygen = metric === "oxygen";
+
+  return {
+    average,
+    color: isOxygen ? "#0891b2" : "#ad6a15",
+    format: isOxygen ? "percent" : "integer",
+    label: isOxygen ? "SpO₂" : "Стресс",
+    lower: scale.lower,
+    title: isOxygen ? "График SpO₂" : "График стресса",
+    unit: isOxygen ? "%" : "",
+    upper: scale.upper,
+    x: visiblePoints.map((point) => Math.round(point.sampledAt.getTime() / 1000)),
+    y: visiblePoints.map((point) => point.value),
+  };
+}
+
+function buildWatchTimedPoints(
+  samples: DeviceHealthSample[],
+  dayBounds: { end: Date; start: Date },
+  lowerLimit: number,
+  upperLimit: number,
+) {
+  return samples
+    .map((sample) => {
+      const sampledAt = new Date(sample.sampledAt);
+      const value = sample.value;
+      if (
+        Number.isNaN(sampledAt.getTime()) ||
+        sampledAt.getTime() < dayBounds.start.getTime() ||
+        sampledAt.getTime() > dayBounds.end.getTime() ||
+        !Number.isFinite(value) ||
+        value < lowerLimit ||
+        value > upperLimit
+      ) {
+        return null;
+      }
+
+      return { sampledAt, value };
+    })
+    .filter((sample): sample is { sampledAt: Date; value: number } => Boolean(sample))
+    .sort((left, right) => left.sampledAt.getTime() - right.sampledAt.getTime());
+}
+
 function renderWatchDetailPulseChart(
   summary: DeviceHealthDailySummary | null,
   samples: DeviceHealthSample[],
 ) {
-  const chart = buildWatchHeartRateChart(summary, samples);
-  if (!chart) {
+  const payload = buildWatchHeartRateUPlotPayload(summary, samples);
+  if (!payload) {
     return `<p class="watch-empty-note">После синхронизации здесь появится подробный график пульса за день.</p>`;
   }
 
   return `
-    <div class="watch-detail-pulse-chart">
-      <div class="watch-detail-chart-y" aria-hidden="true">
-        ${chart.axisLabels.map((label) => `<span>${escapeHtml(label)}</span>`).join("")}
-      </div>
-      <div class="watch-detail-chart-plot">
-        <svg aria-label="График пульса" role="img" viewBox="0 0 100 100" preserveAspectRatio="none">
-          ${chart.sleepBand}
-          ${chart.gridLines}
-          <line class="average" x1="0" x2="100" y1="${escapeHtml(chart.averageY)}" y2="${escapeHtml(chart.averageY)}"></line>
-          <polyline fill="none" points="${escapeHtml(chart.points)}"></polyline>
-          ${chart.peakMarker}
-        </svg>
-      </div>
-      <div class="watch-detail-chart-x" aria-hidden="true">
-        <span>00:00</span>
-        <span>12:00</span>
-        <span>24:00</span>
-      </div>
-    </div>
+    ${renderMobileUPlotChart(payload, "is-pulse", 274)}
   `;
 }
 
@@ -3894,30 +4442,14 @@ function renderWatchDetailSampleChart(
   summary: DeviceHealthDailySummary | null,
   samples: DeviceHealthSample[],
 ) {
-  const chart = buildWatchSampleChart(metric, summary?.entryDate ?? samples[0]?.entryDate ?? null, samples);
-  if (!chart) {
+  const payload = buildWatchSampleUPlotPayload(metric, summary?.entryDate ?? samples[0]?.entryDate ?? null, samples);
+  if (!payload) {
     const label = metric === "oxygen" ? "SpO₂" : "стресс";
     return `<p class="watch-empty-note">После синхронизации здесь появится график ${label} за день.</p>`;
   }
 
   return `
-    <div class="watch-detail-pulse-chart watch-detail-sample-chart is-${escapeHtml(metric)}">
-      <div class="watch-detail-chart-y" aria-hidden="true">
-        ${chart.axisLabels.map((label) => `<span>${escapeHtml(label)}</span>`).join("")}
-      </div>
-      <div class="watch-detail-chart-plot">
-        <svg aria-label="${escapeHtml(chart.title)}" role="img" viewBox="0 0 100 100" preserveAspectRatio="none">
-          ${chart.gridLines}
-          <line class="average" x1="0" x2="100" y1="${escapeHtml(chart.averageY)}" y2="${escapeHtml(chart.averageY)}"></line>
-          <polyline fill="none" points="${escapeHtml(chart.points)}"></polyline>
-        </svg>
-      </div>
-      <div class="watch-detail-chart-x" aria-hidden="true">
-        <span>00:00</span>
-        <span>12:00</span>
-        <span>24:00</span>
-      </div>
-    </div>
+    ${renderMobileUPlotChart(payload, `is-${metric}`, 274)}
   `;
 }
 
@@ -4204,11 +4736,12 @@ function renderWatchSyncPanel(state: MobileAppState, date: string) {
       <div class="watch-sync-actions">
         <button
           class="primary-action"
-          data-direct-watch-service-sync="${escapeHtml(config.deviceId || "")}"
+          data-direct-watch-full-sync="${escapeHtml(config.deviceId || "")}"
+          data-direct-watch-full-sync-date="${escapeHtml(date)}"
           type="button"
           ${state.isBusy || !canServiceSync ? "disabled" : ""}
         >
-          Обновить данные
+          Синхронизировать всё сейчас
         </button>
         <button
           class="secondary-action"
@@ -4217,10 +4750,15 @@ function renderWatchSyncPanel(state: MobileAppState, date: string) {
           type="button"
           ${state.isBusy || !canServiceSync ? "disabled" : ""}
         >
-          Считать данные
+          Только показатели и тренировки
         </button>
-        <button class="secondary-action" data-direct-watch-service-status type="button" ${state.isBusy ? "disabled" : ""}>
-          Обновить статус
+        <button
+          class="secondary-action"
+          data-direct-watch-service-sync="${escapeHtml(config.deviceId || "")}"
+          type="button"
+          ${state.isBusy || !canServiceSync ? "disabled" : ""}
+        >
+          Время и погода
         </button>
       </div>
       <section class="watch-history-sync-card is-${escapeHtml(historyProgress.statusKind)}">
@@ -4263,6 +4801,9 @@ function renderWatchSyncPanel(state: MobileAppState, date: string) {
         </button>
         <button class="secondary-action" data-direct-watch-scan type="button" ${state.isBusy ? "disabled" : ""}>
           Найти часы
+        </button>
+        <button class="secondary-action" data-direct-watch-service-status type="button" ${state.isBusy ? "disabled" : ""}>
+          Обновить статус
         </button>
         <button
           class="secondary-action"
@@ -4438,7 +4979,12 @@ function renderWatchHeartRateChartCard(
   `;
 }
 
-function renderWatchParametersCard(summary: DeviceHealthDailySummary | null, samples: DeviceHealthSample[]) {
+function renderWatchParametersCard(
+  summary: DeviceHealthDailySummary | null,
+  samples: DeviceHealthSample[],
+  state: MobileAppState,
+  date: string,
+) {
   const rawPayload = summary?.rawPayload ?? {};
   const stressAvg = readDeviceHealthRawNumber(rawPayload, "stressAvg");
   const trainingLoadDay = readDeviceHealthRawNumber(rawPayload, "trainingLoadDay");
@@ -4510,6 +5056,7 @@ function renderWatchParametersCard(summary: DeviceHealthDailySummary | null, sam
         </div>
         <span class="watch-health-status">${escapeHtml(statusLabel)}</span>
       </div>
+      ${renderWatchQuickSyncAction(state, date)}
       <div class="watch-parameter-list">
         ${rows.map((row) => {
           const content = `
@@ -4528,6 +5075,57 @@ function renderWatchParametersCard(summary: DeviceHealthDailySummary | null, sam
         }).join("")}
       </div>
     </section>
+  `;
+}
+
+function renderWatchQuickSyncAction(state: MobileAppState, date: string) {
+  if (!isDirectWatchRuntime()) {
+    return "";
+  }
+
+  const config = loadDirectWatchConfig();
+  const canSync = Boolean(config.deviceId && config.authKeyHex);
+  const lastSyncedLabel = config.lastServiceSyncedAt
+    ? `Последняя синхронизация: ${formatDateTime(config.lastServiceSyncedAt)}`
+    : "После нажатия обновятся показатели и тренировки за сегодня.";
+
+  if (!canSync) {
+    return `
+      <div class="watch-quick-sync-card is-setup">
+        <div>
+          <span>Синхронизация</span>
+          <strong>Нужно выбрать часы и сохранить ключ.</strong>
+        </div>
+        <div class="watch-quick-sync-actions">
+          <button class="primary-action" data-watch-settings-open type="button">
+            Настроить
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="watch-quick-sync-card">
+      <div>
+        <span>Синхронизация</span>
+        <strong>${escapeHtml(lastSyncedLabel)}</strong>
+      </div>
+      <div class="watch-quick-sync-actions">
+        <button
+          class="primary-action"
+          data-direct-watch-full-sync="${escapeHtml(config.deviceId || "")}"
+          data-direct-watch-full-sync-date="${escapeHtml(date)}"
+          type="button"
+          ${state.isBusy ? "disabled" : ""}
+        >
+          Обновить
+        </button>
+        <button class="secondary-action" data-watch-settings-open type="button" ${state.isBusy ? "disabled" : ""}>
+          Настройка
+        </button>
+      </div>
+    </div>
   `;
 }
 
@@ -4660,19 +5258,48 @@ function renderWatchMetricPreview(
   return `<span class="watch-parameter-preview is-empty-preview"></span>`;
 }
 
-function renderWatchWorkoutsCard(workouts: DeviceWorkout[]) {
+function renderWatchWorkoutsCard(
+  workouts: DeviceWorkout[],
+  state: MobileAppState,
+  athleteId: string,
+  date: string,
+  showingRecentWorkouts: boolean,
+  expandedWorkoutId: string | null,
+  expandedWorkoutGraphId: string | null,
+) {
+  const contextByDate = new Map<string, WatchWorkoutContext>();
+  const getWorkoutContext = (entryDate: string) => {
+    const cached = contextByDate.get(entryDate);
+    if (cached) {
+      return cached;
+    }
+
+    const context = getWatchWorkoutContextForDate(state, athleteId, entryDate);
+    contextByDate.set(entryDate, context);
+    return context;
+  };
+
   return `
     <section class="watch-workouts-card">
       <div class="watch-card-head">
         <div>
-          <span>Тренировки</span>
-          <h3>Активность с устройства</h3>
+          <span>${showingRecentWorkouts ? "Последние тренировки" : "Тренировки"}</span>
+          <h3>${showingRecentWorkouts ? "Недавняя активность" : "Активность с устройства"}</h3>
         </div>
         <strong>${workouts.length}</strong>
       </div>
       ${workouts.length ? `
         <div class="watch-workout-list">
-          ${workouts.map((workout) => renderWatchWorkoutItem(workout)).join("")}
+          ${workouts.map((workout) => {
+            const context = getWorkoutContext(workout.entryDate);
+            return renderWatchWorkoutItem(
+              workout,
+              context,
+              date,
+              expandedWorkoutId === workout.id,
+              expandedWorkoutGraphId === workout.id,
+            );
+          }).join("")}
         </div>
       ` : `
         <p class="watch-empty-note">Тренировки за сегодня пока не пришли. После синхронизации они появятся здесь.</p>
@@ -4681,36 +5308,152 @@ function renderWatchWorkoutsCard(workouts: DeviceWorkout[]) {
   `;
 }
 
-function renderWatchWorkoutItem(workout: DeviceWorkout) {
+function renderWatchWorkoutItem(
+  workout: DeviceWorkout,
+  context: WatchWorkoutContext,
+  currentDate: string,
+  isExpanded: boolean,
+  isGraphExpanded: boolean,
+) {
   const chips = getWatchWorkoutChips(workout);
+  const graphSeries = isExpanded && isGraphExpanded ? buildDeviceWorkoutGraphSeries(workout, context) : [];
+  const hasAvailableGraphs = isExpanded ? hasDeviceWorkoutGraph(workout, context) : false;
 
   return `
-    <details class="watch-workout-item">
-      <summary>
+    <article class="watch-workout-item ${isExpanded ? "is-open" : ""}">
+      <button
+        class="watch-workout-summary"
+        data-watch-workout-toggle="${escapeHtml(workout.id)}"
+        type="button"
+        aria-expanded="${isExpanded ? "true" : "false"}"
+      >
         <div class="watch-workout-title">
           <span>${escapeHtml(formatDeviceWorkoutTypeLabel(workout))}</span>
-          <small>${escapeHtml(formatTimeRange(workout.startTime, workout.endTime))}</small>
+          <small>${escapeHtml(formatWatchWorkoutListTimeLabel(workout, currentDate))}</small>
         </div>
         ${chips.length ? `
           <div class="watch-workout-chip-list">
             ${chips.map((chip) => `<span>${escapeHtml(chip)}</span>`).join("")}
           </div>
         ` : ""}
-      </summary>
-      <div class="watch-workout-details">
-        ${renderDeviceWorkoutMetrics(workout)}
-        ${renderDeviceWorkoutGraph(workout)}
-      </div>
-    </details>
+      </button>
+      ${isExpanded ? `
+        <div class="watch-workout-details">
+          ${renderWatchWorkoutParameterPanel(workout, context, graphSeries)}
+          ${renderWatchWorkoutGraphGate(workout, context, graphSeries, isGraphExpanded, hasAvailableGraphs)}
+        </div>
+      ` : ""}
+    </article>
   `;
 }
 
+function getWatchWorkoutContextForDate(
+  state: MobileAppState,
+  athleteId: string,
+  date: string,
+): WatchWorkoutContext {
+  return {
+    heartRateSamples: getDeviceHealthSamplesForDate(state, athleteId, date, "heart_rate"),
+    oxygenSamples: getDeviceHealthSamplesForDate(state, athleteId, date, "oxygen_saturation"),
+    stressSamples: getDeviceHealthSamplesForDate(state, athleteId, date, "stress"),
+    summary: getDeviceHealthSummaryForDate(state, athleteId, date),
+  };
+}
+
+function formatWatchWorkoutListTimeLabel(workout: DeviceWorkout, currentDate: string) {
+  const timeLabel = formatDeviceWorkoutTimeLabel(workout);
+  return workout.entryDate === currentDate ? timeLabel : `${formatDate(workout.entryDate)} · ${timeLabel}`;
+}
+
+function renderWatchWorkoutGraphGate(
+  workout: DeviceWorkout,
+  context: WatchWorkoutContext,
+  graphSeries: DeviceWorkoutGraphSeries[],
+  isGraphExpanded: boolean,
+  hasAvailableGraphs: boolean,
+) {
+  const hasRawZones = getDeviceWorkoutRawHeartRateZones(workout).length > 0;
+  const showsOnlyZones = !hasAvailableGraphs && hasRawZones;
+  const hasHeartRateGraph = graphSeries.some((series) => series.key === "heartRate");
+  const hasPaceGraph = graphSeries.some((series) => series.key === "pace" || series.key === "speed");
+  const gateTitle = showsOnlyZones
+    ? "Зоны ЧСС"
+    : hasHeartRateGraph
+      ? "График пульса"
+      : hasPaceGraph
+        ? "График темпа"
+        : "Графики тренировки";
+  const gateDescription = showsOnlyZones
+    ? "Часы отдали зоны по итогу тренировки. Откроем их отдельно, без тяжёлого графика."
+    : hasHeartRateGraph
+      ? "Откроем подробный график пульса без подвисания карточки."
+      : hasPaceGraph
+        ? "Откроем темп и маршрутные точки без подвисания карточки."
+        : "Откроем доступные графики тренировки без подвисания карточки.";
+  const gateButtonLabel = showsOnlyZones
+    ? "Показать зоны"
+    : hasHeartRateGraph
+      ? "Открыть пульс"
+      : hasPaceGraph
+        ? "Открыть темп"
+        : "Открыть графики";
+
+  if (isGraphExpanded) {
+    return `
+      ${renderDeviceWorkoutGraph(workout, context, graphSeries)}
+      <button class="watch-workout-graph-toggle" data-watch-workout-graph="${escapeHtml(workout.id)}" type="button">
+        Свернуть ${graphSeries.length === 0 ? "зоны" : "графики"}
+      </button>
+    `;
+  }
+
+  return `
+    <section class="watch-workout-graph-gate">
+      <div>
+        <strong>${escapeHtml(gateTitle)}</strong>
+        <span>${escapeHtml(gateDescription)}</span>
+      </div>
+      <button class="watch-workout-graph-toggle" data-watch-workout-graph="${escapeHtml(workout.id)}" type="button">
+        ${escapeHtml(gateButtonLabel)}
+      </button>
+    </section>
+  `;
+}
+
+function formatDeviceWorkoutDetailTitle(series: DeviceWorkoutGraphSeries) {
+  if (series.key === "heartRate") {
+    return "Пульс";
+  }
+
+  if (series.key === "pace") {
+    return "Темп";
+  }
+
+  if (series.key === "speed") {
+    return "Скорость";
+  }
+
+  if (series.key === "spo2") {
+    return "Кислород";
+  }
+
+  if (series.key === "stress") {
+    return "Стресс";
+  }
+
+  return "Тренировка";
+}
+
 function getWatchWorkoutChips(workout: DeviceWorkout) {
+  const steps = getTrustedWatchWorkoutSteps(workout);
+  const activeCalories = getTrustedWatchWorkoutActiveCalories(workout);
+  const distanceMeters = getTrustedWatchWorkoutDistanceMeters(workout);
   return [
-    workout.durationMinutes !== null ? formatDurationHours(workout.durationMinutes) : null,
-    workout.distanceMeters !== null ? formatDistanceMeters(workout.distanceMeters) : null,
+    workout.durationMinutes !== null ? formatDeviceWorkoutDuration(workout.durationMinutes) : null,
+    distanceMeters !== null ? formatDistanceMeters(distanceMeters) : null,
+    steps !== null ? `${Math.round(steps).toLocaleString("ru-RU")} шагов` : null,
     workout.averageHeartRateBpm !== null ? `Пульс ${formatLoadValue(workout.averageHeartRateBpm)}` : null,
-    workout.activeCalories !== null ? `${Math.round(workout.activeCalories)} ккал` : null,
+    activeCalories !== null ? `${Math.round(activeCalories)} ккал` : null,
   ].filter((item): item is string => Boolean(item)).slice(0, 3);
 }
 
@@ -5837,6 +6580,65 @@ function formatDirectWatchServiceSyncMessage(
   return [baseMessage, bridgeMessage, weatherMessage].filter(Boolean).join(" ");
 }
 
+function formatDirectWatchDailySyncResultMessage(payload: {
+  summary: DeviceHealthDailySummaryPayload;
+  workouts: DeviceWorkoutsSyncPayload;
+}) {
+  const metricLabels = [
+    payload.summary.heartRate ? "пульс" : null,
+    payload.summary.sleep ? "сон" : null,
+    payload.summary.oxygenSaturation ? "SpO2" : null,
+    payload.summary.samples?.some((sample) => sample.metric === "stress") ? "стресс" : null,
+  ].filter((item): item is string => Boolean(item));
+  const workoutsCount = payload.workouts.workouts.length;
+  const workoutLabel = workoutsCount > 0
+    ? `${workoutsCount} ${formatRussianCount(workoutsCount, "тренировка", "тренировки", "тренировок")}`
+    : "новых тренировок в ответе нет";
+
+  return [
+    "Данные часов обновлены.",
+    metricLabels.length ? `Показатели: ${metricLabels.join(", ")}.` : "Показатели сохранены.",
+    workoutLabel,
+  ].join(" ");
+}
+
+function shouldFetchDirectWatchSleep(data: MobileDataSnapshot, entryDate: string) {
+  return !data.deviceHealthSummaries.some((summary) =>
+    summary.entryDate === entryDate && hasMeaningfulWatchSleep(summary.sleep)
+  );
+}
+
+function hasMeaningfulWatchSleep(sleep: DeviceHealthDailySummary["sleep"] | DeviceHealthDailySummaryPayload["sleep"]) {
+  return Boolean(sleep && (
+    Boolean(sleep.startTime || sleep.endTime) ||
+    isPositiveNumber(sleep.durationMinutes) ||
+    isPositiveNumber(sleep.deepMinutes) ||
+    isPositiveNumber(sleep.lightMinutes) ||
+    isPositiveNumber(sleep.remMinutes) ||
+    isPositiveNumber(sleep.awakeMinutes) ||
+    isPositiveNumber(sleep.score)
+  ));
+}
+
+function isPositiveNumber(value: number | null | undefined) {
+  return typeof value === "number" && Number.isFinite(value) && value > 0;
+}
+
+function formatRussianCount(count: number, one: string, few: string, many: string) {
+  const mod10 = Math.abs(count) % 10;
+  const mod100 = Math.abs(count) % 100;
+
+  if (mod10 === 1 && mod100 !== 11) {
+    return one;
+  }
+
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) {
+    return few;
+  }
+
+  return many;
+}
+
 function formatDirectWatchSyncServiceStatus(
   status: MobileAppState["directWatchDiagnostic"]["serviceStatus"],
 ) {
@@ -6756,30 +7558,486 @@ function formatDeviceWorkoutTypeLabel(workout: DeviceWorkout) {
 }
 
 function formatDeviceWorkoutTitle(workout: DeviceWorkout) {
-  return `${formatDeviceWorkoutTypeLabel(workout)} · ${formatTimeRange(workout.startTime, workout.endTime)}`;
+  return `${formatDeviceWorkoutTypeLabel(workout)} · ${formatDeviceWorkoutTimeLabel(workout)}`;
 }
 
 function formatDeviceWorkoutSummary(workout: DeviceWorkout) {
+  const activeCalories = getTrustedWatchWorkoutActiveCalories(workout);
+  const distanceMeters = getTrustedWatchWorkoutDistanceMeters(workout);
   return [
-    workout.durationMinutes !== null ? formatDurationHours(workout.durationMinutes) : null,
-    workout.distanceMeters !== null ? formatDistanceMeters(workout.distanceMeters) : null,
+    workout.durationMinutes !== null ? formatDeviceWorkoutDuration(workout.durationMinutes) : null,
+    distanceMeters !== null ? formatDistanceMeters(distanceMeters) : null,
     workout.averageHeartRateBpm !== null ? `ср. пульс ${formatLoadValue(workout.averageHeartRateBpm)}` : null,
     workout.maxHeartRateBpm !== null ? `макс ${formatLoadValue(workout.maxHeartRateBpm)}` : null,
-    workout.activeCalories !== null ? `${Math.round(workout.activeCalories)} ккал` : null,
+    activeCalories !== null ? `${Math.round(activeCalories)} ккал` : null,
   ].filter((item): item is string => Boolean(item)).join(" · ");
 }
 
 function formatDeviceWorkoutOptionLabel(workout: DeviceWorkout) {
-  return `${formatTimeRange(workout.startTime, workout.endTime)} · ${formatDeviceWorkoutSummary(workout) || formatDeviceWorkoutTypeLabel(workout)}`;
+  return `${formatDeviceWorkoutTimeLabel(workout)} · ${formatDeviceWorkoutSummary(workout) || formatDeviceWorkoutTypeLabel(workout)}`;
+}
+
+function formatDeviceWorkoutTimeLabel(workout: DeviceWorkout) {
+  if (workout.provider === "direct-watch" && workout.durationMinutes === null) {
+    return `${formatTime(workout.startTime)} · старт`;
+  }
+
+  return formatTimeRange(workout.startTime, workout.endTime);
+}
+
+function renderWatchWorkoutParameterPanel(
+  workout: DeviceWorkout,
+  context: WatchWorkoutContext,
+  series = buildDeviceWorkoutGraphSeries(workout, context),
+) {
+  const heartRateSeries = series.find((item) => item.key === "heartRate");
+  const oxygenSeries = series.find((item) => item.key === "spo2");
+  const stressSeries = series.find((item) => item.key === "stress");
+  const metrics = deriveWatchWorkoutMetrics(workout, context);
+  const canScanWorkoutSamples = series.length > 0 || workout.samples.length <= 600;
+  const heartRateStats = heartRateSeries
+    ? summarizeWorkoutSeries(heartRateSeries.samples)
+    : {
+        avg: workout.averageHeartRateBpm,
+        max: workout.maxHeartRateBpm,
+        min: workout.minHeartRateBpm,
+      };
+  const oxygenStats = oxygenSeries
+    ? summarizeWorkoutSeries(oxygenSeries.samples)
+    : canScanWorkoutSamples
+      ? summarizeWorkoutValues(workout.samples.map((sample) => sample.oxygenSaturationPercent))
+      : summarizeWorkoutValues([readWatchWorkoutRawNumber(workout.rawPayload, "spo2Average")]);
+  const stressStats = stressSeries
+    ? summarizeWorkoutSeries(stressSeries.samples)
+    : canScanWorkoutSamples
+      ? summarizeWorkoutValues(workout.samples.map((sample) => readWatchWorkoutRawNumber(sample.rawPayload, "stress")))
+      : summarizeWorkoutValues([]);
+  const sampleCount = Math.max(
+    workout.sampleCount ?? 0,
+    heartRateSeries?.samples.length ?? 0,
+    oxygenSeries?.samples.length ?? 0,
+    stressSeries?.samples.length ?? 0,
+  );
+  const sourceLabel = workout.provider === "direct-watch"
+    ? "PERFORM Sync"
+    : workout.sourceDevice || formatWatchProviderLabel(context.summary);
+  const cards = [
+    { label: "Старт", value: formatTime(workout.startTime) },
+    {
+      label: "Длительность",
+      value: metrics.durationMinutes !== null ? formatDeviceWorkoutDuration(metrics.durationMinutes) : "нет данных",
+      detail: metrics.durationDetail,
+    },
+    {
+      label: "Шаги",
+      value: metrics.steps !== null ? metrics.steps.toLocaleString("ru-RU") : "нет данных",
+      detail: metrics.stepsDetail,
+    },
+    {
+      label: "Калории",
+      value: metrics.activeCalories !== null ? `${metrics.activeCaloriesPrefix}${Math.round(metrics.activeCalories)}` : "нет данных",
+      detail: metrics.activeCaloriesDetail,
+    },
+    {
+      label: "Дистанция",
+      value: metrics.distanceMeters !== null ? `${metrics.distancePrefix}${formatDistanceMeters(metrics.distanceMeters)}` : "нет данных",
+      detail: metrics.distanceDetail,
+    },
+    {
+      label: "Пульс",
+      value: heartRateStats.avg !== null
+        ? `${formatLoadValue(heartRateStats.avg)} ср.`
+        : workout.averageHeartRateBpm !== null
+          ? `${formatLoadValue(workout.averageHeartRateBpm)} ср.`
+          : "-",
+      detail: heartRateStats.min !== null && heartRateStats.max !== null
+        ? `${formatLoadValue(heartRateStats.min)}-${formatLoadValue(heartRateStats.max)}`
+        : workout.minHeartRateBpm !== null && workout.maxHeartRateBpm !== null
+          ? `${formatLoadValue(workout.minHeartRateBpm)}-${formatLoadValue(workout.maxHeartRateBpm)}`
+          : undefined,
+    },
+    {
+      label: "SpO2",
+      value: oxygenStats.avg !== null ? `${formatLoadValue(oxygenStats.avg)}%` : "-",
+      detail: oxygenStats.min !== null && oxygenStats.max !== null
+        ? `${formatLoadValue(oxygenStats.min)}-${formatLoadValue(oxygenStats.max)}%`
+        : undefined,
+    },
+    {
+      label: "Стресс",
+      value: stressStats.avg !== null ? formatLoadValue(stressStats.avg) : "-",
+      detail: stressStats.min !== null && stressStats.max !== null
+        ? `${formatLoadValue(stressStats.min)}-${formatLoadValue(stressStats.max)}`
+        : undefined,
+    },
+    { label: "Точки", value: sampleCount > 0 ? String(sampleCount) : "-" },
+  ];
+
+  return `
+    <section class="watch-workout-parameter-panel">
+      <div class="watch-workout-parameter-head">
+        <span>${escapeHtml(sourceLabel)}</span>
+        <strong>${escapeHtml(formatDeviceWorkoutTimeLabel(workout))}</strong>
+      </div>
+      <div class="watch-workout-parameter-grid">
+        ${cards.map((card) => `
+          <article>
+            <span>${escapeHtml(card.label)}</span>
+            <strong>${escapeHtml(card.value)}</strong>
+            ${card.detail ? `<small>${escapeHtml(card.detail)}</small>` : ""}
+          </article>
+        `).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function summarizeWorkoutSeries(samples: { value: number }[]) {
+  return summarizeWorkoutValues(samples.map((sample) => sample.value));
+}
+
+function summarizeWorkoutValues(values: Array<number | null | undefined>) {
+  const cleanValues = values.filter((value): value is number => value !== null && value !== undefined);
+
+  if (!cleanValues.length) {
+    return { avg: null, max: null, min: null };
+  }
+
+  return {
+    avg: Math.round(cleanValues.reduce((sum, value) => sum + value, 0) / cleanValues.length),
+    max: Math.max(...cleanValues),
+    min: Math.min(...cleanValues),
+  };
+}
+
+interface WatchWorkoutDerivedMetrics {
+  activeCalories: number | null;
+  activeCaloriesDetail?: string;
+  activeCaloriesPrefix: string;
+  distanceDetail?: string;
+  distanceMeters: number | null;
+  distancePrefix: string;
+  durationDetail?: string;
+  durationMinutes: number | null;
+  steps: number | null;
+  stepsDetail?: string;
+}
+
+function deriveWatchWorkoutMetrics(
+  workout: DeviceWorkout,
+  context: WatchWorkoutContext,
+): WatchWorkoutDerivedMetrics {
+  const activeCalories = getTrustedWatchWorkoutActiveCalories(workout);
+  const rawWorkoutSteps = getTrustedWatchWorkoutSteps(workout);
+  const trustedDistanceMeters = getTrustedWatchWorkoutDistanceMeters(workout);
+  const canScanWorkoutSamples = workout.samples.length <= 600;
+  const workoutSampleSteps = rawWorkoutSteps ?? (canScanWorkoutSamples ? inferWatchWorkoutStepsFromWorkoutSamples(workout.samples) : null);
+  const durationFromWorkoutSamples = workout.durationMinutes !== null || !canScanWorkoutSamples
+    ? null
+    : inferWatchWorkoutDurationFromWorkoutSamples(workout);
+  const needsDailySamples = workoutSampleSteps === null || (workout.durationMinutes === null && durationFromWorkoutSamples === null);
+  const samplesAfterStart = needsDailySamples ? getWatchWorkoutSamplesAfterStart(workout, context) : [];
+  const durationFromSamples = durationFromWorkoutSamples ?? inferWatchWorkoutDurationFromSamples(workout, samplesAfterStart);
+  const durationMinutes = workout.durationMinutes ?? durationFromSamples;
+  const steps = workoutSampleSteps ?? inferWatchWorkoutSteps(samplesAfterStart);
+  const dailySteps = getWatchStepCount(context.summary);
+  const dailyCalories = readWatchWorkoutRawNumber(context.summary?.rawPayload, "calories");
+  const estimatedCalories = activeCalories === null &&
+      steps !== null &&
+      dailySteps !== null &&
+      dailySteps > 0 &&
+      dailyCalories !== null &&
+      dailyCalories > 0
+    ? (dailyCalories * steps) / dailySteps
+    : null;
+  const estimatedDistanceMeters = trustedDistanceMeters === null && steps !== null && steps > 0
+    ? steps * 0.75
+    : null;
+
+  return {
+    activeCalories: activeCalories ?? estimatedCalories,
+    activeCaloriesDetail: activeCalories !== null
+      ? "из тренировки"
+      : estimatedCalories !== null
+        ? "расчёт по доле шагов за день"
+        : "часы не отдали калории тренировки",
+    activeCaloriesPrefix: activeCalories === null && estimatedCalories !== null ? "≈" : "",
+    distanceDetail: trustedDistanceMeters !== null
+      ? "из тренировки"
+      : estimatedDistanceMeters !== null
+        ? "оценка по шагам"
+        : "часы не отдали дистанцию тренировки",
+    distanceMeters: trustedDistanceMeters ?? estimatedDistanceMeters,
+    distancePrefix: trustedDistanceMeters === null && estimatedDistanceMeters !== null ? "≈" : "",
+    durationDetail: workout.durationMinutes !== null
+      ? "из тренировки"
+      : durationFromSamples !== null
+        ? "расчёт по точкам после старта"
+        : "часы отдали только старт",
+    durationMinutes,
+    steps,
+    stepsDetail: steps !== null
+      ? rawWorkoutSteps !== null
+        ? "из итога тренировки"
+        : workoutSampleSteps !== null
+        ? "из точек тренировки"
+        : "расчёт по точкам после старта"
+      : "шаги не пришли в точках",
+  };
+}
+
+function getTrustedWatchWorkoutActiveCalories(workout: DeviceWorkout) {
+  if (workout.activeCalories === null) {
+    return null;
+  }
+  if (workout.activeCalories < 1) {
+    return null;
+  }
+  if (isLegacyDirectWatchWorkoutParserShift(workout)) {
+    return null;
+  }
+
+  const rawPayload = workout.rawPayload ?? {};
+  const rawSteps = readWatchWorkoutRawNumber(rawPayload, "steps");
+  const hasCurrentParserMetadata = typeof rawPayload.dataCompleteness === "string";
+  if (
+    workout.provider === "direct-watch" &&
+    !hasCurrentParserMetadata &&
+    rawSteps !== null &&
+    Math.round(rawSteps) === Math.round(workout.activeCalories)
+  ) {
+    return null;
+  }
+
+  return workout.activeCalories;
+}
+
+function getTrustedWatchWorkoutDistanceMeters(workout: DeviceWorkout) {
+  if (isLegacyDirectWatchWorkoutParserShift(workout)) {
+    return workout.activeCalories ?? readWatchWorkoutRawNumber(workout.rawPayload, "steps");
+  }
+
+  return workout.distanceMeters;
+}
+
+function getTrustedWatchWorkoutSteps(workout: DeviceWorkout) {
+  if (isLegacyDirectWatchWorkoutParserShift(workout)) {
+    return null;
+  }
+
+  return readWatchWorkoutRawNumber(workout.rawPayload, "steps");
+}
+
+function isLegacyDirectWatchWorkoutParserShift(workout: DeviceWorkout) {
+  if (workout.provider !== "direct-watch") {
+    return false;
+  }
+  if (workout.sourceWorkoutId.startsWith("direct-watch:workout-file:")) {
+    return false;
+  }
+
+  const summary = readWatchWorkoutSummaryRawPayload(workout);
+  if (summary?.type !== "walking") {
+    return false;
+  }
+
+  const durationMinutes = workout.durationMinutes ?? readWatchWorkoutSummaryRawNumber(workout, "durationMinutes");
+  const distanceMeters = workout.distanceMeters ?? readWatchWorkoutSummaryRawNumber(workout, "distanceMeters");
+  const rawSteps = readWatchWorkoutRawNumber(workout.rawPayload, "steps");
+  if (
+    durationMinutes === null ||
+    distanceMeters === null ||
+    workout.activeCalories === null ||
+    rawSteps === null
+  ) {
+    return false;
+  }
+
+  const durationSeconds = durationMinutes * 60;
+  const distanceLooksLikeDuration = Math.abs(distanceMeters - durationSeconds) <= Math.max(90, durationSeconds * 0.08);
+  const duplicatedDistanceField = Math.round(workout.activeCalories) === Math.round(rawSteps);
+  return distanceLooksLikeDuration && duplicatedDistanceField;
+}
+
+function inferWatchWorkoutDurationFromWorkoutSamples(workout: DeviceWorkout) {
+  const times = workout.samples
+    .map((sample) => getDeviceWorkoutGraphTime(sample.sampleTime))
+    .filter((time): time is number => time !== null);
+
+  if (times.length < 2) {
+    return null;
+  }
+
+  const start = Math.min(...times);
+  const end = Math.max(...times);
+  return end > start ? Math.max(1, Math.round((end - start) / 60000)) : null;
+}
+
+function inferWatchWorkoutStepsFromWorkoutSamples(samples: DeviceWorkout["samples"]) {
+  const values = samples
+    .map((sample) => readWatchWorkoutRawNumber(sample.rawPayload, "steps"))
+    .filter((value): value is number => value !== null && value >= 0);
+
+  return inferWatchWorkoutStepsFromValues(values);
+}
+
+function getWatchWorkoutSamplesAfterStart(
+  workout: DeviceWorkout,
+  context: WatchWorkoutContext,
+) {
+  const start = getDeviceWorkoutGraphTime(workout.startTime);
+  if (start === null) {
+    return [];
+  }
+
+  const knownEnd = workout.durationMinutes !== null ? getDeviceWorkoutGraphTime(workout.endTime) : null;
+  const fallbackEnd = start + 90 * 60 * 1000;
+  const end = knownEnd !== null && knownEnd > start ? knownEnd : fallbackEnd;
+  const samplesByTime = new Map<string, DeviceHealthSample>();
+
+  [
+    ...context.heartRateSamples,
+    ...context.oxygenSamples,
+    ...context.stressSamples,
+  ].forEach((sample) => {
+    const time = getDeviceWorkoutGraphTime(sample.sampledAt);
+    if (time !== null && time >= start && time <= end) {
+      samplesByTime.set(`${sample.metric}:${sample.sampledAt}`, sample);
+    }
+  });
+
+  return Array.from(samplesByTime.values()).sort((left, right) => left.sampledAt.localeCompare(right.sampledAt));
+}
+
+function inferWatchWorkoutDurationFromSamples(
+  workout: DeviceWorkout,
+  samples: DeviceHealthSample[],
+) {
+  const start = getDeviceWorkoutGraphTime(workout.startTime);
+  if (start === null || samples.length === 0) {
+    return null;
+  }
+
+  const lastSampleTime = Math.max(
+    ...samples
+      .map((sample) => getDeviceWorkoutGraphTime(sample.sampledAt))
+      .filter((time): time is number => time !== null && time >= start),
+  );
+
+  if (!Number.isFinite(lastSampleTime) || lastSampleTime <= start) {
+    return null;
+  }
+
+  return Math.max(1, Math.round((lastSampleTime - start) / 60000));
+}
+
+function inferWatchWorkoutSteps(samples: DeviceHealthSample[]) {
+  const values = samples
+    .map((sample) => readWatchWorkoutRawNumber(sample.rawPayload, "steps"))
+    .filter((value): value is number => value !== null && value >= 0);
+
+  return inferWatchWorkoutStepsFromValues(values);
+}
+
+function inferWatchWorkoutStepsFromValues(values: number[]) {
+  if (values.length === 0) {
+    return null;
+  }
+
+  const first = values[0];
+  const last = values[values.length - 1];
+  const isMostlyCumulative = values.every((value, index) => index === 0 || value >= values[index - 1]);
+
+  if (isMostlyCumulative && last > first) {
+    return Math.round(last - first);
+  }
+
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  if (max > min) {
+    return Math.round(max - min);
+  }
+
+  const sum = values.reduce((total, value) => total + value, 0);
+  return sum > 0 ? Math.round(sum) : null;
+}
+
+function readWatchWorkoutRawNumber(
+  rawPayload: Record<string, unknown> | null | undefined,
+  key: string,
+) {
+  if (!rawPayload) {
+    return null;
+  }
+
+  return readDeviceHealthRawNumber(rawPayload, key);
+}
+
+function readWatchWorkoutSummaryRawPayload(workout: DeviceWorkout) {
+  const value = workout.rawPayload?.workoutSummary;
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function readWatchWorkoutSummaryRawNumber(workout: DeviceWorkout, key: string) {
+  const summary = readWatchWorkoutSummaryRawPayload(workout);
+  return summary ? readDeviceHealthRawNumber(summary, key) : null;
+}
+
+function getDeviceWorkoutRawHeartRateZones(workout: DeviceWorkout): DeviceWorkoutHeartRateZone[] {
+  const summary = readWatchWorkoutSummaryRawPayload(workout);
+  const rawZones = summary?.heartRateZonesSeconds;
+  if (!rawZones || typeof rawZones !== "object" || Array.isArray(rawZones)) {
+    return [];
+  }
+
+  const zoneSource = rawZones as Record<string, unknown>;
+  const secondsByZone = [
+    { key: "extreme", zone: 5 },
+    { key: "anaerobic", zone: 4 },
+    { key: "aerobic", zone: 3 },
+    { key: "fatBurn", zone: 2 },
+    { key: "warmUp", zone: 1 },
+  ].map((item) => ({
+    ...item,
+    seconds: readDeviceHealthRawNumber(zoneSource, item.key),
+  }));
+  const totalSeconds = secondsByZone.reduce((sum, item) => sum + Math.max(0, item.seconds ?? 0), 0);
+
+  if (totalSeconds <= 0) {
+    return [];
+  }
+
+  const maxHeartRate = workout.maxHeartRateBpm ?? workout.averageHeartRateBpm ?? 180;
+  const estimatedMax = getEstimatedHeartRateMax(maxHeartRate);
+
+  return secondsByZone.map((item) => {
+    const durationMs = Math.max(0, item.seconds ?? 0) * 1000;
+    return {
+      color: DEVICE_WORKOUT_ZONE_COLORS[item.zone],
+      durationMs,
+      lower: item.zone === 1 ? 0 : Math.round(estimatedMax * (0.5 + (item.zone - 1) * 0.1)),
+      percent: (durationMs / (totalSeconds * 1000)) * 100,
+      upper: item.zone === 5 ? estimatedMax : Math.round(estimatedMax * (0.5 + item.zone * 0.1)),
+      zone: item.zone,
+    };
+  });
 }
 
 function renderDeviceWorkoutMetrics(workout: DeviceWorkout) {
+  const steps = getTrustedWatchWorkoutSteps(workout);
+  const durationMinutes = workout.durationMinutes ?? readWatchWorkoutSummaryRawNumber(workout, "durationMinutes");
+  const distanceMeters = getTrustedWatchWorkoutDistanceMeters(workout) ??
+    readWatchWorkoutSummaryRawNumber(workout, "distanceMeters");
+  const activeCalories = getTrustedWatchWorkoutActiveCalories(workout);
   const metrics = [
-    { label: "Длительность", value: workout.durationMinutes !== null ? formatDurationHours(workout.durationMinutes) : "-" },
-    { label: "Дистанция", value: workout.distanceMeters !== null ? formatDistanceMeters(workout.distanceMeters) : "-" },
+    { label: "Длительность", value: durationMinutes !== null ? formatDeviceWorkoutDuration(durationMinutes) : "-" },
+    { label: "Дистанция", value: distanceMeters !== null ? formatDistanceMeters(distanceMeters) : "-" },
+    { label: "Шаги", value: steps !== null ? Math.round(steps).toLocaleString("ru-RU") : "-" },
+    { label: "Калории", value: activeCalories !== null ? String(Math.round(activeCalories)) : "-" },
     { label: "Средний пульс", value: workout.averageHeartRateBpm !== null ? formatLoadValue(workout.averageHeartRateBpm) : "-" },
     { label: "Макс. пульс", value: workout.maxHeartRateBpm !== null ? formatLoadValue(workout.maxHeartRateBpm) : "-" },
-    { label: "Калории", value: workout.activeCalories !== null ? String(Math.round(workout.activeCalories)) : "-" },
   ];
 
   return `
@@ -6830,12 +8088,14 @@ function limitDeviceWorkoutSamples<T extends { value: number }>(samples: T[], ma
     .map(([, sample]) => sample);
 }
 
-type DeviceWorkoutGraphKind = "heartRate" | "pace" | "speed" | "spo2";
+type DeviceWorkoutGraphKind = "heartRate" | "pace" | "speed" | "spo2" | "stress";
 
 interface DeviceWorkoutGraphSeries {
+  detail?: string;
   key: DeviceWorkoutGraphKind;
   label: string;
   samples: { sampleTime: string; value: number }[];
+  source?: "day-window" | "workout";
   valueLabel: (value: number) => string;
 }
 
@@ -6847,6 +8107,14 @@ interface DeviceWorkoutHeartRateZone {
   upper: number;
   zone: number;
 }
+
+const DEVICE_WORKOUT_ZONE_COLORS: Record<number, string> = {
+  1: "#cbd5e1",
+  2: "#38bdf8",
+  3: "#84cc16",
+  4: "#facc15",
+  5: "#e11d48",
+};
 
 function formatPaceSeconds(value: number) {
   const rounded = Math.max(0, Math.round(value));
@@ -6867,7 +8135,10 @@ function getDeviceWorkoutPaceSeconds(sample: DeviceWorkout["samples"][number]) {
   return null;
 }
 
-function buildDeviceWorkoutGraphSeries(workout: DeviceWorkout): DeviceWorkoutGraphSeries[] {
+function buildDeviceWorkoutGraphSeries(
+  workout: DeviceWorkout,
+  context?: WatchWorkoutContext,
+): DeviceWorkoutGraphSeries[] {
   const heartRateSamples = workout.samples
     .filter((sample) => sample.heartRateBpm !== null)
     .map((sample) => ({ sampleTime: sample.sampleTime, value: sample.heartRateBpm ?? 0 }));
@@ -6883,14 +8154,24 @@ function buildDeviceWorkoutGraphSeries(workout: DeviceWorkout): DeviceWorkoutGra
   const spo2Samples = workout.samples
     .filter((sample) => sample.oxygenSaturationPercent !== null)
     .map((sample) => ({ sampleTime: sample.sampleTime, value: sample.oxygenSaturationPercent ?? 0 }));
+  const fallbackHeartRateSamples = heartRateSamples.length > 1
+    ? []
+    : getWatchWorkoutWindowSamples(workout, context?.heartRateSamples ?? []);
+  const fallbackOxygenSamples = spo2Samples.length > 1
+    ? []
+    : getWatchWorkoutWindowSamples(workout, context?.oxygenSamples ?? []);
+  const fallbackStressSamples = getWatchWorkoutWindowSamples(workout, context?.stressSamples ?? []);
 
   const series: DeviceWorkoutGraphSeries[] = [];
 
-  if (heartRateSamples.length > 1) {
+  if (heartRateSamples.length > 1 || fallbackHeartRateSamples.length > 1) {
+    const useFallback = heartRateSamples.length <= 1;
     series.push({
+      detail: useFallback ? "дневные точки вокруг старта тренировки" : "точки тренировки",
       key: "heartRate",
-      label: "Пульс",
-      samples: heartRateSamples,
+      label: useFallback ? "Пульс вокруг тренировки" : "Пульс",
+      samples: useFallback ? fallbackHeartRateSamples : heartRateSamples,
+      source: useFallback ? "day-window" : "workout",
       valueLabel: (value) => `${Math.round(value)} уд/мин`,
     });
   }
@@ -6911,29 +8192,171 @@ function buildDeviceWorkoutGraphSeries(workout: DeviceWorkout): DeviceWorkoutGra
     });
   }
 
-  if (spo2Samples.length > 1) {
+  if (spo2Samples.length > 1 || fallbackOxygenSamples.length > 1) {
+    const useFallback = spo2Samples.length <= 1;
     series.push({
+      detail: useFallback ? "дневные точки вокруг старта тренировки" : "точки тренировки",
       key: "spo2",
-      label: "SpO2",
-      samples: spo2Samples,
+      label: useFallback ? "SpO2 вокруг тренировки" : "SpO2",
+      samples: useFallback ? fallbackOxygenSamples : spo2Samples,
+      source: useFallback ? "day-window" : "workout",
       valueLabel: (value) => `${Math.round(value)}%`,
+    });
+  }
+
+  if (fallbackStressSamples.length > 1) {
+    series.push({
+      detail: "дневные точки вокруг старта тренировки",
+      key: "stress",
+      label: "Стресс вокруг тренировки",
+      samples: fallbackStressSamples,
+      source: "day-window",
+      valueLabel: (value) => String(Math.round(value)),
     });
   }
 
   return series;
 }
 
-function hasDeviceWorkoutGraph(workout: DeviceWorkout) {
-  return buildDeviceWorkoutGraphSeries(workout).length > 0;
+function getWatchWorkoutWindowSamples(
+  workout: DeviceWorkout,
+  samples: DeviceHealthSample[],
+): { sampleTime: string; value: number }[] {
+  if (!samples.length) {
+    return [];
+  }
+
+  const start = getDeviceWorkoutGraphTime(workout.startTime);
+  if (start === null) {
+    return [];
+  }
+
+  const knownEnd = workout.durationMinutes !== null ? getDeviceWorkoutGraphTime(workout.endTime) : null;
+  const windowStart = start - 15 * 60 * 1000;
+  const windowEnd = knownEnd !== null && knownEnd > start
+    ? knownEnd + 5 * 60 * 1000
+    : start + 90 * 60 * 1000;
+
+  return samples
+    .filter((sample) => {
+      const time = getDeviceWorkoutGraphTime(sample.sampledAt);
+      return time !== null && time >= windowStart && time <= windowEnd;
+    })
+    .map((sample) => ({ sampleTime: sample.sampledAt, value: sample.value }));
+}
+
+function hasDeviceWorkoutGraph(workout: DeviceWorkout, context?: WatchWorkoutContext) {
+  let heartRateSamples = 0;
+  let paceSamples = 0;
+  let speedSamples = 0;
+  let spo2Samples = 0;
+
+  for (const sample of workout.samples) {
+    if (sample.heartRateBpm !== null) {
+      heartRateSamples += 1;
+    }
+    if (getDeviceWorkoutPaceSeconds(sample) !== null) {
+      paceSamples += 1;
+    }
+    if (sample.speedMetersPerSecond !== null) {
+      speedSamples += 1;
+    }
+    if (sample.oxygenSaturationPercent !== null) {
+      spo2Samples += 1;
+    }
+
+    if (heartRateSamples > 1 || paceSamples > 1 || speedSamples > 1 || spo2Samples > 1) {
+      return true;
+    }
+  }
+
+  if (!context) {
+    return false;
+  }
+
+  return hasWatchWorkoutWindowSamples(workout, context.heartRateSamples) ||
+    hasWatchWorkoutWindowSamples(workout, context.oxygenSamples) ||
+    hasWatchWorkoutWindowSamples(workout, context.stressSamples);
+}
+
+function hasWatchWorkoutWindowSamples(workout: DeviceWorkout, samples: DeviceHealthSample[]) {
+  if (samples.length < 2) {
+    return false;
+  }
+
+  const start = getDeviceWorkoutGraphTime(workout.startTime);
+  if (start === null) {
+    return false;
+  }
+
+  const knownEnd = workout.durationMinutes !== null ? getDeviceWorkoutGraphTime(workout.endTime) : null;
+  const windowStart = start - 15 * 60 * 1000;
+  const windowEnd = knownEnd !== null && knownEnd > start
+    ? knownEnd + 5 * 60 * 1000
+    : start + 90 * 60 * 1000;
+  let count = 0;
+
+  for (const sample of samples) {
+    const time = getDeviceWorkoutGraphTime(sample.sampledAt);
+    if (time !== null && time >= windowStart && time <= windowEnd) {
+      count += 1;
+      if (count > 1) {
+        return true;
+      }
+    }
+  }
+
+  return false;
 }
 
 function formatDeviceWorkoutGraphTime(value: number) {
-  return new Intl.DateTimeFormat("ru", { hour: "2-digit", minute: "2-digit" }).format(new Date(value));
+  return mobileUPlotTimeFormatter.format(new Date(value));
 }
 
 function getDeviceWorkoutGraphTime(value: string) {
-  const time = Date.parse(value);
-  return Number.isFinite(time) ? time : null;
+  if (!value) {
+    return null;
+  }
+
+  if (deviceWorkoutGraphTimeCache.has(value)) {
+    return deviceWorkoutGraphTimeCache.get(value) ?? null;
+  }
+
+  const time = parseDeviceWorkoutGraphTimeFast(value);
+  const result = Number.isFinite(time) ? time : null;
+  deviceWorkoutGraphTimeCache.set(value, result);
+  return result;
+}
+
+function parseDeviceWorkoutGraphTimeFast(value: string) {
+  const match = value.match(
+    /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?(?:\s*(Z|[+-]\d{2}(?::?\d{2})?))?$/,
+  );
+
+  if (!match) {
+    return Date.parse(value);
+  }
+
+  const [, year, month, day, hour, minute, second = "0", zone] = match;
+  const utcTime = Date.UTC(
+    Number(year),
+    Number(month) - 1,
+    Number(day),
+    Number(hour),
+    Number(minute),
+    Number(second),
+  );
+
+  if (!zone || zone === "Z") {
+    return utcTime;
+  }
+
+  const sign = zone.startsWith("-") ? -1 : 1;
+  const cleanZone = zone.slice(1).replace(":", "");
+  const offsetHours = Number(cleanZone.slice(0, 2));
+  const offsetMinutes = Number(cleanZone.slice(2, 4) || "0");
+  const offsetMs = sign * ((offsetHours * 60 + offsetMinutes) * 60 * 1000);
+  return utcTime - offsetMs;
 }
 
 function clampDeviceWorkoutGraphX(value: number) {
@@ -7015,13 +8438,6 @@ function formatDeviceWorkoutDurationMs(value: number) {
 }
 
 function buildDeviceWorkoutHeartRateZones(series: DeviceWorkoutGraphSeries, estimatedMax: number): DeviceWorkoutHeartRateZone[] {
-  const zoneColors: Record<number, string> = {
-    1: "#cbd5e1",
-    2: "#38bdf8",
-    3: "#84cc16",
-    4: "#facc15",
-    5: "#e11d48",
-  };
   const durations = new Map<number, number>([
     [1, 0],
     [2, 0],
@@ -7047,7 +8463,7 @@ function buildDeviceWorkoutHeartRateZones(series: DeviceWorkoutGraphSeries, esti
     const upper = zone === 5 ? estimatedMax : Math.round(estimatedMax * (0.5 + zone * 0.1));
     const durationMs = durations.get(zone) ?? 0;
     return {
-      color: zoneColors[zone],
+      color: DEVICE_WORKOUT_ZONE_COLORS[zone],
       durationMs,
       lower,
       percent: total > 0 ? (durationMs / total) * 100 : 0,
@@ -7057,8 +8473,52 @@ function buildDeviceWorkoutHeartRateZones(series: DeviceWorkoutGraphSeries, esti
   });
 }
 
+function getDeviceWorkoutHeartRateZonesForRender(
+  workout: DeviceWorkout,
+  series: DeviceWorkoutGraphSeries,
+  estimatedMax: number,
+) {
+  const rawZones = getDeviceWorkoutRawHeartRateZones(workout);
+  return rawZones.length > 0 ? rawZones : buildDeviceWorkoutHeartRateZones(series, estimatedMax);
+}
+
+function renderDeviceWorkoutZoneRows(heartRateZones: DeviceWorkoutHeartRateZone[]) {
+  return heartRateZones.map((zone) => `
+    <div class="device-workout-zone-row z${zone.zone}">
+      <span class="zone-number">${zone.zone}</span>
+      <span class="zone-bar">
+        <i style="width: ${zone.percent > 0 ? `${Math.max(2, zone.percent).toFixed(1)}%` : "0%"}"></i>
+        <b>${Math.round(zone.percent)}%</b>
+      </span>
+      <span class="zone-time">${escapeHtml(formatDeviceWorkoutDurationMs(zone.durationMs))}</span>
+    </div>
+  `).join("");
+}
+
+function renderDeviceWorkoutRawZoneSummary(workout: DeviceWorkout) {
+  const zones = getDeviceWorkoutRawHeartRateZones(workout);
+  if (!zones.length) {
+    return "";
+  }
+  const visibleZones = zones.some((zone) => zone.durationMs > 0)
+    ? zones.filter((zone) => zone.durationMs > 0)
+    : zones;
+
+  return `
+    <section class="watch-workout-data-note">
+      <strong>Зоны ЧСС из часов</strong>
+      <span>Часы отдали summary тренировки без точек графика. Показываю зоны по готовому итогу устройства.</span>
+      <div class="device-workout-zone-panel is-summary-only">
+        <strong>Зоны ЧСС</strong>
+        <div class="device-workout-zone-list">
+          ${renderDeviceWorkoutZoneRows(visibleZones)}
+        </div>
+      </div>
+    </section>
+  `;
+}
+
 function renderDeviceWorkoutSeriesGraph(series: DeviceWorkoutGraphSeries, workout: DeviceWorkout) {
-  const shownSamples = limitDeviceWorkoutSamples(series.samples);
   const values = series.samples.map((sample) => sample.value);
   const min = Math.min(...values);
   const max = Math.max(...values);
@@ -7069,7 +8529,6 @@ function renderDeviceWorkoutSeriesGraph(series: DeviceWorkoutGraphSeries, workou
   const heartRateScale = isHeartRate ? buildAdaptiveHeartRateScale(min, max) : null;
   const lower = heartRateScale !== null ? heartRateScale.lower : min - rawRange * 0.08;
   const upper = heartRateScale !== null ? heartRateScale.upper : max + rawRange * 0.08;
-  const range = Math.max(1, upper - lower);
   const sampleStartTime = getDeviceWorkoutGraphTime(series.samples[0]?.sampleTime ?? "");
   const sampleEndTime = getDeviceWorkoutGraphTime(series.samples[series.samples.length - 1]?.sampleTime ?? "");
   const workoutStartTime = getDeviceWorkoutGraphTime(workout.startTime);
@@ -7098,31 +8557,10 @@ function renderDeviceWorkoutSeriesGraph(series: DeviceWorkoutGraphSeries, workou
         }
       : null;
   const axisDuration = axis?.duration ?? 0;
-  const valueToY = (value: number) => 92 - ((value - lower) / range) * 84;
-  const averageY = valueToY(average);
-  const points = shownSamples.map((sample, index) => {
-    const sampleTime = getDeviceWorkoutGraphTime(sample.sampleTime);
-    const x =
-      axis !== null && sampleTime !== null
-        ? clampDeviceWorkoutGraphX(((sampleTime - axis.start) / axis.duration) * 100)
-        : shownSamples.length === 1
-          ? 0
-          : (index / (shownSamples.length - 1)) * 100;
-    const y = valueToY(sample.value);
-    return `${x.toFixed(2)},${y.toFixed(2)}`;
-  }).join(" ");
   const heartRateZones =
     isHeartRate && estimatedHeartRateMax !== null
-      ? buildDeviceWorkoutHeartRateZones(series, estimatedHeartRateMax)
+      ? getDeviceWorkoutHeartRateZonesForRender(workout, series, estimatedHeartRateMax)
       : [];
-  const heartRateGridValues =
-    heartRateScale !== null
-      ? heartRateScale.axisValues
-      : [];
-  const axisLabels = isHeartRate
-    ? heartRateGridValues.map((value) => String(Math.round(value)))
-    : [max, average, min].map((value) => series.valueLabel(value));
-  const gridValues = isHeartRate ? heartRateGridValues : [upper, average, lower];
   const coverageStartX =
     axis !== null && sampleStartTime !== null
       ? clampDeviceWorkoutGraphX(((sampleStartTime - axis.start) / axis.duration) * 100)
@@ -7147,44 +8585,22 @@ function renderDeviceWorkoutSeriesGraph(series: DeviceWorkoutGraphSeries, workou
   const captionDetail = isHeartRate
     ? "ЧСС, уд/мин"
     : `мин ${series.valueLabel(min)} · сред ${series.valueLabel(average)} · макс ${series.valueLabel(max)}`;
+  const sourceDetail = series.detail ? ` · ${series.detail}` : "";
+  const uPlotPayload = buildDeviceWorkoutUPlotPayload(series, lower, upper, average);
 
   const caption = `
     <div class="device-workout-series-caption">
       <strong>${escapeHtml(series.label)}</strong>
-      <span>${escapeHtml(captionDetail)}</span>
-    </div>
-  `;
-  const chart = `
-    <div class="device-workout-chart">
-      <div class="device-workout-axis-y" aria-hidden="true">
-        ${axisLabels.map((label) => `<span>${escapeHtml(label)}</span>`).join("")}
-      </div>
-      <div class="device-workout-chart-plot">
-        <svg aria-label="${escapeHtml(series.label)}" role="img" viewBox="0 0 100 100" preserveAspectRatio="none">
-          ${isHeartRate ? heartRateZones.map((zone) => {
-            const visibleTop = Math.min(upper, zone.upper);
-            const visibleBottom = Math.max(lower, zone.zone === 1 ? 0 : zone.lower);
-            if (visibleBottom >= visibleTop) {
-              return "";
-            }
-            const zoneTop = valueToY(visibleTop);
-            const zoneBottom = valueToY(visibleBottom);
-            return `<rect class="hr-zone-strip z${zone.zone}" height="${Math.max(0, zoneBottom - zoneTop).toFixed(2)}" width="1.6" x="0" y="${zoneTop.toFixed(2)}"></rect>`;
-          }).join("") : ""}
-          ${gridValues.map((value) => `<line class="grid" x1="0" x2="100" y1="${valueToY(value).toFixed(2)}" y2="${valueToY(value).toFixed(2)}"></line>`).join("")}
-          <line class="average" x1="0" x2="100" y1="${averageY.toFixed(2)}" y2="${averageY.toFixed(2)}"></line>
-          ${coverageStartX !== null && coverageEndX !== null ? `<line class="coverage" x1="${coverageStartX.toFixed(2)}" x2="${coverageEndX.toFixed(2)}" y1="97" y2="97"></line>` : ""}
-          <polyline fill="none" points="${escapeHtml(points)}"></polyline>
-        </svg>
-      </div>
-      ${timeLabels.length > 0
-        ? `<div class="device-workout-axis-x" aria-hidden="true">${timeLabels.map((label) => `<span>${escapeHtml(label)}</span>`).join("")}</div>`
-        : ""}
+      <span>${escapeHtml(`${captionDetail}${sourceDetail}`)}</span>
     </div>
   `;
   const chartColumn = `
     <div class="device-workout-chart-column">
-      ${chart}
+      ${renderMobileBarsChart(uPlotPayload, `is-workout is-${series.key}`, 158)}
+      ${timeLabels.length > 0
+        ? `<div class="device-workout-axis-x" aria-hidden="true">${timeLabels.map((label) => `<span>${escapeHtml(label)}</span>`).join("")}</div>`
+        : ""}
+      ${coverageStartX !== null && coverageEndX !== null ? `<span class="device-workout-coverage-bar"><i style="left: ${coverageStartX.toFixed(2)}%; width: ${Math.max(2, coverageEndX - coverageStartX).toFixed(2)}%"></i></span>` : ""}
       ${coverageNote ? `<small class="device-workout-coverage-note">${escapeHtml(coverageNote)}</small>` : ""}
     </div>
   `;
@@ -7192,16 +8608,7 @@ function renderDeviceWorkoutSeriesGraph(series: DeviceWorkoutGraphSeries, workou
     <div class="device-workout-zone-panel">
       <strong>Зоны ЧСС</strong>
       <div class="device-workout-zone-list">
-        ${heartRateZones.map((zone) => `
-          <div class="device-workout-zone-row z${zone.zone}">
-            <span class="zone-number">${zone.zone}</span>
-            <span class="zone-bar">
-              <i style="width: ${zone.percent > 0 ? `${Math.max(2, zone.percent).toFixed(1)}%` : "0%"}"></i>
-              <b>${Math.round(zone.percent)}%</b>
-            </span>
-            <span class="zone-time">${escapeHtml(formatDeviceWorkoutDurationMs(zone.durationMs))}</span>
-          </div>
-        `).join("")}
+        ${renderDeviceWorkoutZoneRows(heartRateZones)}
       </div>
     </div>
   `;
@@ -7226,16 +8633,159 @@ function renderDeviceWorkoutSeriesGraph(series: DeviceWorkoutGraphSeries, workou
   `;
 }
 
-function renderDeviceWorkoutGraph(workout: DeviceWorkout) {
-  const series = buildDeviceWorkoutGraphSeries(workout);
+function buildDeviceWorkoutUPlotPayload(
+  series: DeviceWorkoutGraphSeries,
+  lower: number,
+  upper: number,
+  average: number,
+): MobileUPlotPayload {
+  const visibleSamples = limitDeviceWorkoutSamples(
+    series.samples
+      .map((sample) => {
+        const sampleTime = getDeviceWorkoutGraphTime(sample.sampleTime);
+        return sampleTime === null ? null : { sampleTime, value: sample.value };
+      })
+      .filter((sample): sample is { sampleTime: number; value: number } => Boolean(sample))
+      .sort((left, right) => left.sampleTime - right.sampleTime),
+    900,
+  );
+  const color = series.key === "heartRate"
+    ? "#0f766e"
+    : series.key === "spo2"
+      ? "#0891b2"
+      : series.key === "stress"
+        ? "#ad6a15"
+        : "#426f9d";
+  const format = series.key === "spo2"
+    ? "percent"
+    : series.key === "pace"
+      ? "pace"
+      : series.key === "speed"
+        ? "decimal"
+        : "integer";
+
+  return {
+    average,
+    color,
+    format,
+    label: series.label,
+    lower,
+    title: series.label,
+    unit: series.key === "heartRate"
+      ? "уд/мин"
+      : series.key === "spo2"
+        ? "%"
+        : "",
+    upper,
+    valueDecimals: series.key === "speed" ? 1 : 0,
+    x: visibleSamples.map((sample) => Math.round(sample.sampleTime / 1000)),
+    y: visibleSamples.map((sample) => sample.value),
+  };
+}
+
+function renderDeviceWorkoutGraph(
+  workout: DeviceWorkout,
+  context?: WatchWorkoutContext,
+  precomputedSeries?: DeviceWorkoutGraphSeries[],
+) {
+  const series = precomputedSeries ?? buildDeviceWorkoutGraphSeries(workout, context);
 
   if (series.length === 0) {
-    return `<p class="watch-empty-note">График появится после синхронизации точек тренировки.</p>`;
+    const rawZoneSummary = renderDeviceWorkoutRawZoneSummary(workout);
+    if (rawZoneSummary) {
+      return rawZoneSummary;
+    }
+
+    return `
+      <section class="watch-workout-data-note">
+        <strong>Графики пока недоступны</strong>
+        <span>Часы отдали тренировку, но без точек пульса, SpO2 или стресса рядом со стартом. После следующей синхронизации данные появятся здесь, если часы их передадут.</span>
+      </section>
+    `;
   }
+
+  const primarySeries = series[0];
+  const secondarySeries = series.slice(1);
 
   return `
     <div class="device-workout-graph">
-      ${series.map((item) => renderDeviceWorkoutSeriesGraph(item, workout)).join("")}
+      ${renderDeviceWorkoutSeriesGraph(primarySeries, workout)}
+      ${secondarySeries.length > 0 ? `
+        <div class="device-workout-secondary-series">
+          ${secondarySeries.map((item) => `
+            <span>${escapeHtml(item.label)}</span>
+          `).join("")}
+        </div>
+      ` : ""}
+    </div>
+  `;
+}
+
+function renderDeviceWorkoutSeriesUPlotGraph(series: DeviceWorkoutGraphSeries, workout: DeviceWorkout) {
+  const values = series.samples.map((sample) => sample.value);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const average = values.reduce((total, value) => total + value, 0) / values.length;
+  const isHeartRate = series.key === "heartRate";
+  const estimatedHeartRateMax = isHeartRate ? getEstimatedHeartRateMax(max) : null;
+  const rawRange = Math.max(1, max - min);
+  const heartRateScale = isHeartRate ? buildAdaptiveHeartRateScale(min, max) : null;
+  const lower = heartRateScale !== null ? heartRateScale.lower : min - rawRange * 0.08;
+  const upper = heartRateScale !== null ? heartRateScale.upper : max + rawRange * 0.08;
+  const sampleStartTime = getDeviceWorkoutGraphTime(series.samples[0]?.sampleTime ?? "");
+  const sampleEndTime = getDeviceWorkoutGraphTime(series.samples[series.samples.length - 1]?.sampleTime ?? "");
+  const workoutStartTime = getDeviceWorkoutGraphTime(workout.startTime);
+  const workoutEndTime = getDeviceWorkoutGraphTime(workout.endTime);
+  let axisStartTime = workoutStartTime ?? sampleStartTime;
+  let axisEndTime = workoutEndTime ?? sampleEndTime;
+
+  if (
+    axisStartTime === null ||
+    axisEndTime === null ||
+    axisEndTime <= axisStartTime ||
+    (sampleStartTime !== null && sampleStartTime < axisStartTime) ||
+    (sampleEndTime !== null && sampleEndTime > axisEndTime)
+  ) {
+    axisStartTime = sampleStartTime;
+    axisEndTime = sampleEndTime;
+  }
+
+  const timeLabels =
+    axisStartTime !== null && axisEndTime !== null && axisEndTime > axisStartTime
+      ? [
+          formatDeviceWorkoutGraphTime(axisStartTime),
+          formatDeviceWorkoutGraphTime(axisStartTime + (axisEndTime - axisStartTime) / 2),
+          formatDeviceWorkoutGraphTime(axisEndTime),
+        ]
+      : [];
+  const uPlotPayload = buildDeviceWorkoutUPlotPayload(series, lower, upper, average);
+  const heartRateZones =
+    isHeartRate && estimatedHeartRateMax !== null
+      ? getDeviceWorkoutHeartRateZonesForRender(workout, series, estimatedHeartRateMax)
+      : [];
+
+  return `
+    <div class="device-workout-series ${escapeHtml(series.key)}">
+      <div class="device-workout-series-caption">
+        <strong>${escapeHtml(series.label)}</strong>
+        <span>${escapeHtml(isHeartRate
+          ? "ЧСС, уд/мин"
+          : `мин ${series.valueLabel(min)} · сред ${series.valueLabel(average)} · макс ${series.valueLabel(max)}`)}</span>
+      </div>
+      <div class="device-workout-chart-column">
+        ${renderMobileUPlotChart(uPlotPayload, `is-workout-detail is-${series.key}`, 254)}
+        ${timeLabels.length > 0
+          ? `<div class="device-workout-axis-x" aria-hidden="true">${timeLabels.map((label) => `<span>${escapeHtml(label)}</span>`).join("")}</div>`
+          : ""}
+      </div>
+      ${isHeartRate ? `
+        <div class="device-workout-zone-panel">
+          <strong>Зоны ЧСС</strong>
+          <div class="device-workout-zone-list">
+            ${renderDeviceWorkoutZoneRows(heartRateZones)}
+          </div>
+        </div>
+      ` : ""}
     </div>
   `;
 }
@@ -10330,12 +11880,83 @@ function getDeviceWorkoutsForDate(
   athleteId: string | null,
   date: string,
 ) {
-  return state.data.deviceWorkouts
-    .filter((workout) =>
+  return dedupeDeviceWorkoutsForDisplay(
+    state.data.deviceWorkouts.filter((workout) =>
       workout.entryDate === date &&
       (!athleteId || workout.athleteId === athleteId)
-    )
+    ),
+  )
     .sort((left, right) => left.startTime.localeCompare(right.startTime));
+}
+
+function dedupeDeviceWorkoutsForDisplay(workouts: DeviceWorkout[]) {
+  const workoutsByKey = new Map<string, DeviceWorkout>();
+
+  for (const workout of workouts) {
+    const key = getDeviceWorkoutDisplayKey(workout);
+    const previous = workoutsByKey.get(key);
+    if (!previous || getDeviceWorkoutCompletenessScore(workout) >= getDeviceWorkoutCompletenessScore(previous)) {
+      workoutsByKey.set(key, workout);
+    }
+  }
+
+  return Array.from(workoutsByKey.values());
+}
+
+function getDeviceWorkoutDisplayKey(workout: DeviceWorkout) {
+  const startTime = Number.isFinite(new Date(workout.startTime).getTime())
+    ? new Date(workout.startTime).getTime()
+    : workout.startTime;
+  const distanceMeters = getTrustedWatchWorkoutDistanceMeters(workout);
+  return [
+    workout.athleteId,
+    workout.provider,
+    workout.entryDate,
+    workout.workoutType,
+    startTime,
+    workout.durationMinutes ?? "",
+    distanceMeters ?? "",
+  ].join("|");
+}
+
+function getDeviceWorkoutCompletenessScore(workout: DeviceWorkout) {
+  const rawFiles = Array.isArray(workout.rawPayload?.files) ? workout.rawPayload.files.length : 0;
+  return (
+    (workout.sampleCount ?? 0) * 4 +
+    rawFiles * 3 +
+    (workout.activeCalories !== null ? 2 : 0) +
+    (workout.distanceMeters !== null ? 2 : 0) +
+    (workout.averageHeartRateBpm !== null ? 2 : 0) +
+    (workout.maxHeartRateBpm !== null ? 1 : 0) +
+    (workout.minHeartRateBpm !== null ? 1 : 0)
+  );
+}
+
+function getDeviceWorkoutById(
+  state: MobileAppState,
+  athleteId: string | null,
+  workoutId: string,
+) {
+  return state.data.deviceWorkouts.find((workout) =>
+    workout.id === workoutId &&
+    (!athleteId || workout.athleteId === athleteId)
+  ) ?? null;
+}
+
+function getRecentDeviceWorkouts(
+  state: MobileAppState,
+  athleteId: string | null,
+  maxDate: string,
+  limit: number,
+) {
+  return dedupeDeviceWorkoutsForDisplay(
+    state.data.deviceWorkouts.filter((workout) =>
+        workout.entryDate <= maxDate &&
+        (!athleteId || workout.athleteId === athleteId)
+    ),
+  )
+    .sort((left, right) => right.startTime.localeCompare(left.startTime))
+    .slice(0, limit);
 }
 
 function getDeviceHealthSamplesForDate(
@@ -11223,6 +12844,14 @@ function formatDurationHours(minutes: number) {
   return `${Number.isInteger(hours) ? hours : hours.toFixed(1)} ч`;
 }
 
+function formatDeviceWorkoutDuration(minutes: number) {
+  if (minutes < 60) {
+    return `${Math.max(1, Math.round(minutes))} мин`;
+  }
+
+  return formatDurationHours(minutes);
+}
+
 function formatExecutionDayBreakdown(summary: ExecutionDaySummary) {
   return `${summary.completedBlockCount} вып. · ${summary.partialBlockCount} част. · ${summary.missedBlockCount} нет`;
 }
@@ -11461,15 +13090,36 @@ function replaceDeviceHealthSamplesForDay(
     .slice(0, 5000);
 }
 
+function normalizeMobileDataSnapshot(snapshot: MobileDataSnapshot): MobileDataSnapshot {
+  return {
+    ...snapshot,
+    deviceWorkouts: dedupeDeviceWorkoutsForDisplay(snapshot.deviceWorkouts)
+      .sort((left, right) =>
+        right.entryDate.localeCompare(left.entryDate) || right.startTime.localeCompare(left.startTime),
+      )
+      .slice(0, 200),
+  };
+}
+
 function upsertDeviceWorkouts(items: DeviceWorkout[], workouts: DeviceWorkout[]) {
+  const incomingDisplayKeys = new Set(workouts.map(getDeviceWorkoutDisplayKey));
   const nextItems = items.filter((item) => !workouts.some((workout) =>
     workout.id === item.id ||
     (workout.athleteId === item.athleteId &&
       workout.provider === item.provider &&
       workout.sourceWorkoutId === item.sourceWorkoutId)
-  ));
-  nextItems.unshift(...workouts);
-  return nextItems
+  ) && !incomingDisplayKeys.has(getDeviceWorkoutDisplayKey(item)));
+  const workoutsByKey = new Map<string, DeviceWorkout>();
+
+  [...workouts, ...nextItems].forEach((workout) => {
+    const key = getDeviceWorkoutDisplayKey(workout);
+    const previous = workoutsByKey.get(key);
+    if (!previous || getDeviceWorkoutCompletenessScore(workout) > getDeviceWorkoutCompletenessScore(previous)) {
+      workoutsByKey.set(key, workout);
+    }
+  });
+
+  return Array.from(workoutsByKey.values())
     .sort((left, right) =>
       right.entryDate.localeCompare(left.entryDate) || right.startTime.localeCompare(left.startTime),
     )
@@ -11637,6 +13287,147 @@ function toFriendlyError(error: unknown) {
   }
 
   return error instanceof Error ? translateApiErrorMessage(error.message) : "Неизвестная ошибка";
+}
+
+function mountMobileUPlotCharts(root: HTMLElement): UPlotInstance[] {
+  const uPlot = (window as UPlotWindow).uPlot;
+  const charts: UPlotInstance[] = [];
+
+  root.querySelectorAll<HTMLElement>("[data-uplot-chart-id]").forEach((container) => {
+    const plot = container.querySelector<HTMLElement>(".mobile-uplot-plot");
+    const chartId = container.dataset.uplotChartId;
+
+    if (!plot || !chartId) {
+      return;
+    }
+
+    if (!uPlot) {
+      plot.innerHTML = `<p class="watch-empty-note">График не загрузился. Обнови приложение.</p>`;
+      return;
+    }
+
+    const payload = mobileUPlotPayloads.get(chartId);
+    if (!payload) {
+      plot.innerHTML = `<p class="watch-empty-note">График не удалось подготовить.</p>`;
+      return;
+    }
+
+    if (payload.x.length < 2 || payload.y.length < 2 || payload.x.length !== payload.y.length) {
+      plot.innerHTML = `<p class="watch-empty-note">Недостаточно точек для графика.</p>`;
+      return;
+    }
+
+    const height = Math.max(120, Number(container.dataset.uplotHeight) || 260);
+    const width = Math.max(260, Math.round(plot.clientWidth || container.clientWidth || 320));
+    const averageSeries = payload.average !== null && payload.average !== undefined
+      ? payload.x.map(() => payload.average as number)
+      : null;
+    const data = averageSeries ? [payload.x, payload.y, averageSeries] : [payload.x, payload.y];
+    const chart = new uPlot(buildMobileUPlotOptions(payload, width, height), data, plot);
+    charts.push(chart);
+  });
+
+  return charts;
+}
+
+function buildMobileUPlotOptions(payload: MobileUPlotPayload, width: number, height: number) {
+  const valueFormatter = (value: number) => formatMobileUPlotValue(value, payload);
+
+  return {
+    axes: [
+      {
+        grid: { stroke: "rgba(100, 116, 139, 0.18)", width: 1 },
+        stroke: "#64748b",
+        values: (_plot: unknown, values: number[]) => values.map((value) => formatMobileUPlotTime(value)),
+      },
+      {
+        grid: { stroke: "rgba(100, 116, 139, 0.18)", width: 1 },
+        size: 48,
+        stroke: "#64748b",
+        values: (_plot: unknown, values: number[]) => values.map(valueFormatter),
+      },
+    ],
+    cursor: {
+      drag: { x: true, y: false },
+      points: { show: false },
+    },
+    height,
+    legend: { show: false },
+    padding: [8, 8, 4, 0],
+    scales: {
+      x: { time: true },
+      y: {
+        range: () => [payload.lower, payload.upper],
+      },
+    },
+    series: [
+      {},
+      {
+        label: payload.label,
+        points: { show: false },
+        spanGaps: true,
+        stroke: payload.color,
+        width: 2.4,
+      },
+      ...(payload.average !== null && payload.average !== undefined
+        ? [{
+            dash: [6, 5],
+            label: "Среднее",
+            points: { show: false },
+            spanGaps: true,
+            stroke: payload.highColor ?? "rgba(173, 106, 21, 0.75)",
+            width: 1.2,
+          }]
+        : []),
+    ],
+    width,
+  };
+}
+
+function pendingActionReferencesDirectWatchRawCache(action: PendingSyncAction, cacheId: string) {
+  return valueReferencesDirectWatchRawCache(action.body, cacheId);
+}
+
+function valueReferencesDirectWatchRawCache(value: unknown, cacheId: string): boolean {
+  if (Array.isArray(value)) {
+    return value.some((item) => valueReferencesDirectWatchRawCache(item, cacheId));
+  }
+
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const record = value as Record<string, unknown>;
+  if (record.directWatchRawCacheId === cacheId) {
+    return true;
+  }
+
+  return Object.values(record).some((item) => valueReferencesDirectWatchRawCache(item, cacheId));
+}
+
+function formatMobileUPlotTime(value: number) {
+  const date = new Date(value * 1000);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  return mobileUPlotTimeFormatter.format(date);
+}
+
+function formatMobileUPlotValue(value: number, payload: MobileUPlotPayload) {
+  if (!Number.isFinite(value)) {
+    return "";
+  }
+
+  if (payload.format === "pace") {
+    const minutes = Math.floor(value / 60);
+    const seconds = Math.max(0, Math.round(value - minutes * 60));
+    return `${minutes}:${String(seconds).padStart(2, "0")}`;
+  }
+
+  const decimals = payload.valueDecimals ?? (payload.format === "decimal" ? 1 : 0);
+  const formatted = value.toFixed(decimals);
+  return payload.format === "percent" ? `${formatted}%` : formatted;
 }
 
 function escapeHtml(value: string | number | null | undefined) {

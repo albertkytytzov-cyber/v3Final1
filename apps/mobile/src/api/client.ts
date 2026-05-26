@@ -161,8 +161,7 @@ export class MobileApiClient {
         ? this.loadDeviceHealthSamples(selectedEntryDate ?? localDateValue())
         : Promise.resolve({ samples: [] }),
       userRole === "athlete"
-        ? this.request<DeviceWorkoutsResponse>("/device-health/workouts")
-            .catch(() => ({ workouts: [] }))
+        ? this.loadAthleteDeviceWorkouts(selectedEntryDate ?? localDateValue())
         : Promise.resolve({ workouts: [] }),
       userRole === "athlete"
         ? this.request<{ entry: ReadinessEntry | null }>("/readiness/today")
@@ -326,6 +325,29 @@ export class MobileApiClient {
     return responses.flatMap((response) => response.samples);
   }
 
+  private async loadAthleteDeviceWorkouts(selectedEntryDate: string): Promise<DeviceWorkoutsResponse> {
+    const dayPath =
+      `/device-health/workouts?entryDate=${encodeURIComponent(selectedEntryDate)}&includeSamples=false`;
+    const [recentResponse, dayResponse] = await Promise.all([
+      this.request<DeviceWorkoutsResponse>("/device-health/workouts?includeSamples=false")
+        .catch(() => ({ workouts: [] })),
+      this.request<DeviceWorkoutsResponse>(dayPath)
+        .catch(() => ({ workouts: [] })),
+    ]);
+
+    const workoutsById = new Map<string, DeviceWorkout>();
+    recentResponse.workouts.forEach((workout) => {
+      workoutsById.set(workout.id, workout);
+    });
+    dayResponse.workouts.forEach((workout) => {
+      workoutsById.set(workout.id, workout);
+    });
+
+    return {
+      workouts: Array.from(workoutsById.values()),
+    };
+  }
+
   private async loadCoachDeviceWorkouts(
     assignedPlans: AssignedPlanSummary[],
     athletes: CoachAthleteSummary[],
@@ -402,6 +424,12 @@ export class MobileApiClient {
   listDeviceHealthSamples(entryDate: string, metric: DeviceHealthSampleMetric = "heart_rate") {
     return this.request<DeviceHealthSamplesResponse>(
       `/device-health/samples?entryDate=${encodeURIComponent(entryDate)}&metric=${encodeURIComponent(metric)}`,
+    );
+  }
+
+  listDeviceWorkouts(entryDate: string, includeSamples = true) {
+    return this.request<DeviceWorkoutsResponse>(
+      `/device-health/workouts?entryDate=${encodeURIComponent(entryDate)}&includeSamples=${includeSamples ? "true" : "false"}`,
     );
   }
 

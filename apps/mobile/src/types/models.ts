@@ -192,6 +192,9 @@ export interface MobileAppState {
   readinessEditMode: boolean;
   watchDetailMetric: WatchDetailMetric | null;
   watchDetailPeriod: WatchDetailPeriod;
+  watchExpandedWorkoutId: string | null;
+  watchExpandedWorkoutGraphId: string | null;
+  watchWorkoutDetailId: string | null;
   watchSettingsOpen: boolean;
   isOnline: boolean;
   isBusy: boolean;

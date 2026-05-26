@@ -22,6 +22,7 @@ apps/mobile/ios/App/DerivedData/
 apps/mobile/www/**/*.js
 apps/mobile/www/**/*.js.map
 apps/mobile/www/mobile-config.js
+apps/mobile/www/vendor/
 
 # Logs
 *.log
@@ -77,6 +78,7 @@ apps/web/public/downloads/*.apk
 tmp*.png
 1778425134325log/
 mockups/
+_external/
 
 # OS and editor files
 .DS_Store

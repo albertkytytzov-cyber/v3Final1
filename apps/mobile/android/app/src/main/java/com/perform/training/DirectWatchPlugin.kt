@@ -614,10 +614,234 @@ class DirectWatchPlugin : Plugin() {
     }
 
     @PluginMethod
+    fun ackActivityFiles(call: PluginCall) {
+        val address = call.getString("deviceId")
+        val authKeyHex = call.getString("authKeyHex")?.trim()?.takeIf { it.isNotBlank() }
+        val fileIdsJson = call.data.optJSONArray("fileIds")
+        val fileIds = mutableListOf<ByteArray>()
+        val seenFileIds = mutableSetOf<String>()
+        if (fileIdsJson != null) {
+            for (index in 0 until fileIdsJson.length()) {
+                val fileId = parseHexBytes(fileIdsJson.optString(index, "").trim())
+                if (fileId != null && fileId.size == CLASSIC_ACTIVITY_FILE_ID_BYTES) {
+                    val idHex = fullHex(fileId)
+                    if (idHex != null && seenFileIds.add(idHex)) {
+                        fileIds.add(fileId)
+                    }
+                }
+            }
+        }
+
+        if (address.isNullOrBlank()) {
+            call.reject("deviceId is required")
+            return
+        }
+
+        if (authKeyHex.isNullOrBlank()) {
+            call.reject("Auth Key должен быть сохранён перед подтверждением файлов часов.")
+            return
+        }
+
+        if (fileIds.isEmpty()) {
+            call.reject("Нет корректных файлов часов для подтверждения.")
+            return
+        }
+
+        val adapter = bluetoothAdapter()
+        if (adapter == null || !adapter.isEnabled) {
+            call.reject("Включите Bluetooth на телефоне и повторите подтверждение файлов часов.")
+            return
+        }
+
+        if (!hasRequiredRuntimePermissions()) {
+            call.reject("Нужно разрешить PERFORM подключение к Bluetooth-устройствам.")
+            return
+        }
+
+        val device = try {
+            adapter.getRemoteDevice(address)
+        } catch (error: IllegalArgumentException) {
+            call.reject("Некорректный идентификатор Bluetooth-устройства.", error)
+            return
+        }
+
+        if (safeBondState(device) != BluetoothDevice.BOND_BONDED) {
+            call.reject("Для подтверждения файлов часы должны быть в системном сопряжении.")
+            return
+        }
+
+        stopActiveGatt()
+        stopActiveClassicSocket()
+
+        val worker = Thread {
+            var socket: BluetoothSocket? = null
+            val packets = mutableListOf<JSObject>()
+            val acknowledgedFileIds = mutableListOf<String>()
+            var connected = false
+            var sentVersionRequest = false
+            var sentSessionConfig = false
+            var sentAuthStep1 = false
+            var sentAuthStep2 = false
+            var phoneNonce: ByteArray? = null
+            var postAuthDecryptionKey: ByteArray? = null
+            var errorMessage: String? = null
+            val combined = java.io.ByteArrayOutputStream()
+
+            try {
+                try {
+                    adapter.cancelDiscovery()
+                } catch (_: SecurityException) {
+                    // Discovery cancellation is best-effort.
+                }
+
+                socket = try {
+                    device.createRfcommSocketToServiceRecord(SPP_SERVICE_UUID)
+                } catch (error: IOException) {
+                    throw IOException("Android не смог создать SPP-сокет для часов.", error)
+                }
+
+                activeClassicSocket = socket
+                socket.connect()
+                connected = true
+
+                socket.outputStream.write(CLASSIC_SPP_V1_VERSION_REQUEST)
+                socket.outputStream.flush()
+                sentVersionRequest = true
+                readClassicPackets(socket, packets, combined, CLASSIC_VERSION_READ_MS)
+
+                val versionProbe = parseClassicProbeBytes(combined.toByteArray())
+                val useSppV2 = shouldUseClassicSppV2(versionProbe.versionHex)
+                if (useSppV2) {
+                    socket.outputStream.write(buildClassicV2SessionConfigPacket(0))
+                    socket.outputStream.flush()
+                    sentSessionConfig = true
+                    readClassicPackets(socket, packets, combined, CLASSIC_SESSION_CONFIG_READ_MS)
+                }
+
+                phoneNonce = ByteArray(16)
+                SecureRandom().nextBytes(phoneNonce)
+                socket.outputStream.write(
+                    if (useSppV2) {
+                        buildClassicV2AuthStep1Packet(phoneNonce, 0)
+                    } else {
+                        buildClassicAuthStep1Packet(phoneNonce)
+                    },
+                )
+                socket.outputStream.flush()
+                sentAuthStep1 = true
+                errorMessage = readClassicPacketsUntilAuthStage(
+                    socket,
+                    packets,
+                    combined,
+                    "watch-nonce",
+                    CLASSIC_PROBE_READ_MS,
+                ) ?: errorMessage
+
+                val parsedAuthStep1 = parseClassicProbeBytes(combined.toByteArray())
+                val authStep2 = buildClassicAuthStep2Material(authKeyHex, phoneNonce, parsedAuthStep1)
+                if (authStep2.status != "valid" || authStep2.authStep3Command == null) {
+                    errorMessage = authStep2.error ?: "PERFORM Sync не смог авторизоваться для подтверждения файлов часов."
+                } else {
+                    if (useSppV2 && parsedAuthStep1.authPacketSequenceNumber != null) {
+                        socket.outputStream.write(buildClassicV2AckPacket(parsedAuthStep1.authPacketSequenceNumber))
+                        socket.outputStream.flush()
+                    }
+                    socket.outputStream.write(
+                        if (useSppV2) {
+                            buildClassicV2AuthStep2Packet(authStep2.authStep3Command, 1)
+                        } else {
+                            buildClassicAuthStep2Packet(authStep2.authStep3Command)
+                        },
+                    )
+                    socket.outputStream.flush()
+                    sentAuthStep2 = true
+                    postAuthDecryptionKey = authStep2.decryptionKey
+                    errorMessage = readClassicPacketsUntilAuthStage(
+                        socket,
+                        packets,
+                        combined,
+                        "authenticated",
+                        CLASSIC_PROBE_READ_MS,
+                    ) ?: errorMessage
+
+                    val parsedAuthStep2 = parseClassicProbeBytes(combined.toByteArray())
+                    if (!useSppV2 || parsedAuthStep2.authStage != "authenticated" || authStep2.encryptionKey == null) {
+                        errorMessage = "Часы авторизовались не полностью: ACK файлов доступен только в SPP v2 после auth."
+                    } else {
+                        if (parsedAuthStep2.authPacketSequenceNumber != null) {
+                            socket.outputStream.write(buildClassicV2AckPacket(parsedAuthStep2.authPacketSequenceNumber))
+                            socket.outputStream.flush()
+                        }
+
+                        fileIds.forEachIndexed { index, fileId ->
+                            val idHex = fullHex(fileId)
+                            socket.outputStream.write(
+                                buildClassicV2EncryptedCommandPacket(
+                                    command = buildActivityFetchAckCommand(fileId),
+                                    sequenceNumber = 2 + index,
+                                    encryptionKey = authStep2.encryptionKey,
+                                ),
+                            )
+                            if (idHex != null) {
+                                acknowledgedFileIds.add(idHex)
+                            }
+                            Thread.sleep(CLASSIC_POST_AUTH_COMMAND_DELAY_MS)
+                        }
+                        socket.outputStream.flush()
+                        errorMessage = readClassicPackets(socket, packets, combined, CLASSIC_ACTIVITY_ACK_READ_MS) ?: errorMessage
+                    }
+                }
+            } catch (error: IOException) {
+                errorMessage = safeMessage(error)
+            } catch (error: SecurityException) {
+                errorMessage = "Нет разрешения Bluetooth для Classic/SPP-подключения."
+            } catch (error: InterruptedException) {
+                Thread.currentThread().interrupt()
+                errorMessage = "Подтверждение файлов часов было остановлено."
+            } finally {
+                try {
+                    socket?.close()
+                } catch (_: IOException) {
+                    // Socket is already closed.
+                }
+                if (activeClassicSocket == socket) {
+                    activeClassicSocket = null
+                }
+                if (activeClassicThread == Thread.currentThread()) {
+                    activeClassicThread = null
+                }
+            }
+
+            val response = buildActivityAckResponse(
+                device = device,
+                connected = connected,
+                sentVersionRequest = sentVersionRequest,
+                sentSessionConfig = sentSessionConfig,
+                sentAuthStep1 = sentAuthStep1,
+                sentAuthStep2 = sentAuthStep2,
+                acknowledgedFileIds = acknowledgedFileIds,
+                phoneNonce = phoneNonce,
+                authKeyHex = authKeyHex,
+                postAuthDecryptionKey = postAuthDecryptionKey,
+                packets = packets,
+                combinedBytes = combined.toByteArray(),
+                error = errorMessage,
+            )
+            mainHandler.post {
+                call.resolve(response)
+            }
+        }
+        activeClassicThread = worker
+        worker.start()
+    }
+
+    @PluginMethod
     fun probeClassicSession(call: PluginCall) {
         val address = call.getString("deviceId")
         val authStep1 = call.getBoolean("authStep1") ?: false
         val postAuthProbe = call.getBoolean("postAuthProbe") ?: false
+        val includeHistory = call.getBoolean("includeHistory") ?: true
+        val includeSleep = call.getBoolean("includeSleep") ?: true
         val authKeyHex = call.getString("authKeyHex")?.trim()?.takeIf { it.isNotBlank() }
         val entryDate = call.getString("entryDate")?.trim()?.takeIf { isClassicEntryDate(it) }
         if (address.isNullOrBlank()) {
@@ -662,6 +886,9 @@ class DirectWatchPlugin : Plugin() {
             var sentPostAuthProbe = false
             var sentActivityFileProbe = false
             var activityFileProbeCount = 0
+            var activityFileProbeCompletedCount = 0
+            var activityFileProbeFailedCount = 0
+            val activityFileProbeRequests = mutableListOf<JSObject>()
             var phoneNonce: ByteArray? = null
             var postAuthDecryptionKey: ByteArray? = null
             var errorMessage: String? = null
@@ -712,7 +939,13 @@ class DirectWatchPlugin : Plugin() {
                     socket.outputStream.flush()
                     sentAuthStep1 = true
 
-                    errorMessage = readClassicPackets(socket, packets, combined, CLASSIC_PROBE_READ_MS) ?: errorMessage
+                    errorMessage = readClassicPacketsUntilAuthStage(
+                        socket,
+                        packets,
+                        combined,
+                        "watch-nonce",
+                        CLASSIC_PROBE_READ_MS,
+                    ) ?: errorMessage
 
                     val parsedAuthStep1 = parseClassicProbeBytes(combined.toByteArray())
                     val authStep2 = buildClassicAuthStep2Material(authKeyHex, phoneNonce, parsedAuthStep1)
@@ -731,7 +964,13 @@ class DirectWatchPlugin : Plugin() {
                         socket.outputStream.flush()
                         sentAuthStep2 = true
                         postAuthDecryptionKey = authStep2.decryptionKey
-                        errorMessage = readClassicPackets(socket, packets, combined, CLASSIC_PROBE_READ_MS) ?: errorMessage
+                        errorMessage = readClassicPacketsUntilAuthStage(
+                            socket,
+                            packets,
+                            combined,
+                            "authenticated",
+                            CLASSIC_PROBE_READ_MS,
+                        ) ?: errorMessage
 
                         val parsedAuthStep2 = parseClassicProbeBytes(combined.toByteArray())
                         if (postAuthProbe &&
@@ -743,7 +982,8 @@ class DirectWatchPlugin : Plugin() {
                                 socket.outputStream.write(buildClassicV2AckPacket(parsedAuthStep2.authPacketSequenceNumber))
                                 socket.outputStream.flush()
                             }
-                            buildClassicPostAuthProbeCommands().forEachIndexed { index, command ->
+                            val postAuthCommands = buildClassicPostAuthProbeCommands(includeHistory)
+                            postAuthCommands.forEachIndexed { index, command ->
                                 socket.outputStream.write(
                                     buildClassicV2EncryptedCommandPacket(
                                         command = command.payload,
@@ -755,27 +995,55 @@ class DirectWatchPlugin : Plugin() {
                             }
                             socket.outputStream.flush()
                             sentPostAuthProbe = true
-                            errorMessage = readClassicPackets(socket, packets, combined, CLASSIC_POST_AUTH_READ_MS) ?: errorMessage
+                            val postAuthReadMs = if (includeHistory) {
+                                CLASSIC_POST_AUTH_HISTORY_READ_MS
+                            } else {
+                                CLASSIC_POST_AUTH_READ_MS
+                            }
+                            errorMessage = if (includeHistory) {
+                                readClassicPackets(socket, packets, combined, postAuthReadMs)
+                            } else {
+                                readClassicPacketsUntilActivitySelection(
+                                    socket,
+                                    packets,
+                                    combined,
+                                    authStep2.decryptionKey,
+                                    entryDate,
+                                    includeSleep,
+                                    postAuthReadMs,
+                                )
+                            } ?: errorMessage
 
-                            val activityFileIds = selectClassicActivityFileIdsForEntryDate(
-                                classicActivityFileIds(combined.toByteArray(), authStep2.decryptionKey),
-                                entryDate,
-                            ).take(CLASSIC_ACTIVITY_FILE_PROBE_LIMIT)
+                            val allActivityFileIds = classicActivityFileIds(combined.toByteArray(), authStep2.decryptionKey)
+                            val activityFileIds = selectClassicActivityFileIdsForEntryDate(allActivityFileIds, entryDate, includeSleep)
+                            val allActivityFiles = allActivityFileIds.mapNotNull { parseClassicActivityFileIds(it).firstOrNull() }
+                            val selectedActivityFiles = activityFileIds.mapNotNull { parseClassicActivityFileIds(it).firstOrNull() }
+                            Log.i(
+                                TAG,
+                                "classic activity inventory entryDate=$entryDate total=${allActivityFileIds.size} " +
+                                    "selected=${activityFileIds.size} breakdown=${describeClassicActivityInventoryFiles(allActivityFiles)} " +
+                                    "selectedBreakdown=${describeClassicActivityInventoryFiles(selectedActivityFiles)} " +
+                                    "ids=${activityFileIds.take(12).joinToString(",") { fullHex(it) ?: "-" }}",
+                            )
                             if (activityFileIds.isNotEmpty()) {
-                                activityFileIds.forEachIndexed { index, fileId ->
-                                    socket.outputStream.write(
-                                        buildClassicV2EncryptedCommandPacket(
-                                            command = buildActivityFetchRequestCommand(fileId),
-                                            sequenceNumber = 2 + buildClassicPostAuthProbeCommands().size + index,
-                                            encryptionKey = authStep2.encryptionKey,
-                                        ),
-                                    )
-                                    Thread.sleep(CLASSIC_POST_AUTH_COMMAND_DELAY_MS)
-                                }
-                                socket.outputStream.flush()
+                                val fetchResult = requestClassicActivityFilesSequentially(
+                                    socket = socket,
+                                    packets = packets,
+                                    combined = combined,
+                                    fileIds = activityFileIds,
+                                    entryDate = entryDate,
+                                    encryptionKey = authStep2.encryptionKey,
+                                    decryptionKey = authStep2.decryptionKey,
+                                    initialSequenceNumber = 2 + postAuthCommands.size,
+                                )
                                 sentActivityFileProbe = true
-                                activityFileProbeCount = activityFileIds.size
-                                errorMessage = readClassicPackets(socket, packets, combined, CLASSIC_ACTIVITY_FILE_READ_MS) ?: errorMessage
+                                activityFileProbeCount = fetchResult.requestedCount
+                                activityFileProbeCompletedCount = fetchResult.completedCount
+                                activityFileProbeFailedCount = fetchResult.failedCount
+                                activityFileProbeRequests.addAll(fetchResult.requests)
+                                if (fetchResult.completedCount == 0) {
+                                    errorMessage = fetchResult.error ?: errorMessage
+                                }
                             }
                         }
                     }
@@ -813,6 +1081,9 @@ class DirectWatchPlugin : Plugin() {
                 sentPostAuthProbe = sentPostAuthProbe,
                 sentActivityFileProbe = sentActivityFileProbe,
                 activityFileProbeCount = activityFileProbeCount,
+                activityFileProbeCompletedCount = activityFileProbeCompletedCount,
+                activityFileProbeFailedCount = activityFileProbeFailedCount,
+                activityFileProbeRequests = activityFileProbeRequests,
                 phoneNonce = phoneNonce,
                 authKeyHex = authKeyHex,
                 postAuthDecryptionKey = postAuthDecryptionKey,
@@ -956,7 +1227,13 @@ class DirectWatchPlugin : Plugin() {
                 )
                 socket.outputStream.flush()
                 sentAuthStep1 = true
-                errorMessage = readClassicPackets(socket, packets, combined, CLASSIC_PROBE_READ_MS) ?: errorMessage
+                errorMessage = readClassicPacketsUntilAuthStage(
+                    socket,
+                    packets,
+                    combined,
+                    "watch-nonce",
+                    CLASSIC_PROBE_READ_MS,
+                ) ?: errorMessage
 
                 val parsedAuthStep1 = parseClassicProbeBytes(combined.toByteArray())
                 val authStep2 = buildClassicAuthStep2Material(authKeyHex, phoneNonce, parsedAuthStep1)
@@ -977,7 +1254,13 @@ class DirectWatchPlugin : Plugin() {
                     socket.outputStream.flush()
                     sentAuthStep2 = true
                     postAuthDecryptionKey = authStep2.decryptionKey
-                    errorMessage = readClassicPackets(socket, packets, combined, CLASSIC_PROBE_READ_MS) ?: errorMessage
+                    errorMessage = readClassicPacketsUntilAuthStage(
+                        socket,
+                        packets,
+                        combined,
+                        "authenticated",
+                        CLASSIC_PROBE_READ_MS,
+                    ) ?: errorMessage
 
                     val parsedAuthStep2 = parseClassicProbeBytes(combined.toByteArray())
                     if (!useSppV2 || parsedAuthStep2.authStage != "authenticated" || authStep2.encryptionKey == null) {
@@ -1803,6 +2086,9 @@ class DirectWatchPlugin : Plugin() {
         sentPostAuthProbe: Boolean,
         sentActivityFileProbe: Boolean,
         activityFileProbeCount: Int,
+        activityFileProbeCompletedCount: Int,
+        activityFileProbeFailedCount: Int,
+        activityFileProbeRequests: List<JSObject>,
         phoneNonce: ByteArray?,
         authKeyHex: String?,
         postAuthDecryptionKey: ByteArray?,
@@ -1825,6 +2111,9 @@ class DirectWatchPlugin : Plugin() {
         response.put("sentPostAuthProbe", sentPostAuthProbe)
         response.put("sentActivityFileProbe", sentActivityFileProbe)
         response.put("activityFileProbeCount", activityFileProbeCount)
+        response.put("activityFileProbeCompletedCount", activityFileProbeCompletedCount)
+        response.put("activityFileProbeFailedCount", activityFileProbeFailedCount)
+        response.put("activityFileProbeRequests", JSArray(activityFileProbeRequests))
         response.put("phoneNonceHex", fullHex(phoneNonce))
         response.put("packetCount", packets.size)
         response.put("packets", JSArray(packets))
@@ -1871,6 +2160,9 @@ class DirectWatchPlugin : Plugin() {
             sentPostAuthProbe = sentServiceCommands.isNotEmpty(),
             sentActivityFileProbe = false,
             activityFileProbeCount = 0,
+            activityFileProbeCompletedCount = 0,
+            activityFileProbeFailedCount = 0,
+            activityFileProbeRequests = emptyList(),
             phoneNonce = phoneNonce,
             authKeyHex = authKeyHex,
             postAuthDecryptionKey = postAuthDecryptionKey,
@@ -1916,6 +2208,48 @@ class DirectWatchPlugin : Plugin() {
         )
         response.put("serviceCommands", JSArray(sentServiceCommands))
         response.put("syncedAt", java.time.Instant.now().toString())
+        return response
+    }
+
+    private fun buildActivityAckResponse(
+        device: BluetoothDevice,
+        connected: Boolean,
+        sentVersionRequest: Boolean,
+        sentSessionConfig: Boolean,
+        sentAuthStep1: Boolean,
+        sentAuthStep2: Boolean,
+        acknowledgedFileIds: List<String>,
+        phoneNonce: ByteArray?,
+        authKeyHex: String?,
+        postAuthDecryptionKey: ByteArray?,
+        packets: List<JSObject>,
+        combinedBytes: ByteArray,
+        error: String?,
+    ): JSObject {
+        val response = buildClassicProbeResponse(
+            device = device,
+            connected = connected,
+            sentVersionRequest = sentVersionRequest,
+            sentSessionConfig = sentSessionConfig,
+            sentAuthStep1 = sentAuthStep1,
+            sentAuthStep2 = sentAuthStep2,
+            sentPostAuthProbe = acknowledgedFileIds.isNotEmpty(),
+            sentActivityFileProbe = false,
+            activityFileProbeCount = 0,
+            activityFileProbeCompletedCount = 0,
+            activityFileProbeFailedCount = 0,
+            activityFileProbeRequests = emptyList(),
+            phoneNonce = phoneNonce,
+            authKeyHex = authKeyHex,
+            postAuthDecryptionKey = postAuthDecryptionKey,
+            packets = packets,
+            combinedBytes = combinedBytes,
+            error = error,
+        )
+        response.put("sentActivityFileAck", acknowledgedFileIds.isNotEmpty())
+        response.put("activityFileAckCount", acknowledgedFileIds.size)
+        response.put("activityFileAckIds", JSArray(acknowledgedFileIds))
+        response.put("ackedAt", java.time.Instant.now().toString())
         return response
     }
 
@@ -2176,6 +2510,7 @@ class DirectWatchPlugin : Plugin() {
         val seenCompleteActivityFiles = mutableSetOf<String>()
         var activityAssembly: java.io.ByteArrayOutputStream? = null
         var activityAssemblyTotal: Int? = null
+        var activityAssemblyFile: ClassicActivityFileContent? = null
         var offset = 0
         while (offset <= bytes.size - 8) {
             if (bytes[offset] == 0xA5.toByte() && bytes[offset + 1] == 0xA5.toByte()) {
@@ -2213,7 +2548,11 @@ class DirectWatchPlugin : Plugin() {
                                 } else {
                                     byteArrayOf()
                                 }
+                                var activityFileRawHex: String? = null
                                 var file = if (chunk?.number == 1) {
+                                    if (chunk.total == 1) {
+                                        activityFileRawHex = fullHex(chunkData)
+                                    }
                                     parseClassicActivityFilePayload(chunkData, isComplete = chunk.total == 1)
                                 } else {
                                     null
@@ -2221,13 +2560,20 @@ class DirectWatchPlugin : Plugin() {
                                 if (chunk?.number == 1) {
                                     activityAssembly = java.io.ByteArrayOutputStream()
                                     activityAssemblyTotal = chunk.total
+                                    activityAssemblyFile = file
                                 }
                                 if (chunk != null && activityAssembly != null && activityAssemblyTotal == chunk.total) {
                                     activityAssembly?.write(chunkData)
+                                    if (file == null) {
+                                        file = activityAssemblyFile
+                                    }
                                     if (chunk.number == chunk.total) {
-                                        file = parseClassicActivityFilePayload(activityAssembly!!.toByteArray(), isComplete = true) ?: file
+                                        val assembledFileBytes = activityAssembly!!.toByteArray()
+                                        activityFileRawHex = fullHex(assembledFileBytes)
+                                        file = parseClassicActivityFilePayload(assembledFileBytes, isComplete = true) ?: file
                                         activityAssembly = null
                                         activityAssemblyTotal = null
+                                        activityAssemblyFile = null
                                     }
                                 }
                                 if (file?.crcValid != null && !seenCompleteActivityFiles.add(file.file.idHex)) {
@@ -2242,7 +2588,9 @@ class DirectWatchPlugin : Plugin() {
                                 item.put("activityFileKind", file?.fileKind)
                                 item.put("activityFilePadding", file?.padding)
                                 item.put("activityFilePayloadBytes", file?.payloadBytes)
+                                item.put("activityFileRawHex", activityFileRawHex)
                                 item.put("activityFileCrcValid", file?.crcValid)
+                                item.put("activityFileParsed", file?.parsed)
                                 item.put("activitySampleCount", file?.sampleCount)
                                 item.put("activitySteps", file?.steps)
                                 item.put("activityHeartRateAvg", file?.heartRateAvg)
@@ -2259,6 +2607,19 @@ class DirectWatchPlugin : Plugin() {
                                 item.put("activityTrainingLoadDay", file?.trainingLoadDay)
                                 item.put("activityTrainingLoadWeek", file?.trainingLoadWeek)
                                 item.put("activityVitality", file?.vitality)
+                                item.put("activityWorkoutStartTime", file?.workoutStartTime)
+                                item.put("activityWorkoutEndTime", file?.workoutEndTime)
+                                item.put("activityWorkoutDurationMinutes", file?.workoutDurationMinutes)
+                                item.put("activityWorkoutDistanceMeters", file?.workoutDistanceMeters)
+                                item.put("activityWorkoutSteps", file?.workoutSteps)
+                                item.put("activityWorkoutType", file?.workoutType)
+                                item.put("activityWorkoutHeartRateZoneExtremeSeconds", file?.workoutHeartRateZoneExtremeSeconds)
+                                item.put("activityWorkoutHeartRateZoneAnaerobicSeconds", file?.workoutHeartRateZoneAnaerobicSeconds)
+                                item.put("activityWorkoutHeartRateZoneAerobicSeconds", file?.workoutHeartRateZoneAerobicSeconds)
+                                item.put("activityWorkoutHeartRateZoneFatBurnSeconds", file?.workoutHeartRateZoneFatBurnSeconds)
+                                item.put("activityWorkoutHeartRateZoneWarmUpSeconds", file?.workoutHeartRateZoneWarmUpSeconds)
+                                item.put("activityWorkoutGpsSampleCount", file?.workoutGpsSampleCount)
+                                item.put("activityWorkoutGpsSamples", JSArray(file?.workoutGpsSamples?.map { sample -> sample.toJson() } ?: emptyList<JSObject>()))
                                 item.put("activitySamples", JSArray(file?.activitySamples?.map { sample -> sample.toJson() } ?: emptyList<JSObject>()))
                                 item.put("sleepStartTime", file?.sleepStartTime)
                                 item.put("sleepEndTime", file?.sleepEndTime)
@@ -2483,18 +2844,22 @@ class DirectWatchPlugin : Plugin() {
         }
     }
 
-    private fun buildClassicPostAuthProbeCommands(): List<ClassicPostAuthProbeCommand> {
-        return listOf(
+    private fun buildClassicPostAuthProbeCommands(includeHistory: Boolean = true): List<ClassicPostAuthProbeCommand> {
+        val commands = mutableListOf(
             ClassicPostAuthProbeCommand("state", buildSimpleCommand(2, 78)),
             ClassicPostAuthProbeCommand("battery", buildSimpleCommand(2, 1)),
             ClassicPostAuthProbeCommand("device-info", buildSimpleCommand(2, 2)),
-            ClassicPostAuthProbeCommand("activity-today", buildActivityFetchTodayCommand()),
-            ClassicPostAuthProbeCommand("activity-history", buildSimpleCommand(8, 2)),
+            ClassicPostAuthProbeCommand("activity-today", buildActivityFetchTodayCommand(0)),
+            ClassicPostAuthProbeCommand("activity-today-alt", buildActivityFetchTodayCommand(1)),
             ClassicPostAuthProbeCommand("heart-rate-config", buildSimpleCommand(8, 10)),
             ClassicPostAuthProbeCommand("spo2-config", buildSimpleCommand(8, 8)),
             ClassicPostAuthProbeCommand("stress-config", buildSimpleCommand(8, 14)),
             ClassicPostAuthProbeCommand("vitality-config", buildSimpleCommand(8, 35)),
         )
+        if (includeHistory) {
+            commands.add(5, ClassicPostAuthProbeCommand("activity-history", buildSimpleCommand(8, 2)))
+        }
+        return commands
     }
 
     private fun buildClassicServiceSyncCommands(
@@ -2602,10 +2967,21 @@ class DirectWatchPlugin : Plugin() {
         writeProtoVarintField(time, 3, now.get(Calendar.SECOND))
         writeProtoVarintField(time, 4, now.get(Calendar.MILLISECOND))
 
+        val zoneOffsetBlocks = ((now.get(Calendar.ZONE_OFFSET) / 1000) / 60) / 15
+        val dstOffsetBlocks = ((now.get(Calendar.DST_OFFSET) / 1000) / 60) / 15
         val timeZone = java.io.ByteArrayOutputStream()
-        writeProtoInt32Field(timeZone, 1, ((now.get(Calendar.ZONE_OFFSET) / 1000) / 60) / 15)
-        writeProtoInt32Field(timeZone, 2, ((now.get(Calendar.DST_OFFSET) / 1000) / 60) / 15)
+        writeProtoSInt32Field(timeZone, 1, zoneOffsetBlocks)
+        writeProtoSInt32Field(timeZone, 2, dstOffsetBlocks)
         writeProtoStringField(timeZone, 3, timezone.id)
+
+        Log.i(
+            TAG,
+            "classic service time sync " +
+                "local=${now.get(Calendar.YEAR)}-${(now.get(Calendar.MONTH) + 1).toString().padStart(2, '0')}-${now.get(Calendar.DATE).toString().padStart(2, '0')} " +
+                "${now.get(Calendar.HOUR_OF_DAY).toString().padStart(2, '0')}:${now.get(Calendar.MINUTE).toString().padStart(2, '0')}:${now.get(Calendar.SECOND).toString().padStart(2, '0')} " +
+                "zone=${timezone.id} zoneBlocks=$zoneOffsetBlocks dstBlocks=$dstOffsetBlocks " +
+                "is24h=${android.text.format.DateFormat.is24HourFormat(context)}",
+        )
 
         val clock = java.io.ByteArrayOutputStream()
         writeProtoBytesField(clock, 1, date.toByteArray())
@@ -2878,6 +3254,20 @@ class DirectWatchPlugin : Plugin() {
         return fileIds.distinctBy { fullHex(it) }
     }
 
+    private fun describeClassicActivityInventoryFiles(files: List<ClassicActivityFileSummary>): String {
+        if (files.isEmpty()) {
+            return "-"
+        }
+
+        return files
+            .groupingBy { file -> "${file.type}/${file.subtype}/${file.detailType}/v${file.version}" }
+            .eachCount()
+            .entries
+            .sortedBy { it.key }
+            .joinToString(";") { (key, count) -> "$key:$count" }
+            .take(320)
+    }
+
     private fun extractClassicActivityFileIdByteList(commandPayload: ByteArray): List<ByteArray> {
         var commandType: Int? = null
         var commandSubtype: Int? = null
@@ -2942,37 +3332,100 @@ class DirectWatchPlugin : Plugin() {
     private fun selectClassicActivityFileIdsForEntryDate(
         fileIds: List<ByteArray>,
         entryDate: String?,
+        includeSleep: Boolean = true,
     ): List<ByteArray> {
+        val fetchable = fileIds
+            .distinctBy { fullHex(it) ?: "" }
+            .mapNotNull { fileId ->
+                val file = parseClassicActivityFileIds(fileId).firstOrNull() ?: return@mapNotNull null
+                if (isClassicFetchableActivityFile(file)) fileId to file else null
+            }
+
         if (entryDate.isNullOrBlank()) {
-            return fileIds
+            return fetchable
+                .filter { (_, file) -> includeSleep || !isClassicSleepActivityFile(file) }
+                .map { it.first }
         }
 
-        val previousEntryDate = try {
-            java.time.LocalDate.parse(entryDate).minusDays(1).toString()
+        val targetDate = try {
+            java.time.LocalDate.parse(entryDate)
         } catch (_: Exception) {
             null
-        }
-        val selected = fileIds.filter { fileId ->
-            val file = parseClassicActivityFileIds(fileId).firstOrNull() ?: return@filter false
-            val fileEntryDate = classicActivityFileEntryDate(file) ?: return@filter false
-            fileEntryDate == entryDate ||
-                (
-                    previousEntryDate != null &&
-                        fileEntryDate == previousEntryDate &&
-                        isClassicSleepActivityFile(file)
-                    )
+        } ?: return fetchable.map { it.first }
+        val previousEntryDate = targetDate.minusDays(1)
+        val selected = fetchable.filter { (_, file) ->
+            val fileEntryDate = classicActivityFileEntryLocalDate(file) ?: return@filter false
+            val isSleep = isClassicSleepActivityFile(file)
+            if (isSleep) {
+                includeSleep && (fileEntryDate == targetDate || fileEntryDate == previousEntryDate)
+            } else {
+                fileEntryDate == targetDate
+            }
         }
 
-        return selected.ifEmpty { fileIds }
+        if (selected.isNotEmpty()) {
+            return selected.map { it.first }
+        }
+
+        return emptyList()
+    }
+
+    private fun sortClassicActivityFileIdsForFetch(fileIds: List<ByteArray>, entryDate: String?): List<ByteArray> {
+        val targetDate = entryDate?.let {
+            try {
+                java.time.LocalDate.parse(it)
+            } catch (_: Exception) {
+                null
+            }
+        }
+        return fileIds
+            .distinctBy { fullHex(it) ?: "" }
+            .sortedWith(
+                compareBy<ByteArray> { fileId ->
+                    parseClassicActivityFileIds(fileId).firstOrNull()?.let { file ->
+                        classicActivityDateDistance(file, targetDate)
+                    } ?: Int.MAX_VALUE
+                }.thenBy { fileId ->
+                    parseClassicActivityFileIds(fileId).firstOrNull()?.let { classicActivityFetchOrder(it) } ?: 100
+                }.thenByDescending { fileId ->
+                    parseClassicActivityFileIds(fileId).firstOrNull()?.timestamp ?: ""
+                }.thenBy { fileId ->
+                    fullHex(fileId) ?: ""
+                },
+            )
+    }
+
+    private fun classicActivityDateDistance(file: ClassicActivityFileSummary, targetDate: java.time.LocalDate?): Int {
+        if (targetDate == null) {
+            return 0
+        }
+        val fileDate = classicActivityFileEntryLocalDate(file) ?: return Int.MAX_VALUE
+        return kotlin.math.abs(java.time.temporal.ChronoUnit.DAYS.between(targetDate, fileDate)).toInt()
+    }
+
+    private fun classicActivityFetchOrder(file: ClassicActivityFileSummary): Int {
+        return when {
+            file.type == 0 && file.subtype == 0 && file.detailType == 1 -> 0
+            file.type == 0 && file.subtype == 0 && file.detailType == 0 -> 1
+            isClassicSleepActivityFile(file) -> 2
+            isClassicManualSampleActivityFile(file) -> 3
+            file.type == 1 && file.detailType == 1 -> 10
+            file.type == 1 && file.detailType == 0 -> 11
+            file.type == 1 && file.detailType == 2 -> 12
+            else -> 50
+        }
     }
 
     private fun classicActivityFileEntryDate(file: ClassicActivityFileSummary): String? {
+        return classicActivityFileEntryLocalDate(file)?.toString()
+    }
+
+    private fun classicActivityFileEntryLocalDate(file: ClassicActivityFileSummary): java.time.LocalDate? {
         return try {
             java.time.Instant.parse(file.timestamp)
                 .plusSeconds(file.timezone.toLong() * 15L * 60L)
                 .atOffset(java.time.ZoneOffset.UTC)
                 .toLocalDate()
-                .toString()
         } catch (_: Exception) {
             null
         }
@@ -2980,6 +3433,22 @@ class DirectWatchPlugin : Plugin() {
 
     private fun isClassicSleepActivityFile(file: ClassicActivityFileSummary): Boolean {
         return file.type == 0 && (file.subtype == 8 || file.subtype == 3)
+    }
+
+    private fun isClassicManualSampleActivityFile(file: ClassicActivityFileSummary): Boolean {
+        return file.type == 0 && file.subtype == 6 && file.detailType == 0
+    }
+
+    private fun isClassicFetchableActivityFile(file: ClassicActivityFileSummary): Boolean {
+        return when {
+            file.type == 0 && file.subtype == 0 -> true
+            isClassicSleepActivityFile(file) -> true
+            isClassicManualSampleActivityFile(file) -> true
+            file.type == 1 && file.detailType == 0 -> true
+            file.type == 1 && file.detailType == 1 -> true
+            file.type == 1 && file.detailType == 2 -> true
+            else -> false
+        }
     }
 
     private fun isClassicEntryDate(value: String): Boolean {
@@ -3017,8 +3486,14 @@ class DirectWatchPlugin : Plugin() {
         val dataEnd = if (isComplete && crcValid != null && bytes.size >= 4) bytes.size - 4 else bytes.size
         val payloadBytes = (dataEnd - 8).coerceAtLeast(0)
         val daily = parseClassicDailyDetails(bytes, file, dataEnd)
+        val manual = parseClassicManualSamples(bytes, file, dataEnd)
         val summary = parseClassicDailySummary(bytes, file, dataEnd)
         val sleep = parseClassicSleepDetails(bytes, file, dataEnd) ?: parseClassicSleepStages(bytes, file, dataEnd)
+        val workout = parseClassicWorkoutSummary(bytes, file, dataEnd)
+        val workoutDetails = parseClassicWorkoutDetails(bytes, file, dataEnd)
+        val workoutGps = parseClassicWorkoutGps(bytes, file, dataEnd)
+        val parsed = daily != null || manual != null || summary != null || sleep != null || workout != null || workoutDetails != null || workoutGps != null
+        val samples = daily?.samples ?: manual?.samples ?: sleep?.samples ?: workoutDetails?.samples ?: emptyList()
 
         return ClassicActivityFileContent(
             file = file,
@@ -3026,19 +3501,20 @@ class DirectWatchPlugin : Plugin() {
             padding = padding,
             payloadBytes = payloadBytes,
             crcValid = crcValid,
-            sampleCount = daily?.sampleCount,
-            steps = daily?.steps ?: summary?.steps,
-            heartRateAvg = daily?.heartRateAvg ?: summary?.heartRateAvg,
-            heartRateMin = daily?.heartRateMin ?: summary?.heartRateMin,
-            heartRateMax = daily?.heartRateMax ?: summary?.heartRateMax,
+            parsed = parsed,
+            sampleCount = daily?.sampleCount ?: manual?.sampleCount ?: sleep?.sampleCount ?: workoutDetails?.sampleCount,
+            steps = daily?.steps ?: summary?.steps ?: workout?.steps,
+            heartRateAvg = daily?.heartRateAvg ?: manual?.heartRateAvg ?: summary?.heartRateAvg ?: sleep?.heartRateAvg ?: workout?.heartRateAvg ?: workoutDetails?.heartRateAvg,
+            heartRateMin = daily?.heartRateMin ?: manual?.heartRateMin ?: summary?.heartRateMin ?: sleep?.heartRateMin ?: workout?.heartRateMin ?: workoutDetails?.heartRateMin,
+            heartRateMax = daily?.heartRateMax ?: manual?.heartRateMax ?: summary?.heartRateMax ?: sleep?.heartRateMax ?: workout?.heartRateMax ?: workoutDetails?.heartRateMax,
             heartRateResting = summary?.heartRateResting,
-            spo2Avg = daily?.spo2Avg ?: summary?.spo2Avg,
-            spo2Min = summary?.spo2Min,
-            spo2Max = summary?.spo2Max,
-            stressAvg = daily?.stressAvg ?: summary?.stressAvg,
+            spo2Avg = daily?.spo2Avg ?: manual?.spo2Avg ?: summary?.spo2Avg ?: sleep?.spo2Avg,
+            spo2Min = summary?.spo2Min ?: sleep?.spo2Min,
+            spo2Max = summary?.spo2Max ?: sleep?.spo2Max,
+            stressAvg = daily?.stressAvg ?: manual?.stressAvg ?: summary?.stressAvg,
             stressMin = summary?.stressMin,
             stressMax = summary?.stressMax,
-            calories = summary?.calories,
+            calories = summary?.calories ?: workout?.calories,
             trainingLoadDay = summary?.trainingLoadDay,
             trainingLoadWeek = summary?.trainingLoadWeek,
             vitality = summary?.vitality,
@@ -3052,8 +3528,487 @@ class DirectWatchPlugin : Plugin() {
             sleepScore = sleep?.score,
             sleepStageCount = sleep?.stageCount,
             sleepIsAwake = sleep?.isAwake,
-            activitySamples = daily?.samples ?: emptyList(),
+            workoutStartTime = workout?.startTime,
+            workoutEndTime = workout?.endTime,
+            workoutDurationMinutes = workout?.durationMinutes,
+            workoutDistanceMeters = workout?.distanceMeters,
+            workoutSteps = workout?.steps,
+            workoutType = workout?.workoutType,
+            workoutHeartRateZoneExtremeSeconds = workout?.zoneExtremeSeconds,
+            workoutHeartRateZoneAnaerobicSeconds = workout?.zoneAnaerobicSeconds,
+            workoutHeartRateZoneAerobicSeconds = workout?.zoneAerobicSeconds,
+            workoutHeartRateZoneFatBurnSeconds = workout?.zoneFatBurnSeconds,
+            workoutHeartRateZoneWarmUpSeconds = workout?.zoneWarmUpSeconds,
+            workoutGpsSampleCount = workoutGps?.sampleCount,
+            workoutGpsSamples = workoutGps?.samples ?: emptyList(),
+            activitySamples = samples,
         )
+    }
+
+    private fun parseClassicWorkoutSummary(
+        bytes: ByteArray,
+        file: ClassicActivityFileSummary,
+        dataEnd: Int,
+    ): ClassicWorkoutSummary? {
+        if (file.type != 1 || file.detailType != 1 || dataEnd <= 20) {
+            return null
+        }
+
+        parseClassicKnownWorkoutSummary(bytes, file, dataEnd)?.let {
+            return it
+        }
+
+        val timing = findClassicWorkoutTiming(bytes, file, dataEnd)
+        if (timing == null) {
+            Log.i(TAG, "unsupported workout summary timing subtype=${file.subtype} version=${file.version} file=${file.idHex}")
+            return null
+        }
+
+        val scanStart = timing.afterActiveOffset
+        val scanEnd = minOf(dataEnd, scanStart + 96)
+        val heartRate = findClassicWorkoutHeartRateTriplet(bytes, scanStart, scanEnd)
+        val zones = findClassicWorkoutHeartRateZones(bytes, scanStart, dataEnd, timing.activeSeconds)
+        val distanceMeters = findClassicWorkoutDistanceMeters(bytes, file, scanStart, scanEnd)
+        val calories = findClassicWorkoutCalories(bytes, file, scanStart, scanEnd)
+        val steps = findClassicWorkoutSteps(bytes, file, scanStart, scanEnd, distanceMeters)
+
+        return ClassicWorkoutSummary(
+            startTime = epochSecondsIso(timing.startSeconds),
+            endTime = epochSecondsIso(timing.endSeconds),
+            durationMinutes = (timing.activeSeconds / 60).toInt().coerceAtLeast(1),
+            distanceMeters = distanceMeters,
+            calories = calories,
+            steps = steps,
+            heartRateAvg = heartRate?.first,
+            heartRateMin = heartRate?.third,
+            heartRateMax = heartRate?.second,
+            workoutType = classicWorkoutTypeLabel(file.subtype),
+            zoneExtremeSeconds = zones?.getOrNull(0),
+            zoneAnaerobicSeconds = zones?.getOrNull(1),
+            zoneAerobicSeconds = zones?.getOrNull(2),
+            zoneFatBurnSeconds = zones?.getOrNull(3),
+            zoneWarmUpSeconds = zones?.getOrNull(4),
+        )
+    }
+
+    private fun parseClassicKnownWorkoutSummary(
+        bytes: ByteArray,
+        file: ClassicActivityFileSummary,
+        dataEnd: Int,
+    ): ClassicWorkoutSummary? {
+        return when (file.subtype) {
+            8 -> parseClassicFreestyleSummary(bytes, file, dataEnd)
+            22 -> parseClassicOutdoorWalkingV2Summary(bytes, file, dataEnd)
+            else -> null
+        }
+    }
+
+    private fun parseClassicFreestyleSummary(
+        bytes: ByteArray,
+        file: ClassicActivityFileSummary,
+        dataEnd: Int,
+    ): ClassicWorkoutSummary? {
+        val headerSize = when (file.version) {
+            5 -> 3
+            7 -> 5
+            8, 9, 10 -> 6
+            else -> return null
+        }
+        val minDataSize = if (file.version == 5) 64 else if (file.version > 7) 76 else 75
+        val dataStart = 8 + headerSize
+        if (dataEnd < dataStart + minDataSize) {
+            return null
+        }
+
+        var offset = dataStart
+        val startSeconds = littleEndianUInt32(bytes, offset)
+        offset += 4
+        val endSeconds = littleEndianUInt32(bytes, offset)
+        offset += 4
+        val activeSeconds = littleEndianUInt32(bytes, offset)
+        offset += 4
+        val calories = littleEndianUInt16(bytes, offset).takeIf { it in 1..20_000 }
+        offset += 2
+
+        val heartRateAvg = (bytes.getOrNull(offset)?.toInt() ?: 0) and 0xff
+        offset += 1
+        val heartRateMax = (bytes.getOrNull(offset)?.toInt() ?: 0) and 0xff
+        offset += 1
+        val heartRateMin = (bytes.getOrNull(offset)?.toInt() ?: 0) and 0xff
+        offset += 1
+        if (file.version > 5) {
+            offset += 6
+        }
+        offset += 4 // aerobic training effect
+        if (file.version > 6) {
+            offset += 1
+        }
+        offset += 1
+        offset += 2 // recovery time
+
+        val zoneOffset = offset
+        val zones = (0 until 5).map { index -> littleEndianUInt32(bytes, zoneOffset + index * 4).toInt() }
+            .takeIf { values ->
+                values.all { it in 0..(24 * 60 * 60) } &&
+                    values.sum() > 0 &&
+                    values.sum() in (activeSeconds / 3).toInt()..(activeSeconds * 2).toInt()
+            }
+        offset += 20
+
+        if (file.version == 5) {
+            offset += 10
+            offset += 2 // Xiaomi workout type code
+            offset += 2
+            offset += 4 // configured time goal
+            offset += 2 // configured calories goal
+        } else {
+            offset += 2
+            offset += 4 // active seconds repeated
+            offset += 4 // anaerobic training effect
+            offset += 1
+            offset += 2 // Xiaomi workout type code
+            offset += 2
+            offset += 4 // configured time goal
+            offset += 2 // configured calories goal
+            offset += 2 // workout load
+            offset += 1
+            if (file.version > 7) {
+                offset += 1 // vitality gain
+            }
+        }
+
+        if (!isClassicWorkoutEpochSeconds(startSeconds) ||
+            !isClassicWorkoutEpochSeconds(endSeconds) ||
+            endSeconds <= startSeconds ||
+            activeSeconds <= 0L ||
+            activeSeconds > 24L * 60L * 60L ||
+            offset > dataEnd
+        ) {
+            return null
+        }
+
+        return ClassicWorkoutSummary(
+            startTime = epochSecondsIso(startSeconds),
+            endTime = epochSecondsIso(endSeconds),
+            durationMinutes = (activeSeconds / 60).toInt().coerceAtLeast(1),
+            distanceMeters = null,
+            calories = calories,
+            steps = null,
+            heartRateAvg = heartRateAvg.takeIf { it in 35..230 },
+            heartRateMin = heartRateMin.takeIf { it in 30..230 },
+            heartRateMax = heartRateMax.takeIf { it in 35..254 },
+            workoutType = classicWorkoutTypeLabel(file.subtype),
+            zoneExtremeSeconds = zones?.getOrNull(0),
+            zoneAnaerobicSeconds = zones?.getOrNull(1),
+            zoneAerobicSeconds = zones?.getOrNull(2),
+            zoneFatBurnSeconds = zones?.getOrNull(3),
+            zoneWarmUpSeconds = zones?.getOrNull(4),
+        )
+    }
+
+    private fun parseClassicOutdoorWalkingV2Summary(
+        bytes: ByteArray,
+        file: ClassicActivityFileSummary,
+        dataEnd: Int,
+    ): ClassicWorkoutSummary? {
+        val headerSize = when (file.version) {
+            1 -> 5
+            4 -> 7
+            5, 6 -> 9
+            9 -> 13
+            else -> return null
+        }
+        val dataStart = 8 + headerSize
+        if (dataEnd < dataStart + 59) {
+            return null
+        }
+
+        var offset = dataStart
+        offset += 2 // Xiaomi workout type code
+        val startSeconds = littleEndianUInt32(bytes, offset)
+        offset += 4
+        val endSeconds = littleEndianUInt32(bytes, offset)
+        offset += 4
+        val activeSeconds = littleEndianUInt32(bytes, offset)
+        offset += 4
+        offset += 4 // unknown
+        val distanceMeters = littleEndianUInt32(bytes, offset).toInt().takeIf { it in 1..500_000 }
+        offset += 4
+        val totalCalories = littleEndianUInt16(bytes, offset).takeIf { it in 1..20_000 }
+        offset += 2
+        val activeCalories = littleEndianUInt16(bytes, offset).takeIf { it in 1..20_000 } ?: totalCalories
+        offset += 2
+        if (file.version >= 5) {
+            offset += 4 // average pace
+        }
+        offset += 4 // max pace
+        offset += 4 // min pace
+        if (file.version >= 5) {
+            offset += 4 // average speed
+        }
+        offset += 4 // max speed
+        val steps = littleEndianUInt32(bytes, offset).toInt().takeIf { it in 1..200_000 }
+        offset += 4
+        if (file.version >= 5) {
+            offset += 2 // average step length
+            offset += 2 // average step rate
+        }
+        offset += 2 // max step rate
+
+        val heartRateAvg = (bytes.getOrNull(offset)?.toInt() ?: 0) and 0xff
+        offset += 1
+        val heartRateMax = (bytes.getOrNull(offset)?.toInt() ?: 0) and 0xff
+        offset += 1
+        val heartRateMin = (bytes.getOrNull(offset)?.toInt() ?: 0) and 0xff
+        offset += 1
+        val normalizedHeartRateAvg = heartRateAvg.takeIf { it in 35..230 }
+        val normalizedHeartRateMax = heartRateMax.takeIf { it in 35..254 }
+        val normalizedHeartRateMin = heartRateMin.takeIf { it in 30..230 }
+
+        val zoneOffset = if (file.version == 1) {
+            offset + 33
+        } else {
+            offset += 20
+            offset += 4 // aerobic training effect
+            offset += 1
+            offset += 4 // anaerobic training effect
+            offset += if (file.version >= 9) {
+                6 + 1 + 2
+            } else {
+                4
+            }
+            offset += 2 // recovery time
+            offset + 1
+        }
+        val zones = if (zoneOffset + 20 <= dataEnd) {
+            (0 until 5).map { index -> littleEndianUInt32(bytes, zoneOffset + index * 4).toInt() }
+                .takeIf { values ->
+                    values.all { it in 0..(24 * 60 * 60) } &&
+                        values.sum() > 0 &&
+                        values.sum() in (activeSeconds / 3).toInt()..(activeSeconds * 2).toInt()
+                }
+        } else {
+            null
+        }
+
+        if (!isClassicWorkoutEpochSeconds(startSeconds) ||
+            !isClassicWorkoutEpochSeconds(endSeconds) ||
+            endSeconds <= startSeconds ||
+            activeSeconds <= 0L ||
+            activeSeconds > 24L * 60L * 60L
+        ) {
+            return null
+        }
+
+        return ClassicWorkoutSummary(
+            startTime = epochSecondsIso(startSeconds),
+            endTime = epochSecondsIso(endSeconds),
+            durationMinutes = (activeSeconds / 60).toInt().coerceAtLeast(1),
+            distanceMeters = distanceMeters,
+            calories = activeCalories,
+            steps = steps,
+            heartRateAvg = normalizedHeartRateAvg,
+            heartRateMin = normalizedHeartRateMin,
+            heartRateMax = normalizedHeartRateMax,
+            workoutType = classicWorkoutTypeLabel(file.subtype),
+            zoneExtremeSeconds = zones?.getOrNull(0),
+            zoneAnaerobicSeconds = zones?.getOrNull(1),
+            zoneAerobicSeconds = zones?.getOrNull(2),
+            zoneFatBurnSeconds = zones?.getOrNull(3),
+            zoneWarmUpSeconds = zones?.getOrNull(4),
+        )
+    }
+
+    private fun findClassicWorkoutTiming(
+        bytes: ByteArray,
+        file: ClassicActivityFileSummary,
+        dataEnd: Int,
+    ): ClassicWorkoutTiming? {
+        val fileTimestamp = try {
+            java.time.Instant.parse(file.timestamp).epochSecond
+        } catch (_: Exception) {
+            null
+        }
+        var best: ClassicWorkoutTiming? = null
+        var bestScore = Int.MIN_VALUE
+        val maxOffset = minOf(dataEnd - 12, 40)
+        for (offset in 8..maxOffset) {
+            val startSeconds = littleEndianUInt32(bytes, offset)
+            val endSeconds = littleEndianUInt32(bytes, offset + 4)
+            val activeSeconds = littleEndianUInt32(bytes, offset + 8)
+            if (!isClassicWorkoutEpochSeconds(startSeconds) || !isClassicWorkoutEpochSeconds(endSeconds)) {
+                continue
+            }
+            if (endSeconds <= startSeconds || activeSeconds <= 0L || activeSeconds > 24L * 60L * 60L) {
+                continue
+            }
+            val totalSeconds = endSeconds - startSeconds
+            if (activeSeconds > totalSeconds + 60L * 60L) {
+                continue
+            }
+
+            var score = 100 - (offset - 8)
+            if (fileTimestamp != null) {
+                val distanceFromFileTimestamp = kotlin.math.abs(startSeconds - fileTimestamp)
+                when {
+                    distanceFromFileTimestamp <= 60L -> score += 80
+                    distanceFromFileTimestamp <= 60L * 60L -> score += 40
+                    distanceFromFileTimestamp <= 24L * 60L * 60L -> score += 10
+                    else -> score -= 20
+                }
+            }
+            if (activeSeconds <= totalSeconds) {
+                score += 20
+            }
+
+            if (score > bestScore) {
+                bestScore = score
+                best = ClassicWorkoutTiming(
+                    startSeconds = startSeconds,
+                    endSeconds = endSeconds,
+                    activeSeconds = activeSeconds,
+                    afterActiveOffset = offset + 12,
+                )
+            }
+        }
+        return best
+    }
+
+    private fun isClassicWorkoutEpochSeconds(value: Long): Boolean {
+        return value in 1_577_836_800L..4_102_444_800L
+    }
+
+    private fun findClassicWorkoutHeartRateTriplet(
+        bytes: ByteArray,
+        start: Int,
+        end: Int,
+    ): Triple<Int, Int, Int>? {
+        val scanEnd = minOf(end, bytes.size)
+        for (offset in start until (scanEnd - 2)) {
+            val average = bytes[offset].toInt() and 0xff
+            val max = bytes[offset + 1].toInt() and 0xff
+            val min = bytes[offset + 2].toInt() and 0xff
+            if (average in 35..230 && min in 30..230 && max in 35..254 && min <= average && average <= max) {
+                return Triple(average, max, min)
+            }
+        }
+        return null
+    }
+
+    private fun findClassicWorkoutHeartRateZones(
+        bytes: ByteArray,
+        start: Int,
+        dataEnd: Int,
+        activeSeconds: Long,
+    ): List<Int>? {
+        val scanEnd = minOf(dataEnd, start + 128)
+        if (activeSeconds <= 0L) {
+            return null
+        }
+
+        for (offset in start..(scanEnd - 20)) {
+            val zones = (0 until 5).map { index -> littleEndianUInt32(bytes, offset + index * 4).toInt() }
+            if (zones.any { it < 0 || it > 24 * 60 * 60 }) {
+                continue
+            }
+            val total = zones.sum()
+            if (total > 0 && total in (activeSeconds / 3).toInt()..(activeSeconds * 2).toInt()) {
+                return zones
+            }
+        }
+        return null
+    }
+
+    private fun findClassicWorkoutDistanceMeters(
+        bytes: ByteArray,
+        file: ClassicActivityFileSummary,
+        start: Int,
+        end: Int,
+    ): Int? {
+        if (!isClassicDistanceWorkout(file.subtype)) {
+            return null
+        }
+
+        val scanEnd = minOf(end, bytes.size - 4)
+        for (offset in start..scanEnd) {
+            val value = littleEndianUInt32(bytes, offset)
+            if (value in 1L..500_000L) {
+                return value.toInt()
+            }
+        }
+        return null
+    }
+
+    private fun findClassicWorkoutCalories(
+        bytes: ByteArray,
+        file: ClassicActivityFileSummary,
+        start: Int,
+        end: Int,
+    ): Int? {
+        val scanEnd = minOf(end, bytes.size - 2)
+        val preferredOffset = if (isClassicDistanceWorkout(file.subtype)) start + 4 else start
+        if (preferredOffset + 2 <= bytes.size) {
+            val preferred = littleEndianUInt16(bytes, preferredOffset)
+            if (preferred in 1..20_000) {
+                return preferred
+            }
+        }
+
+        for (offset in start..scanEnd) {
+            val value = littleEndianUInt16(bytes, offset)
+            if (value in 1..20_000) {
+                return value
+            }
+        }
+        return null
+    }
+
+    private fun findClassicWorkoutSteps(
+        bytes: ByteArray,
+        file: ClassicActivityFileSummary,
+        start: Int,
+        end: Int,
+        distanceMeters: Int?,
+    ): Int? {
+        if (!isClassicStepWorkout(file.subtype)) {
+            return null
+        }
+
+        val scanEnd = minOf(end, bytes.size - 4)
+        for (offset in start..scanEnd) {
+            val value = littleEndianUInt32(bytes, offset)
+            if (value in 1L..200_000L && value.toInt() != distanceMeters) {
+                return value.toInt()
+            }
+        }
+        return null
+    }
+
+    private fun isClassicDistanceWorkout(subtype: Int): Boolean {
+        return subtype in setOf(1, 2, 3, 6, 9, 16, 22, 23)
+    }
+
+    private fun isClassicStepWorkout(subtype: Int): Boolean {
+        return subtype in setOf(1, 2, 3, 11, 22)
+    }
+
+    private fun classicWorkoutTypeLabel(subtype: Int): String {
+        return when (subtype) {
+            1 -> "outdoor-walk"
+            2 -> "outdoor-run"
+            3 -> "treadmill"
+            6 -> "outdoor-cycling"
+            7 -> "indoor-cycling"
+            8 -> "freestyle"
+            9 -> "pool-swim"
+            11 -> "elliptical"
+            13 -> "rowing"
+            14 -> "jump-rope"
+            16 -> "hiit"
+            22 -> "walking"
+            23 -> "cycling"
+            else -> "workout-$subtype"
+        }
     }
 
     private fun parseClassicSleepDetails(
@@ -3061,11 +4016,15 @@ class DirectWatchPlugin : Plugin() {
         file: ClassicActivityFileSummary,
         dataEnd: Int,
     ): ClassicSleepSummary? {
-        if (file.type != 0 || file.subtype != 8 || file.version > 4) {
+        if (file.type != 0 || file.subtype != 8 || file.version > 5) {
+            if (file.type == 0 && file.subtype == 8) {
+                Log.i(TAG, "unsupported sleep detail file version=${file.version} detailType=${file.detailType} file=${file.idHex}")
+            }
             return null
         }
 
         var offset = 8
+        val headerSize = if (file.version >= 5) 2 else 1
         fun takeByte(): Int? {
             if (offset + 1 > dataEnd) return null
             return bytes[offset++].toInt() and 0xff
@@ -3088,39 +4047,98 @@ class DirectWatchPlugin : Plugin() {
             return true
         }
 
-        val header = takeByte() ?: return null
+        val header = ByteArray(headerSize)
+        for (index in header.indices) {
+            header[index] = (takeByte() ?: return null).toByte()
+        }
         val isAwake = takeByte()?.let { it == 1 }
         val bedTime = takeInt() ?: return null
         val wakeupTime = takeInt() ?: return null
-        var versionDependentFields = 0
-        val score = if (file.version >= 4) {
-            versionDependentFields += 1
-            takeByte()
-        } else {
-            null
-        }
+        var headerIndex = 3
 
         fun hasSection(bitIndex: Int): Boolean {
-            val shifted = bitIndex - versionDependentFields
-            return shifted >= 0 && (header and (1 shl shifted)) != 0
+            val headerByte = header.getOrNull(bitIndex / 8)?.toInt() ?: return false
+            return (headerByte and (1 shl (7 - (bitIndex % 8)))) != 0
         }
 
-        fun skipSampleSeries(bytesPerSample: Int): Boolean {
-            val count = takeShort()
-            // The first short is the unit/sample rate and is consumed by the caller.
-            if (count == null) return false
-            if (count > 0 && file.version >= 2 && !skip(4)) return false
-            return skip(count * bytesPerSample)
+        val score = if (file.version >= 4 && hasSection(headerIndex)) takeByte() else null
+        if (file.version >= 4) {
+            headerIndex += 1
         }
 
-        if (hasSection(5)) {
-            if (takeShort() == null || !skipSampleSeries(1)) return null
+        if (file.version >= 5) {
+            if (!skip(9)) return null
+            if (takeInt() == null) return null
+            if (takeInt() == null) return null
+            headerIndex += 5
         }
-        if (hasSection(4)) {
-            if (takeShort() == null || !skipSampleSeries(1)) return null
+
+        val sleepSamples = linkedMapOf<String, ClassicActivitySample>()
+        val heartRateValues = mutableListOf<Int>()
+        val spo2Values = mutableListOf<Int>()
+
+        fun putSleepMetricSample(sampleTime: String, heartRate: Int? = null, spo2: Int? = null) {
+            val existing = sleepSamples[sampleTime]
+            sleepSamples[sampleTime] = ClassicActivitySample(
+                sampleTime = sampleTime,
+                heartRate = heartRate ?: existing?.heartRate,
+                spo2 = spo2 ?: existing?.spo2,
+                stress = existing?.stress,
+                steps = existing?.steps,
+            )
         }
-        if (file.version >= 3 && hasSection(3)) {
-            if (takeShort() == null || !skipSampleSeries(4)) return null
+
+        fun readMetricSampleSeries(metric: String): Boolean {
+            val unitSeconds = takeShort() ?: return false
+            val count = takeShort() ?: return false
+            val firstRecordTime = if (count > 0 && file.version >= 2) {
+                takeInt() ?: return false
+            } else {
+                bedTime
+            }
+            if (count <= 0) {
+                return true
+            }
+            if (offset + count > dataEnd) {
+                return false
+            }
+            repeat(count) { index ->
+                val value = bytes[offset++].toInt() and 0xff
+                val sampleSeconds = firstRecordTime + unitSeconds.toLong() * index.toLong()
+                val sampleTime = epochSecondsIso(sampleSeconds) ?: return@repeat
+                when (metric) {
+                    "heart-rate" -> {
+                        val heartRate = value.takeIf { it in 30..240 }
+                        if (heartRate != null) {
+                            heartRateValues.add(heartRate)
+                            putSleepMetricSample(sampleTime, heartRate = heartRate)
+                        }
+                    }
+                    "spo2" -> {
+                        val spo2 = value.takeIf { it in 50..100 }
+                        if (spo2 != null) {
+                            spo2Values.add(spo2)
+                            putSleepMetricSample(sampleTime, spo2 = spo2)
+                        }
+                    }
+                }
+            }
+            return true
+        }
+
+        if (hasSection(headerIndex)) {
+            if (!readMetricSampleSeries("heart-rate")) return null
+        }
+        headerIndex += 1
+        if (hasSection(headerIndex)) {
+            if (!readMetricSampleSeries("spo2")) return null
+        }
+        headerIndex += 1
+        if (file.version >= 3 && hasSection(headerIndex)) {
+            val unitSeconds = takeShort() ?: return null
+            val count = takeShort() ?: return null
+            if (count > 0 && file.version >= 2 && !skip(4)) return null
+            if (!skip(count * 4)) return null
         }
 
         var summary: ClassicSleepSummary? = null
@@ -3160,6 +4178,14 @@ class DirectWatchPlugin : Plugin() {
                     score = score?.takeIf { it > 0 },
                     stageCount = stageCount,
                     isAwake = isAwake,
+                    sampleCount = sleepSamples.size.takeIf { it > 0 },
+                    heartRateAvg = averageInt(heartRateValues),
+                    heartRateMin = heartRateValues.minOrNull(),
+                    heartRateMax = heartRateValues.maxOrNull(),
+                    spo2Avg = averageInt(spo2Values),
+                    spo2Min = spo2Values.minOrNull(),
+                    spo2Max = spo2Values.maxOrNull(),
+                    samples = sleepSamples.values.toList(),
                 )
             } else if (packetType == 17) {
                 stageCount += dataLength / 2
@@ -3178,6 +4204,14 @@ class DirectWatchPlugin : Plugin() {
             score = score?.takeIf { it > 0 },
             stageCount = stageCount.takeIf { it > 0 },
             isAwake = isAwake,
+            sampleCount = sleepSamples.size.takeIf { it > 0 },
+            heartRateAvg = averageInt(heartRateValues),
+            heartRateMin = heartRateValues.minOrNull(),
+            heartRateMax = heartRateValues.maxOrNull(),
+            spo2Avg = averageInt(spo2Values),
+            spo2Min = spo2Values.minOrNull(),
+            spo2Max = spo2Values.maxOrNull(),
+            samples = sleepSamples.values.toList(),
         )
     }
 
@@ -3187,6 +4221,9 @@ class DirectWatchPlugin : Plugin() {
         dataEnd: Int,
     ): ClassicSleepSummary? {
         if (file.type != 0 || file.subtype != 3 || file.detailType != 0 || file.version != 2) {
+            if (file.type == 0 && file.subtype == 3) {
+                Log.i(TAG, "unsupported sleep stage file version=${file.version} detailType=${file.detailType} file=${file.idHex}")
+            }
             return null
         }
 
@@ -3395,6 +4432,377 @@ class DirectWatchPlugin : Plugin() {
         )
     }
 
+    private fun parseClassicManualSamples(
+        bytes: ByteArray,
+        file: ClassicActivityFileSummary,
+        dataEnd: Int,
+    ): ClassicDailyDetailsSummary? {
+        if (!isClassicManualSampleActivityFile(file) || file.version != 2 || dataEnd <= 8) {
+            return null
+        }
+
+        var offset = 8
+        val samples = mutableListOf<ClassicActivitySample>()
+        val heartRates = mutableListOf<Int>()
+        val spo2Values = mutableListOf<Int>()
+        val stressValues = mutableListOf<Int>()
+        var sawUnsupportedType = false
+
+        while (offset + 5 <= dataEnd) {
+            val timestampSeconds = littleEndianUInt32(bytes, offset)
+            offset += 4
+            val sampleType = bytes[offset].toInt() and 0xff
+            offset += 1
+
+            var heartRate: Int? = null
+            var spo2: Int? = null
+            var stress: Int? = null
+
+            when (sampleType) {
+                CLASSIC_MANUAL_SAMPLE_HR,
+                CLASSIC_MANUAL_SAMPLE_SPO2,
+                CLASSIC_MANUAL_SAMPLE_STRESS
+                -> {
+                    if (offset >= dataEnd) {
+                        return null
+                    }
+                    val value = bytes[offset].toInt() and 0xff
+                    offset += 1
+                    when (sampleType) {
+                        CLASSIC_MANUAL_SAMPLE_HR -> heartRate = value.takeIf { it in 30..240 }
+                        CLASSIC_MANUAL_SAMPLE_SPO2 -> spo2 = value.takeIf { it in 50..100 }
+                        CLASSIC_MANUAL_SAMPLE_STRESS -> stress = value.takeIf { it in 0..100 }
+                    }
+                }
+
+                CLASSIC_MANUAL_SAMPLE_TEMPERATURE -> {
+                    if (offset + 4 > dataEnd) {
+                        return null
+                    }
+                    offset += 4
+                }
+
+                else -> {
+                    sawUnsupportedType = true
+                    break
+                }
+            }
+
+            val sampleTime = epochSecondsIso(timestampSeconds)
+            if (sampleTime != null && (heartRate != null || spo2 != null || stress != null)) {
+                heartRate?.let { heartRates.add(it) }
+                spo2?.let { spo2Values.add(it) }
+                stress?.let { stressValues.add(it) }
+                samples.add(
+                    ClassicActivitySample(
+                        sampleTime = sampleTime,
+                        heartRate = heartRate,
+                        spo2 = spo2,
+                        stress = stress,
+                        steps = null,
+                    ),
+                )
+            }
+        }
+
+        if (sawUnsupportedType) {
+            Log.i(TAG, "unsupported classic manual sample type file=${file.idHex}")
+            return null
+        }
+
+        if (samples.isEmpty()) {
+            return null
+        }
+
+        return ClassicDailyDetailsSummary(
+            sampleCount = samples.size,
+            steps = null,
+            heartRateAvg = averageInt(heartRates),
+            heartRateMin = heartRates.minOrNull(),
+            heartRateMax = heartRates.maxOrNull(),
+            spo2Avg = averageInt(spo2Values),
+            stressAvg = averageInt(stressValues),
+            samples = samples,
+        )
+    }
+
+    private fun parseClassicWorkoutDetails(
+        bytes: ByteArray,
+        file: ClassicActivityFileSummary,
+        dataEnd: Int,
+    ): ClassicWorkoutDetailsSummary? {
+        if (file.type != 1 || file.detailType != 0) {
+            return null
+        }
+
+        return when {
+            file.subtype == 22 && file.version == 5 -> parseClassicOutdoorWalkingV2Details(bytes, file, dataEnd)
+            file.subtype == 8 && file.version == 3 -> parseClassicFreestyleV3Details(bytes, file, dataEnd)
+            else -> {
+                Log.i(TAG, "unsupported workout details subtype=${file.subtype} version=${file.version} file=${file.idHex}")
+                null
+            }
+        }
+    }
+
+    private fun parseClassicOutdoorWalkingV2Details(
+        bytes: ByteArray,
+        file: ClassicActivityFileSummary,
+        dataEnd: Int,
+    ): ClassicWorkoutDetailsSummary? {
+        val startSeconds = try {
+            java.time.Instant.parse(file.timestamp).epochSecond
+        } catch (_: Exception) {
+            return null
+        }
+        val recordSize = 13
+        val recordStart = findClassicOutdoorWalkingV2DetailsRecordStart(dataEnd) ?: return null
+        if (recordStart + recordSize > dataEnd) {
+            return null
+        }
+
+        val samples = mutableListOf<ClassicActivitySample>()
+        val heartRates = mutableListOf<Int>()
+        var offset = recordStart
+        var recordIndex = 0
+
+        while (offset + recordSize <= dataEnd) {
+            val primaryHeartRate = (bytes[offset + 11].toInt() and 0xff).takeIf { it in 30..240 }
+            val fallbackHeartRate = (bytes[offset + 2].toInt() and 0xff).takeIf { it in 30..240 }
+            val heartRate = primaryHeartRate ?: fallbackHeartRate
+            val sampleTime = epochSecondsIso(startSeconds + recordIndex.toLong())
+            if (sampleTime != null && heartRate != null) {
+                heartRates.add(heartRate)
+                samples.add(
+                    ClassicActivitySample(
+                        sampleTime = sampleTime,
+                        heartRate = heartRate,
+                        spo2 = null,
+                        stress = null,
+                        steps = null,
+                    ),
+                )
+            }
+
+            offset += recordSize
+            recordIndex += 1
+        }
+
+        if (samples.size < 10) {
+            Log.i(TAG, "workout details parsed too few samples=${samples.size} file=${file.idHex}")
+            return null
+        }
+
+        return ClassicWorkoutDetailsSummary(
+            sampleCount = samples.size,
+            heartRateAvg = averageInt(heartRates),
+            heartRateMin = heartRates.minOrNull(),
+            heartRateMax = heartRates.maxOrNull(),
+            samples = samples,
+        )
+    }
+
+    private fun findClassicOutdoorWalkingV2DetailsRecordStart(dataEnd: Int): Int? {
+        val recordStart = 124
+        val recordSize = 13
+        return recordStart.takeIf { dataEnd >= it + recordSize }
+    }
+
+    private fun parseClassicFreestyleV3Details(
+        bytes: ByteArray,
+        file: ClassicActivityFileSummary,
+        dataEnd: Int,
+    ): ClassicWorkoutDetailsSummary? {
+        val startSeconds = try {
+            java.time.Instant.parse(file.timestamp).epochSecond
+        } catch (_: Exception) {
+            return null
+        }
+        val recordSize = 4
+        val recordStart = findClassicFreestyleV3DetailsRecordStart(bytes, dataEnd) ?: return null
+        if (recordStart + recordSize > dataEnd) {
+            return null
+        }
+
+        val samples = mutableListOf<ClassicActivitySample>()
+        val heartRates = mutableListOf<Int>()
+        var offset = recordStart
+        var recordIndex = 0
+
+        while (offset + recordSize <= dataEnd) {
+            val heartRate = (bytes[offset].toInt() and 0xff).takeIf { it in 30..240 }
+            val sampleTime = epochSecondsIso(startSeconds + recordIndex.toLong())
+            if (sampleTime != null && heartRate != null) {
+                heartRates.add(heartRate)
+                samples.add(
+                    ClassicActivitySample(
+                        sampleTime = sampleTime,
+                        heartRate = heartRate,
+                        spo2 = null,
+                        stress = null,
+                        steps = null,
+                    ),
+                )
+            }
+
+            offset += recordSize
+            recordIndex += 1
+        }
+
+        if (samples.size < 10) {
+            Log.i(TAG, "freestyle workout details parsed too few samples=${samples.size} file=${file.idHex}")
+            return null
+        }
+
+        return ClassicWorkoutDetailsSummary(
+            sampleCount = samples.size,
+            heartRateAvg = averageInt(heartRates),
+            heartRateMin = heartRates.minOrNull(),
+            heartRateMax = heartRates.maxOrNull(),
+            samples = samples,
+        )
+    }
+
+    private fun findClassicFreestyleV3DetailsRecordStart(bytes: ByteArray, dataEnd: Int): Int? {
+        val recordSize = 4
+        var bestStart: Int? = null
+        var bestValidCount = 0
+
+        for (recordStart in 52..64) {
+            if (recordStart + recordSize > dataEnd) {
+                continue
+            }
+
+            var offset = recordStart
+            var totalCount = 0
+            var validHeartRateCount = 0
+            var validTrailingByteCount = 0
+
+            while (offset + recordSize <= dataEnd) {
+                val heartRate = bytes[offset].toInt() and 0xff
+                val second = bytes[offset + 1].toInt() and 0xff
+                val third = bytes[offset + 2].toInt() and 0xff
+                val fourth = bytes[offset + 3].toInt() and 0xff
+                if (heartRate in 30..240) {
+                    validHeartRateCount += 1
+                }
+                if (second in 0..3 && third == 0 && fourth == 0) {
+                    validTrailingByteCount += 1
+                }
+                totalCount += 1
+                offset += recordSize
+            }
+
+            if (
+                totalCount >= 10 &&
+                validHeartRateCount >= maxOf(10, (totalCount * 85) / 100) &&
+                validTrailingByteCount >= maxOf(10, (totalCount * 85) / 100) &&
+                validHeartRateCount > bestValidCount
+            ) {
+                bestStart = recordStart
+                bestValidCount = validHeartRateCount
+            }
+        }
+
+        return bestStart
+    }
+
+    private fun parseClassicWorkoutGps(
+        bytes: ByteArray,
+        file: ClassicActivityFileSummary,
+        dataEnd: Int,
+    ): ClassicWorkoutGpsSummary? {
+        if (file.type != 1 || file.detailType != 2) {
+            return null
+        }
+
+        val headerSize: Int
+        val sampleSize: Int
+        when (file.version) {
+            1 -> {
+                headerSize = 1
+                sampleSize = 12
+            }
+
+            2 -> {
+                headerSize = 1
+                sampleSize = 18
+            }
+
+            else -> {
+                Log.i(TAG, "unsupported workout gps version=${file.version} file=${file.idHex}")
+                return null
+            }
+        }
+
+        val dataStart = 8 + headerSize
+        if (dataEnd <= dataStart) {
+            return null
+        }
+
+        val samples = mutableListOf<ClassicWorkoutGpsSample>()
+        var offset = dataStart
+        var lastLatitude: Double? = null
+        var lastLongitude: Double? = null
+        var cumulativeDistanceMeters = 0.0
+
+        while (offset + sampleSize <= dataEnd) {
+            val timestampSeconds = littleEndianUInt32(bytes, offset)
+            offset += 4
+            val longitude = littleEndianFloat(bytes, offset)
+            offset += 4
+            val latitude = littleEndianFloat(bytes, offset)
+            offset += 4
+            var hdop: Double? = null
+            var speedMetersPerSecond: Double? = null
+
+            if (file.version >= 2) {
+                hdop = (littleEndianFloat(bytes, offset) / 4.8f).toDouble().takeIf { it.isFinite() && it >= 0.0 }
+                offset += 4
+                speedMetersPerSecond = ((littleEndianInt16(bytes, offset) shr 2) / 10.0).takeIf { it.isFinite() && it >= 0.0 }
+                offset += 2
+            }
+
+            val sampleTime = epochSecondsIso(timestampSeconds)
+            val normalizedLatitude = latitude.toDouble().takeIf { it.isFinite() && it in -90.0..90.0 }
+            val normalizedLongitude = longitude.toDouble().takeIf { it.isFinite() && it in -180.0..180.0 }
+            if (sampleTime == null || normalizedLatitude == null || normalizedLongitude == null) {
+                continue
+            }
+
+            val previousLatitude = lastLatitude
+            val previousLongitude = lastLongitude
+            if (previousLatitude != null && previousLongitude != null) {
+                val deltaMeters = haversineMeters(previousLatitude, previousLongitude, normalizedLatitude, normalizedLongitude)
+                if (deltaMeters.isFinite() && deltaMeters in 0.0..200.0) {
+                    cumulativeDistanceMeters += deltaMeters
+                }
+            }
+            lastLatitude = normalizedLatitude
+            lastLongitude = normalizedLongitude
+
+            samples.add(
+                ClassicWorkoutGpsSample(
+                    sampleTime = sampleTime,
+                    latitude = normalizedLatitude,
+                    longitude = normalizedLongitude,
+                    hdop = hdop,
+                    speedMetersPerSecond = speedMetersPerSecond,
+                    distanceMeters = cumulativeDistanceMeters.takeIf { it > 0.0 },
+                ),
+            )
+        }
+
+        if (samples.isEmpty()) {
+            return null
+        }
+
+        return ClassicWorkoutGpsSummary(
+            sampleCount = samples.size,
+            samples = samples,
+        )
+    }
+
     private fun parseClassicDailyDetailsSample(
         bytes: ByteArray,
         startOffset: Int,
@@ -3567,6 +4975,7 @@ class DirectWatchPlugin : Plugin() {
             type == 0 && subtype == 3 -> "Фазы сна"
             type == 0 && subtype == 6 -> "Ручные замеры"
             type == 0 && subtype == 8 -> "Сон"
+            type == 1 && detailType == 0 -> "Детали тренировки"
             type == 1 && detailType == 1 -> "Итог тренировки"
             type == 1 && detailType == 2 -> "GPS тренировки"
             else -> "Файл активности"
@@ -3741,9 +5150,9 @@ class DirectWatchPlugin : Plugin() {
         return command.toByteArray()
     }
 
-    private fun buildActivityFetchTodayCommand(): ByteArray {
+    private fun buildActivityFetchTodayCommand(unknown1: Int): ByteArray {
         val requestToday = java.io.ByteArrayOutputStream()
-        writeProtoVarintField(requestToday, 1, 0)
+        writeProtoVarintField(requestToday, 1, unknown1)
 
         val health = java.io.ByteArrayOutputStream()
         writeProtoBytesField(health, 5, requestToday.toByteArray())
@@ -3762,6 +5171,17 @@ class DirectWatchPlugin : Plugin() {
         val command = java.io.ByteArrayOutputStream()
         writeProtoVarintField(command, 1, 8)
         writeProtoVarintField(command, 2, 3)
+        writeProtoBytesField(command, 10, health.toByteArray())
+        return command.toByteArray()
+    }
+
+    private fun buildActivityFetchAckCommand(fileId: ByteArray): ByteArray {
+        val health = java.io.ByteArrayOutputStream()
+        writeProtoBytesField(health, 3, fileId)
+
+        val command = java.io.ByteArrayOutputStream()
+        writeProtoVarintField(command, 1, 8)
+        writeProtoVarintField(command, 2, 5)
         writeProtoBytesField(command, 10, health.toByteArray())
         return command.toByteArray()
     }
@@ -4026,6 +5446,341 @@ class DirectWatchPlugin : Plugin() {
         return null
     }
 
+    private fun readClassicPacketsUntilAuthStage(
+        socket: BluetoothSocket,
+        packets: MutableList<JSObject>,
+        combined: java.io.ByteArrayOutputStream,
+        targetStage: String,
+        durationMs: Long,
+    ): String? {
+        val startedAt = android.os.SystemClock.uptimeMillis()
+        var lastError: String? = null
+        while (android.os.SystemClock.uptimeMillis() - startedAt < durationMs) {
+            lastError = readClassicPackets(socket, packets, combined, CLASSIC_FAST_READ_POLL_MS) ?: lastError
+            val parsed = parseClassicProbeBytes(combined.toByteArray())
+            if (parsed.authStage == targetStage) {
+                return lastError
+            }
+            if (targetStage == "watch-nonce" && parsed.watchNonceHex != null && parsed.watchHmacHex != null) {
+                return lastError
+            }
+            if (targetStage == "authenticated" && parsed.authStage == "authenticated") {
+                return lastError
+            }
+            if (lastError != null) {
+                return lastError
+            }
+        }
+        return lastError
+    }
+
+    private fun readClassicPacketsUntilActivitySelection(
+        socket: BluetoothSocket,
+        packets: MutableList<JSObject>,
+        combined: java.io.ByteArrayOutputStream,
+        decryptionKey: ByteArray?,
+        entryDate: String?,
+        includeSleep: Boolean,
+        durationMs: Long,
+    ): String? {
+        val startedAt = android.os.SystemClock.uptimeMillis()
+        var lastError: String? = null
+        var lastSelectionSignature: String? = null
+        var lastSelectionChangedAt = startedAt
+        while (android.os.SystemClock.uptimeMillis() - startedAt < durationMs) {
+            lastError = readClassicPackets(socket, packets, combined, CLASSIC_FAST_READ_POLL_MS) ?: lastError
+            val now = android.os.SystemClock.uptimeMillis()
+            val selectedFileIds = selectClassicActivityFileIdsForEntryDate(
+                classicActivityFileIds(combined.toByteArray(), decryptionKey),
+                entryDate,
+                includeSleep,
+            )
+            val selectionSignature = selectedFileIds.joinToString("|") { fullHex(it) ?: "" }
+            if (selectionSignature != lastSelectionSignature) {
+                lastSelectionSignature = selectionSignature
+                lastSelectionChangedAt = now
+            }
+            if (selectedFileIds.isNotEmpty() && now - lastSelectionChangedAt >= CLASSIC_ACTIVITY_SELECTION_QUIET_MS) {
+                return lastError
+            }
+            if (lastError != null) {
+                return lastError
+            }
+        }
+        return lastError
+    }
+
+    private fun requestClassicActivityFilesSequentially(
+        socket: BluetoothSocket,
+        packets: MutableList<JSObject>,
+        combined: java.io.ByteArrayOutputStream,
+        fileIds: List<ByteArray>,
+        entryDate: String?,
+        encryptionKey: ByteArray,
+        decryptionKey: ByteArray?,
+        initialSequenceNumber: Int,
+    ): ClassicActivityFetchQueueResult {
+        val requests = mutableListOf<JSObject>()
+        var nextSequenceNumber = initialSequenceNumber
+        var firstError: String? = null
+        var completedCount = 0
+        var failedCount = 0
+        val selectedFileIds = dedupeClassicActivityFileIdsForFetch(
+            sortClassicActivityFileIdsForFetch(fileIds, entryDate),
+        ).take(CLASSIC_ACTIVITY_FILE_PROBE_LIMIT)
+
+        for (fileId in selectedFileIds) {
+            if (Thread.currentThread().isInterrupted) {
+                throw InterruptedException()
+            }
+
+            val file = parseClassicActivityFileIds(fileId).firstOrNull()
+            val idHex = fullHex(fileId)
+            val request = JSObject()
+            request.put("idHex", idHex)
+            request.put("activityFile", file?.toJson())
+            request.put("kind", file?.kind)
+            request.put("timestamp", file?.timestamp)
+            request.put("type", file?.type)
+            request.put("subtype", file?.subtype)
+            request.put("detailType", file?.detailType)
+            request.put("version", file?.version)
+            request.put("sequenceNumber", nextSequenceNumber)
+            Log.i(TAG, "classic activity request file=${idHex ?: "-"} kind=${file?.kind ?: "-"} timestamp=${file?.timestamp ?: "-"} seq=$nextSequenceNumber")
+
+            try {
+                socket.outputStream.write(
+                    buildClassicV2EncryptedCommandPacket(
+                        command = buildActivityFetchRequestCommand(fileId),
+                        sequenceNumber = nextSequenceNumber++,
+                        encryptionKey = encryptionKey,
+                    ),
+                )
+                socket.outputStream.flush()
+            } catch (error: IOException) {
+                val message = "Не удалось запросить файл часов ${idHex ?: "-"}: ${safeMessage(error)}"
+                request.put("status", "write-error")
+                request.put("error", message)
+                requests.add(request)
+                failedCount += 1
+                firstError = firstError ?: message
+                break
+            }
+
+            Thread.sleep(CLASSIC_POST_AUTH_COMMAND_DELAY_MS)
+            val readResult = readClassicActivityFileUntil(
+                socket = socket,
+                packets = packets,
+                combined = combined,
+                decryptionKey = decryptionKey,
+                targetFileIdHex = idHex,
+                targetFile = file,
+            )
+            request.put("status", readResult.status)
+            request.put("error", readResult.error)
+            request.put("crcValid", readResult.crcValid)
+            request.put("parsed", readResult.parsed)
+            request.put("chunkNumber", readResult.chunkNumber)
+            request.put("chunkTotal", readResult.chunkTotal)
+            request.put("payloadBytes", readResult.payloadBytes)
+            request.put("durationMs", readResult.durationMs)
+            requests.add(request)
+            Log.i(
+                TAG,
+                "classic activity result file=${idHex ?: "-"} status=${readResult.status} " +
+                    "crc=${readResult.crcValid} chunk=${readResult.chunkNumber}/${readResult.chunkTotal} " +
+                    "parsed=${readResult.parsed} bytes=${readResult.payloadBytes} durationMs=${readResult.durationMs}",
+            )
+
+            if (readResult.status == "complete") {
+                completedCount += 1
+            } else {
+                failedCount += 1
+                firstError = firstError ?: readResult.error
+            }
+        }
+
+        return ClassicActivityFetchQueueResult(
+            requestedCount = selectedFileIds.size,
+            completedCount = completedCount,
+            failedCount = failedCount,
+            requests = requests,
+            nextSequenceNumber = nextSequenceNumber,
+            error = if (completedCount == 0) firstError else null,
+        )
+    }
+
+    private fun readClassicActivityFileUntil(
+        socket: BluetoothSocket,
+        packets: MutableList<JSObject>,
+        combined: java.io.ByteArrayOutputStream,
+        decryptionKey: ByteArray?,
+        targetFileIdHex: String?,
+        targetFile: ClassicActivityFileSummary?,
+    ): ClassicActivityFileReadResult {
+        val startedAt = android.os.SystemClock.uptimeMillis()
+        val readLimitMs = classicActivityFileReadLimitMs(targetFile)
+        val noProgressLimitMs = classicActivityFileNoProgressLimitMs(targetFile)
+        var lastError: String? = null
+        var lastChunkNumber: Int? = null
+        var lastChunkTotal: Int? = null
+        var lastPayloadBytes: Int? = null
+        var lastCrcValid: Boolean? = null
+        var lastParsed: Boolean? = null
+        var lastTargetProgressAt: Long? = null
+        var lastTargetSignature: String? = null
+
+        while (android.os.SystemClock.uptimeMillis() - startedAt < readLimitMs) {
+            lastError = readClassicPackets(socket, packets, combined, CLASSIC_ACTIVITY_FILE_QUEUE_POLL_MS) ?: lastError
+            val now = android.os.SystemClock.uptimeMillis()
+            val targetPacket = findClassicActivityFilePacket(
+                packets = collectClassicDecryptedPackets(combined.toByteArray(), decryptionKey),
+                targetFileIdHex = targetFileIdHex,
+            )
+            if (targetPacket != null) {
+                lastChunkNumber = nullableInt(targetPacket, "activityChunkNumber")
+                lastChunkTotal = nullableInt(targetPacket, "activityChunkTotal")
+                lastPayloadBytes = nullableInt(targetPacket, "activityFilePayloadBytes")
+                lastCrcValid = nullableBoolean(targetPacket, "activityFileCrcValid")
+                lastParsed = nullableBoolean(targetPacket, "activityFileParsed")
+                val targetSignature = listOf(lastChunkNumber, lastChunkTotal, lastPayloadBytes, lastCrcValid, lastParsed).joinToString(":")
+                if (targetSignature != lastTargetSignature) {
+                    lastTargetSignature = targetSignature
+                    lastTargetProgressAt = now
+                }
+                if (lastCrcValid == true) {
+                    return ClassicActivityFileReadResult(
+                        status = "complete",
+                        error = null,
+                        crcValid = true,
+                        parsed = lastParsed == true,
+                        chunkNumber = lastChunkNumber,
+                        chunkTotal = lastChunkTotal,
+                        payloadBytes = lastPayloadBytes,
+                        durationMs = android.os.SystemClock.uptimeMillis() - startedAt,
+                    )
+                }
+                if (lastCrcValid == false) {
+                    return ClassicActivityFileReadResult(
+                        status = "crc-error",
+                        error = "Файл часов прочитан, но CRC не совпал.",
+                        crcValid = false,
+                        parsed = lastParsed == true,
+                        chunkNumber = lastChunkNumber,
+                        chunkTotal = lastChunkTotal,
+                        payloadBytes = lastPayloadBytes,
+                        durationMs = android.os.SystemClock.uptimeMillis() - startedAt,
+                    )
+                }
+            }
+            val targetProgressAt = lastTargetProgressAt
+            if (targetProgressAt != null && now - targetProgressAt >= noProgressLimitMs) {
+                val hasPartialTarget = lastChunkNumber != null || lastChunkTotal != null
+                return ClassicActivityFileReadResult(
+                    status = if (hasPartialTarget) "partial-timeout" else "timeout",
+                    error = if (hasPartialTarget) {
+                        "Часы начали отдавать файл активности, но не завершили передачу."
+                    } else {
+                        "Часы не начали отдавать файл активности."
+                    },
+                    crcValid = lastCrcValid,
+                    parsed = lastParsed,
+                    chunkNumber = lastChunkNumber,
+                    chunkTotal = lastChunkTotal,
+                    payloadBytes = lastPayloadBytes,
+                    durationMs = now - startedAt,
+                )
+            }
+            if (lastError != null) {
+                return ClassicActivityFileReadResult(
+                    status = "read-error",
+                    error = lastError,
+                    crcValid = lastCrcValid,
+                    parsed = lastParsed,
+                    chunkNumber = lastChunkNumber,
+                    chunkTotal = lastChunkTotal,
+                    payloadBytes = lastPayloadBytes,
+                    durationMs = android.os.SystemClock.uptimeMillis() - startedAt,
+                )
+            }
+        }
+
+        return ClassicActivityFileReadResult(
+            status = "timeout",
+            error = "Часы не отдали файл активности за отведенное время.",
+            crcValid = lastCrcValid,
+            parsed = lastParsed,
+            chunkNumber = lastChunkNumber,
+            chunkTotal = lastChunkTotal,
+            payloadBytes = lastPayloadBytes,
+            durationMs = android.os.SystemClock.uptimeMillis() - startedAt,
+        )
+    }
+
+    private fun classicActivityFileReadLimitMs(file: ClassicActivityFileSummary?): Long {
+        return if (isClassicWorkoutDetailFile(file)) {
+            CLASSIC_ACTIVITY_WORKOUT_DETAIL_READ_MS
+        } else {
+            CLASSIC_ACTIVITY_FILE_READ_MS
+        }
+    }
+
+    private fun classicActivityFileNoProgressLimitMs(file: ClassicActivityFileSummary?): Long {
+        return if (isClassicWorkoutDetailFile(file)) {
+            CLASSIC_ACTIVITY_WORKOUT_DETAIL_NO_PROGRESS_MS
+        } else {
+            CLASSIC_ACTIVITY_FILE_NO_PROGRESS_MS
+        }
+    }
+
+    private fun isClassicWorkoutDetailFile(file: ClassicActivityFileSummary?): Boolean {
+        return file?.type == 1 && file.detailType == 0
+    }
+
+    private fun dedupeClassicActivityFileIdsForFetch(fileIds: List<ByteArray>): List<ByteArray> {
+        val seen = mutableSetOf<String>()
+        return fileIds.filter { fileId ->
+            val file = parseClassicActivityFileIds(fileId).firstOrNull()
+            val key = file?.let { classicActivityFileLogicalKey(it) } ?: (fullHex(fileId) ?: "")
+            key.isNotBlank() && seen.add(key)
+        }
+    }
+
+    private fun classicActivityFileLogicalKey(file: ClassicActivityFileSummary): String {
+        return listOf(
+            file.timestamp,
+            file.type,
+            file.subtype,
+            file.detailType,
+            file.version,
+        ).joinToString(":")
+    }
+
+    private fun findClassicActivityFilePacket(
+        packets: List<JSObject>,
+        targetFileIdHex: String?,
+    ): JSObject? {
+        return packets.lastOrNull { packet ->
+            if (packet.optString("channel") != "activity") {
+                return@lastOrNull false
+            }
+            val activityFile = packet.optJSONObject("activityFile")
+            if (targetFileIdHex.isNullOrBlank()) {
+                activityFile != null && !activityFile.optString("idHex").isNullOrBlank()
+            } else {
+                activityFile?.optString("idHex") == targetFileIdHex
+            }
+        }
+    }
+
+    private fun nullableInt(item: JSObject, key: String): Int? {
+        return if (item.has(key) && !item.isNull(key)) item.optInt(key) else null
+    }
+
+    private fun nullableBoolean(item: JSObject, key: String): Boolean? {
+        return if (item.has(key) && !item.isNull(key)) item.optBoolean(key) else null
+    }
+
     private fun keepAliveClassicServiceBridge(
         socket: BluetoothSocket,
         packets: MutableList<JSObject>,
@@ -4213,6 +5968,33 @@ class DirectWatchPlugin : Plugin() {
             ((bytes[offset + 1].toLong() and 0xffL) shl 8) or
             ((bytes[offset + 2].toLong() and 0xffL) shl 16) or
             ((bytes[offset + 3].toLong() and 0xffL) shl 24)
+    }
+
+    private fun littleEndianInt16(bytes: ByteArray, offset: Int): Int {
+        val unsigned = littleEndianUInt16(bytes, offset)
+        return if ((unsigned and 0x8000) != 0) unsigned - 0x10000 else unsigned
+    }
+
+    private fun littleEndianFloat(bytes: ByteArray, offset: Int): Float {
+        return java.lang.Float.intBitsToFloat(littleEndianUInt32(bytes, offset).toInt())
+    }
+
+    private fun haversineMeters(
+        fromLatitude: Double,
+        fromLongitude: Double,
+        toLatitude: Double,
+        toLongitude: Double,
+    ): Double {
+        val radiusMeters = 6_371_000.0
+        val dLat = Math.toRadians(toLatitude - fromLatitude)
+        val dLon = Math.toRadians(toLongitude - fromLongitude)
+        val lat1 = Math.toRadians(fromLatitude)
+        val lat2 = Math.toRadians(toLatitude)
+        val a = kotlin.math.sin(dLat / 2) * kotlin.math.sin(dLat / 2) +
+            kotlin.math.cos(lat1) * kotlin.math.cos(lat2) *
+            kotlin.math.sin(dLon / 2) * kotlin.math.sin(dLon / 2)
+        val c = 2 * kotlin.math.atan2(kotlin.math.sqrt(a), kotlin.math.sqrt(1 - a))
+        return radiusMeters * c
     }
 
     private fun bigEndianUInt16(bytes: ByteArray, offset: Int): Int {
@@ -4464,6 +6246,26 @@ class DirectWatchPlugin : Plugin() {
         val payload: ByteArray,
     )
 
+    private data class ClassicActivityFetchQueueResult(
+        val requestedCount: Int,
+        val completedCount: Int,
+        val failedCount: Int,
+        val requests: List<JSObject>,
+        val nextSequenceNumber: Int,
+        val error: String?,
+    )
+
+    private data class ClassicActivityFileReadResult(
+        val status: String,
+        val error: String?,
+        val crcValid: Boolean?,
+        val parsed: Boolean?,
+        val chunkNumber: Int?,
+        val chunkTotal: Int?,
+        val payloadBytes: Int?,
+        val durationMs: Long,
+    )
+
     private data class ClassicSystemPayload(
         var batteryLevel: Int? = null,
         var batteryState: Int? = null,
@@ -4516,6 +6318,7 @@ class DirectWatchPlugin : Plugin() {
         val padding: Int,
         val payloadBytes: Int,
         val crcValid: Boolean?,
+        val parsed: Boolean,
         val sampleCount: Int?,
         val steps: Int?,
         val heartRateAvg: Int?,
@@ -4542,6 +6345,19 @@ class DirectWatchPlugin : Plugin() {
         val sleepScore: Int?,
         val sleepStageCount: Int?,
         val sleepIsAwake: Boolean?,
+        val workoutStartTime: String?,
+        val workoutEndTime: String?,
+        val workoutDurationMinutes: Int?,
+        val workoutDistanceMeters: Int?,
+        val workoutSteps: Int?,
+        val workoutType: String?,
+        val workoutHeartRateZoneExtremeSeconds: Int?,
+        val workoutHeartRateZoneAnaerobicSeconds: Int?,
+        val workoutHeartRateZoneAerobicSeconds: Int?,
+        val workoutHeartRateZoneFatBurnSeconds: Int?,
+        val workoutHeartRateZoneWarmUpSeconds: Int?,
+        val workoutGpsSampleCount: Int?,
+        val workoutGpsSamples: List<ClassicWorkoutGpsSample>,
         val activitySamples: List<ClassicActivitySample>,
     )
 
@@ -4582,6 +6398,64 @@ class DirectWatchPlugin : Plugin() {
         val stress: Int?,
     )
 
+    private data class ClassicWorkoutSummary(
+        val startTime: String?,
+        val endTime: String?,
+        val durationMinutes: Int?,
+        val distanceMeters: Int?,
+        val calories: Int?,
+        val steps: Int?,
+        val heartRateAvg: Int?,
+        val heartRateMin: Int?,
+        val heartRateMax: Int?,
+        val workoutType: String?,
+        val zoneExtremeSeconds: Int?,
+        val zoneAnaerobicSeconds: Int?,
+        val zoneAerobicSeconds: Int?,
+        val zoneFatBurnSeconds: Int?,
+        val zoneWarmUpSeconds: Int?,
+    )
+
+    private data class ClassicWorkoutTiming(
+        val startSeconds: Long,
+        val endSeconds: Long,
+        val activeSeconds: Long,
+        val afterActiveOffset: Int,
+    )
+
+    private data class ClassicWorkoutDetailsSummary(
+        val sampleCount: Int,
+        val heartRateAvg: Int?,
+        val heartRateMin: Int?,
+        val heartRateMax: Int?,
+        val samples: List<ClassicActivitySample>,
+    )
+
+    private data class ClassicWorkoutGpsSummary(
+        val sampleCount: Int,
+        val samples: List<ClassicWorkoutGpsSample>,
+    )
+
+    private data class ClassicWorkoutGpsSample(
+        val sampleTime: String,
+        val latitude: Double,
+        val longitude: Double,
+        val hdop: Double?,
+        val speedMetersPerSecond: Double?,
+        val distanceMeters: Double?,
+    ) {
+        fun toJson(): JSObject {
+            val item = JSObject()
+            item.put("sampleTime", sampleTime)
+            item.put("latitude", latitude)
+            item.put("longitude", longitude)
+            item.put("hdop", hdop)
+            item.put("speedMetersPerSecond", speedMetersPerSecond)
+            item.put("distanceMeters", distanceMeters)
+            return item
+        }
+    }
+
     private data class ClassicActivitySample(
         val sampleTime: String,
         val heartRate: Int?,
@@ -4611,6 +6485,14 @@ class DirectWatchPlugin : Plugin() {
         val score: Int?,
         val stageCount: Int?,
         val isAwake: Boolean?,
+        val sampleCount: Int? = null,
+        val heartRateAvg: Int? = null,
+        val heartRateMin: Int? = null,
+        val heartRateMax: Int? = null,
+        val spo2Avg: Int? = null,
+        val spo2Min: Int? = null,
+        val spo2Max: Int? = null,
+        val samples: List<ClassicActivitySample> = emptyList(),
     )
 
     private data class ClassicActivityChunk(
@@ -4676,11 +6558,24 @@ class DirectWatchPlugin : Plugin() {
         private const val MAX_PACKET_PREVIEW_BYTES = 96
         private const val MAX_CLASSIC_PACKET_PREVIEW_BYTES = 160
         private const val CLASSIC_PROBE_READ_MS = 6_000L
-        private const val CLASSIC_POST_AUTH_READ_MS = 10_000L
+        private const val CLASSIC_POST_AUTH_READ_MS = 4_000L
+        private const val CLASSIC_POST_AUTH_HISTORY_READ_MS = 10_000L
         private const val CLASSIC_SERVICE_SYNC_READ_MS = 4_000L
-        private const val CLASSIC_ACTIVITY_FILE_READ_MS = 25_000L
-        private const val CLASSIC_ACTIVITY_FILE_PROBE_LIMIT = 24
+        private const val CLASSIC_ACTIVITY_ACK_READ_MS = 1_500L
+        private const val CLASSIC_ACTIVITY_FILE_READ_MS = 45_000L
+        private const val CLASSIC_ACTIVITY_FILE_NO_PROGRESS_MS = 12_000L
+        private const val CLASSIC_ACTIVITY_WORKOUT_DETAIL_READ_MS = 120_000L
+        private const val CLASSIC_ACTIVITY_WORKOUT_DETAIL_NO_PROGRESS_MS = 30_000L
+        private const val CLASSIC_ACTIVITY_FILE_QUEUE_POLL_MS = 250L
+        private const val CLASSIC_ACTIVITY_FILE_PROBE_LIMIT = 128
+        private const val CLASSIC_ACTIVITY_FILE_ID_BYTES = 7
+        private const val CLASSIC_MANUAL_SAMPLE_HR = 0x11
+        private const val CLASSIC_MANUAL_SAMPLE_SPO2 = 0x12
+        private const val CLASSIC_MANUAL_SAMPLE_STRESS = 0x13
+        private const val CLASSIC_MANUAL_SAMPLE_TEMPERATURE = 0x44
         private const val CLASSIC_POST_AUTH_COMMAND_DELAY_MS = 120L
+        private const val CLASSIC_FAST_READ_POLL_MS = 120L
+        private const val CLASSIC_ACTIVITY_SELECTION_QUIET_MS = 650L
         private const val CLASSIC_SLEEP_PACKET_HEADER = 0xfffcfafbL
         private const val CLASSIC_VERSION_READ_MS = 1_200L
         private const val CLASSIC_SESSION_CONFIG_READ_MS = 1_200L

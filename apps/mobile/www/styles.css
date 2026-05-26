@@ -61,7 +61,7 @@ button {
   width: min(100%, 520px);
   min-height: 100dvh;
   margin: 0 auto;
-  padding: calc(14px + env(safe-area-inset-top)) 12px calc(88px + env(safe-area-inset-bottom));
+  padding: calc(14px + env(safe-area-inset-top)) 12px calc(168px + env(safe-area-inset-bottom));
 }
 
 .mobile-shell-auth {
@@ -1976,7 +1976,14 @@ button {
   color: #fff;
 }
 
+.secondary-action {
+  border: 1px solid rgba(15, 118, 110, 0.2);
+  background: rgba(238, 245, 243, 0.94);
+  color: var(--accent-dark);
+}
+
 .primary-action:disabled,
+.secondary-action:disabled,
 .topbar-action-button:disabled {
   cursor: not-allowed;
   opacity: 0.55;
@@ -3313,6 +3320,22 @@ button {
   min-width: 0;
 }
 
+.device-workout-secondary-series {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.device-workout-secondary-series span {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: #fff;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 820;
+}
+
 .device-workout-series-caption {
   display: grid;
   gap: 2px;
@@ -3556,6 +3579,10 @@ button {
 
 .device-workout-series.spo2 .device-workout-chart-plot polyline {
   stroke: #7c3aed;
+}
+
+.device-workout-series.stress .device-workout-chart-plot polyline {
+  stroke: #0f766e;
 }
 
 .coach-team-day-row {
@@ -3815,6 +3842,7 @@ button {
 .watch-parameters-card,
 .watch-workouts-card,
 .watch-detail-head,
+.watch-quick-sync-card,
 .watch-settings-entry-card,
 .watch-settings-panel {
   display: grid;
@@ -4027,6 +4055,107 @@ button {
   font-size: 0.78rem;
   font-weight: 820;
   line-height: 1.3;
+}
+
+.mobile-uplot-chart {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #fbfdfc;
+}
+
+.mobile-uplot-plot {
+  min-width: 0;
+  width: 100%;
+}
+
+.mobile-uplot-chart .u-wrap,
+.mobile-uplot-chart .uplot {
+  width: 100% !important;
+}
+
+.mobile-uplot-chart .u-over {
+  border-radius: 16px;
+}
+
+.mobile-uplot-chart .u-axis text {
+  fill: var(--muted);
+  font-weight: 760;
+}
+
+.mobile-uplot-chart .u-cursor-x,
+.mobile-uplot-chart .u-cursor-y {
+  border-color: rgba(15, 118, 110, 0.32);
+}
+
+.mobile-uplot-chart.is-workout {
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.mobile-bars-plot {
+  position: relative;
+  display: block;
+  min-width: 0;
+  width: 100%;
+  height: var(--mobile-bars-height, 158px);
+  padding: 12px 8px 10px;
+  background:
+    linear-gradient(to bottom, transparent 24%, rgba(100, 116, 139, 0.14) 24%, rgba(100, 116, 139, 0.14) calc(24% + 1px), transparent calc(24% + 1px)),
+    linear-gradient(to bottom, transparent 49%, rgba(100, 116, 139, 0.14) 49%, rgba(100, 116, 139, 0.14) calc(49% + 1px), transparent calc(49% + 1px)),
+    linear-gradient(to bottom, transparent 74%, rgba(100, 116, 139, 0.14) 74%, rgba(100, 116, 139, 0.14) calc(74% + 1px), transparent calc(74% + 1px));
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.mobile-bars-plot i {
+  position: relative;
+  z-index: 1;
+  flex: 1 1 0;
+  min-width: 2px;
+  border-radius: 999px 999px 0 0;
+  background: #0f766e;
+  opacity: 0.88;
+}
+
+.mobile-bars-average {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  z-index: 2;
+  border-top: 1px dashed rgba(173, 106, 21, 0.72);
+}
+
+.mobile-bars-chart.is-spo2 .mobile-bars-plot i {
+  background: #0891b2;
+}
+
+.mobile-bars-chart.is-stress .mobile-bars-plot i {
+  background: #ad6a15;
+}
+
+.mobile-bars-chart.is-pace .mobile-bars-plot i,
+.mobile-bars-chart.is-speed .mobile-bars-plot i {
+  background: #426f9d;
+}
+
+.device-workout-coverage-bar {
+  position: relative;
+  display: block;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(15, 118, 110, 0.1);
+}
+
+.device-workout-coverage-bar i {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: inherit;
+  background: rgba(15, 118, 110, 0.5);
 }
 
 .watch-detail-pulse-chart {
@@ -4300,6 +4429,62 @@ button {
   line-height: 1;
   text-transform: uppercase;
   white-space: nowrap;
+}
+
+.watch-quick-sync-card {
+  grid-template-columns: minmax(0, 1fr);
+  align-items: stretch;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 16px;
+  border-color: rgba(15, 118, 110, 0.12);
+  background:
+    linear-gradient(135deg, rgba(240, 253, 250, 0.92), rgba(255, 255, 255, 0.96)),
+    #ffffff;
+  box-shadow: none;
+}
+
+.watch-quick-sync-card > div {
+  min-width: 0;
+}
+
+.watch-quick-sync-card span {
+  display: block;
+  color: var(--accent-dark);
+  font-size: 0.7rem;
+  font-weight: 950;
+  letter-spacing: 0.04em;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+
+.watch-quick-sync-card strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--text);
+  font-size: 0.84rem;
+  font-weight: 880;
+  line-height: 1.25;
+}
+
+.watch-quick-sync-card .primary-action {
+  min-height: 42px;
+  border-radius: 15px;
+  font-size: 0.94rem;
+  line-height: 1.1;
+}
+
+.watch-quick-sync-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+}
+
+.watch-quick-sync-actions .secondary-action {
+  min-height: 40px;
+  border-radius: 14px;
+  font-size: 0.86rem;
+  line-height: 1.1;
 }
 
 .watch-parameters-source {
@@ -5619,22 +5804,28 @@ svg.watch-parameter-preview {
   box-shadow: 0 10px 24px rgba(13, 44, 39, 0.06);
 }
 
-.watch-workout-item summary {
+.watch-workout-summary {
   position: relative;
   display: grid;
   gap: 11px;
+  width: 100%;
   min-width: 0;
   min-height: 116px;
   padding: 16px 52px 14px 16px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
   cursor: pointer;
   list-style: none;
+  appearance: none;
 }
 
-.watch-workout-item summary::-webkit-details-marker {
+.watch-workout-summary::-webkit-details-marker {
   display: none;
 }
 
-.watch-workout-item summary::after {
+.watch-workout-summary::after {
   content: "›";
   position: absolute;
   right: 17px;
@@ -5652,7 +5843,7 @@ svg.watch-parameter-preview {
   transition: transform 0.18s ease;
 }
 
-.watch-workout-item[open] summary::after {
+.watch-workout-item.is-open .watch-workout-summary::after {
   transform: rotate(90deg);
 }
 
@@ -5703,6 +5894,128 @@ svg.watch-parameter-preview {
   gap: 12px;
   min-width: 0;
   padding: 0 14px 14px;
+}
+
+.watch-workout-parameter-panel,
+.watch-workout-data-note {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid rgba(15, 118, 110, 0.12);
+  border-radius: 16px;
+  background:
+    linear-gradient(135deg, rgba(240, 253, 250, 0.88), rgba(255, 255, 255, 0.95)),
+    #ffffff;
+}
+
+.watch-workout-parameter-head {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.watch-workout-parameter-head span {
+  color: var(--accent-dark);
+  font-size: 0.68rem;
+  font-weight: 950;
+  letter-spacing: 0.04em;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+
+.watch-workout-parameter-head strong {
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 950;
+  line-height: 1.15;
+}
+
+.watch-workout-parameter-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.watch-workout-parameter-grid article {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  min-height: 72px;
+  padding: 9px 10px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.watch-workout-parameter-grid span,
+.watch-workout-data-note span {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 820;
+  line-height: 1.25;
+}
+
+.watch-workout-parameter-grid strong,
+.watch-workout-data-note strong {
+  color: var(--text);
+  font-size: 0.94rem;
+  font-weight: 950;
+  line-height: 1.12;
+  overflow-wrap: anywhere;
+}
+
+.watch-workout-parameter-grid small {
+  color: var(--accent-dark);
+  font-size: 0.7rem;
+  font-weight: 850;
+  line-height: 1.1;
+}
+
+.watch-workout-graph-gate {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px dashed rgba(15, 118, 110, 0.22);
+  border-radius: 16px;
+  background: rgba(248, 250, 252, 0.9);
+}
+
+.watch-workout-graph-gate div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.watch-workout-graph-gate strong {
+  color: var(--text);
+  font-size: 0.92rem;
+  font-weight: 950;
+  line-height: 1.15;
+}
+
+.watch-workout-graph-gate span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 780;
+  line-height: 1.3;
+}
+
+.watch-workout-graph-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  width: 100%;
+  min-width: 0;
+  border: 1px solid rgba(15, 118, 110, 0.18);
+  border-radius: 13px;
+  background: rgba(15, 118, 110, 0.1);
+  color: var(--accent-dark);
+  font-size: 0.78rem;
+  font-weight: 950;
+  line-height: 1;
 }
 
 .watch-settings-panel summary {

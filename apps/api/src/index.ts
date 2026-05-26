@@ -23,6 +23,7 @@ import { ensureSchema } from "./schema";
 
 const host = process.env.API_HOST ?? "0.0.0.0";
 const port = Number(process.env.API_PORT ?? 4000);
+const bodyLimit = Number(process.env.API_BODY_LIMIT_BYTES ?? 10 * 1024 * 1024);
 const nodeEnv = process.env.NODE_ENV ?? "development";
 const sessionCookieName =
   process.env.SESSION_COOKIE_NAME ?? "training_platform_session";
@@ -39,6 +40,7 @@ const allowedCorsOrigins = resolveAllowedCorsOrigins();
 validateRuntimeConfig();
 
 const app = Fastify({
+  bodyLimit,
   logger: true,
 });
 const guards = createApiGuards({
@@ -196,7 +198,6 @@ function validateRuntimeConfig() {
     throw new Error("PUBLIC_HOST or CORS_ORIGINS must be configured for production CORS.");
   }
 }
-
 
 
 

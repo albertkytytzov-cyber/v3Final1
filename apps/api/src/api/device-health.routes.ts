@@ -101,8 +101,12 @@ export function registerDeviceHealthRoutes(
       throw dependencies.httpError(400, (error as Error).message);
     }
 
+    const includeSamples = query.includeSamples ?? Boolean(query.entryDate);
+
     return {
-      workouts: await listDeviceWorkoutsForAthlete(user.athlete_id, query.entryDate),
+      workouts: await listDeviceWorkoutsForAthlete(user.athlete_id, query.entryDate, {
+        includeSamples,
+      }),
     };
   });
 
@@ -209,9 +213,15 @@ export function registerDeviceHealthRoutes(
 
     await dependencies.guards.assertAthleteAccess(user, athleteId);
 
+    const includeSamples = query.includeSamples ?? Boolean(query.entryDate);
+
     return {
-      links: await listDeviceWorkoutLinksForAthlete(athleteId, query.entryDate),
-      workouts: await listDeviceWorkoutsForAthlete(athleteId, query.entryDate),
+      links: await listDeviceWorkoutLinksForAthlete(athleteId, query.entryDate, {
+        includeSamples,
+      }),
+      workouts: await listDeviceWorkoutsForAthlete(athleteId, query.entryDate, {
+        includeSamples,
+      }),
     };
   });
 

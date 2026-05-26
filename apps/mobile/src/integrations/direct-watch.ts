@@ -4,10 +4,16 @@ import type {
   DeviceHealthOxygenSaturationSummary,
   DeviceHealthSamplePayload,
   DeviceHealthSleepSummary,
+  DeviceHealthWorkoutSummary,
+  DeviceWorkoutPayload,
+  DeviceWorkoutSamplePayload,
+  DeviceWorkoutsSyncPayload,
 } from "../types/models.js";
 import type { DirectWatchWeatherPayload } from "./watch-weather.js";
 
-const DIRECT_WATCH_TIME_OFFSET_MINUTES = -90;
+const DIRECT_WATCH_TIME_OFFSET_MINUTES = 0;
+const DIRECT_WATCH_RAW_CACHE_KEY = "perform.mobile.directWatchRawCache";
+const DIRECT_WATCH_RAW_CACHE_LIMIT = 6;
 
 export interface DirectWatchAvailability {
   available?: boolean;
@@ -134,7 +140,9 @@ export interface DirectWatchDecryptedPacket {
   activityFileIdsHex?: string | null;
   activityFileKind?: string | null;
   activityFilePadding?: number | null;
+  activityFileParsed?: boolean | null;
   activityFilePayloadBytes?: number | null;
+  activityFileRawHex?: string | null;
   activityFiles?: DirectWatchActivityFile[];
   activitySamples?: DirectWatchActivitySample[];
   activityCalories?: number | null;
@@ -153,6 +161,19 @@ export interface DirectWatchDecryptedPacket {
   activityTrainingLoadDay?: number | null;
   activityTrainingLoadWeek?: number | null;
   activityVitality?: number | null;
+  activityWorkoutDistanceMeters?: number | null;
+  activityWorkoutDurationMinutes?: number | null;
+  activityWorkoutEndTime?: string | null;
+  activityWorkoutHeartRateZoneAerobicSeconds?: number | null;
+  activityWorkoutHeartRateZoneAnaerobicSeconds?: number | null;
+  activityWorkoutHeartRateZoneExtremeSeconds?: number | null;
+  activityWorkoutHeartRateZoneFatBurnSeconds?: number | null;
+  activityWorkoutHeartRateZoneWarmUpSeconds?: number | null;
+  activityWorkoutGpsSampleCount?: number | null;
+  activityWorkoutGpsSamples?: DirectWatchWorkoutGpsSample[];
+  activityWorkoutStartTime?: string | null;
+  activityWorkoutSteps?: number | null;
+  activityWorkoutType?: string | null;
   batteryLevel?: number | null;
   batteryState?: number | null;
   byteLength?: number | null;
@@ -194,6 +215,15 @@ export interface DirectWatchActivitySample {
   stress?: number | null;
 }
 
+export interface DirectWatchWorkoutGpsSample {
+  distanceMeters?: number | null;
+  hdop?: number | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  sampleTime?: string | null;
+  speedMetersPerSecond?: number | null;
+}
+
 export interface DirectWatchSessionStatus {
   connected?: boolean;
   deviceId?: string | null;
@@ -209,7 +239,12 @@ export interface DirectWatchSessionStatus {
 }
 
 export interface DirectWatchClassicProbe {
+  activityFileProbeCompletedCount?: number | null;
   activityFileProbeCount?: number | null;
+  activityFileProbeFailedCount?: number | null;
+  activityFileProbeRequests?: DirectWatchActivityFileProbeRequest[];
+  activityFileAckCount?: number | null;
+  activityFileAckIds?: string[];
   authStage?: "watch-nonce" | "auth-response" | string | null;
   authKeyError?: string | null;
   authKeyStatus?: "not-provided" | "valid" | "invalid" | "invalid-format" | "no-watch-nonce" | string | null;
@@ -232,6 +267,7 @@ export interface DirectWatchClassicProbe {
   sentAuthStep1?: boolean;
   sentAuthStep2?: boolean;
   sentActivityFileProbe?: boolean;
+  sentActivityFileAck?: boolean;
   sentPostAuthProbe?: boolean;
   sentSessionConfig?: boolean;
   sentVersionRequest?: boolean;
@@ -240,11 +276,77 @@ export interface DirectWatchClassicProbe {
   watchNonceHex?: string | null;
 }
 
+export interface DirectWatchActivityFileProbeRequest {
+  activityFile?: DirectWatchActivityFile | null;
+  chunkNumber?: number | null;
+  chunkTotal?: number | null;
+  crcValid?: boolean | null;
+  detailType?: number | null;
+  durationMs?: number | null;
+  error?: string | null;
+  idHex?: string | null;
+  kind?: string | null;
+  payloadBytes?: number | null;
+  parsed?: boolean | null;
+  sequenceNumber?: number | null;
+  status?: string | null;
+  subtype?: number | null;
+  timestamp?: string | null;
+  type?: number | null;
+  version?: number | null;
+}
+
 export interface DirectWatchActivityInventory {
   entryDates: string[];
   fileCount: number;
   files: DirectWatchActivityFile[];
   probe: DirectWatchClassicProbe;
+}
+
+export interface DirectWatchDailySyncPayload {
+  ackFileIds: string[];
+  rawCacheId?: string | null;
+  summary: DeviceHealthDailySummaryPayload;
+  workouts: DeviceWorkoutsSyncPayload;
+}
+
+export type DirectWatchRawCacheStatus = "captured" | "queued" | "submitted" | "acked" | "ack-error";
+
+export interface DirectWatchRawCacheFile {
+  crcValid?: boolean | null;
+  detailType?: number | null;
+  idHex: string;
+  kind?: string | null;
+  parsed?: boolean | null;
+  payloadBytes?: number | null;
+  rawHex?: string | null;
+  sampleCount?: number | null;
+  subtype?: number | null;
+  timestamp?: string | null;
+  type?: number | null;
+  version?: number | null;
+}
+
+export interface DirectWatchRawCacheEntry {
+  ackedAt?: string | null;
+  ackError?: string | null;
+  ackFileIds: string[];
+  capturedAt: string;
+  deviceId: string;
+  deviceName?: string | null;
+  entryDate: string;
+  files: DirectWatchRawCacheFile[];
+  id: string;
+  status: DirectWatchRawCacheStatus;
+  submittedAt?: string | null;
+  summary: {
+    fileCount: number;
+    heartRateSampleCount: number;
+    oxygenSampleCount: number;
+    sleepMinutes: number | null;
+    workoutCount: number;
+    workoutSampleCount: number;
+  };
 }
 
 export interface DirectWatchServiceSyncResult extends DirectWatchClassicProbe {
@@ -296,11 +398,18 @@ interface DirectWatchPlugin {
   inspectDevice?: (input: { deviceId: string }) => Promise<DirectWatchInspection>;
   isAvailable?: () => Promise<DirectWatchAvailability>;
   pairDevice?: (input: { deviceId: string }) => Promise<DirectWatchPairingResult>;
+  ackActivityFiles?: (input: {
+    authKeyHex: string;
+    deviceId: string;
+    fileIds: string[];
+  }) => Promise<DirectWatchClassicProbe>;
   probeClassicSession?: (input: {
     authKeyHex?: string;
     authStep1?: boolean;
     deviceId: string;
     entryDate?: string;
+    includeHistory?: boolean;
+    includeSleep?: boolean;
     postAuthProbe?: boolean;
   }) => Promise<DirectWatchClassicProbe>;
   requestAuthorization?: () => Promise<DirectWatchPermissionResult>;
@@ -489,6 +598,8 @@ export async function probeDirectWatchClassicSession(
   authKeyHex?: string,
   postAuthProbe = false,
   entryDate?: string,
+  includeHistory = true,
+  includeSleep = true,
 ): Promise<DirectWatchClassicProbe> {
   const plugin = getDirectWatchPlugin();
 
@@ -503,15 +614,58 @@ export async function probeDirectWatchClassicSession(
     }
   }
 
-  const probe = await plugin.probeClassicSession({ authKeyHex, authStep1, deviceId, entryDate, postAuthProbe });
+  const probe = await plugin.probeClassicSession({
+    authKeyHex,
+    authStep1,
+    deviceId,
+    entryDate,
+    includeHistory,
+    includeSleep,
+    postAuthProbe,
+  });
   return normalizeDirectWatchClassicProbe(probe);
+}
+
+export async function ackDirectWatchActivityFiles(
+  deviceId: string,
+  authKeyHex: string,
+  fileIds: string[],
+): Promise<DirectWatchClassicProbe> {
+  const plugin = getDirectWatchPlugin();
+  const normalizedFileIds = Array.from(new Set(fileIds.map((fileId) => fileId.trim()).filter(Boolean)));
+
+  if (!normalizedFileIds.length) {
+    return {
+      activityFileAckCount: 0,
+      activityFileAckIds: [],
+      sentActivityFileAck: false,
+    };
+  }
+
+  if (!plugin?.ackActivityFiles) {
+    throw new Error("Подтверждение файлов часов доступно только в Android-сборке PERFORM.");
+  }
+
+  if (plugin.requestAuthorization) {
+    const authorization = await plugin.requestAuthorization();
+    if (!authorization.granted) {
+      throw new Error(authorization.reason || "Нужно разрешить PERFORM подключение к Bluetooth-устройствам.");
+    }
+  }
+
+  const result = await plugin.ackActivityFiles({
+    authKeyHex,
+    deviceId,
+    fileIds: normalizedFileIds,
+  });
+  return normalizeDirectWatchClassicProbe(result);
 }
 
 export async function readDirectWatchActivityInventory(
   deviceId: string,
   authKeyHex: string,
 ): Promise<DirectWatchActivityInventory> {
-  const probe = await probeDirectWatchClassicSession(deviceId, true, authKeyHex, true, formatLocalDateValue(new Date()));
+  const probe = await probeDirectWatchClassicSession(deviceId, true, authKeyHex, true, formatLocalDateValue(new Date()), true);
   const files = collectDirectWatchActivityFiles(probe);
   const entryDates = collectDirectWatchInventoryEntryDates(files);
 
@@ -557,15 +711,61 @@ export async function readDirectWatchDailySummary(
   deviceId: string,
   authKeyHex: string,
 ): Promise<DeviceHealthDailySummaryPayload> {
-  const probe = await probeDirectWatchClassicSession(deviceId, true, authKeyHex, true, entryDate);
+  const result = await readDirectWatchDailySync(entryDate, deviceId, authKeyHex);
+  return result.summary;
+}
 
-  if (probe.authKeyStatus !== "valid" || !probe.sentActivityFileProbe) {
+export async function readDirectWatchDeviceWorkouts(
+  entryDate: string,
+  deviceId: string,
+  authKeyHex: string,
+): Promise<DeviceWorkoutsSyncPayload> {
+  const result = await readDirectWatchDailySync(entryDate, deviceId, authKeyHex);
+  return result.workouts;
+}
+
+export async function readDirectWatchDailySync(
+  entryDate: string,
+  deviceId: string,
+  authKeyHex: string,
+  options: { includeHistory?: boolean; includeSleep?: boolean } = {},
+): Promise<DirectWatchDailySyncPayload> {
+  const includeHistory = options.includeHistory ?? true;
+  const includeSleep = options.includeSleep ?? true;
+  const probe = await probeDirectWatchClassicSession(
+    deviceId,
+    true,
+    authKeyHex,
+    true,
+    entryDate,
+    includeHistory,
+    includeSleep,
+  );
+
+  const payload = buildDirectWatchDailySyncPayload(entryDate, probe);
+  const rawCacheId = saveDirectWatchRawSyncCache(entryDate, deviceId, probe, payload);
+  return attachDirectWatchRawCacheId(payload, rawCacheId);
+}
+
+function buildDirectWatchDailySyncPayload(
+  entryDate: string,
+  probe: DirectWatchClassicProbe,
+): DirectWatchDailySyncPayload {
+  if (probe.authKeyStatus !== "valid") {
     throw new Error(probe.authKeyError || probe.error || "PERFORM Sync не смог авторизоваться на часах.");
   }
+  if (!probe.sentActivityFileProbe) {
+    throw new Error("За выбранный день часы не отдали отдельные файлы активности.");
+  }
 
-  const packets = (probe.decryptedPackets ?? []).filter(hasDirectWatchActivityFile);
+  const packets = dedupeDirectWatchActivityPackets(
+    (probe.decryptedPackets ?? [])
+      .filter(hasDirectWatchActivityFile)
+      .filter(isCompleteDirectWatchActivityPacket),
+  );
   const activityPackets = packets.filter((packet) =>
-    getDirectWatchActivityEntryDate(packet.activityFile) === entryDate,
+    getDirectWatchActivityEntryDate(packet.activityFile) === entryDate ||
+      hasDirectWatchSampleForEntryDate(packet, entryDate),
   );
   const sleepPackets = packets.filter((packet) =>
     getDirectWatchSleepEntryDate(packet) === entryDate,
@@ -581,33 +781,357 @@ export async function readDirectWatchDailySummary(
     packet.activityFile.subtype === 0 &&
     packet.activityFile.detailType === 1,
   );
-  const minuteDetails = activityPackets.filter((packet) =>
-    packet.activityFile?.type === 0 &&
-    packet.activityFile.subtype === 0 &&
-    packet.activityFile.detailType === 0,
-  );
-  const detailAggregate = aggregateDirectWatchMinuteDetails(minuteDetails);
+  const detailAggregate = aggregateDirectWatchMinuteDetails(activityPackets, entryDate);
   const heartRate = buildDirectWatchHeartRateSummary(dailySummary, detailAggregate);
   const oxygenSaturation = buildDirectWatchOxygenSummary(dailySummary, detailAggregate);
   const sleep = buildDirectWatchSleepSummary(sleepPackets);
-  const samples = buildDirectWatchSamples(dayPackets);
+  const samples = buildDirectWatchSamples(dayPackets, entryDate);
+  const workouts = buildDirectWatchDeviceWorkouts(entryDate, probe, activityPackets);
+  const workoutSummary = buildDirectWatchWorkoutSummary(workouts.workouts);
 
-  if (!sleep && !heartRate && !oxygenSaturation && !dailySummary) {
+  if (!sleep && !heartRate && !oxygenSaturation && !dailySummary && !workoutSummary) {
     throw new Error("PERFORM Sync прочитал день, но пока не нашёл сон, пульс, SpO2 или итоговые показатели.");
   }
 
   return {
-    entryDate,
-    provider: "direct-watch",
-    sourceDevice: probe.deviceName || "Redmi Watch / PERFORM Sync",
-    sleep,
-    heartRate,
-    oxygenSaturation,
-    workout: null,
-    samples,
-    rawPayload: buildDirectWatchRawPayload(probe, dayPackets, dailySummary, detailAggregate),
-    syncedAt: new Date().toISOString(),
+    ackFileIds: collectDirectWatchAckFileIds(probe, dayPackets),
+    summary: {
+      entryDate,
+      provider: "direct-watch",
+      sourceDevice: probe.deviceName || "Redmi Watch / PERFORM Sync",
+      sleep,
+      heartRate,
+      oxygenSaturation,
+      workout: workoutSummary,
+      samples,
+      rawPayload: buildDirectWatchRawPayload(probe, dayPackets, dailySummary, detailAggregate, workouts.workouts),
+      syncedAt: new Date().toISOString(),
+    },
+    workouts,
   };
+}
+
+function dedupeDirectWatchActivityPackets(packets: DirectWatchDecryptedPacket[]) {
+  const dedupedPackets: DirectWatchDecryptedPacket[] = [];
+  const packetsByFileId = new Map<string, { index: number; score: number }>();
+
+  packets.forEach((packet) => {
+    const fileId = normalizeString(packet.activityFile?.idHex)?.toUpperCase();
+    if (!fileId) {
+      dedupedPackets.push(packet);
+      return;
+    }
+
+    const score = scoreDirectWatchActivityPacket(packet);
+    const existing = packetsByFileId.get(fileId);
+    if (!existing) {
+      packetsByFileId.set(fileId, { index: dedupedPackets.length, score });
+      dedupedPackets.push(packet);
+      return;
+    }
+
+    if (score >= existing.score) {
+      dedupedPackets[existing.index] = packet;
+      packetsByFileId.set(fileId, { ...existing, score });
+    }
+  });
+
+  return dedupedPackets;
+}
+
+function isCompleteDirectWatchActivityPacket(packet: DirectWatchDecryptedPacket) {
+  return packet.activityFileCrcValid === true;
+}
+
+function scoreDirectWatchActivityPacket(packet: DirectWatchDecryptedPacket) {
+  const rawHexLength = normalizeString(packet.activityFileRawHex)?.length ?? 0;
+  const sampleCount = Math.max(
+    packet.activitySampleCount ?? 0,
+    packet.activitySamples?.length ?? 0,
+    packet.activityWorkoutGpsSampleCount ?? 0,
+    packet.activityWorkoutGpsSamples?.length ?? 0,
+  );
+  const summaryScore = [
+    packet.activityWorkoutStartTime,
+    packet.activityWorkoutEndTime,
+    packet.activityWorkoutDurationMinutes,
+    packet.activityWorkoutDistanceMeters,
+    packet.activityWorkoutSteps,
+    packet.activityWorkoutType,
+    packet.activityCalories,
+    packet.activityHeartRateAvg,
+    packet.activitySpo2Avg,
+    packet.activityStressAvg,
+  ].filter((value) => value !== null && value !== undefined && value !== "").length;
+  const isCompleteChunk =
+    typeof packet.activityChunkTotal === "number" &&
+    packet.activityChunkNumber === packet.activityChunkTotal;
+
+  return (
+    (packet.activityFileCrcValid === true ? 1_000_000 : 0) +
+    (isCompleteChunk ? 100_000 : 0) +
+    summaryScore * 10_000 +
+    sampleCount * 100 +
+    (packet.activityFilePayloadBytes ?? 0) +
+    rawHexLength
+  );
+}
+
+function attachDirectWatchRawCacheId(
+  payload: DirectWatchDailySyncPayload,
+  rawCacheId: string | null,
+): DirectWatchDailySyncPayload {
+  if (!rawCacheId) {
+    return payload;
+  }
+
+  return {
+    ...payload,
+    rawCacheId,
+    summary: {
+      ...payload.summary,
+      rawPayload: {
+        ...(payload.summary.rawPayload ?? {}),
+        directWatchRawCacheId: rawCacheId,
+      },
+    },
+    workouts: {
+      ...payload.workouts,
+      workouts: payload.workouts.workouts.map((workout) => ({
+        ...workout,
+        rawPayload: {
+          ...(workout.rawPayload ?? {}),
+          directWatchRawCacheId: rawCacheId,
+        },
+      })),
+    },
+  };
+}
+
+function saveDirectWatchRawSyncCache(
+  entryDate: string,
+  deviceId: string,
+  probe: DirectWatchClassicProbe,
+  payload: DirectWatchDailySyncPayload,
+) {
+  const packets = (probe.decryptedPackets ?? []).filter(hasDirectWatchActivityFile);
+  const dayPackets = packets.filter((packet) =>
+    getDirectWatchActivityEntryDate(packet.activityFile) === entryDate ||
+      hasDirectWatchSampleForEntryDate(packet, entryDate) ||
+      getDirectWatchSleepEntryDate(packet) === entryDate,
+  );
+  const files = collectDirectWatchRawCacheFiles(dayPackets);
+  if (!files.length) {
+    return null;
+  }
+
+  const cacheId = createDirectWatchRawCacheId(entryDate, deviceId, files);
+  const entry: DirectWatchRawCacheEntry = {
+    ackedAt: null,
+    ackError: null,
+    ackFileIds: collectDirectWatchAckFileIds(probe, dayPackets),
+    capturedAt: new Date().toISOString(),
+    deviceId,
+    deviceName: probe.deviceName ?? null,
+    entryDate,
+    files,
+    id: cacheId,
+    status: "captured",
+    submittedAt: null,
+    summary: {
+      fileCount: files.length,
+      heartRateSampleCount: payload.summary.samples?.filter((sample) => sample.metric === "heart_rate").length ?? 0,
+      oxygenSampleCount: payload.summary.samples?.filter((sample) => sample.metric === "oxygen_saturation").length ?? 0,
+      sleepMinutes: payload.summary.sleep?.durationMinutes ?? null,
+      workoutCount: payload.workouts.workouts.length,
+      workoutSampleCount: payload.workouts.workouts.reduce((total, workout) => total + workout.samples.length, 0),
+    },
+  };
+
+  upsertDirectWatchRawCacheEntry(entry);
+  return cacheId;
+}
+
+function collectDirectWatchRawCacheFiles(dayPackets: DirectWatchDecryptedPacket[]) {
+  const seen = new Set<string>();
+  const files: DirectWatchRawCacheFile[] = [];
+
+  for (const packet of dayPackets) {
+    const idHex = packet.activityFile?.idHex?.trim();
+    if (!idHex || seen.has(idHex)) {
+      continue;
+    }
+    seen.add(idHex);
+
+    files.push({
+      crcValid: packet.activityFileCrcValid ?? null,
+      detailType: packet.activityFile?.detailType ?? null,
+      idHex,
+      kind: packet.activityFileKind ?? packet.activityFile?.kind ?? null,
+      parsed: packet.activityFileParsed ?? null,
+      payloadBytes: packet.activityFilePayloadBytes ?? null,
+      rawHex: packet.activityFileRawHex ?? null,
+      sampleCount: packet.activitySampleCount ?? null,
+      subtype: packet.activityFile?.subtype ?? null,
+      timestamp: packet.activityFile?.timestamp ?? null,
+      type: packet.activityFile?.type ?? null,
+      version: packet.activityFile?.version ?? null,
+    });
+  }
+
+  return files;
+}
+
+function createDirectWatchRawCacheId(
+  entryDate: string,
+  deviceId: string,
+  files: DirectWatchRawCacheFile[],
+) {
+  const filePart = files.map((file) => file.idHex).sort().join("-");
+  return `direct-watch:${entryDate}:${deviceId}:${filePart}`;
+}
+
+export function loadDirectWatchRawCacheEntries(): DirectWatchRawCacheEntry[] {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  const rawValue = window.localStorage.getItem(DIRECT_WATCH_RAW_CACHE_KEY);
+  if (!rawValue) {
+    return [];
+  }
+
+  try {
+    const entries = JSON.parse(rawValue) as DirectWatchRawCacheEntry[];
+    return Array.isArray(entries)
+      ? entries.filter((entry) => typeof entry?.id === "string" && entry.id.trim())
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+export function markDirectWatchRawCacheQueued(cacheId: string | null | undefined) {
+  updateDirectWatchRawCacheEntry(cacheId, {
+    status: "queued",
+  });
+}
+
+export function markDirectWatchRawCacheSubmitted(cacheId: string | null | undefined) {
+  updateDirectWatchRawCacheEntry(cacheId, {
+    status: "submitted",
+    submittedAt: new Date().toISOString(),
+  });
+}
+
+export function markDirectWatchRawCacheAcked(
+  cacheId: string | null | undefined,
+  ackFileIds: string[],
+) {
+  updateDirectWatchRawCacheEntry(cacheId, {
+    ackedAt: new Date().toISOString(),
+    ackError: null,
+    ackFileIds: Array.from(new Set(ackFileIds.map((fileId) => fileId.trim()).filter(Boolean))),
+    status: "acked",
+  });
+}
+
+export function markDirectWatchRawCacheAckError(
+  cacheId: string | null | undefined,
+  error: unknown,
+) {
+  updateDirectWatchRawCacheEntry(cacheId, {
+    ackError: error instanceof Error ? error.message : typeof error === "string" ? error : "ACK не выполнен.",
+    status: "ack-error",
+  });
+}
+
+function upsertDirectWatchRawCacheEntry(entry: DirectWatchRawCacheEntry) {
+  const entries = loadDirectWatchRawCacheEntries();
+  const previous = entries.find((item) => item.id === entry.id);
+  const nextEntry: DirectWatchRawCacheEntry = previous
+    ? {
+        ...entry,
+        ackedAt: previous.ackedAt,
+        ackError: previous.ackError,
+        capturedAt: previous.capturedAt,
+        status: previous.status === "acked" ||
+          previous.status === "submitted" ||
+          previous.status === "queued" ||
+          previous.status === "ack-error"
+          ? previous.status
+          : entry.status,
+        submittedAt: previous.submittedAt,
+      }
+    : entry;
+  writeDirectWatchRawCacheEntries([
+    nextEntry,
+    ...entries.filter((item) => item.id !== entry.id),
+  ].slice(0, DIRECT_WATCH_RAW_CACHE_LIMIT));
+}
+
+function updateDirectWatchRawCacheEntry(
+  cacheId: string | null | undefined,
+  patch: Partial<DirectWatchRawCacheEntry>,
+) {
+  if (!cacheId) {
+    return;
+  }
+
+  const entries = loadDirectWatchRawCacheEntries();
+  const nextEntries = entries.map((entry) =>
+    entry.id === cacheId
+      ? {
+          ...entry,
+          ...patch,
+        }
+      : entry,
+  );
+  writeDirectWatchRawCacheEntries(nextEntries);
+}
+
+function writeDirectWatchRawCacheEntries(entries: DirectWatchRawCacheEntry[]) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const normalizedEntries = entries.slice(0, DIRECT_WATCH_RAW_CACHE_LIMIT);
+  try {
+    window.localStorage.setItem(DIRECT_WATCH_RAW_CACHE_KEY, JSON.stringify(normalizedEntries));
+    return;
+  } catch {
+    // Fall through to a compact metadata-only fallback below.
+  }
+
+  const compactEntries = normalizedEntries.map((entry) => ({
+    ...entry,
+    files: entry.files.map((file) => ({
+      ...file,
+      rawHex: file.rawHex && file.rawHex.length <= 2048 ? file.rawHex : null,
+    })),
+  }));
+
+  try {
+    window.localStorage.setItem(DIRECT_WATCH_RAW_CACHE_KEY, JSON.stringify(compactEntries));
+  } catch {
+    window.localStorage.removeItem(DIRECT_WATCH_RAW_CACHE_KEY);
+  }
+}
+
+function collectDirectWatchAckFileIds(
+  probe: DirectWatchClassicProbe,
+  _dayPackets: DirectWatchDecryptedPacket[],
+): string[] {
+  const fileIds = new Set<string>();
+
+  for (const request of probe.activityFileProbeRequests ?? []) {
+    const fileId = request.idHex?.trim();
+    if (request.status === "complete" && request.crcValid === true && request.parsed === true && fileId) {
+      fileIds.add(fileId);
+    }
+  }
+
+  return Array.from(fileIds);
 }
 
 export async function addDirectWatchPacketListener(
@@ -758,7 +1282,16 @@ function normalizeDirectWatchClassicProbe(value: unknown): DirectWatchClassicPro
     authStage: normalizeString(value.authStage),
     authKeyError: normalizeString(value.authKeyError),
     authKeyStatus: normalizeString(value.authKeyStatus),
+    activityFileProbeCompletedCount: normalizeNumber(value.activityFileProbeCompletedCount),
     activityFileProbeCount: normalizeNumber(value.activityFileProbeCount),
+    activityFileProbeFailedCount: normalizeNumber(value.activityFileProbeFailedCount),
+    activityFileProbeRequests: Array.isArray(value.activityFileProbeRequests)
+      ? value.activityFileProbeRequests.map(normalizeDirectWatchActivityFileProbeRequest)
+      : [],
+    activityFileAckCount: normalizeNumber(value.activityFileAckCount),
+    activityFileAckIds: Array.isArray(value.activityFileAckIds)
+      ? value.activityFileAckIds.map((fileId) => normalizeString(fileId)).filter((fileId): fileId is string => Boolean(fileId))
+      : [],
     authStatus: normalizeNumber(value.authStatus),
     authSubtype: normalizeNumber(value.authSubtype),
     bondState: normalizeBluetoothState(value.bondState),
@@ -782,6 +1315,7 @@ function normalizeDirectWatchClassicProbe(value: unknown): DirectWatchClassicPro
     sentAuthStep1: normalizeBoolean(value.sentAuthStep1),
     sentAuthStep2: normalizeBoolean(value.sentAuthStep2),
     sentActivityFileProbe: normalizeBoolean(value.sentActivityFileProbe),
+    sentActivityFileAck: normalizeBoolean(value.sentActivityFileAck),
     sentPostAuthProbe: normalizeBoolean(value.sentPostAuthProbe),
     sentSessionConfig: normalizeBoolean(value.sentSessionConfig),
     sentVersionRequest: normalizeBoolean(value.sentVersionRequest),
@@ -850,7 +1384,9 @@ function normalizeDirectWatchDecryptedPacket(value: unknown): DirectWatchDecrypt
     activityFileIdsHex: normalizeString(value.activityFileIdsHex),
     activityFileKind: normalizeString(value.activityFileKind),
     activityFilePadding: normalizeNumber(value.activityFilePadding),
+    activityFileParsed: normalizeNullableBoolean(value.activityFileParsed),
     activityFilePayloadBytes: normalizeNumber(value.activityFilePayloadBytes),
+    activityFileRawHex: normalizeString(value.activityFileRawHex),
     activityFiles: Array.isArray(value.activityFiles)
       ? value.activityFiles.map(normalizeDirectWatchActivityFile)
       : [],
@@ -873,6 +1409,21 @@ function normalizeDirectWatchDecryptedPacket(value: unknown): DirectWatchDecrypt
     activityTrainingLoadDay: normalizeNumber(value.activityTrainingLoadDay),
     activityTrainingLoadWeek: normalizeNumber(value.activityTrainingLoadWeek),
     activityVitality: normalizeNumber(value.activityVitality),
+    activityWorkoutDistanceMeters: normalizeNumber(value.activityWorkoutDistanceMeters),
+    activityWorkoutDurationMinutes: normalizeNumber(value.activityWorkoutDurationMinutes),
+    activityWorkoutEndTime: normalizeString(value.activityWorkoutEndTime),
+    activityWorkoutHeartRateZoneAerobicSeconds: normalizeNumber(value.activityWorkoutHeartRateZoneAerobicSeconds),
+    activityWorkoutHeartRateZoneAnaerobicSeconds: normalizeNumber(value.activityWorkoutHeartRateZoneAnaerobicSeconds),
+    activityWorkoutHeartRateZoneExtremeSeconds: normalizeNumber(value.activityWorkoutHeartRateZoneExtremeSeconds),
+    activityWorkoutHeartRateZoneFatBurnSeconds: normalizeNumber(value.activityWorkoutHeartRateZoneFatBurnSeconds),
+    activityWorkoutHeartRateZoneWarmUpSeconds: normalizeNumber(value.activityWorkoutHeartRateZoneWarmUpSeconds),
+    activityWorkoutGpsSampleCount: normalizeNumber(value.activityWorkoutGpsSampleCount),
+    activityWorkoutGpsSamples: Array.isArray(value.activityWorkoutGpsSamples)
+      ? value.activityWorkoutGpsSamples.map(normalizeDirectWatchWorkoutGpsSample)
+      : [],
+    activityWorkoutStartTime: normalizeString(value.activityWorkoutStartTime),
+    activityWorkoutSteps: normalizeNumber(value.activityWorkoutSteps),
+    activityWorkoutType: normalizeString(value.activityWorkoutType),
     batteryLevel: normalizeNumber(value.batteryLevel),
     batteryState: normalizeNumber(value.batteryState),
     byteLength: normalizeNumber(value.byteLength),
@@ -918,6 +1469,47 @@ function normalizeDirectWatchActivitySample(value: unknown): DirectWatchActivity
     spo2: normalizeNumber(value.spo2),
     steps: normalizeNumber(value.steps),
     stress: normalizeNumber(value.stress),
+  };
+}
+
+function normalizeDirectWatchWorkoutGpsSample(value: unknown): DirectWatchWorkoutGpsSample {
+  if (!isRecord(value)) {
+    return {};
+  }
+
+  return {
+    distanceMeters: normalizeNumber(value.distanceMeters),
+    hdop: normalizeNumber(value.hdop),
+    latitude: normalizeNumber(value.latitude),
+    longitude: normalizeNumber(value.longitude),
+    sampleTime: normalizeString(value.sampleTime),
+    speedMetersPerSecond: normalizeNumber(value.speedMetersPerSecond),
+  };
+}
+
+function normalizeDirectWatchActivityFileProbeRequest(value: unknown): DirectWatchActivityFileProbeRequest {
+  if (!isRecord(value)) {
+    return {};
+  }
+
+  return {
+    activityFile: isRecord(value.activityFile) ? normalizeDirectWatchActivityFile(value.activityFile) : null,
+    chunkNumber: normalizeNumber(value.chunkNumber),
+    chunkTotal: normalizeNumber(value.chunkTotal),
+    crcValid: normalizeNullableBoolean(value.crcValid),
+    detailType: normalizeNumber(value.detailType),
+    durationMs: normalizeNumber(value.durationMs),
+    error: normalizeString(value.error),
+    idHex: normalizeString(value.idHex),
+    kind: normalizeString(value.kind),
+    payloadBytes: normalizeNumber(value.payloadBytes),
+    parsed: normalizeNullableBoolean(value.parsed),
+    sequenceNumber: normalizeNumber(value.sequenceNumber),
+    status: normalizeString(value.status),
+    subtype: normalizeNumber(value.subtype),
+    timestamp: normalizeString(value.timestamp),
+    type: normalizeNumber(value.type),
+    version: normalizeNumber(value.version),
   };
 }
 
@@ -1067,6 +1659,19 @@ function getDirectWatchSleepEntryDate(packet: DirectWatchDecryptedPacket) {
     getDirectWatchActivityEntryDate(packet.activityFile);
 }
 
+function hasDirectWatchSampleForEntryDate(packet: DirectWatchDecryptedPacket, entryDate: string) {
+  return packet.activitySamples?.some((sample) =>
+    getDirectWatchSampleEntryDate(sample, packet.activityFile) === entryDate,
+  ) ?? false;
+}
+
+function getDirectWatchSampleEntryDate(
+  sample: DirectWatchActivitySample,
+  file: DirectWatchActivityFile | null | undefined,
+) {
+  return getDirectWatchTimestampEntryDate(sample.sampleTime, file);
+}
+
 function getDirectWatchTimestampEntryDate(
   timestamp: string | null | undefined,
   file: DirectWatchActivityFile | null | undefined,
@@ -1125,7 +1730,43 @@ function getDirectWatchTimestampMs(file: DirectWatchActivityFile | null | undefi
   return Number.isNaN(parsedDate.getTime()) ? 0 : parsedDate.getTime();
 }
 
-function aggregateDirectWatchMinuteDetails(packets: DirectWatchDecryptedPacket[]): DirectWatchMinuteAggregate {
+function aggregateDirectWatchMinuteDetails(
+  packets: DirectWatchDecryptedPacket[],
+  entryDate?: string,
+): DirectWatchMinuteAggregate {
+  const samples = entryDate
+    ? collectDirectWatchSamplesForEntryDate(packets, entryDate)
+    : [];
+
+  if (samples.length) {
+    const heartRateValues = samples
+      .map((sample) => sample.heartRate)
+      .filter(isMeaningfulDirectWatchNumber);
+    const spo2Values = samples
+      .map((sample) => sample.spo2)
+      .filter(isMeaningfulDirectWatchNumber);
+    const stressValues = samples
+      .map((sample) => sample.stress)
+      .filter((value): value is number =>
+        typeof value === "number" && Number.isFinite(value) && value >= 0,
+      );
+
+    return {
+      heartRateAvg: averageDirectWatchNumber(heartRateValues),
+      heartRateMax: maxDirectWatchNumber(heartRateValues),
+      heartRateMin: minDirectWatchNumber(heartRateValues),
+      sampleCount: samples.length,
+      spo2Avg: averageDirectWatchNumber(spo2Values),
+      spo2Max: maxDirectWatchNumber(spo2Values),
+      spo2Min: minDirectWatchNumber(spo2Values),
+      spo2SampleCount: spo2Values.length,
+      steps: sumDirectWatchNumbers(samples.map((sample) => sample.steps)),
+      stressAvg: averageDirectWatchNumber(stressValues),
+      stressMax: maxDirectWatchNumber(stressValues),
+      stressMin: minDirectWatchNumber(stressValues),
+    };
+  }
+
   const sampleCount = packets.reduce((sum, packet) => sum + Math.max(0, packet.activitySampleCount ?? 0), 0);
   const steps = sumDirectWatchNumbers(packets.map((packet) => packet.activitySteps));
 
@@ -1159,6 +1800,23 @@ function aggregateDirectWatchMinuteDetails(packets: DirectWatchDecryptedPacket[]
     stressMax: maxDirectWatchNumber(packets.map((packet) => packet.activityStressMax ?? packet.activityStressAvg)),
     stressMin: minDirectWatchNumber(packets.map((packet) => packet.activityStressMin ?? packet.activityStressAvg)),
   };
+}
+
+function collectDirectWatchSamplesForEntryDate(
+  packets: DirectWatchDecryptedPacket[],
+  entryDate: string,
+) {
+  const samples: DirectWatchActivitySample[] = [];
+
+  packets.forEach((packet) => {
+    getDirectWatchWorkoutActivitySamples(packet).forEach((sample) => {
+      if (getDirectWatchSampleEntryDate(sample, packet.activityFile) === entryDate) {
+        samples.push(sample);
+      }
+    });
+  });
+
+  return samples;
 }
 
 function buildDirectWatchHeartRateSummary(
@@ -1201,10 +1859,16 @@ function buildDirectWatchOxygenSummary(
 }
 
 function buildDirectWatchSleepSummary(packets: DirectWatchDecryptedPacket[]): DeviceHealthSleepSummary | null {
-  const sleepPacket = pickLatestDirectWatchPacket(packets, (packet) =>
-    (packet.activityFile?.subtype === 8 || packet.activityFile?.subtype === 3) &&
-    Boolean(packet.sleepDurationMinutes || packet.sleepStartTime || packet.sleepEndTime),
-  );
+  const sleepPacket = packets
+    .filter((packet) =>
+      (packet.activityFile?.subtype === 8 || packet.activityFile?.subtype === 3) &&
+      Boolean(packet.sleepDurationMinutes || packet.sleepStartTime || packet.sleepEndTime)
+    )
+    .sort((left, right) =>
+      Number(Boolean(right.activityFileCrcValid)) - Number(Boolean(left.activityFileCrcValid)) ||
+      (normalizeSleepMetric(right.sleepDurationMinutes) ?? -1) - (normalizeSleepMetric(left.sleepDurationMinutes) ?? -1) ||
+      getDirectWatchTimestampMs(right.activityFile) - getDirectWatchTimestampMs(left.activityFile)
+    )[0] ?? null;
 
   if (!sleepPacket) {
     return null;
@@ -1224,11 +1888,18 @@ function buildDirectWatchSleepSummary(packets: DirectWatchDecryptedPacket[]): De
   return hasDirectWatchSleepData(sleep) ? sleep : null;
 }
 
-function buildDirectWatchSamples(packets: DirectWatchDecryptedPacket[]): DeviceHealthSamplePayload[] {
+function buildDirectWatchSamples(
+  packets: DirectWatchDecryptedPacket[],
+  entryDate?: string,
+): DeviceHealthSamplePayload[] {
   const samples = new Map<string, DeviceHealthSamplePayload>();
 
   packets.forEach((packet) => {
     packet.activitySamples?.forEach((sample) => {
+      if (entryDate && getDirectWatchSampleEntryDate(sample, packet.activityFile) !== entryDate) {
+        return;
+      }
+
       const sampledAt = normalizeIsoString(sample.sampleTime);
       if (!sampledAt) {
         return;
@@ -1284,17 +1955,540 @@ function addDirectWatchSample(
   });
 }
 
+function buildDirectWatchDeviceWorkouts(
+  entryDate: string,
+  probe: DirectWatchClassicProbe,
+  activityPackets: DirectWatchDecryptedPacket[],
+): DeviceWorkoutsSyncPayload {
+  const workoutPacketGroups = new Map<string, DirectWatchDecryptedPacket[]>();
+
+  activityPackets
+    .filter((packet) => packet.activityFile?.type === 1)
+    .forEach((packet) => {
+      const groupKey = getDirectWatchWorkoutGroupKey(packet);
+      if (!groupKey) {
+        return;
+      }
+
+      const group = workoutPacketGroups.get(groupKey) ?? [];
+      group.push(packet);
+      workoutPacketGroups.set(groupKey, group);
+    });
+
+  const workouts = Array.from(workoutPacketGroups.values())
+    .map((packets) => buildDirectWatchDeviceWorkout(entryDate, probe, packets, activityPackets))
+    .filter((workout): workout is DeviceWorkoutPayload => Boolean(workout))
+    .sort((left, right) => left.startTime.localeCompare(right.startTime));
+
+  return {
+    entryDate,
+    provider: "direct-watch",
+    workouts,
+  };
+}
+
+function getDirectWatchWorkoutGroupKey(packet: DirectWatchDecryptedPacket) {
+  const fileGroupKey = getDirectWatchWorkoutFileGroupKey(packet.activityFile);
+  if (fileGroupKey) {
+    return fileGroupKey;
+  }
+
+  const summaryStart = normalizeIsoString(packet.activityWorkoutStartTime);
+  if (summaryStart) {
+    return `workout:summary:${summaryStart}`;
+  }
+
+  const fileTimestamp = normalizeIsoString(packet.activityFile?.timestamp);
+  if (fileTimestamp) {
+    return `workout:file:${fileTimestamp}`;
+  }
+
+  return packet.activityFile?.idHex ?? packet.rawHex ?? "";
+}
+
+function getDirectWatchWorkoutFileGroupKey(file: DirectWatchActivityFile | null | undefined) {
+  if (!file || file.type !== 1) {
+    return null;
+  }
+
+  const idHex = normalizeString(file.idHex)?.toUpperCase() ?? null;
+  const baseFileId = idHex && idHex.length >= 10 ? idHex.slice(0, 10) : null;
+  const timestamp = normalizeIsoString(file.timestamp);
+  const identity = baseFileId ?? timestamp;
+  if (!identity) {
+    return null;
+  }
+
+  return [
+    "workout-file",
+    file.type ?? "",
+    file.subtype ?? "",
+    identity,
+  ].join(":");
+}
+
+function buildDirectWatchDeviceWorkout(
+  entryDate: string,
+  probe: DirectWatchClassicProbe,
+  packets: DirectWatchDecryptedPacket[],
+  activityPackets: DirectWatchDecryptedPacket[],
+): DeviceWorkoutPayload | null {
+  const files = packets
+    .map((packet) => packet.activityFile)
+    .filter((file): file is DirectWatchActivityFile => Boolean(file));
+  const sourceFile = files.find((file) => normalizeIsoString(file.timestamp)) ?? files[0];
+  const fileStart = normalizeIsoString(sourceFile?.timestamp);
+  const summaryPacket = packets.find((packet) =>
+    Boolean(
+      packet.activityWorkoutStartTime ||
+        packet.activityWorkoutDurationMinutes ||
+        packet.activityWorkoutDistanceMeters ||
+        packet.activityWorkoutSteps ||
+        packet.activityWorkoutType,
+    ),
+  ) ?? packets[0];
+  const summaryStart = normalizeIsoString(summaryPacket?.activityWorkoutStartTime);
+  const summaryEnd = normalizeIsoString(summaryPacket?.activityWorkoutEndTime);
+  const directSamples = buildDirectWatchWorkoutSamples(packets);
+  const directSampleTimes = directSamples
+    .map((sample) => new Date(sample.sampleTime).getTime())
+    .filter((time) => Number.isFinite(time));
+  const startMs = summaryStart
+    ? new Date(summaryStart).getTime()
+    : directSampleTimes.length
+    ? Math.min(...directSampleTimes)
+    : fileStart
+      ? new Date(fileStart).getTime()
+      : Number.NaN;
+
+  if (!Number.isFinite(startMs)) {
+    return null;
+  }
+
+  const latestDirectSampleMs = directSampleTimes.length ? Math.max(...directSampleTimes) : Number.NaN;
+  const sampleCount = maxDirectWatchNumber(packets.map((packet) => packet.activitySampleCount));
+  const inferredDuration = Number.isFinite(latestDirectSampleMs) && latestDirectSampleMs > startMs
+    ? Math.max(1, Math.round((latestDirectSampleMs - startMs) / 60000))
+    : sampleCount && sampleCount > 1
+      ? sampleCount
+      : null;
+  const durationMinutes = summaryPacket?.activityWorkoutDurationMinutes ?? inferredDuration;
+  const endMs = summaryEnd
+    ? new Date(summaryEnd).getTime()
+    : Number.isFinite(latestDirectSampleMs) && latestDirectSampleMs > startMs
+    ? latestDirectSampleMs
+    : startMs + Math.max(1, durationMinutes ?? 1) * 60000;
+  const samples = mergeDirectWatchWorkoutSamples(
+    directSamples,
+    buildDirectWatchWorkoutSamplesForWindow(activityPackets, startMs, endMs),
+  );
+  const heartRates = samples
+    .map((sample) => sample.heartRateBpm)
+    .filter(isMeaningfulDirectWatchNumber);
+  const oxygenValues = samples
+    .map((sample) => sample.oxygenSaturationPercent)
+    .filter(isMeaningfulDirectWatchNumber);
+  const sampleDistanceMeters = maxDirectWatchNumber(samples.map((sample) => sample.distanceMeters));
+  const distanceMeters = summaryPacket?.activityWorkoutDistanceMeters ?? sampleDistanceMeters;
+  const summaryHeartRates = [
+    normalizeWorkoutHeartRate(summaryPacket?.activityHeartRateAvg),
+    normalizeWorkoutHeartRate(summaryPacket?.activityHeartRateMin),
+    normalizeWorkoutHeartRate(summaryPacket?.activityHeartRateMax),
+  ].filter(isMeaningfulDirectWatchNumber);
+  const activeCalories = summaryPacket?.activityCalories ?? sumDirectWatchNumbers(packets.map((packet) => packet.activityCalories));
+  const steps = summaryPacket?.activityWorkoutSteps ?? summaryPacket?.activitySteps ?? null;
+  const zoneSeconds = {
+    aerobic: summaryPacket?.activityWorkoutHeartRateZoneAerobicSeconds ?? null,
+    anaerobic: summaryPacket?.activityWorkoutHeartRateZoneAnaerobicSeconds ?? null,
+    extreme: summaryPacket?.activityWorkoutHeartRateZoneExtremeSeconds ?? null,
+    fatBurn: summaryPacket?.activityWorkoutHeartRateZoneFatBurnSeconds ?? null,
+    warmUp: summaryPacket?.activityWorkoutHeartRateZoneWarmUpSeconds ?? null,
+  };
+  const workoutType = summaryPacket?.activityWorkoutType ?? getDirectWatchWorkoutTypeLabel(sourceFile?.subtype) ?? "workout";
+  const missingMetrics = [
+    durationMinutes === null ? "duration" : null,
+    distanceMeters === null || distanceMeters === undefined ? "distance" : null,
+    activeCalories === null ? "calories" : null,
+    steps === null ? "steps" : null,
+    !summaryHeartRates.length && !heartRates.length ? "heartRate" : null,
+  ].filter((item): item is string => Boolean(item));
+  const sourceWorkoutGroupId = files
+    .map((file) => getDirectWatchWorkoutFileGroupKey(file))
+    .find((item): item is string => Boolean(item));
+  const sourceWorkoutId = sourceWorkoutGroupId
+    ? `direct-watch:${sourceWorkoutGroupId}`
+    : [
+        "direct-watch",
+        entryDate,
+        new Date(startMs).toISOString(),
+      ].join(":");
+
+  return {
+    activeCalories,
+    averageHeartRateBpm: normalizeWorkoutHeartRate(summaryPacket?.activityHeartRateAvg) ?? averageDirectWatchNumber(heartRates),
+    distanceMeters: distanceMeters ?? null,
+    durationMinutes,
+    endTime: new Date(endMs).toISOString(),
+    entryDate,
+    maxHeartRateBpm: normalizeWorkoutHeartRate(summaryPacket?.activityHeartRateMax) ?? maxDirectWatchNumber(heartRates),
+    minHeartRateBpm: normalizeWorkoutHeartRate(summaryPacket?.activityHeartRateMin) ?? minDirectWatchNumber(heartRates),
+    provider: "direct-watch",
+    rawPayload: {
+      dataOrigin: "PERFORM Sync",
+      files: files.map((file) => ({
+        detailType: file.detailType ?? null,
+        idHex: file.idHex ?? null,
+        kind: file.kind ?? null,
+        subtype: file.subtype ?? null,
+        timestamp: file.timestamp ?? null,
+        type: file.type ?? null,
+        version: file.version ?? null,
+      })),
+      packetCount: packets.length,
+      gpsTrackPointCount: sumDirectWatchNumbers(packets.map((packet) => packet.activityWorkoutGpsSampleCount)),
+      sampleCount: samples.length,
+      dataCompleteness: missingMetrics.length === 0 ? "complete" : "partial",
+      missingMetrics,
+      source: "direct-watch-workout-file",
+      sourceWorkoutGroupId,
+      sourceFileKind: summaryPacket?.activityFile?.kind ?? null,
+      spo2Average: averageDirectWatchNumber(oxygenValues),
+      steps,
+      summaryHeartRateSamples: summaryHeartRates,
+      workoutSummary: {
+        distanceMeters: distanceMeters ?? null,
+        durationMinutes: summaryPacket?.activityWorkoutDurationMinutes ?? null,
+        endTime: summaryEnd ?? null,
+        heartRateZonesSeconds: zoneSeconds,
+        startTime: summaryStart ?? null,
+        type: workoutType,
+      },
+    },
+    samples,
+    sourceDevice: probe.deviceName || "Redmi Watch / PERFORM Sync",
+    sourceWorkoutId,
+    startTime: new Date(startMs).toISOString(),
+    syncedAt: new Date().toISOString(),
+    workoutType,
+  };
+}
+
+function getDirectWatchWorkoutTypeLabel(subtype: number | null | undefined) {
+  switch (subtype) {
+    case 1:
+      return "outdoor-walk";
+    case 2:
+      return "outdoor-run";
+    case 3:
+      return "treadmill";
+    case 6:
+      return "outdoor-cycling";
+    case 7:
+      return "indoor-cycling";
+    case 8:
+      return "freestyle";
+    case 9:
+      return "pool-swim";
+    case 11:
+      return "elliptical";
+    case 13:
+      return "rowing";
+    case 14:
+      return "jump-rope";
+    case 16:
+      return "hiit";
+    case 22:
+      return "walking";
+    case 23:
+      return "cycling";
+    default:
+      return typeof subtype === "number" ? `workout-${subtype}` : null;
+  }
+}
+
+function buildDirectWatchWorkoutSamples(packets: DirectWatchDecryptedPacket[]): DeviceWorkoutSamplePayload[] {
+  const samples = new Map<string, DeviceWorkoutSamplePayload>();
+
+  packets.forEach((packet) => {
+    packet.activityWorkoutGpsSamples?.forEach((sample) => {
+      const sampleTime = normalizeIsoString(sample.sampleTime);
+      if (!sampleTime) {
+        return;
+      }
+
+      const speedMetersPerSecond = normalizeWorkoutSpeed(sample.speedMetersPerSecond);
+      const distanceMeters = normalizeWorkoutDistance(sample.distanceMeters);
+      const existing = samples.get(sampleTime);
+      samples.set(sampleTime, {
+        distanceMeters: existing?.distanceMeters ?? distanceMeters,
+        heartRateBpm: existing?.heartRateBpm ?? null,
+        oxygenSaturationPercent: existing?.oxygenSaturationPercent ?? null,
+        paceSecondsPerKm: existing?.paceSecondsPerKm ?? (
+          speedMetersPerSecond && speedMetersPerSecond > 0 ? Math.round(1000 / speedMetersPerSecond) : null
+        ),
+        rawPayload: {
+          ...(existing?.rawPayload ?? {}),
+          fileId: packet.activityFile?.idHex ?? existing?.rawPayload?.fileId ?? null,
+          gps: {
+            hdop: sample.hdop ?? null,
+            latitude: sample.latitude ?? null,
+            longitude: sample.longitude ?? null,
+          },
+          source: "direct-watch-gps-track",
+        },
+        sampleTime,
+        speedMetersPerSecond: existing?.speedMetersPerSecond ?? speedMetersPerSecond,
+      });
+    });
+
+    packet.activitySamples?.forEach((sample) => {
+      const sampleTime = normalizeIsoString(sample.sampleTime);
+      if (!sampleTime) {
+        return;
+      }
+
+      const heartRateBpm = normalizeWorkoutHeartRate(sample.heartRate);
+      const oxygenSaturationPercent = normalizeWorkoutOxygen(sample.spo2);
+
+      if (heartRateBpm === null && oxygenSaturationPercent === null) {
+        return;
+      }
+
+      const existing = samples.get(sampleTime);
+      samples.set(sampleTime, {
+        distanceMeters: existing?.distanceMeters ?? null,
+        heartRateBpm,
+        oxygenSaturationPercent,
+        paceSecondsPerKm: existing?.paceSecondsPerKm ?? null,
+        rawPayload: {
+          ...(existing?.rawPayload ?? {}),
+          fileId: packet.activityFile?.idHex ?? null,
+          source: "direct-watch-workout-file",
+          steps: sample.steps ?? null,
+          stress: sample.stress ?? null,
+        },
+        sampleTime,
+        speedMetersPerSecond: existing?.speedMetersPerSecond ?? null,
+      });
+    });
+  });
+
+  return Array.from(samples.values()).sort((left, right) => left.sampleTime.localeCompare(right.sampleTime));
+}
+
+function getDirectWatchWorkoutActivitySamples(packet: DirectWatchDecryptedPacket): DirectWatchActivitySample[] {
+  if (packet.activitySamples?.length) {
+    return packet.activitySamples;
+  }
+
+  return parseDirectWatchFreestyleV3WorkoutSamples(packet);
+}
+
+function parseDirectWatchFreestyleV3WorkoutSamples(packet: DirectWatchDecryptedPacket): DirectWatchActivitySample[] {
+  const file = packet.activityFile;
+  if (
+    file?.type !== 1 ||
+    file.subtype !== 8 ||
+    file.detailType !== 0 ||
+    file.version !== 3
+  ) {
+    return [];
+  }
+
+  const startTime = normalizeIsoString(file.timestamp);
+  const rawHex = normalizeString(packet.activityFileRawHex);
+  if (!startTime || !rawHex) {
+    return [];
+  }
+
+  const bytes = directWatchHexToBytes(rawHex);
+  const dataEnd = packet.activityFileCrcValid !== false && bytes.length >= 4 ? bytes.length - 4 : bytes.length;
+  const recordSize = 4;
+  const recordStart = findDirectWatchFreestyleV3RecordStart(bytes, dataEnd);
+  const startMs = new Date(startTime).getTime();
+  if (recordStart === null || !Number.isFinite(startMs)) {
+    return [];
+  }
+
+  const samples: DirectWatchActivitySample[] = [];
+  let recordIndex = 0;
+  for (let offset = recordStart; offset + recordSize <= dataEnd; offset += recordSize) {
+    const heartRate = normalizeWorkoutHeartRate(bytes[offset]);
+    if (heartRate !== null) {
+      samples.push({
+        heartRate,
+        sampleTime: new Date(startMs + recordIndex * 1000).toISOString(),
+        spo2: null,
+        steps: null,
+        stress: null,
+      });
+    }
+    recordIndex += 1;
+  }
+
+  return samples.length >= 10 ? samples : [];
+}
+
+function findDirectWatchFreestyleV3RecordStart(bytes: number[], dataEnd: number) {
+  const recordSize = 4;
+  let bestStart: number | null = null;
+  let bestValidCount = 0;
+
+  for (let recordStart = 52; recordStart <= 64; recordStart += 1) {
+    if (recordStart + recordSize > dataEnd) {
+      continue;
+    }
+
+    let totalCount = 0;
+    let validHeartRateCount = 0;
+    let validTrailingByteCount = 0;
+    for (let offset = recordStart; offset + recordSize <= dataEnd; offset += recordSize) {
+      const heartRate = bytes[offset] ?? 0;
+      const second = bytes[offset + 1] ?? 0;
+      const third = bytes[offset + 2] ?? 0;
+      const fourth = bytes[offset + 3] ?? 0;
+      if (normalizeWorkoutHeartRate(heartRate) !== null) {
+        validHeartRateCount += 1;
+      }
+      if (second >= 0 && second <= 3 && third === 0 && fourth === 0) {
+        validTrailingByteCount += 1;
+      }
+      totalCount += 1;
+    }
+
+    if (
+      totalCount >= 10 &&
+      validHeartRateCount >= Math.max(10, Math.floor(totalCount * 0.85)) &&
+      validTrailingByteCount >= Math.max(10, Math.floor(totalCount * 0.85)) &&
+      validHeartRateCount > bestValidCount
+    ) {
+      bestStart = recordStart;
+      bestValidCount = validHeartRateCount;
+    }
+  }
+
+  return bestStart;
+}
+
+function directWatchHexToBytes(rawHex: string) {
+  const cleanHex = rawHex.replace(/[^a-f0-9]/gi, "");
+  if (cleanHex.length < 2 || cleanHex.length % 2 !== 0) {
+    return [];
+  }
+
+  const bytes: number[] = [];
+  for (let index = 0; index < cleanHex.length; index += 2) {
+    const value = Number.parseInt(cleanHex.slice(index, index + 2), 16);
+    if (!Number.isFinite(value)) {
+      return [];
+    }
+    bytes.push(value);
+  }
+  return bytes;
+}
+
+function buildDirectWatchWorkoutSamplesForWindow(
+  packets: DirectWatchDecryptedPacket[],
+  startMs: number,
+  endMs: number,
+) {
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) {
+    return [];
+  }
+
+  return buildDirectWatchWorkoutSamples(
+    packets.filter((packet) =>
+      packet.activityFile?.type === 0 &&
+      packet.activityFile.subtype === 0 &&
+      packet.activityFile.detailType === 0 &&
+      getDirectWatchWorkoutActivitySamples(packet).some((sample) => {
+        const sampleMs = sample.sampleTime ? new Date(sample.sampleTime).getTime() : Number.NaN;
+        return Number.isFinite(sampleMs) && sampleMs >= startMs && sampleMs <= endMs;
+      })
+    ),
+  ).filter((sample) => {
+    const sampleMs = new Date(sample.sampleTime).getTime();
+    return Number.isFinite(sampleMs) && sampleMs >= startMs && sampleMs <= endMs;
+  });
+}
+
+function mergeDirectWatchWorkoutSamples(
+  primarySamples: DeviceWorkoutSamplePayload[],
+  fallbackSamples: DeviceWorkoutSamplePayload[],
+) {
+  if (!fallbackSamples.length) {
+    return primarySamples;
+  }
+
+  const samples = new Map<string, DeviceWorkoutSamplePayload>();
+  primarySamples.forEach((sample) => samples.set(sample.sampleTime, sample));
+  fallbackSamples.forEach((sample) => {
+    if (!samples.has(sample.sampleTime)) {
+      samples.set(sample.sampleTime, {
+        ...sample,
+        rawPayload: {
+          ...(sample.rawPayload ?? {}),
+          source: "direct-watch-day-file-workout-window",
+        },
+      });
+    }
+  });
+  return Array.from(samples.values()).sort((left, right) => left.sampleTime.localeCompare(right.sampleTime));
+}
+
+function buildDirectWatchWorkoutSummary(workouts: DeviceWorkoutPayload[]): DeviceHealthWorkoutSummary | null {
+  if (!workouts.length) {
+    return null;
+  }
+
+  return {
+    activeCalories: sumDirectWatchNumbers(workouts.map((workout) => workout.activeCalories)),
+    averageHeartRateBpm: weightedAverageDirectWatchValue(workouts.map((workout) => ({
+      value: workout.averageHeartRateBpm,
+      weight: workout.samples.length || workout.durationMinutes,
+    }))),
+    count: workouts.length,
+    maxHeartRateBpm: maxDirectWatchNumber(workouts.map((workout) => workout.maxHeartRateBpm)),
+    totalDistanceMeters: sumDirectWatchNumbers(workouts.map((workout) => workout.distanceMeters)),
+    totalDurationMinutes: sumDirectWatchNumbers(workouts.map((workout) => workout.durationMinutes)),
+  };
+}
+
+function averageDirectWatchNumber(values: number[]) {
+  return values.length ? Math.round(values.reduce((sum, value) => sum + value, 0) / values.length) : null;
+}
+
+function normalizeWorkoutHeartRate(value: number | null | undefined) {
+  return typeof value === "number" && Number.isFinite(value) && value >= 1 && value <= 254 ? value : null;
+}
+
+function normalizeWorkoutOxygen(value: number | null | undefined) {
+  return typeof value === "number" && Number.isFinite(value) && value >= 1 && value <= 100 ? value : null;
+}
+
+function normalizeWorkoutSpeed(value: number | null | undefined) {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 20 ? value : null;
+}
+
+function normalizeWorkoutDistance(value: number | null | undefined) {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 500_000 ? value : null;
+}
+
 function buildDirectWatchRawPayload(
   probe: DirectWatchClassicProbe,
   dayPackets: DirectWatchDecryptedPacket[],
   dailySummary: DirectWatchDecryptedPacket | null,
   details: DirectWatchMinuteAggregate,
+  workouts: DeviceWorkoutPayload[],
 ): Record<string, unknown> {
   return {
+    activityFileProbeCompletedCount: probe.activityFileProbeCompletedCount ?? 0,
     activityFileProbeCount: probe.activityFileProbeCount ?? 0,
+    activityFileProbeFailedCount: probe.activityFileProbeFailedCount ?? 0,
     authKeyStatus: probe.authKeyStatus ?? null,
     dataOrigin: "PERFORM Sync",
     fileCount: dayPackets.length,
+    workoutFileCount: workouts.length,
     restingHeartRateSource: getDirectWatchRestingHeartRateSource(dailySummary, details),
     calories: dailySummary?.activityCalories ?? null,
     steps: dailySummary?.activitySteps ?? details.steps,
@@ -1312,6 +2506,7 @@ function buildDirectWatchRawPayload(
       detailType: packet.activityFile?.detailType ?? null,
       idHex: packet.activityFile?.idHex ?? null,
       kind: packet.activityFileKind ?? packet.activityFile?.kind ?? null,
+      parsed: packet.activityFileParsed ?? null,
       payloadBytes: packet.activityFilePayloadBytes ?? null,
       sampleCount: packet.activitySampleCount ?? null,
       sleepDurationMinutes: packet.sleepDurationMinutes ?? null,

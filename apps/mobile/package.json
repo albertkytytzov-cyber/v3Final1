@@ -15,7 +15,8 @@
     "@capacitor/android": "^8.3.1",
     "@capacitor/core": "^8.3.1",
     "@capacitor/ios": "^8.3.1",
-    "@training-platform/shared": "0.1.0"
+    "@training-platform/shared": "0.1.0",
+    "uplot": "^1.6.32"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.3.1"

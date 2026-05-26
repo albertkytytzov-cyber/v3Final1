@@ -120,8 +120,31 @@ interface DeviceWorkoutLinkRow {
 
 type QueryClient = PoolClient | typeof pool;
 
+interface DeviceWorkoutHydrationOptions {
+  includeSamples?: boolean;
+}
+
+interface DeviceWorkoutSampleUpsertRow {
+  distance_meters: number | null;
+  heart_rate_bpm: number | null;
+  oxygen_saturation_percent: number | null;
+  pace_seconds_per_km: number | null;
+  raw_payload_json: Record<string, unknown>;
+  sample_time: string;
+  speed_meters_per_second: number | null;
+}
+
 function toNullableNumber(value: string | null) {
   return value !== null ? Number(value) : null;
+}
+
+function canonicalIsoDateTime(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  const parsedTime = new Date(value).getTime();
+  return Number.isFinite(parsedTime) ? new Date(parsedTime).toISOString() : null;
 }
 
 function hasPositiveNumber(value: number | null | undefined) {
@@ -716,6 +739,7 @@ async function replaceDeviceHealthSamples(input: {
 export async function listDeviceWorkoutsForAthlete(
   athleteId: string,
   entryDate?: string,
+  options: DeviceWorkoutHydrationOptions = {},
 ): Promise<DeviceWorkout[]> {
   const values: unknown[] = [athleteId];
   const dateFilter = entryDate ? "AND device_workouts.entry_date = $2::date" : "";
@@ -759,6 +783,10 @@ export async function listDeviceWorkoutsForAthlete(
     values,
   );
 
+  if (!options.includeSamples) {
+    return result.rows.map((row) => mapDeviceWorkout(row));
+  }
+
   return attachDeviceWorkoutSamples(result.rows);
 }
 
@@ -783,7 +811,9 @@ export async function syncDeviceWorkouts(input: {
     client.release();
   }
 
-  const workouts = await listDeviceWorkoutsForAthlete(input.athleteId, input.payload.entryDate);
+  const workouts = await listDeviceWorkoutsForAthlete(input.athleteId, input.payload.entryDate, {
+    includeSamples: false,
+  });
 
   await Promise.all([
     markCoachTeamDayDirtyForAthlete({
@@ -804,6 +834,7 @@ export async function syncDeviceWorkouts(input: {
 export async function listDeviceWorkoutLinksForAthlete(
   athleteId: string,
   entryDate?: string,
+  options: DeviceWorkoutHydrationOptions = {},
 ): Promise<DeviceWorkoutLink[]> {
   const values: unknown[] = [athleteId];
   const dateFilter = entryDate ? "AND device_workouts.entry_date = $2::date" : "";
@@ -833,7 +864,7 @@ export async function listDeviceWorkoutLinksForAthlete(
     values,
   );
 
-  return hydrateDeviceWorkoutLinks(result.rows);
+  return hydrateDeviceWorkoutLinks(result.rows, options);
 }
 
 export async function linkDeviceWorkoutToPlanBlock(input: {
@@ -944,6 +975,8 @@ async function upsertDeviceWorkout(
   workout: DeviceWorkoutPayload,
 ) {
   const syncedAt = workout.syncedAt ?? new Date().toISOString();
+  await reconcileDirectWatchWorkoutIdentity(client, athleteId, workout);
+
   const result = await client.query<DeviceWorkoutRow>(
     `
       INSERT INTO device_workouts (
@@ -988,16 +1021,57 @@ async function upsertDeviceWorkout(
       DO UPDATE SET
         entry_date = EXCLUDED.entry_date,
         source_device = EXCLUDED.source_device,
-        workout_type = EXCLUDED.workout_type,
+        workout_type = CASE
+          WHEN device_workouts.provider = 'direct-watch'
+            AND EXCLUDED.workout_type = 'workout'
+            AND device_workouts.workout_type <> 'workout'
+            THEN device_workouts.workout_type
+          ELSE EXCLUDED.workout_type
+        END,
         start_time = EXCLUDED.start_time,
-        end_time = EXCLUDED.end_time,
-        duration_minutes = EXCLUDED.duration_minutes,
-        distance_meters = EXCLUDED.distance_meters,
-        active_calories = EXCLUDED.active_calories,
-        average_hr = EXCLUDED.average_hr,
-        max_hr = EXCLUDED.max_hr,
-        min_hr = EXCLUDED.min_hr,
-        raw_payload_json = EXCLUDED.raw_payload_json,
+        end_time = CASE
+          WHEN device_workouts.provider = 'direct-watch'
+            AND EXCLUDED.duration_minutes IS NULL
+            AND device_workouts.duration_minutes IS NOT NULL
+            THEN device_workouts.end_time
+          ELSE EXCLUDED.end_time
+        END,
+        duration_minutes = CASE
+          WHEN device_workouts.provider = 'direct-watch'
+            THEN COALESCE(EXCLUDED.duration_minutes, device_workouts.duration_minutes)
+          ELSE EXCLUDED.duration_minutes
+        END,
+        distance_meters = CASE
+          WHEN device_workouts.provider = 'direct-watch'
+            THEN COALESCE(EXCLUDED.distance_meters, device_workouts.distance_meters)
+          ELSE EXCLUDED.distance_meters
+        END,
+        active_calories = CASE
+          WHEN device_workouts.provider = 'direct-watch'
+            THEN COALESCE(EXCLUDED.active_calories, device_workouts.active_calories)
+          ELSE EXCLUDED.active_calories
+        END,
+        average_hr = CASE
+          WHEN device_workouts.provider = 'direct-watch'
+            THEN COALESCE(EXCLUDED.average_hr, device_workouts.average_hr)
+          ELSE EXCLUDED.average_hr
+        END,
+        max_hr = CASE
+          WHEN device_workouts.provider = 'direct-watch'
+            THEN COALESCE(EXCLUDED.max_hr, device_workouts.max_hr)
+          ELSE EXCLUDED.max_hr
+        END,
+        min_hr = CASE
+          WHEN device_workouts.provider = 'direct-watch'
+            THEN COALESCE(EXCLUDED.min_hr, device_workouts.min_hr)
+          ELSE EXCLUDED.min_hr
+        END,
+        raw_payload_json = CASE
+          WHEN device_workouts.provider = 'direct-watch'
+            THEN COALESCE(device_workouts.raw_payload_json, '{}'::jsonb) ||
+              jsonb_strip_nulls(COALESCE(EXCLUDED.raw_payload_json, '{}'::jsonb))
+          ELSE EXCLUDED.raw_payload_json
+        END,
         synced_at = EXCLUDED.synced_at,
         updated_at = NOW()
       RETURNING
@@ -1043,9 +1117,63 @@ async function upsertDeviceWorkout(
   );
   const workoutId = result.rows[0].id;
 
+  await deleteStaleDirectWatchWorkoutDuplicates(client, athleteId, workout, workoutId);
+
+  const existingSamples = workout.provider === "direct-watch"
+    ? (await listDeviceWorkoutSamplesByWorkoutId([workoutId], client)).get(workoutId) ?? []
+    : [];
   await client.query("DELETE FROM device_workout_samples WHERE device_workout_id = $1", [workoutId]);
 
-  for (const sample of workout.samples) {
+  if (workout.samples.length > 0 || existingSamples.length > 0) {
+    const samplesByTime = new Map<string, DeviceWorkoutSampleUpsertRow>();
+    workout.samples.forEach((sample) => {
+      const sampleTime = canonicalIsoDateTime(sample.sampleTime) ?? sample.sampleTime;
+      samplesByTime.set(sampleTime, {
+        distance_meters: sample.distanceMeters,
+        heart_rate_bpm: sample.heartRateBpm,
+        oxygen_saturation_percent: sample.oxygenSaturationPercent,
+        pace_seconds_per_km: sample.paceSecondsPerKm,
+        raw_payload_json: sample.rawPayload ?? {},
+        sample_time: sampleTime,
+        speed_meters_per_second: sample.speedMetersPerSecond,
+      });
+    });
+    existingSamples.forEach((sample) => {
+      const sampleTime = canonicalIsoDateTime(sample.sampleTime) ?? sample.sampleTime;
+      const incoming = samplesByTime.get(sampleTime);
+      const existingPayload = sample.rawPayload ?? {};
+      if (!incoming) {
+        samplesByTime.set(sampleTime, {
+          distance_meters: sample.distanceMeters,
+          heart_rate_bpm: sample.heartRateBpm,
+          oxygen_saturation_percent: sample.oxygenSaturationPercent,
+          pace_seconds_per_km: sample.paceSecondsPerKm,
+          raw_payload_json: {
+            ...existingPayload,
+            preservedFromPreviousSync: true,
+          },
+          sample_time: sampleTime,
+          speed_meters_per_second: sample.speedMetersPerSecond,
+        });
+        return;
+      }
+
+      samplesByTime.set(sampleTime, {
+        distance_meters: incoming.distance_meters ?? sample.distanceMeters,
+        heart_rate_bpm: incoming.heart_rate_bpm ?? sample.heartRateBpm,
+        oxygen_saturation_percent: incoming.oxygen_saturation_percent ?? sample.oxygenSaturationPercent,
+        pace_seconds_per_km: incoming.pace_seconds_per_km ?? sample.paceSecondsPerKm,
+        raw_payload_json: {
+          ...existingPayload,
+          ...incoming.raw_payload_json,
+          mergedWithPreviousSync: true,
+        },
+        sample_time: sampleTime,
+        speed_meters_per_second: incoming.speed_meters_per_second ?? sample.speedMetersPerSecond,
+      });
+    });
+    const sampleRows = Array.from(samplesByTime.values());
+
     await client.query(
       `
         INSERT INTO device_workout_samples (
@@ -1058,7 +1186,24 @@ async function upsertDeviceWorkout(
           oxygen_saturation_percent,
           raw_payload_json
         )
-        VALUES ($1, $2::timestamptz, $3, $4, $5, $6, $7, $8::jsonb)
+        SELECT
+          $1::uuid,
+          samples.sample_time::timestamptz,
+          samples.heart_rate_bpm,
+          samples.distance_meters,
+          samples.speed_meters_per_second,
+          samples.pace_seconds_per_km,
+          samples.oxygen_saturation_percent,
+          COALESCE(samples.raw_payload_json, '{}'::jsonb)
+        FROM jsonb_to_recordset($2::jsonb) AS samples(
+          sample_time text,
+          heart_rate_bpm numeric,
+          distance_meters numeric,
+          speed_meters_per_second numeric,
+          pace_seconds_per_km numeric,
+          oxygen_saturation_percent numeric,
+          raw_payload_json jsonb
+        )
         ON CONFLICT (device_workout_id, sample_time)
         DO UPDATE SET
           heart_rate_bpm = EXCLUDED.heart_rate_bpm,
@@ -1068,18 +1213,178 @@ async function upsertDeviceWorkout(
           oxygen_saturation_percent = EXCLUDED.oxygen_saturation_percent,
           raw_payload_json = EXCLUDED.raw_payload_json
       `,
-      [
-        workoutId,
-        sample.sampleTime,
-        sample.heartRateBpm,
-        sample.distanceMeters,
-        sample.speedMetersPerSecond,
-        sample.paceSecondsPerKm,
-        sample.oxygenSaturationPercent,
-        JSON.stringify(sample.rawPayload ?? {}),
-      ],
+      [workoutId, JSON.stringify(sampleRows)],
     );
   }
+}
+
+async function reconcileDirectWatchWorkoutIdentity(
+  client: PoolClient,
+  athleteId: string,
+  workout: DeviceWorkoutPayload,
+) {
+  if (workout.provider !== "direct-watch") {
+    return;
+  }
+
+  const sameSource = await findDirectWatchWorkoutIdentityRow(client, athleteId, workout, { sameSourceOnly: true });
+  const equivalent = await findDirectWatchWorkoutIdentityRow(client, athleteId, workout, { excludeSameSource: true });
+
+  if (!equivalent) {
+    return;
+  }
+
+  if (sameSource && sameSource.id !== equivalent.id) {
+    if (equivalent.has_links && !sameSource.has_links) {
+      await client.query("DELETE FROM device_workouts WHERE id = $1", [sameSource.id]);
+    } else {
+      return;
+    }
+  }
+
+  await client.query(
+    `
+      UPDATE device_workouts
+      SET source_workout_id = $1,
+          updated_at = NOW()
+      WHERE id = $2
+    `,
+    [workout.sourceWorkoutId, equivalent.id],
+  );
+}
+
+async function deleteStaleDirectWatchWorkoutDuplicates(
+  client: PoolClient,
+  athleteId: string,
+  workout: DeviceWorkoutPayload,
+  canonicalWorkoutId: string,
+) {
+  if (workout.provider !== "direct-watch") {
+    return;
+  }
+
+  await client.query(
+    `
+      DELETE FROM device_workouts
+      WHERE id IN (
+        SELECT device_workouts.id
+        FROM device_workouts
+        WHERE device_workouts.athlete_id = $1
+          AND device_workouts.provider = 'direct-watch'
+          AND device_workouts.id <> $2
+          AND device_workouts.entry_date = $3::date
+          AND device_workouts.workout_type = $4
+          AND device_workouts.start_time = $5::timestamptz
+          AND device_workouts.end_time = $6::timestamptz
+          AND (
+            $7::numeric IS NULL
+            OR device_workouts.duration_minutes IS NULL
+            OR device_workouts.duration_minutes = $7::numeric
+          )
+          AND (
+            $8::numeric IS NULL
+            OR device_workouts.distance_meters IS NULL
+            OR device_workouts.distance_meters = $8::numeric
+            OR (
+              device_workouts.duration_minutes IS NOT NULL
+              AND device_workouts.active_calories IS NOT NULL
+              AND ABS(device_workouts.distance_meters - device_workouts.duration_minutes * 60) <=
+                GREATEST(90, device_workouts.duration_minutes * 60 * 0.08)
+              AND ROUND(device_workouts.active_calories) = ROUND($8::numeric)
+            )
+          )
+          AND NOT EXISTS (
+            SELECT 1
+            FROM training_plan_device_links
+            WHERE training_plan_device_links.device_workout_id = device_workouts.id
+          )
+      )
+    `,
+    [
+      athleteId,
+      canonicalWorkoutId,
+      workout.entryDate,
+      workout.workoutType,
+      workout.startTime,
+      workout.endTime,
+      workout.durationMinutes,
+      workout.distanceMeters,
+    ],
+  );
+}
+
+async function findDirectWatchWorkoutIdentityRow(
+  client: PoolClient,
+  athleteId: string,
+  workout: DeviceWorkoutPayload,
+  options: { excludeSameSource?: boolean; sameSourceOnly?: boolean },
+) {
+  const sourceFilter = options.sameSourceOnly
+    ? "AND device_workouts.source_workout_id = $2"
+    : options.excludeSameSource
+      ? "AND device_workouts.source_workout_id <> $2"
+      : "";
+  const identityFilter = options.sameSourceOnly
+    ? ""
+    : `
+      AND device_workouts.entry_date = $3::date
+      AND device_workouts.workout_type = $4
+      AND device_workouts.start_time = $5::timestamptz
+      AND device_workouts.end_time = $6::timestamptz
+      AND (
+        $7::numeric IS NULL
+        OR device_workouts.duration_minutes IS NULL
+        OR device_workouts.duration_minutes = $7::numeric
+      )
+      AND (
+        $8::numeric IS NULL
+        OR device_workouts.distance_meters IS NULL
+        OR device_workouts.distance_meters = $8::numeric
+        OR (
+          device_workouts.duration_minutes IS NOT NULL
+          AND device_workouts.active_calories IS NOT NULL
+          AND ABS(device_workouts.distance_meters - device_workouts.duration_minutes * 60) <=
+            GREATEST(90, device_workouts.duration_minutes * 60 * 0.08)
+          AND ROUND(device_workouts.active_calories) = ROUND($8::numeric)
+        )
+      )
+    `;
+  const result = await client.query<{ id: string; has_links: boolean }>(
+    `
+      SELECT
+        device_workouts.id,
+        EXISTS (
+          SELECT 1
+          FROM training_plan_device_links
+          WHERE training_plan_device_links.device_workout_id = device_workouts.id
+        ) AS has_links
+      FROM device_workouts
+      WHERE device_workouts.athlete_id = $1
+        AND device_workouts.provider = 'direct-watch'
+        ${sourceFilter}
+        ${identityFilter}
+      ORDER BY has_links DESC, device_workouts.updated_at DESC
+      LIMIT 1
+      FOR UPDATE
+    `,
+    options.sameSourceOnly
+      ? [
+          athleteId,
+          workout.sourceWorkoutId,
+        ]
+      : [
+          athleteId,
+          workout.sourceWorkoutId,
+          workout.entryDate,
+          workout.workoutType,
+          workout.startTime,
+          workout.endTime,
+          workout.durationMinutes,
+          workout.distanceMeters,
+        ],
+  );
+
+  return result.rows[0] ?? null;
 }
 
 async function assertDeviceWorkoutLinkTarget(
@@ -1157,12 +1462,18 @@ async function assertDeviceWorkoutLinkTarget(
   }
 }
 
-async function hydrateDeviceWorkoutLinks(rows: DeviceWorkoutLinkRow[]): Promise<DeviceWorkoutLink[]> {
+async function hydrateDeviceWorkoutLinks(
+  rows: DeviceWorkoutLinkRow[],
+  options: DeviceWorkoutHydrationOptions = {},
+): Promise<DeviceWorkoutLink[]> {
   if (rows.length === 0) {
     return [];
   }
 
-  const workouts = await listDeviceWorkoutsByIds(rows.map((row) => row.device_workout_id));
+  const workouts = await listDeviceWorkoutsByIds(
+    rows.map((row) => row.device_workout_id),
+    options,
+  );
   const workoutsById = new Map(workouts.map((workout) => [workout.id, workout]));
 
   return rows
@@ -1173,7 +1484,10 @@ async function hydrateDeviceWorkoutLinks(rows: DeviceWorkoutLinkRow[]): Promise<
     .filter((link): link is DeviceWorkoutLink => Boolean(link));
 }
 
-async function listDeviceWorkoutsByIds(workoutIds: string[]): Promise<DeviceWorkout[]> {
+async function listDeviceWorkoutsByIds(
+  workoutIds: string[],
+  options: DeviceWorkoutHydrationOptions = {},
+): Promise<DeviceWorkout[]> {
   const ids = Array.from(new Set(workoutIds.filter(Boolean)));
   if (ids.length === 0) {
     return [];
@@ -1212,6 +1526,10 @@ async function listDeviceWorkoutsByIds(workoutIds: string[]): Promise<DeviceWork
     `,
     [ids],
   );
+
+  if (!options.includeSamples) {
+    return result.rows.map((row) => mapDeviceWorkout(row));
+  }
 
   return attachDeviceWorkoutSamples(result.rows);
 }
