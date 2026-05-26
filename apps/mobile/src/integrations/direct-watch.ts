@@ -1,3 +1,7 @@
+import {
+  getDeviceWorkoutProfile,
+  getMissingDeviceWorkoutMetrics,
+} from "../workout-profiles.js";
 import type {
   DeviceHealthDailySummaryPayload,
   DeviceHealthHeartRateSummary,
@@ -164,16 +168,46 @@ export interface DirectWatchDecryptedPacket {
   activityWorkoutDistanceMeters?: number | null;
   activityWorkoutDurationMinutes?: number | null;
   activityWorkoutEndTime?: string | null;
+  activityWorkoutAltitudeAvgMeters?: number | null;
+  activityWorkoutAltitudeMaxMeters?: number | null;
+  activityWorkoutAltitudeMinMeters?: number | null;
+  activityWorkoutCadenceAvg?: number | null;
+  activityWorkoutCadenceMax?: number | null;
+  activityWorkoutElevationGainMeters?: number | null;
+  activityWorkoutElevationLossMeters?: number | null;
   activityWorkoutHeartRateZoneAerobicSeconds?: number | null;
   activityWorkoutHeartRateZoneAnaerobicSeconds?: number | null;
   activityWorkoutHeartRateZoneExtremeSeconds?: number | null;
   activityWorkoutHeartRateZoneFatBurnSeconds?: number | null;
   activityWorkoutHeartRateZoneWarmUpSeconds?: number | null;
+  activityWorkoutJumpRateAvg?: number | null;
+  activityWorkoutJumpRateMax?: number | null;
+  activityWorkoutJumps?: number | null;
+  activityWorkoutLaps?: number | null;
+  activityWorkoutLoad?: number | null;
+  activityWorkoutPaceAvgSecondsPerKm?: number | null;
+  activityWorkoutPaceMaxSecondsPerKm?: number | null;
+  activityWorkoutPaceMinSecondsPerKm?: number | null;
+  activityWorkoutRecoveryTimeHours?: number | null;
   activityWorkoutGpsSampleCount?: number | null;
   activityWorkoutGpsSamples?: DirectWatchWorkoutGpsSample[];
+  activityWorkoutSpeedAvgKmh?: number | null;
+  activityWorkoutSpeedMaxKmh?: number | null;
   activityWorkoutStartTime?: string | null;
   activityWorkoutSteps?: number | null;
+  activityWorkoutStepLengthAvgCm?: number | null;
+  activityWorkoutStepRateAvg?: number | null;
+  activityWorkoutStepRateMax?: number | null;
+  activityWorkoutStrokeRateAvg?: number | null;
+  activityWorkoutStrokes?: number | null;
+  activityWorkoutSwimStyle?: number | null;
+  activityWorkoutSwolfAvg?: number | null;
+  activityWorkoutTrainingEffectAerobic?: number | null;
+  activityWorkoutTrainingEffectAnaerobic?: number | null;
   activityWorkoutType?: string | null;
+  activityWorkoutTypeCode?: number | null;
+  activityWorkoutVitalityGain?: number | null;
+  activityWorkoutVo2Max?: number | null;
   batteryLevel?: number | null;
   batteryState?: number | null;
   byteLength?: number | null;
@@ -1409,21 +1443,51 @@ function normalizeDirectWatchDecryptedPacket(value: unknown): DirectWatchDecrypt
     activityTrainingLoadDay: normalizeNumber(value.activityTrainingLoadDay),
     activityTrainingLoadWeek: normalizeNumber(value.activityTrainingLoadWeek),
     activityVitality: normalizeNumber(value.activityVitality),
+    activityWorkoutAltitudeAvgMeters: normalizeNumber(value.activityWorkoutAltitudeAvgMeters),
+    activityWorkoutAltitudeMaxMeters: normalizeNumber(value.activityWorkoutAltitudeMaxMeters),
+    activityWorkoutAltitudeMinMeters: normalizeNumber(value.activityWorkoutAltitudeMinMeters),
+    activityWorkoutCadenceAvg: normalizeNumber(value.activityWorkoutCadenceAvg),
+    activityWorkoutCadenceMax: normalizeNumber(value.activityWorkoutCadenceMax),
     activityWorkoutDistanceMeters: normalizeNumber(value.activityWorkoutDistanceMeters),
     activityWorkoutDurationMinutes: normalizeNumber(value.activityWorkoutDurationMinutes),
+    activityWorkoutElevationGainMeters: normalizeNumber(value.activityWorkoutElevationGainMeters),
+    activityWorkoutElevationLossMeters: normalizeNumber(value.activityWorkoutElevationLossMeters),
     activityWorkoutEndTime: normalizeString(value.activityWorkoutEndTime),
     activityWorkoutHeartRateZoneAerobicSeconds: normalizeNumber(value.activityWorkoutHeartRateZoneAerobicSeconds),
     activityWorkoutHeartRateZoneAnaerobicSeconds: normalizeNumber(value.activityWorkoutHeartRateZoneAnaerobicSeconds),
     activityWorkoutHeartRateZoneExtremeSeconds: normalizeNumber(value.activityWorkoutHeartRateZoneExtremeSeconds),
     activityWorkoutHeartRateZoneFatBurnSeconds: normalizeNumber(value.activityWorkoutHeartRateZoneFatBurnSeconds),
     activityWorkoutHeartRateZoneWarmUpSeconds: normalizeNumber(value.activityWorkoutHeartRateZoneWarmUpSeconds),
+    activityWorkoutJumpRateAvg: normalizeNumber(value.activityWorkoutJumpRateAvg),
+    activityWorkoutJumpRateMax: normalizeNumber(value.activityWorkoutJumpRateMax),
+    activityWorkoutJumps: normalizeNumber(value.activityWorkoutJumps),
+    activityWorkoutLaps: normalizeNumber(value.activityWorkoutLaps),
+    activityWorkoutLoad: normalizeNumber(value.activityWorkoutLoad),
+    activityWorkoutPaceAvgSecondsPerKm: normalizeNumber(value.activityWorkoutPaceAvgSecondsPerKm),
+    activityWorkoutPaceMaxSecondsPerKm: normalizeNumber(value.activityWorkoutPaceMaxSecondsPerKm),
+    activityWorkoutPaceMinSecondsPerKm: normalizeNumber(value.activityWorkoutPaceMinSecondsPerKm),
+    activityWorkoutRecoveryTimeHours: normalizeNumber(value.activityWorkoutRecoveryTimeHours),
     activityWorkoutGpsSampleCount: normalizeNumber(value.activityWorkoutGpsSampleCount),
     activityWorkoutGpsSamples: Array.isArray(value.activityWorkoutGpsSamples)
       ? value.activityWorkoutGpsSamples.map(normalizeDirectWatchWorkoutGpsSample)
       : [],
+    activityWorkoutSpeedAvgKmh: normalizeNumber(value.activityWorkoutSpeedAvgKmh),
+    activityWorkoutSpeedMaxKmh: normalizeNumber(value.activityWorkoutSpeedMaxKmh),
     activityWorkoutStartTime: normalizeString(value.activityWorkoutStartTime),
     activityWorkoutSteps: normalizeNumber(value.activityWorkoutSteps),
+    activityWorkoutStepLengthAvgCm: normalizeNumber(value.activityWorkoutStepLengthAvgCm),
+    activityWorkoutStepRateAvg: normalizeNumber(value.activityWorkoutStepRateAvg),
+    activityWorkoutStepRateMax: normalizeNumber(value.activityWorkoutStepRateMax),
+    activityWorkoutStrokeRateAvg: normalizeNumber(value.activityWorkoutStrokeRateAvg),
+    activityWorkoutStrokes: normalizeNumber(value.activityWorkoutStrokes),
+    activityWorkoutSwimStyle: normalizeNumber(value.activityWorkoutSwimStyle),
+    activityWorkoutSwolfAvg: normalizeNumber(value.activityWorkoutSwolfAvg),
+    activityWorkoutTrainingEffectAerobic: normalizeNumber(value.activityWorkoutTrainingEffectAerobic),
+    activityWorkoutTrainingEffectAnaerobic: normalizeNumber(value.activityWorkoutTrainingEffectAnaerobic),
     activityWorkoutType: normalizeString(value.activityWorkoutType),
+    activityWorkoutTypeCode: normalizeNumber(value.activityWorkoutTypeCode),
+    activityWorkoutVitalityGain: normalizeNumber(value.activityWorkoutVitalityGain),
+    activityWorkoutVo2Max: normalizeNumber(value.activityWorkoutVo2Max),
     batteryLevel: normalizeNumber(value.batteryLevel),
     batteryState: normalizeNumber(value.batteryState),
     byteLength: normalizeNumber(value.byteLength),
@@ -2105,13 +2169,14 @@ function buildDirectWatchDeviceWorkout(
     warmUp: summaryPacket?.activityWorkoutHeartRateZoneWarmUpSeconds ?? null,
   };
   const workoutType = summaryPacket?.activityWorkoutType ?? getDirectWatchWorkoutTypeLabel(sourceFile?.subtype) ?? "workout";
-  const missingMetrics = [
-    durationMinutes === null ? "duration" : null,
-    distanceMeters === null || distanceMeters === undefined ? "distance" : null,
-    activeCalories === null ? "calories" : null,
-    steps === null ? "steps" : null,
-    !summaryHeartRates.length && !heartRates.length ? "heartRate" : null,
-  ].filter((item): item is string => Boolean(item));
+  const workoutProfile = getDeviceWorkoutProfile(workoutType);
+  const missingMetrics = getMissingDeviceWorkoutMetrics(workoutType, {
+    calories: activeCalories !== null,
+    distance: distanceMeters !== null && distanceMeters !== undefined,
+    duration: durationMinutes !== null,
+    heartRate: summaryHeartRates.length > 0 || heartRates.length > 0,
+    steps: steps !== null,
+  });
   const sourceWorkoutGroupId = files
     .map((file) => getDirectWatchWorkoutFileGroupKey(file))
     .find((item): item is string => Boolean(item));
@@ -2149,6 +2214,11 @@ function buildDirectWatchDeviceWorkout(
       sampleCount: samples.length,
       dataCompleteness: missingMetrics.length === 0 ? "complete" : "partial",
       missingMetrics,
+      workoutProfile: {
+        id: workoutProfile.id,
+        optionalMetrics: workoutProfile.optionalMetrics,
+        requiredMetrics: workoutProfile.requiredMetrics,
+      },
       source: "direct-watch-workout-file",
       sourceWorkoutGroupId,
       sourceFileKind: summaryPacket?.activityFile?.kind ?? null,
@@ -2157,12 +2227,42 @@ function buildDirectWatchDeviceWorkout(
       steps,
       summaryHeartRateSamples: summaryHeartRates,
       workoutSummary: {
+        altitudeAvgMeters: summaryPacket?.activityWorkoutAltitudeAvgMeters ?? null,
+        altitudeMaxMeters: summaryPacket?.activityWorkoutAltitudeMaxMeters ?? null,
+        altitudeMinMeters: summaryPacket?.activityWorkoutAltitudeMinMeters ?? null,
+        cadenceAvg: summaryPacket?.activityWorkoutCadenceAvg ?? null,
+        cadenceMax: summaryPacket?.activityWorkoutCadenceMax ?? null,
         distanceMeters: distanceMeters ?? null,
         durationMinutes: summaryPacket?.activityWorkoutDurationMinutes ?? null,
+        elevationGainMeters: summaryPacket?.activityWorkoutElevationGainMeters ?? null,
+        elevationLossMeters: summaryPacket?.activityWorkoutElevationLossMeters ?? null,
         endTime: summaryEnd ?? null,
         heartRateZonesSeconds: zoneSeconds,
+        jumpRateAvg: summaryPacket?.activityWorkoutJumpRateAvg ?? null,
+        jumpRateMax: summaryPacket?.activityWorkoutJumpRateMax ?? null,
+        jumps: summaryPacket?.activityWorkoutJumps ?? null,
+        laps: summaryPacket?.activityWorkoutLaps ?? null,
+        paceAvgSecondsPerKm: summaryPacket?.activityWorkoutPaceAvgSecondsPerKm ?? null,
+        paceMaxSecondsPerKm: summaryPacket?.activityWorkoutPaceMaxSecondsPerKm ?? null,
+        paceMinSecondsPerKm: summaryPacket?.activityWorkoutPaceMinSecondsPerKm ?? null,
+        recoveryTimeHours: summaryPacket?.activityWorkoutRecoveryTimeHours ?? null,
+        speedAvgKmh: summaryPacket?.activityWorkoutSpeedAvgKmh ?? null,
+        speedMaxKmh: summaryPacket?.activityWorkoutSpeedMaxKmh ?? null,
         startTime: summaryStart ?? null,
+        stepLengthAvgCm: summaryPacket?.activityWorkoutStepLengthAvgCm ?? null,
+        stepRateAvg: summaryPacket?.activityWorkoutStepRateAvg ?? null,
+        stepRateMax: summaryPacket?.activityWorkoutStepRateMax ?? null,
+        strokeRateAvg: summaryPacket?.activityWorkoutStrokeRateAvg ?? null,
+        strokes: summaryPacket?.activityWorkoutStrokes ?? null,
+        swolfAvg: summaryPacket?.activityWorkoutSwolfAvg ?? null,
+        swimStyle: summaryPacket?.activityWorkoutSwimStyle ?? null,
+        trainingEffectAerobic: summaryPacket?.activityWorkoutTrainingEffectAerobic ?? null,
+        trainingEffectAnaerobic: summaryPacket?.activityWorkoutTrainingEffectAnaerobic ?? null,
         type: workoutType,
+        typeCode: summaryPacket?.activityWorkoutTypeCode ?? null,
+        vo2Max: summaryPacket?.activityWorkoutVo2Max ?? null,
+        workoutLoad: summaryPacket?.activityWorkoutLoad ?? null,
+        vitalityGain: summaryPacket?.activityWorkoutVitalityGain ?? null,
       },
     },
     samples,
@@ -2203,9 +2303,9 @@ function getDirectWatchWorkoutProbeRequests(
 function getDirectWatchWorkoutTypeLabel(subtype: number | null | undefined) {
   switch (subtype) {
     case 1:
-      return "outdoor-walk";
-    case 2:
       return "outdoor-run";
+    case 2:
+      return "outdoor-walk";
     case 3:
       return "treadmill";
     case 6:

@@ -2613,6 +2613,36 @@ class DirectWatchPlugin : Plugin() {
                                 item.put("activityWorkoutDistanceMeters", file?.workoutDistanceMeters)
                                 item.put("activityWorkoutSteps", file?.workoutSteps)
                                 item.put("activityWorkoutType", file?.workoutType)
+                                item.put("activityWorkoutTypeCode", file?.workoutTypeCode)
+                                item.put("activityWorkoutPaceAvgSecondsPerKm", file?.workoutPaceAvgSecondsPerKm)
+                                item.put("activityWorkoutPaceMaxSecondsPerKm", file?.workoutPaceMaxSecondsPerKm)
+                                item.put("activityWorkoutPaceMinSecondsPerKm", file?.workoutPaceMinSecondsPerKm)
+                                item.put("activityWorkoutSpeedAvgKmh", file?.workoutSpeedAvgKmh)
+                                item.put("activityWorkoutSpeedMaxKmh", file?.workoutSpeedMaxKmh)
+                                item.put("activityWorkoutCadenceAvg", file?.workoutCadenceAvg)
+                                item.put("activityWorkoutCadenceMax", file?.workoutCadenceMax)
+                                item.put("activityWorkoutStepLengthAvgCm", file?.workoutStepLengthAvgCm)
+                                item.put("activityWorkoutStepRateAvg", file?.workoutStepRateAvg)
+                                item.put("activityWorkoutStepRateMax", file?.workoutStepRateMax)
+                                item.put("activityWorkoutStrokes", file?.workoutStrokes)
+                                item.put("activityWorkoutStrokeRateAvg", file?.workoutStrokeRateAvg)
+                                item.put("activityWorkoutJumps", file?.workoutJumps)
+                                item.put("activityWorkoutJumpRateAvg", file?.workoutJumpRateAvg)
+                                item.put("activityWorkoutJumpRateMax", file?.workoutJumpRateMax)
+                                item.put("activityWorkoutLaps", file?.workoutLaps)
+                                item.put("activityWorkoutSwolfAvg", file?.workoutSwolfAvg)
+                                item.put("activityWorkoutSwimStyle", file?.workoutSwimStyle)
+                                item.put("activityWorkoutElevationGainMeters", file?.workoutElevationGainMeters)
+                                item.put("activityWorkoutElevationLossMeters", file?.workoutElevationLossMeters)
+                                item.put("activityWorkoutAltitudeAvgMeters", file?.workoutAltitudeAvgMeters)
+                                item.put("activityWorkoutAltitudeMaxMeters", file?.workoutAltitudeMaxMeters)
+                                item.put("activityWorkoutAltitudeMinMeters", file?.workoutAltitudeMinMeters)
+                                item.put("activityWorkoutTrainingEffectAerobic", file?.workoutTrainingEffectAerobic)
+                                item.put("activityWorkoutTrainingEffectAnaerobic", file?.workoutTrainingEffectAnaerobic)
+                                item.put("activityWorkoutLoad", file?.workoutLoad)
+                                item.put("activityWorkoutRecoveryTimeHours", file?.workoutRecoveryTimeHours)
+                                item.put("activityWorkoutVo2Max", file?.workoutVo2Max)
+                                item.put("activityWorkoutVitalityGain", file?.workoutVitalityGain)
                                 item.put("activityWorkoutHeartRateZoneExtremeSeconds", file?.workoutHeartRateZoneExtremeSeconds)
                                 item.put("activityWorkoutHeartRateZoneAnaerobicSeconds", file?.workoutHeartRateZoneAnaerobicSeconds)
                                 item.put("activityWorkoutHeartRateZoneAerobicSeconds", file?.workoutHeartRateZoneAerobicSeconds)
@@ -3534,6 +3564,36 @@ class DirectWatchPlugin : Plugin() {
             workoutDistanceMeters = workout?.distanceMeters,
             workoutSteps = workout?.steps,
             workoutType = workout?.workoutType,
+            workoutTypeCode = workout?.workoutTypeCode,
+            workoutPaceAvgSecondsPerKm = workout?.paceAvgSecondsPerKm,
+            workoutPaceMaxSecondsPerKm = workout?.paceMaxSecondsPerKm,
+            workoutPaceMinSecondsPerKm = workout?.paceMinSecondsPerKm,
+            workoutSpeedAvgKmh = workout?.speedAvgKmh,
+            workoutSpeedMaxKmh = workout?.speedMaxKmh,
+            workoutCadenceAvg = workout?.cadenceAvg,
+            workoutCadenceMax = workout?.cadenceMax,
+            workoutStepLengthAvgCm = workout?.stepLengthAvgCm,
+            workoutStepRateAvg = workout?.stepRateAvg,
+            workoutStepRateMax = workout?.stepRateMax,
+            workoutStrokes = workout?.strokes,
+            workoutStrokeRateAvg = workout?.strokeRateAvg,
+            workoutJumps = workout?.jumps,
+            workoutJumpRateAvg = workout?.jumpRateAvg,
+            workoutJumpRateMax = workout?.jumpRateMax,
+            workoutLaps = workout?.laps,
+            workoutSwolfAvg = workout?.swolfAvg,
+            workoutSwimStyle = workout?.swimStyle,
+            workoutElevationGainMeters = workout?.elevationGainMeters,
+            workoutElevationLossMeters = workout?.elevationLossMeters,
+            workoutAltitudeAvgMeters = workout?.altitudeAvgMeters,
+            workoutAltitudeMaxMeters = workout?.altitudeMaxMeters,
+            workoutAltitudeMinMeters = workout?.altitudeMinMeters,
+            workoutTrainingEffectAerobic = workout?.trainingEffectAerobic,
+            workoutTrainingEffectAnaerobic = workout?.trainingEffectAnaerobic,
+            workoutLoad = workout?.workoutLoad,
+            workoutRecoveryTimeHours = workout?.recoveryTimeHours,
+            workoutVo2Max = workout?.vo2Max,
+            workoutVitalityGain = workout?.vitalityGain,
             workoutHeartRateZoneExtremeSeconds = workout?.zoneExtremeSeconds,
             workoutHeartRateZoneAnaerobicSeconds = workout?.zoneAnaerobicSeconds,
             workoutHeartRateZoneAerobicSeconds = workout?.zoneAerobicSeconds,
@@ -3649,11 +3709,13 @@ class DirectWatchPlugin : Plugin() {
         if (file.version > 5) {
             offset += 6
         }
+        val trainingEffectAerobic = normalizeClassicTrainingEffect(littleEndianFloat(bytes, offset))
         offset += 4 // aerobic training effect
         if (file.version > 6) {
             offset += 1
         }
         offset += 1
+        val recoveryTimeHours = littleEndianUInt16(bytes, offset).takeIf { it in 0..240 }
         offset += 2 // recovery time
 
         val zoneOffset = offset
@@ -3665,8 +3727,13 @@ class DirectWatchPlugin : Plugin() {
             }
         offset += 20
 
+        var workoutTypeCode: Int? = null
+        var trainingEffectAnaerobic: Double? = null
+        var workoutLoad: Int? = null
+        var vitalityGain: Int? = null
         if (file.version == 5) {
             offset += 10
+            workoutTypeCode = littleEndianUInt16(bytes, offset).takeIf { it > 0 }
             offset += 2 // Xiaomi workout type code
             offset += 2
             offset += 4 // configured time goal
@@ -3674,15 +3741,19 @@ class DirectWatchPlugin : Plugin() {
         } else {
             offset += 2
             offset += 4 // active seconds repeated
+            trainingEffectAnaerobic = normalizeClassicTrainingEffect(littleEndianFloat(bytes, offset))
             offset += 4 // anaerobic training effect
             offset += 1
+            workoutTypeCode = littleEndianUInt16(bytes, offset).takeIf { it > 0 }
             offset += 2 // Xiaomi workout type code
             offset += 2
             offset += 4 // configured time goal
             offset += 2 // configured calories goal
+            workoutLoad = littleEndianUInt16(bytes, offset).takeIf { it in 1..20_000 }
             offset += 2 // workout load
             offset += 1
             if (file.version > 7) {
+                vitalityGain = byteAt(bytes, offset).takeIf { it in 0..200 }
                 offset += 1 // vitality gain
             }
         }
@@ -3707,12 +3778,18 @@ class DirectWatchPlugin : Plugin() {
             heartRateAvg = heartRateAvg.takeIf { it in 35..230 },
             heartRateMin = heartRateMin.takeIf { it in 30..230 },
             heartRateMax = heartRateMax.takeIf { it in 35..254 },
-            workoutType = classicWorkoutTypeLabel(file.subtype),
+            workoutType = classicWorkoutTypeLabel(file.subtype, workoutTypeCode),
             zoneExtremeSeconds = zones?.getOrNull(0),
             zoneAnaerobicSeconds = zones?.getOrNull(1),
             zoneAerobicSeconds = zones?.getOrNull(2),
             zoneFatBurnSeconds = zones?.getOrNull(3),
             zoneWarmUpSeconds = zones?.getOrNull(4),
+            workoutTypeCode = workoutTypeCode,
+            trainingEffectAerobic = trainingEffectAerobic,
+            trainingEffectAnaerobic = trainingEffectAnaerobic,
+            workoutLoad = workoutLoad,
+            recoveryTimeHours = recoveryTimeHours,
+            vitalityGain = vitalityGain,
         )
     }
 
@@ -3738,7 +3815,9 @@ class DirectWatchPlugin : Plugin() {
         offset += 4
         val calories = littleEndianUInt32(bytes, offset).toInt().takeIf { it in 1..20_000 }
         offset += 4
+        val paceMaxSecondsPerKm = normalizeClassicPaceSecondsPerMeter(littleEndianUInt32(bytes, offset).toInt())
         offset += 4 // max pace
+        val paceMinSecondsPerKm = normalizeClassicPaceSecondsPerMeter(littleEndianUInt32(bytes, offset).toInt())
         offset += 4 // min pace
         offset += 4
         val steps = littleEndianUInt32(bytes, offset).toInt().takeIf { it in 1..200_000 }
@@ -3769,6 +3848,8 @@ class DirectWatchPlugin : Plugin() {
             heartRateMin = heartRateMin,
             heartRateMax = heartRateMax,
             zones = zones,
+            paceMaxSecondsPerKm = paceMaxSecondsPerKm,
+            paceMinSecondsPerKm = paceMinSecondsPerKm,
         )
     }
 
@@ -3790,6 +3871,7 @@ class DirectWatchPlugin : Plugin() {
         }
 
         var offset = dataStart
+        val workoutTypeCode = littleEndianUInt16(bytes, offset).takeIf { it > 0 }
         offset += 2 // Xiaomi workout type code
         val startSeconds = littleEndianUInt32(bytes, offset)
         offset += 4
@@ -3804,21 +3886,37 @@ class DirectWatchPlugin : Plugin() {
         offset += 2
         val activeCalories = littleEndianUInt16(bytes, offset).takeIf { it in 1..20_000 } ?: totalCalories
         offset += 2
+        var paceAvgSecondsPerKm: Int? = null
+        var speedAvgKmh: Double? = null
+        var stepLengthAvgCm: Int? = null
+        var stepRateAvg: Int? = null
+        var trainingEffectAerobic: Double? = null
+        var trainingEffectAnaerobic: Double? = null
+        var recoveryTimeHours: Int? = null
+        var vo2Max: Int? = null
         if (file.version >= 5) {
+            paceAvgSecondsPerKm = normalizeClassicPaceSecondsPerKm(littleEndianUInt32(bytes, offset).toInt())
             offset += 4 // average pace
         }
+        val paceMaxSecondsPerKm = normalizeClassicPaceSecondsPerKm(littleEndianUInt32(bytes, offset).toInt())
         offset += 4 // max pace
+        val paceMinSecondsPerKm = normalizeClassicPaceSecondsPerKm(littleEndianUInt32(bytes, offset).toInt())
         offset += 4 // min pace
         if (file.version >= 5) {
+            speedAvgKmh = normalizeClassicSpeedKmh(littleEndianFloat(bytes, offset))
             offset += 4 // average speed
         }
+        val speedMaxKmh = normalizeClassicSpeedKmh(littleEndianFloat(bytes, offset))
         offset += 4 // max speed
         val steps = littleEndianUInt32(bytes, offset).toInt().takeIf { it in 1..200_000 }
         offset += 4
         if (file.version >= 5) {
+            stepLengthAvgCm = littleEndianUInt16(bytes, offset).takeIf { it in 1..300 }
             offset += 2 // average step length
+            stepRateAvg = normalizeClassicCadence(littleEndianUInt16(bytes, offset))
             offset += 2 // average step rate
         }
+        val stepRateMax = normalizeClassicCadence(littleEndianUInt16(bytes, offset))
         offset += 2 // max step rate
 
         val heartRateAvg = (bytes.getOrNull(offset)?.toInt() ?: 0) and 0xff
@@ -3835,14 +3933,18 @@ class DirectWatchPlugin : Plugin() {
             offset + 33
         } else {
             offset += 20
+            trainingEffectAerobic = normalizeClassicTrainingEffect(littleEndianFloat(bytes, offset))
             offset += 4 // aerobic training effect
             offset += 1
+            trainingEffectAnaerobic = normalizeClassicTrainingEffect(littleEndianFloat(bytes, offset))
             offset += 4 // anaerobic training effect
             offset += if (file.version >= 9) {
+                vo2Max = byteAt(bytes, offset + 6).takeIf { it in 10..100 }
                 6 + 1 + 2
             } else {
                 4
             }
+            recoveryTimeHours = littleEndianUInt16(bytes, offset).takeIf { it in 0..240 }
             offset += 2 // recovery time
             offset + 1
         }
@@ -3876,12 +3978,25 @@ class DirectWatchPlugin : Plugin() {
             heartRateAvg = normalizedHeartRateAvg,
             heartRateMin = normalizedHeartRateMin,
             heartRateMax = normalizedHeartRateMax,
-            workoutType = classicWorkoutTypeLabel(file.subtype),
+            workoutType = classicWorkoutTypeLabel(file.subtype, workoutTypeCode),
             zoneExtremeSeconds = zones?.getOrNull(0),
             zoneAnaerobicSeconds = zones?.getOrNull(1),
             zoneAerobicSeconds = zones?.getOrNull(2),
             zoneFatBurnSeconds = zones?.getOrNull(3),
             zoneWarmUpSeconds = zones?.getOrNull(4),
+            workoutTypeCode = workoutTypeCode,
+            paceAvgSecondsPerKm = paceAvgSecondsPerKm,
+            paceMaxSecondsPerKm = paceMaxSecondsPerKm,
+            paceMinSecondsPerKm = paceMinSecondsPerKm,
+            speedAvgKmh = speedAvgKmh,
+            speedMaxKmh = speedMaxKmh,
+            stepLengthAvgCm = stepLengthAvgCm,
+            stepRateAvg = stepRateAvg,
+            stepRateMax = stepRateMax,
+            trainingEffectAerobic = trainingEffectAerobic,
+            trainingEffectAnaerobic = trainingEffectAnaerobic,
+            recoveryTimeHours = recoveryTimeHours,
+            vo2Max = vo2Max,
         )
     }
 
@@ -3909,15 +4024,24 @@ class DirectWatchPlugin : Plugin() {
         offset += 4
         val calories = littleEndianUInt16(bytes, offset).takeIf { it in 1..20_000 }
         offset += 2
-        if (file.version >= 10) offset += 4
+        var paceAvgSecondsPerKm: Int? = null
+        var cadenceAvg: Int? = null
+        if (file.version >= 10) {
+            paceAvgSecondsPerKm = normalizeClassicPaceSecondsPerKm(littleEndianUInt32(bytes, offset).toInt())
+            offset += 4
+        }
+        val paceMaxSecondsPerKm = normalizeClassicPaceSecondsPerKm(littleEndianUInt32(bytes, offset).toInt())
         offset += 4
+        val paceMinSecondsPerKm = normalizeClassicPaceSecondsPerKm(littleEndianUInt32(bytes, offset).toInt())
         offset += 4
         val steps = littleEndianUInt32(bytes, offset).toInt().takeIf { it in 1..200_000 }
         offset += 4
         if (file.version >= 10) {
             offset += 2
+            cadenceAvg = normalizeClassicCadence(littleEndianUInt16(bytes, offset))
             offset += 2
         }
+        val cadenceMax = normalizeClassicCadence(littleEndianUInt16(bytes, offset))
         offset += 2
         val heartRateAvg = byteAt(bytes, offset)
         offset += 1
@@ -3925,15 +4049,38 @@ class DirectWatchPlugin : Plugin() {
         offset += 1
         val heartRateMin = byteAt(bytes, offset)
         offset += 1
+        val trainingEffectAerobic = normalizeClassicTrainingEffect(littleEndianFloat(bytes, offset))
         offset += 4
         if (file.version >= 10) offset += 1
+        val vo2Max = byteAt(bytes, offset).takeIf { it in 10..100 }
         offset += 1
         if (file.version >= 10) offset += 1
         offset += 1
+        val recoveryTimeHours = littleEndianUInt16(bytes, offset).takeIf { it in 0..240 }
         offset += 2
         val zones = readClassicWorkoutHeartRateZonesAt(bytes, offset, dataEnd, activeSeconds)
 
-        return buildClassicWorkoutSummary(file, startSeconds, endSeconds, activeSeconds, distanceMeters, calories, steps, heartRateAvg, heartRateMin, heartRateMax, zones)
+        return buildClassicWorkoutSummary(
+            file,
+            startSeconds,
+            endSeconds,
+            activeSeconds,
+            distanceMeters,
+            calories,
+            steps,
+            heartRateAvg,
+            heartRateMin,
+            heartRateMax,
+            zones,
+            paceAvgSecondsPerKm = paceAvgSecondsPerKm,
+            paceMaxSecondsPerKm = paceMaxSecondsPerKm,
+            paceMinSecondsPerKm = paceMinSecondsPerKm,
+            cadenceAvg = cadenceAvg,
+            cadenceMax = cadenceMax,
+            trainingEffectAerobic = trainingEffectAerobic,
+            recoveryTimeHours = recoveryTimeHours,
+            vo2Max = vo2Max,
+        )
     }
 
     private fun parseClassicOutdoorCyclingSummary(
@@ -3949,6 +4096,7 @@ class DirectWatchPlugin : Plugin() {
         var offset = 8 + headerSize
         if (dataEnd < offset + 62) return null
 
+        val workoutTypeCode = littleEndianUInt16(bytes, offset).takeIf { it > 0 }
         offset += 2
         val startSeconds = littleEndianUInt32(bytes, offset)
         offset += 4
@@ -3964,7 +4112,12 @@ class DirectWatchPlugin : Plugin() {
         offset += 2
         offset += 4
         offset += 4
-        if (file.version >= 5) offset += 4
+        var speedAvgKmh: Double? = null
+        if (file.version >= 5) {
+            speedAvgKmh = normalizeClassicSpeedKmh(littleEndianFloat(bytes, offset))
+            offset += 4
+        }
+        val speedMaxKmh = normalizeClassicSpeedKmh(littleEndianFloat(bytes, offset))
         offset += 4
         val heartRateAvg = byteAt(bytes, offset)
         offset += 1
@@ -3972,19 +4125,56 @@ class DirectWatchPlugin : Plugin() {
         offset += 1
         val heartRateMin = byteAt(bytes, offset)
         offset += 1
-        offset += 20
+        val elevationGainMeters = normalizeClassicAltitude(littleEndianFloat(bytes, offset))
+        offset += 4
+        val elevationLossMeters = normalizeClassicAltitude(littleEndianFloat(bytes, offset))
+        offset += 4
+        val altitudeAvgMeters = normalizeClassicAltitude(littleEndianFloat(bytes, offset))
+        offset += 4
+        val altitudeMaxMeters = normalizeClassicAltitude(littleEndianFloat(bytes, offset))
+        offset += 4
+        val altitudeMinMeters = normalizeClassicAltitude(littleEndianFloat(bytes, offset))
+        offset += 4
+        val trainingEffectAerobic = normalizeClassicTrainingEffect(littleEndianFloat(bytes, offset))
         offset += 4
         offset += 1
+        val trainingEffectAnaerobic = normalizeClassicTrainingEffect(littleEndianFloat(bytes, offset))
         offset += 4
         offset += 1
+        val vo2Max = byteAt(bytes, offset).takeIf { it in 10..100 }
         offset += 1
         offset += 1
         offset += 1
+        val recoveryTimeHours = littleEndianUInt16(bytes, offset).takeIf { it in 0..240 }
         offset += 2
         offset += 1
         val zones = readClassicWorkoutHeartRateZonesAt(bytes, offset, dataEnd, activeSeconds)
 
-        return buildClassicWorkoutSummary(file, startSeconds, endSeconds, activeSeconds, distanceMeters, calories, null, heartRateAvg, heartRateMin, heartRateMax, zones)
+        return buildClassicWorkoutSummary(
+            file,
+            startSeconds,
+            endSeconds,
+            activeSeconds,
+            distanceMeters,
+            calories,
+            null,
+            heartRateAvg,
+            heartRateMin,
+            heartRateMax,
+            zones,
+            workoutTypeCode = workoutTypeCode,
+            speedAvgKmh = speedAvgKmh,
+            speedMaxKmh = speedMaxKmh,
+            elevationGainMeters = elevationGainMeters,
+            elevationLossMeters = elevationLossMeters,
+            altitudeAvgMeters = altitudeAvgMeters,
+            altitudeMaxMeters = altitudeMaxMeters,
+            altitudeMinMeters = altitudeMinMeters,
+            trainingEffectAerobic = trainingEffectAerobic,
+            trainingEffectAnaerobic = trainingEffectAnaerobic,
+            recoveryTimeHours = recoveryTimeHours,
+            vo2Max = vo2Max,
+        )
     }
 
     private fun parseClassicOutdoorCyclingV2Summary(
@@ -4010,6 +4200,7 @@ class DirectWatchPlugin : Plugin() {
         val calories = littleEndianUInt16(bytes, offset).takeIf { it in 1..20_000 }
         offset += 2
         offset += 8
+        val speedMaxKmh = normalizeClassicSpeedKmh(littleEndianFloat(bytes, offset))
         offset += 4
         val heartRateAvg = byteAt(bytes, offset)
         offset += 1
@@ -4020,7 +4211,20 @@ class DirectWatchPlugin : Plugin() {
         offset += 28
         val zones = readClassicWorkoutHeartRateZonesAt(bytes, offset, dataEnd, activeSeconds)
 
-        return buildClassicWorkoutSummary(file, startSeconds, endSeconds, activeSeconds, distanceMeters, calories, null, heartRateAvg, heartRateMin, heartRateMax, zones)
+        return buildClassicWorkoutSummary(
+            file,
+            startSeconds,
+            endSeconds,
+            activeSeconds,
+            distanceMeters,
+            calories,
+            null,
+            heartRateAvg,
+            heartRateMin,
+            heartRateMax,
+            zones,
+            speedMaxKmh = speedMaxKmh,
+        )
     }
 
     private fun parseClassicIndoorCyclingSummary(
@@ -4052,13 +4256,29 @@ class DirectWatchPlugin : Plugin() {
         offset += 1
         val heartRateMin = byteAt(bytes, offset)
         offset += 1
+        val trainingEffectAerobic = normalizeClassicTrainingEffect(littleEndianFloat(bytes, offset))
         offset += 4
         offset += 1
         offset += 1
+        val recoveryTimeHours = littleEndianUInt16(bytes, offset).takeIf { it in 0..240 }
         offset += 2
         val zones = readClassicWorkoutHeartRateZonesAt(bytes, offset, dataEnd, activeSeconds)
 
-        return buildClassicWorkoutSummary(file, startSeconds, endSeconds, activeSeconds, null, calories, null, heartRateAvg, heartRateMin, heartRateMax, zones)
+        return buildClassicWorkoutSummary(
+            file,
+            startSeconds,
+            endSeconds,
+            activeSeconds,
+            null,
+            calories,
+            null,
+            heartRateAvg,
+            heartRateMin,
+            heartRateMax,
+            zones,
+            trainingEffectAerobic = trainingEffectAerobic,
+            recoveryTimeHours = recoveryTimeHours,
+        )
     }
 
     private fun parseClassicHiitSummary(
@@ -4087,13 +4307,29 @@ class DirectWatchPlugin : Plugin() {
         offset += 1
         val heartRateMin = byteAt(bytes, offset)
         offset += 1
+        val trainingEffectAerobic = normalizeClassicTrainingEffect(littleEndianFloat(bytes, offset))
         offset += 4
         offset += 1
         offset += 1
+        val recoveryTimeHours = littleEndianUInt16(bytes, offset).takeIf { it in 0..240 }
         offset += 2
         val zones = readClassicWorkoutHeartRateZonesAt(bytes, offset, dataEnd, activeSeconds)
 
-        return buildClassicWorkoutSummary(file, startSeconds, endSeconds, activeSeconds, null, calories, null, heartRateAvg, heartRateMin, heartRateMax, zones)
+        return buildClassicWorkoutSummary(
+            file,
+            startSeconds,
+            endSeconds,
+            activeSeconds,
+            null,
+            calories,
+            null,
+            heartRateAvg,
+            heartRateMin,
+            heartRateMax,
+            zones,
+            trainingEffectAerobic = trainingEffectAerobic,
+            recoveryTimeHours = recoveryTimeHours,
+        )
     }
 
     private fun parseClassicEllipticalSummary(
@@ -4118,7 +4354,12 @@ class DirectWatchPlugin : Plugin() {
         offset += 2
         val steps = littleEndianUInt32(bytes, offset).toInt().takeIf { it in 1..200_000 }
         offset += 4
-        if (file.version >= 6) offset += 2
+        var cadenceAvg: Int? = null
+        if (file.version >= 6) {
+            cadenceAvg = normalizeClassicCadence(littleEndianUInt16(bytes, offset))
+            offset += 2
+        }
+        val cadenceMax = normalizeClassicCadence(littleEndianUInt16(bytes, offset))
         offset += 2
         val heartRateAvg = byteAt(bytes, offset)
         offset += 1
@@ -4130,7 +4371,21 @@ class DirectWatchPlugin : Plugin() {
         if (file.version >= 4) offset += 1
         val zones = readClassicWorkoutHeartRateZonesAt(bytes, offset, dataEnd, activeSeconds)
 
-        return buildClassicWorkoutSummary(file, startSeconds, endSeconds, activeSeconds, null, calories, steps, heartRateAvg, heartRateMin, heartRateMax, zones)
+        return buildClassicWorkoutSummary(
+            file,
+            startSeconds,
+            endSeconds,
+            activeSeconds,
+            null,
+            calories,
+            steps,
+            heartRateAvg,
+            heartRateMin,
+            heartRateMax,
+            zones,
+            cadenceAvg = cadenceAvg,
+            cadenceMax = cadenceMax,
+        )
     }
 
     private fun parseClassicRowingSummary(
@@ -4163,8 +4418,27 @@ class DirectWatchPlugin : Plugin() {
         offset += 7
         if (file.version > 4) offset += 1
         val zones = readClassicWorkoutHeartRateZonesAt(bytes, offset, dataEnd, activeSeconds)
+        offset += 20
+        offset += 2
+        val strokes = littleEndianUInt32(bytes, offset).toInt().takeIf { it in 1..200_000 }
+        offset += 4
+        val strokeRateAvg = littleEndianUInt32(bytes, offset).toInt().takeIf { it in 1..300 }
 
-        return buildClassicWorkoutSummary(file, startSeconds, endSeconds, activeSeconds, null, calories, null, heartRateAvg, heartRateMin, heartRateMax, zones)
+        return buildClassicWorkoutSummary(
+            file,
+            startSeconds,
+            endSeconds,
+            activeSeconds,
+            null,
+            calories,
+            null,
+            heartRateAvg,
+            heartRateMin,
+            heartRateMax,
+            zones,
+            strokes = strokes,
+            strokeRateAvg = strokeRateAvg,
+        )
     }
 
     private fun parseClassicJumpRopingSummary(
@@ -4193,11 +4467,66 @@ class DirectWatchPlugin : Plugin() {
         offset += 1
         val heartRateMin = byteAt(bytes, offset)
         offset += 1
+        val trainingEffectAerobic = normalizeClassicTrainingEffect(littleEndianFloat(bytes, offset))
         offset += 4
+        var recoveryTimeHours: Int? = null
         offset += if (file.version == 3) 3 else 4
+        if (file.version == 5) {
+            recoveryTimeHours = littleEndianUInt16(bytes, offset - 2).takeIf { it in 0..240 }
+        }
         val zones = readClassicWorkoutHeartRateZonesAt(bytes, offset, dataEnd, activeSeconds)
+        offset += 20
+        offset += 2
+        val jumps = littleEndianUInt32(bytes, offset).toInt().takeIf { it in 1..500_000 }
+        offset += 4
+        val jumpRateAvg = littleEndianUInt16(bytes, offset).takeIf { it in 1..500 }
+        offset += 2
+        offset += 2
+        val jumpRateMax = littleEndianUInt16(bytes, offset).takeIf { it in 1..500 }
+        offset += 2
+        var trainingEffectAnaerobic: Double? = null
+        var workoutLoad: Int? = null
+        var vitalityGain: Int? = null
+        if (file.version == 3) {
+            offset += 43
+            offset += 2
+            offset += 2
+        } else {
+            offset += 27
+            offset += 4
+            trainingEffectAnaerobic = normalizeClassicTrainingEffect(littleEndianFloat(bytes, offset))
+            offset += 4
+            offset += 3
+            offset += 4
+            offset += 2
+            offset += 4
+            workoutLoad = littleEndianUInt16(bytes, offset).takeIf { it in 1..20_000 }
+            offset += 2
+            offset += 1
+            vitalityGain = byteAt(bytes, offset).takeIf { it in 0..200 }
+        }
 
-        return buildClassicWorkoutSummary(file, startSeconds, endSeconds, activeSeconds, null, calories, null, heartRateAvg, heartRateMin, heartRateMax, zones)
+        return buildClassicWorkoutSummary(
+            file,
+            startSeconds,
+            endSeconds,
+            activeSeconds,
+            null,
+            calories,
+            null,
+            heartRateAvg,
+            heartRateMin,
+            heartRateMax,
+            zones,
+            jumps = jumps,
+            jumpRateAvg = jumpRateAvg,
+            jumpRateMax = jumpRateMax,
+            trainingEffectAerobic = trainingEffectAerobic,
+            trainingEffectAnaerobic = trainingEffectAnaerobic,
+            workoutLoad = workoutLoad,
+            recoveryTimeHours = recoveryTimeHours,
+            vitalityGain = vitalityGain,
+        )
     }
 
     private fun parseClassicPoolSwimmingSummary(
@@ -4223,8 +4552,36 @@ class DirectWatchPlugin : Plugin() {
         val distanceMeters = littleEndianUInt32(bytes, offset).toInt().takeIf { it in 1..500_000 }
         offset += 4
         val calories = littleEndianUInt16(bytes, offset).takeIf { it in 1..20_000 }
+        offset += 2
+        if (file.version >= 7) offset += 4
+        offset += 11
+        val strokes = littleEndianUInt16(bytes, offset).takeIf { it in 1..200_000 }
+        offset += 2
+        val swimStyle = byteAt(bytes, offset).takeIf { it in 0..20 }
+        offset += 1
+        if (file.version >= 7) offset += 1
+        offset += 1
+        val laps = littleEndianUInt16(bytes, offset).takeIf { it in 1..10_000 }
+        offset += 2
+        val swolfAvg = littleEndianUInt16(bytes, offset).takeIf { it in 1..500 }
 
-        return buildClassicWorkoutSummary(file, startSeconds, endSeconds, activeSeconds, distanceMeters, calories, null, null, null, null, null)
+        return buildClassicWorkoutSummary(
+            file,
+            startSeconds,
+            endSeconds,
+            activeSeconds,
+            distanceMeters,
+            calories,
+            null,
+            null,
+            null,
+            null,
+            null,
+            strokes = strokes,
+            laps = laps,
+            swolfAvg = swolfAvg,
+            swimStyle = swimStyle,
+        )
     }
 
     private fun buildClassicWorkoutSummary(
@@ -4239,6 +4596,36 @@ class DirectWatchPlugin : Plugin() {
         heartRateMin: Int?,
         heartRateMax: Int?,
         zones: List<Int>?,
+        workoutTypeCode: Int? = null,
+        paceAvgSecondsPerKm: Int? = null,
+        paceMaxSecondsPerKm: Int? = null,
+        paceMinSecondsPerKm: Int? = null,
+        speedAvgKmh: Double? = null,
+        speedMaxKmh: Double? = null,
+        cadenceAvg: Int? = null,
+        cadenceMax: Int? = null,
+        stepLengthAvgCm: Int? = null,
+        stepRateAvg: Int? = null,
+        stepRateMax: Int? = null,
+        strokes: Int? = null,
+        strokeRateAvg: Int? = null,
+        jumps: Int? = null,
+        jumpRateAvg: Int? = null,
+        jumpRateMax: Int? = null,
+        laps: Int? = null,
+        swolfAvg: Int? = null,
+        swimStyle: Int? = null,
+        elevationGainMeters: Double? = null,
+        elevationLossMeters: Double? = null,
+        altitudeAvgMeters: Double? = null,
+        altitudeMaxMeters: Double? = null,
+        altitudeMinMeters: Double? = null,
+        trainingEffectAerobic: Double? = null,
+        trainingEffectAnaerobic: Double? = null,
+        workoutLoad: Int? = null,
+        recoveryTimeHours: Int? = null,
+        vo2Max: Int? = null,
+        vitalityGain: Int? = null,
     ): ClassicWorkoutSummary? {
         if (!isClassicWorkoutEpochSeconds(startSeconds) ||
             !isClassicWorkoutEpochSeconds(endSeconds) ||
@@ -4259,12 +4646,42 @@ class DirectWatchPlugin : Plugin() {
             heartRateAvg = heartRateAvg?.takeIf { it in 35..230 },
             heartRateMin = heartRateMin?.takeIf { it in 30..230 },
             heartRateMax = heartRateMax?.takeIf { it in 35..254 },
-            workoutType = classicWorkoutTypeLabel(file.subtype),
+            workoutType = classicWorkoutTypeLabel(file.subtype, workoutTypeCode),
             zoneExtremeSeconds = zones?.getOrNull(0),
             zoneAnaerobicSeconds = zones?.getOrNull(1),
             zoneAerobicSeconds = zones?.getOrNull(2),
             zoneFatBurnSeconds = zones?.getOrNull(3),
             zoneWarmUpSeconds = zones?.getOrNull(4),
+            workoutTypeCode = workoutTypeCode,
+            paceAvgSecondsPerKm = paceAvgSecondsPerKm,
+            paceMaxSecondsPerKm = paceMaxSecondsPerKm,
+            paceMinSecondsPerKm = paceMinSecondsPerKm,
+            speedAvgKmh = speedAvgKmh,
+            speedMaxKmh = speedMaxKmh,
+            cadenceAvg = cadenceAvg,
+            cadenceMax = cadenceMax,
+            stepLengthAvgCm = stepLengthAvgCm,
+            stepRateAvg = stepRateAvg,
+            stepRateMax = stepRateMax,
+            strokes = strokes,
+            strokeRateAvg = strokeRateAvg,
+            jumps = jumps,
+            jumpRateAvg = jumpRateAvg,
+            jumpRateMax = jumpRateMax,
+            laps = laps,
+            swolfAvg = swolfAvg,
+            swimStyle = swimStyle,
+            elevationGainMeters = elevationGainMeters,
+            elevationLossMeters = elevationLossMeters,
+            altitudeAvgMeters = altitudeAvgMeters,
+            altitudeMaxMeters = altitudeMaxMeters,
+            altitudeMinMeters = altitudeMinMeters,
+            trainingEffectAerobic = trainingEffectAerobic,
+            trainingEffectAnaerobic = trainingEffectAnaerobic,
+            workoutLoad = workoutLoad,
+            recoveryTimeHours = recoveryTimeHours,
+            vo2Max = vo2Max,
+            vitalityGain = vitalityGain,
         )
     }
 
@@ -4463,10 +4880,42 @@ class DirectWatchPlugin : Plugin() {
         return subtype in setOf(1, 2, 3, 11, 22)
     }
 
-    private fun classicWorkoutTypeLabel(subtype: Int): String {
+    private fun normalizeClassicPaceSecondsPerKm(value: Int): Int? {
+        return value.takeIf { it in 120..7_200 }
+    }
+
+    private fun normalizeClassicPaceSecondsPerMeter(value: Int): Int? {
+        val secondsPerKm = value * 1000
+        return secondsPerKm.takeIf { it in 120..7_200 }
+    }
+
+    private fun normalizeClassicSpeedKmh(value: Float): Double? {
+        val normalized = value.toDouble()
+        return normalized.takeIf { it.isFinite() && it in 0.1..250.0 }
+    }
+
+    private fun normalizeClassicAltitude(value: Float): Double? {
+        val normalized = value.toDouble()
+        return normalized.takeIf { it.isFinite() && it in -1_000.0..10_000.0 }
+    }
+
+    private fun normalizeClassicTrainingEffect(value: Float): Double? {
+        val normalized = value.toDouble()
+        return normalized.takeIf { it.isFinite() && it in 0.0..10.0 }
+    }
+
+    private fun normalizeClassicCadence(value: Int): Int? {
+        return value.takeIf { it in 1..300 }
+    }
+
+    private fun classicWorkoutTypeLabel(subtype: Int, workoutTypeCode: Int? = null): String {
+        if (workoutTypeCode != null) {
+            classicWorkoutTypeCodeLabel(workoutTypeCode)?.let { return it }
+        }
+
         return when (subtype) {
-            1 -> "outdoor-walk"
-            2 -> "outdoor-run"
+            1 -> "outdoor-run"
+            2 -> "outdoor-walk"
             3 -> "treadmill"
             6 -> "outdoor-cycling"
             7 -> "indoor-cycling"
@@ -4479,6 +4928,41 @@ class DirectWatchPlugin : Plugin() {
             22 -> "walking"
             23 -> "cycling"
             else -> "workout-$subtype"
+        }
+    }
+
+    private fun classicWorkoutTypeCodeLabel(code: Int): String? {
+        return when (code) {
+            1 -> "outdoor-run"
+            2, 15, 207 -> "outdoor-walk"
+            3, 4, 5 -> "hiking"
+            6 -> "outdoor-cycling"
+            7, 324 -> "indoor-cycling"
+            8 -> "freestyle"
+            9 -> "pool-swim"
+            10, 100, 101, 103, 105, 106, 107, 109, 112, 113, 115 -> "water-sport"
+            11, 300, 301, 302, 325 -> "elliptical"
+            12 -> "yoga"
+            13 -> "rowing"
+            14 -> "jump-rope"
+            16 -> "hiit"
+            17 -> "triathlon"
+            102 -> "water-polo"
+            104, 108, 110, 111, 114 -> "water-sport"
+            200, 201, 202, 203, 204, 205, 206 -> "outdoor-sport"
+            in 303..323, in 326..333, 399 -> "strength"
+            in 400..499 -> "dance"
+            500 -> "boxing"
+            501 -> "wrestling"
+            502 -> "martial-arts"
+            in 503..511 -> "combat"
+            in 600..627 -> "field-sport"
+            in 700..709 -> "winter-sport"
+            800, 801, 806, 811, in 900..904 -> "static"
+            802, 10000, 10002 -> "outdoor-sport"
+            803, 804, 805, 807, 808, 809, 810 -> "freestyle"
+            10001 -> "athletics"
+            else -> null
         }
     }
 
@@ -6822,6 +7306,36 @@ class DirectWatchPlugin : Plugin() {
         val workoutDistanceMeters: Int?,
         val workoutSteps: Int?,
         val workoutType: String?,
+        val workoutTypeCode: Int?,
+        val workoutPaceAvgSecondsPerKm: Int?,
+        val workoutPaceMaxSecondsPerKm: Int?,
+        val workoutPaceMinSecondsPerKm: Int?,
+        val workoutSpeedAvgKmh: Double?,
+        val workoutSpeedMaxKmh: Double?,
+        val workoutCadenceAvg: Int?,
+        val workoutCadenceMax: Int?,
+        val workoutStepLengthAvgCm: Int?,
+        val workoutStepRateAvg: Int?,
+        val workoutStepRateMax: Int?,
+        val workoutStrokes: Int?,
+        val workoutStrokeRateAvg: Int?,
+        val workoutJumps: Int?,
+        val workoutJumpRateAvg: Int?,
+        val workoutJumpRateMax: Int?,
+        val workoutLaps: Int?,
+        val workoutSwolfAvg: Int?,
+        val workoutSwimStyle: Int?,
+        val workoutElevationGainMeters: Double?,
+        val workoutElevationLossMeters: Double?,
+        val workoutAltitudeAvgMeters: Double?,
+        val workoutAltitudeMaxMeters: Double?,
+        val workoutAltitudeMinMeters: Double?,
+        val workoutTrainingEffectAerobic: Double?,
+        val workoutTrainingEffectAnaerobic: Double?,
+        val workoutLoad: Int?,
+        val workoutRecoveryTimeHours: Int?,
+        val workoutVo2Max: Int?,
+        val workoutVitalityGain: Int?,
         val workoutHeartRateZoneExtremeSeconds: Int?,
         val workoutHeartRateZoneAnaerobicSeconds: Int?,
         val workoutHeartRateZoneAerobicSeconds: Int?,
@@ -6885,6 +7399,36 @@ class DirectWatchPlugin : Plugin() {
         val zoneAerobicSeconds: Int?,
         val zoneFatBurnSeconds: Int?,
         val zoneWarmUpSeconds: Int?,
+        val workoutTypeCode: Int? = null,
+        val paceAvgSecondsPerKm: Int? = null,
+        val paceMaxSecondsPerKm: Int? = null,
+        val paceMinSecondsPerKm: Int? = null,
+        val speedAvgKmh: Double? = null,
+        val speedMaxKmh: Double? = null,
+        val cadenceAvg: Int? = null,
+        val cadenceMax: Int? = null,
+        val stepLengthAvgCm: Int? = null,
+        val stepRateAvg: Int? = null,
+        val stepRateMax: Int? = null,
+        val strokes: Int? = null,
+        val strokeRateAvg: Int? = null,
+        val jumps: Int? = null,
+        val jumpRateAvg: Int? = null,
+        val jumpRateMax: Int? = null,
+        val laps: Int? = null,
+        val swolfAvg: Int? = null,
+        val swimStyle: Int? = null,
+        val elevationGainMeters: Double? = null,
+        val elevationLossMeters: Double? = null,
+        val altitudeAvgMeters: Double? = null,
+        val altitudeMaxMeters: Double? = null,
+        val altitudeMinMeters: Double? = null,
+        val trainingEffectAerobic: Double? = null,
+        val trainingEffectAnaerobic: Double? = null,
+        val workoutLoad: Int? = null,
+        val recoveryTimeHours: Int? = null,
+        val vo2Max: Int? = null,
+        val vitalityGain: Int? = null,
     )
 
     private data class ClassicWorkoutTiming(

@@ -81,7 +81,10 @@ import {
   estimateTrainingActualLoad,
   estimateTrainingBlockLoad,
   estimateTrainingBlocksLoad,
+  getDeviceWorkoutMetricExpectation,
   isDeviceWorkoutLinkablePlanBlock,
+  isDeviceWorkoutMetricRelevant,
+  type DeviceWorkoutMetricKey,
   type UwwEventSyncFilters,
   type UwwEventSyncOptions,
   type UwwEventSyncOptionsResponse,
@@ -1422,10 +1425,31 @@ function formatDeviceWorkoutValue(summary: DeviceHealthDailySummary | null) {
 function formatDeviceWorkoutTypeLabel(workout: DeviceWorkout, language: Language) {
   const type = workout.workoutType.trim().toLowerCase();
   const knownTypes: Record<string, Record<Language, string>> = {
+    boxing: { en: "Boxing", ru: "Бокс", bg: "Бокс" },
+    combat: { en: "Combat sport", ru: "Единоборства", bg: "Бойни спортове" },
     cycling: { en: "Cycling", ru: "Велотренировка", bg: "Колоездене" },
+    dance: { en: "Dance", ru: "Танцы", bg: "Танци" },
+    elliptical: { en: "Elliptical", ru: "Эллипс", bg: "Елиптичен тренажор" },
+    "field-sport": { en: "Game sport", ru: "Игровая тренировка", bg: "Игрова тренировка" },
+    freestyle: { en: "Free training", ru: "Свободная тренировка", bg: "Свободна тренировка" },
     hiking: { en: "Hike", ru: "Поход", bg: "Преход" },
+    hiit: { en: "HIIT", ru: "HIIT", bg: "HIIT" },
+    "indoor-cycling": { en: "Indoor cycling", ru: "Велотренажёр", bg: "Велоергометър" },
+    "jump-rope": { en: "Jump rope", ru: "Скакалка", bg: "Скачане на въже" },
+    "outdoor-cycling": { en: "Cycling", ru: "Велотренировка", bg: "Колоездене" },
+    "outdoor-run": { en: "Run", ru: "Бег", bg: "Бягане" },
+    "outdoor-walk": { en: "Walk", ru: "Ходьба", bg: "Ходене" },
+    "pool-swim": { en: "Swimming", ru: "Плавание", bg: "Плуване" },
+    rowing: { en: "Rowing", ru: "Гребля", bg: "Гребане" },
     running: { en: "Run", ru: "Бег", bg: "Бягане" },
+    strength: { en: "Strength", ru: "Силовая", bg: "Силова" },
+    static: { en: "Static activity", ru: "Статичная активность", bg: "Статична активност" },
+    treadmill: { en: "Treadmill", ru: "Дорожка", bg: "Пътека" },
+    triathlon: { en: "Triathlon", ru: "Триатлон", bg: "Триатлон" },
+    "water-sport": { en: "Water sport", ru: "Водная тренировка", bg: "Водна тренировка" },
+    "winter-sport": { en: "Winter sport", ru: "Зимняя тренировка", bg: "Зимна тренировка" },
     walking: { en: "Walk", ru: "Ходьба", bg: "Ходене" },
+    wrestling: { en: "Wrestling", ru: "Борьба", bg: "Борба" },
     workout: { en: "Device workout", ru: "Тренировка с устройства", bg: "Тренировка от устройство" },
   };
 
@@ -1462,7 +1486,9 @@ function formatDeviceDistance(meters: number, language: Language) {
 function formatDeviceWorkoutSummary(workout: DeviceWorkout, language: Language) {
   return [
     workout.durationMinutes !== null ? formatDeviceDuration(workout.durationMinutes, language) : null,
-    workout.distanceMeters !== null ? formatDeviceDistance(workout.distanceMeters, language) : null,
+    workout.distanceMeters !== null && isDeviceWorkoutMetricRelevant(workout.workoutType, "distance")
+      ? formatDeviceDistance(workout.distanceMeters, language)
+      : null,
     workout.averageHeartRateBpm !== null
       ? `${copyFor(language, { en: "avg HR", ru: "ср. пульс", bg: "ср. пулс" })} ${Math.round(workout.averageHeartRateBpm)}`
       : null,
@@ -1478,28 +1504,142 @@ function formatDeviceWorkoutOptionLabel(workout: DeviceWorkout, language: Langua
 }
 
 function buildDeviceWorkoutMetrics(workout: DeviceWorkout, language: Language) {
-  return [
+  const metrics: Array<{
+    hasValue: boolean;
+    label: string;
+    metric: DeviceWorkoutMetricKey;
+    value: string;
+  }> = [
     {
+      hasValue: workout.durationMinutes !== null,
       label: copyFor(language, { en: "Duration", ru: "Длительность", bg: "Продължителност" }),
+      metric: "duration",
       value: workout.durationMinutes !== null ? formatDeviceDuration(workout.durationMinutes, language) : "-",
     },
     {
+      hasValue: workout.distanceMeters !== null,
       label: copyFor(language, { en: "Distance", ru: "Дистанция", bg: "Дистанция" }),
+      metric: "distance",
       value: workout.distanceMeters !== null ? formatDeviceDistance(workout.distanceMeters, language) : "-",
     },
     {
+      hasValue: workout.averageHeartRateBpm !== null,
       label: copyFor(language, { en: "Avg HR", ru: "Средний пульс", bg: "Среден пулс" }),
+      metric: "heartRate",
       value: workout.averageHeartRateBpm !== null ? Math.round(workout.averageHeartRateBpm).toString() : "-",
     },
     {
+      hasValue: workout.maxHeartRateBpm !== null,
       label: copyFor(language, { en: "Max HR", ru: "Макс. пульс", bg: "Макс. пулс" }),
+      metric: "heartRate",
       value: workout.maxHeartRateBpm !== null ? Math.round(workout.maxHeartRateBpm).toString() : "-",
     },
     {
+      hasValue: workout.activeCalories !== null,
       label: copyFor(language, { en: "Calories", ru: "Калории", bg: "Калории" }),
+      metric: "calories",
       value: workout.activeCalories !== null ? Math.round(workout.activeCalories).toString() : "-",
     },
+    ...buildDeviceWorkoutExtendedMetrics(workout, language),
   ];
+
+  return metrics.filter((metric) => {
+    const expectation = getDeviceWorkoutMetricExpectation(workout.workoutType, metric.metric);
+    return expectation === "expected" || metric.hasValue && expectation === "optional";
+  });
+}
+
+function buildDeviceWorkoutExtendedMetrics(workout: DeviceWorkout, language: Language): Array<{
+  hasValue: boolean;
+  label: string;
+  metric: DeviceWorkoutMetricKey;
+  value: string;
+}> {
+  const summary = readDeviceWorkoutSummaryRaw(workout);
+  const paceAvg = readDeviceRawNumber(summary, "paceAvgSecondsPerKm");
+  const speedAvg = readDeviceRawNumber(summary, "speedAvgKmh");
+  const cadenceAvg = readDeviceRawNumber(summary, "cadenceAvg") ?? readDeviceRawNumber(summary, "stepRateAvg");
+  const strokes = readDeviceRawNumber(summary, "strokes");
+  const jumps = readDeviceRawNumber(summary, "jumps");
+  const laps = readDeviceRawNumber(summary, "laps");
+  const swolfAvg = readDeviceRawNumber(summary, "swolfAvg");
+  const elevationGain = readDeviceRawNumber(summary, "elevationGainMeters");
+
+  return [
+    paceAvg !== null ? {
+      hasValue: true,
+      label: copyFor(language, { en: "Pace", ru: "Темп", bg: "Темпо" }),
+      metric: "pace",
+      value: formatDevicePace(paceAvg),
+    } : null,
+    speedAvg !== null ? {
+      hasValue: true,
+      label: copyFor(language, { en: "Speed", ru: "Скорость", bg: "Скорост" }),
+      metric: "speed",
+      value: `${speedAvg.toFixed(1)} ${copyFor(language, { en: "km/h", ru: "км/ч", bg: "км/ч" })}`,
+    } : null,
+    cadenceAvg !== null ? {
+      hasValue: true,
+      label: copyFor(language, { en: "Cadence", ru: "Каденс", bg: "Каданс" }),
+      metric: "cadence",
+      value: `${Math.round(cadenceAvg)} spm`,
+    } : null,
+    strokes !== null ? {
+      hasValue: true,
+      label: copyFor(language, { en: "Strokes", ru: "Гребки", bg: "Загребвания" }),
+      metric: "strokes",
+      value: Math.round(strokes).toLocaleString(language === "en" ? "en-US" : language === "bg" ? "bg-BG" : "ru-RU"),
+    } : null,
+    jumps !== null ? {
+      hasValue: true,
+      label: copyFor(language, { en: "Jumps", ru: "Прыжки", bg: "Скокове" }),
+      metric: "jumps",
+      value: Math.round(jumps).toLocaleString(language === "en" ? "en-US" : language === "bg" ? "bg-BG" : "ru-RU"),
+    } : null,
+    laps !== null ? {
+      hasValue: true,
+      label: copyFor(language, { en: "Laps", ru: "Дорожки", bg: "Дължини" }),
+      metric: "laps",
+      value: Math.round(laps).toString(),
+    } : null,
+    swolfAvg !== null ? {
+      hasValue: true,
+      label: "SWOLF",
+      metric: "swolf",
+      value: Math.round(swolfAvg).toString(),
+    } : null,
+    elevationGain !== null ? {
+      hasValue: true,
+      label: copyFor(language, { en: "Elevation", ru: "Набор", bg: "Изкачване" }),
+      metric: "elevation",
+      value: `${Math.round(elevationGain)} ${copyFor(language, { en: "m", ru: "м", bg: "м" })}`,
+    } : null,
+  ].filter((item): item is {
+    hasValue: boolean;
+    label: string;
+    metric: DeviceWorkoutMetricKey;
+    value: string;
+  } => Boolean(item));
+}
+
+function readDeviceWorkoutSummaryRaw(workout: DeviceWorkout) {
+  const value = workout.rawPayload?.workoutSummary;
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function readDeviceRawNumber(rawPayload: Record<string, unknown> | null | undefined, key: string) {
+  const value = rawPayload?.[key];
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? numericValue : null;
+}
+
+function formatDevicePace(value: number) {
+  const rounded = Math.max(0, Math.round(value));
+  const minutes = Math.floor(rounded / 60);
+  const seconds = rounded % 60;
+  return `${minutes}:${seconds.toString().padStart(2, "0")} /км`;
 }
 
 function limitDeviceWorkoutSamples<T extends { value: number }>(samples: T[], maxCount = 260) {

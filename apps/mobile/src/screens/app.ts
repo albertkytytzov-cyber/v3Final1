@@ -1,3 +1,9 @@
+import {
+  getDeviceWorkoutMetricExpectation,
+  getDeviceWorkoutProfile,
+  isDeviceWorkoutMetricRelevant,
+  type DeviceWorkoutMetricKey,
+} from "../workout-profiles.js";
 import { MobileApiClient, MobileApiError } from "../api/client.js";
 import {
   canSubmitSyncAction,
@@ -111,6 +117,7 @@ const DIRECT_WATCH_AUTO_SYNC_INTERVAL_MS = 30 * 60 * 1000;
 const DIRECT_WATCH_AUTO_SYNC_START_DELAY_MS = 10 * 1000;
 const DIRECT_WATCH_HISTORY_SYNC_DAYS = 30;
 const DIRECT_WATCH_HISTORY_SYNC_DAY_DELAY_MS = 350;
+const DEVICE_WORKOUT_SERIES_RENDER_LIMIT = 1_600;
 
 interface UPlotInstance {
   destroy: () => void;
@@ -5450,8 +5457,12 @@ function getWatchWorkoutChips(workout: DeviceWorkout) {
   const distanceMeters = getTrustedWatchWorkoutDistanceMeters(workout);
   return [
     workout.durationMinutes !== null ? formatDeviceWorkoutDuration(workout.durationMinutes) : null,
-    distanceMeters !== null ? formatDistanceMeters(distanceMeters) : null,
-    steps !== null ? `${Math.round(steps).toLocaleString("ru-RU")} шагов` : null,
+    distanceMeters !== null && isDeviceWorkoutMetricRelevant(workout.workoutType, "distance")
+      ? formatDistanceMeters(distanceMeters)
+      : null,
+    steps !== null && isDeviceWorkoutMetricRelevant(workout.workoutType, "steps")
+      ? `${Math.round(steps).toLocaleString("ru-RU")} шагов`
+      : null,
     workout.averageHeartRateBpm !== null ? `Пульс ${formatLoadValue(workout.averageHeartRateBpm)}` : null,
     activeCalories !== null ? `${Math.round(activeCalories)} ккал` : null,
   ].filter((item): item is string => Boolean(item)).slice(0, 3);
@@ -7543,10 +7554,31 @@ function formatDeviceHealthWorkoutDetail(summary: DeviceHealthDailySummary | nul
 function formatDeviceWorkoutTypeLabel(workout: DeviceWorkout) {
   const type = workout.workoutType.trim().toLowerCase();
   const labels: Record<string, string> = {
+    boxing: "Бокс",
+    combat: "Единоборства",
     cycling: "Велотренировка",
+    dance: "Танцы",
+    "elliptical": "Эллипс",
+    "field-sport": "Игровая тренировка",
+    freestyle: "Свободная тренировка",
     hiking: "Поход",
+    hiit: "HIIT",
+    "indoor-cycling": "Велотренажёр",
+    "jump-rope": "Скакалка",
+    "outdoor-cycling": "Велотренировка",
+    "outdoor-run": "Бег",
+    "outdoor-walk": "Ходьба",
+    "pool-swim": "Плавание",
+    rowing: "Гребля",
     running: "Бег",
+    strength: "Силовая",
+    static: "Статичная активность",
+    treadmill: "Дорожка",
+    triathlon: "Триатлон",
+    "water-sport": "Водная тренировка",
+    "winter-sport": "Зимняя тренировка",
     walking: "Ходьба",
+    wrestling: "Борьба",
     workout: "Тренировка с устройства",
   };
 
@@ -7566,7 +7598,9 @@ function formatDeviceWorkoutSummary(workout: DeviceWorkout) {
   const distanceMeters = getTrustedWatchWorkoutDistanceMeters(workout);
   return [
     workout.durationMinutes !== null ? formatDeviceWorkoutDuration(workout.durationMinutes) : null,
-    distanceMeters !== null ? formatDistanceMeters(distanceMeters) : null,
+    distanceMeters !== null && isDeviceWorkoutMetricRelevant(workout.workoutType, "distance")
+      ? formatDistanceMeters(distanceMeters)
+      : null,
     workout.averageHeartRateBpm !== null ? `ср. пульс ${formatLoadValue(workout.averageHeartRateBpm)}` : null,
     workout.maxHeartRateBpm !== null ? `макс ${formatLoadValue(workout.maxHeartRateBpm)}` : null,
     activeCalories !== null ? `${Math.round(activeCalories)} ккал` : null,
@@ -7621,27 +7655,35 @@ function renderWatchWorkoutParameterPanel(
   const sourceLabel = workout.provider === "direct-watch"
     ? "PERFORM Sync"
     : workout.sourceDevice || formatWatchProviderLabel(context.summary);
-  const cards = [
-    { label: "Старт", value: formatTime(workout.startTime) },
+  const rawCards: WatchWorkoutMetricCard[] = [
+    { label: "Старт", value: formatTime(workout.startTime), hasValue: true },
     {
       label: "Длительность",
       value: metrics.durationMinutes !== null ? formatDeviceWorkoutDuration(metrics.durationMinutes) : "нет данных",
       detail: metrics.durationDetail,
+      hasValue: metrics.durationMinutes !== null,
+      metric: "duration",
     },
     {
       label: "Шаги",
       value: metrics.steps !== null ? metrics.steps.toLocaleString("ru-RU") : "нет данных",
       detail: metrics.stepsDetail,
+      hasValue: metrics.steps !== null,
+      metric: "steps",
     },
     {
       label: "Калории",
       value: metrics.activeCalories !== null ? `${metrics.activeCaloriesPrefix}${Math.round(metrics.activeCalories)}` : "нет данных",
       detail: metrics.activeCaloriesDetail,
+      hasValue: metrics.activeCalories !== null,
+      metric: "calories",
     },
     {
       label: "Дистанция",
       value: metrics.distanceMeters !== null ? `${metrics.distancePrefix}${formatDistanceMeters(metrics.distanceMeters)}` : "нет данных",
       detail: metrics.distanceDetail,
+      hasValue: metrics.distanceMeters !== null,
+      metric: "distance",
     },
     {
       label: "Пульс",
@@ -7653,8 +7695,10 @@ function renderWatchWorkoutParameterPanel(
       detail: heartRateStats.min !== null && heartRateStats.max !== null
         ? `${formatLoadValue(heartRateStats.min)}-${formatLoadValue(heartRateStats.max)}`
         : workout.minHeartRateBpm !== null && workout.maxHeartRateBpm !== null
-          ? `${formatLoadValue(workout.minHeartRateBpm)}-${formatLoadValue(workout.maxHeartRateBpm)}`
-          : undefined,
+        ? `${formatLoadValue(workout.minHeartRateBpm)}-${formatLoadValue(workout.maxHeartRateBpm)}`
+        : undefined,
+      hasValue: heartRateStats.avg !== null || workout.averageHeartRateBpm !== null,
+      metric: "heartRate",
     },
     {
       label: "SpO2",
@@ -7662,6 +7706,7 @@ function renderWatchWorkoutParameterPanel(
       detail: oxygenStats.min !== null && oxygenStats.max !== null
         ? `${formatLoadValue(oxygenStats.min)}-${formatLoadValue(oxygenStats.max)}%`
         : undefined,
+      hasValue: oxygenStats.avg !== null,
     },
     {
       label: "Стресс",
@@ -7669,9 +7714,12 @@ function renderWatchWorkoutParameterPanel(
       detail: stressStats.min !== null && stressStats.max !== null
         ? `${formatLoadValue(stressStats.min)}-${formatLoadValue(stressStats.max)}`
         : undefined,
+      hasValue: stressStats.avg !== null,
     },
-    { label: "Точки", value: sampleCount > 0 ? String(sampleCount) : "-" },
+    ...buildWatchWorkoutExtendedMetricCards(workout),
+    { label: "Точки", value: sampleCount > 0 ? String(sampleCount) : "-", hasValue: sampleCount > 0 },
   ];
+  const cards = rawCards.filter((card) => shouldRenderWatchWorkoutMetricCard(workout, card.metric, card.hasValue ?? false));
 
   return `
     <section class="watch-workout-parameter-panel">
@@ -7690,6 +7738,122 @@ function renderWatchWorkoutParameterPanel(
       </div>
     </section>
   `;
+}
+
+function buildWatchWorkoutExtendedMetricCards(workout: DeviceWorkout): WatchWorkoutMetricCard[] {
+  const summary = readWatchWorkoutSummaryRawPayload(workout);
+  const paceAvg = readDeviceHealthRawNumber(summary ?? {}, "paceAvgSecondsPerKm");
+  const speedAvg = readDeviceHealthRawNumber(summary ?? {}, "speedAvgKmh");
+  const cadenceAvg = readDeviceHealthRawNumber(summary ?? {}, "cadenceAvg") ??
+    readDeviceHealthRawNumber(summary ?? {}, "stepRateAvg");
+  const strokes = readDeviceHealthRawNumber(summary ?? {}, "strokes");
+  const strokeRateAvg = readDeviceHealthRawNumber(summary ?? {}, "strokeRateAvg");
+  const jumps = readDeviceHealthRawNumber(summary ?? {}, "jumps");
+  const jumpRateAvg = readDeviceHealthRawNumber(summary ?? {}, "jumpRateAvg");
+  const laps = readDeviceHealthRawNumber(summary ?? {}, "laps");
+  const swolfAvg = readDeviceHealthRawNumber(summary ?? {}, "swolfAvg");
+  const elevationGain = readDeviceHealthRawNumber(summary ?? {}, "elevationGainMeters");
+  const workoutLoad = readDeviceHealthRawNumber(summary ?? {}, "workoutLoad");
+  const trainingEffectAerobic = readDeviceHealthRawNumber(summary ?? {}, "trainingEffectAerobic");
+  const trainingEffectAnaerobic = readDeviceHealthRawNumber(summary ?? {}, "trainingEffectAnaerobic");
+  const vo2Max = readDeviceHealthRawNumber(summary ?? {}, "vo2Max");
+
+  const cards: Array<WatchWorkoutMetricCard | null> = [
+    paceAvg !== null ? {
+      hasValue: true,
+      label: "Темп",
+      metric: "pace",
+      value: formatPaceSeconds(paceAvg),
+    } : null,
+    speedAvg !== null ? {
+      hasValue: true,
+      label: "Скорость",
+      metric: "speed",
+      value: `${speedAvg.toFixed(1)} км/ч`,
+    } : null,
+    cadenceAvg !== null ? {
+      hasValue: true,
+      label: "Каденс",
+      metric: "cadence",
+      value: `${Math.round(cadenceAvg)} spm`,
+    } : null,
+    strokes !== null ? {
+      hasValue: true,
+      label: "Гребки",
+      metric: "strokes",
+      value: Math.round(strokes).toLocaleString("ru-RU"),
+    } : null,
+    strokeRateAvg !== null ? {
+      hasValue: true,
+      label: "Частота гребков",
+      metric: "strokeRate",
+      value: `${Math.round(strokeRateAvg)}/мин`,
+    } : null,
+    jumps !== null ? {
+      hasValue: true,
+      label: "Прыжки",
+      metric: "jumps",
+      value: Math.round(jumps).toLocaleString("ru-RU"),
+    } : null,
+    jumpRateAvg !== null ? {
+      hasValue: true,
+      label: "Частота прыжков",
+      metric: "cadence",
+      value: `${Math.round(jumpRateAvg)}/мин`,
+    } : null,
+    laps !== null ? {
+      hasValue: true,
+      label: "Дорожки",
+      metric: "laps",
+      value: Math.round(laps).toLocaleString("ru-RU"),
+    } : null,
+    swolfAvg !== null ? {
+      hasValue: true,
+      label: "SWOLF",
+      metric: "swolf",
+      value: Math.round(swolfAvg).toLocaleString("ru-RU"),
+    } : null,
+    elevationGain !== null ? {
+      hasValue: true,
+      label: "Набор",
+      metric: "elevation",
+      value: `${Math.round(elevationGain)} м`,
+    } : null,
+    workoutLoad !== null ? {
+      hasValue: true,
+      label: "Нагрузка",
+      value: Math.round(workoutLoad).toLocaleString("ru-RU"),
+    } : null,
+    trainingEffectAerobic !== null || trainingEffectAnaerobic !== null ? {
+      detail: [
+        trainingEffectAerobic !== null ? `аэр ${trainingEffectAerobic.toFixed(1)}` : null,
+        trainingEffectAnaerobic !== null ? `анаэр ${trainingEffectAnaerobic.toFixed(1)}` : null,
+      ].filter((item): item is string => Boolean(item)).join(" · "),
+      hasValue: true,
+      label: "Эффект",
+      value: trainingEffectAerobic !== null ? trainingEffectAerobic.toFixed(1) : trainingEffectAnaerobic?.toFixed(1) ?? "-",
+    } : null,
+    vo2Max !== null ? {
+      hasValue: true,
+      label: "VO2 max",
+      value: Math.round(vo2Max).toString(),
+    } : null,
+  ];
+
+  return cards.filter((item): item is WatchWorkoutMetricCard => Boolean(item));
+}
+
+function shouldRenderWatchWorkoutMetricCard(
+  workout: DeviceWorkout,
+  metric: DeviceWorkoutMetricKey | undefined,
+  hasValue: boolean,
+) {
+  if (!metric) {
+    return hasValue;
+  }
+
+  const expectation = getDeviceWorkoutMetricExpectation(workout.workoutType, metric);
+  return expectation === "expected" || hasValue && expectation === "optional";
 }
 
 function summarizeWorkoutSeries(samples: { value: number }[]) {
@@ -7723,23 +7887,39 @@ interface WatchWorkoutDerivedMetrics {
   stepsDetail?: string;
 }
 
+interface WatchWorkoutMetricCard {
+  detail?: string;
+  hasValue?: boolean;
+  label: string;
+  metric?: DeviceWorkoutMetricKey;
+  value: string;
+}
+
 function deriveWatchWorkoutMetrics(
   workout: DeviceWorkout,
   context: WatchWorkoutContext,
 ): WatchWorkoutDerivedMetrics {
+  const profile = getDeviceWorkoutProfile(workout.workoutType);
+  const expectsDistance = getDeviceWorkoutMetricExpectation(workout.workoutType, "distance") === "expected";
+  const expectsSteps = getDeviceWorkoutMetricExpectation(workout.workoutType, "steps") === "expected";
+  const allowsRawDistance = isDeviceWorkoutMetricRelevant(workout.workoutType, "distance");
+  const allowsRawSteps = isDeviceWorkoutMetricRelevant(workout.workoutType, "steps");
   const activeCalories = getTrustedWatchWorkoutActiveCalories(workout);
   const rawWorkoutSteps = getTrustedWatchWorkoutSteps(workout);
   const trustedDistanceMeters = getTrustedWatchWorkoutDistanceMeters(workout);
   const canScanWorkoutSamples = workout.samples.length <= 600;
-  const workoutSampleSteps = rawWorkoutSteps ?? (canScanWorkoutSamples ? inferWatchWorkoutStepsFromWorkoutSamples(workout.samples) : null);
+  const workoutSampleSteps = rawWorkoutSteps ?? (expectsSteps && canScanWorkoutSamples ? inferWatchWorkoutStepsFromWorkoutSamples(workout.samples) : null);
   const durationFromWorkoutSamples = workout.durationMinutes !== null || !canScanWorkoutSamples
     ? null
     : inferWatchWorkoutDurationFromWorkoutSamples(workout);
-  const needsDailySamples = workoutSampleSteps === null || (workout.durationMinutes === null && durationFromWorkoutSamples === null);
+  const needsDailySamples = expectsSteps && workoutSampleSteps === null ||
+    (workout.durationMinutes === null && durationFromWorkoutSamples === null);
   const samplesAfterStart = needsDailySamples ? getWatchWorkoutSamplesAfterStart(workout, context) : [];
   const durationFromSamples = durationFromWorkoutSamples ?? inferWatchWorkoutDurationFromSamples(workout, samplesAfterStart);
   const durationMinutes = workout.durationMinutes ?? durationFromSamples;
-  const steps = workoutSampleSteps ?? inferWatchWorkoutSteps(samplesAfterStart);
+  const steps = allowsRawSteps
+    ? workoutSampleSteps ?? (expectsSteps ? inferWatchWorkoutSteps(samplesAfterStart) : null)
+    : null;
   const dailySteps = getWatchStepCount(context.summary);
   const dailyCalories = readWatchWorkoutRawNumber(context.summary?.rawPayload, "calories");
   const estimatedCalories = activeCalories === null &&
@@ -7750,7 +7930,8 @@ function deriveWatchWorkoutMetrics(
       dailyCalories > 0
     ? (dailyCalories * steps) / dailySteps
     : null;
-  const estimatedDistanceMeters = trustedDistanceMeters === null && steps !== null && steps > 0
+  const distanceFromWorkout = allowsRawDistance ? trustedDistanceMeters : null;
+  const estimatedDistanceMeters = expectsDistance && distanceFromWorkout === null && steps !== null && steps > 0
     ? steps * 0.75
     : null;
 
@@ -7762,13 +7943,15 @@ function deriveWatchWorkoutMetrics(
         ? "расчёт по доле шагов за день"
         : "часы не отдали калории тренировки",
     activeCaloriesPrefix: activeCalories === null && estimatedCalories !== null ? "≈" : "",
-    distanceDetail: trustedDistanceMeters !== null
+    distanceDetail: distanceFromWorkout !== null
       ? "из тренировки"
       : estimatedDistanceMeters !== null
         ? "оценка по шагам"
-        : "часы не отдали дистанцию тренировки",
-    distanceMeters: trustedDistanceMeters ?? estimatedDistanceMeters,
-    distancePrefix: trustedDistanceMeters === null && estimatedDistanceMeters !== null ? "≈" : "",
+        : expectsDistance
+          ? "часы не отдали дистанцию тренировки"
+          : `не требуется для профиля ${profile.label}`,
+    distanceMeters: distanceFromWorkout ?? estimatedDistanceMeters,
+    distancePrefix: distanceFromWorkout === null && estimatedDistanceMeters !== null ? "≈" : "",
     durationDetail: workout.durationMinutes !== null
       ? "из тренировки"
       : durationFromSamples !== null
@@ -7782,7 +7965,9 @@ function deriveWatchWorkoutMetrics(
         : workoutSampleSteps !== null
         ? "из точек тренировки"
         : "расчёт по точкам после старта"
-      : "шаги не пришли в точках",
+      : expectsSteps
+        ? "шаги не пришли в точках"
+        : `не требуется для профиля ${profile.label}`,
   };
 }
 
@@ -8032,13 +8217,16 @@ function renderDeviceWorkoutMetrics(workout: DeviceWorkout) {
     readWatchWorkoutSummaryRawNumber(workout, "distanceMeters");
   const activeCalories = getTrustedWatchWorkoutActiveCalories(workout);
   const metrics = [
-    { label: "Длительность", value: durationMinutes !== null ? formatDeviceWorkoutDuration(durationMinutes) : "-" },
-    { label: "Дистанция", value: distanceMeters !== null ? formatDistanceMeters(distanceMeters) : "-" },
-    { label: "Шаги", value: steps !== null ? Math.round(steps).toLocaleString("ru-RU") : "-" },
-    { label: "Калории", value: activeCalories !== null ? String(Math.round(activeCalories)) : "-" },
-    { label: "Средний пульс", value: workout.averageHeartRateBpm !== null ? formatLoadValue(workout.averageHeartRateBpm) : "-" },
-    { label: "Макс. пульс", value: workout.maxHeartRateBpm !== null ? formatLoadValue(workout.maxHeartRateBpm) : "-" },
-  ];
+    { hasValue: durationMinutes !== null, label: "Длительность", metric: "duration" as DeviceWorkoutMetricKey, value: durationMinutes !== null ? formatDeviceWorkoutDuration(durationMinutes) : "-" },
+    { hasValue: distanceMeters !== null, label: "Дистанция", metric: "distance" as DeviceWorkoutMetricKey, value: distanceMeters !== null ? formatDistanceMeters(distanceMeters) : "-" },
+    { hasValue: steps !== null, label: "Шаги", metric: "steps" as DeviceWorkoutMetricKey, value: steps !== null ? Math.round(steps).toLocaleString("ru-RU") : "-" },
+    { hasValue: activeCalories !== null, label: "Калории", metric: "calories" as DeviceWorkoutMetricKey, value: activeCalories !== null ? String(Math.round(activeCalories)) : "-" },
+    { hasValue: workout.averageHeartRateBpm !== null, label: "Средний пульс", metric: "heartRate" as DeviceWorkoutMetricKey, value: workout.averageHeartRateBpm !== null ? formatLoadValue(workout.averageHeartRateBpm) : "-" },
+    { hasValue: workout.maxHeartRateBpm !== null, label: "Макс. пульс", metric: "heartRate" as DeviceWorkoutMetricKey, value: workout.maxHeartRateBpm !== null ? formatLoadValue(workout.maxHeartRateBpm) : "-" },
+  ].filter((metric) => {
+    const expectation = getDeviceWorkoutMetricExpectation(workout.workoutType, metric.metric);
+    return expectation === "expected" || metric.hasValue && expectation === "optional";
+  });
 
   return `
     <div class="device-workout-metric-grid">
@@ -8139,21 +8327,21 @@ function buildDeviceWorkoutGraphSeries(
   workout: DeviceWorkout,
   context?: WatchWorkoutContext,
 ): DeviceWorkoutGraphSeries[] {
-  const heartRateSamples = workout.samples
+  const heartRateSamples = compactDeviceWorkoutGraphSamples(workout.samples
     .filter((sample) => sample.heartRateBpm !== null)
-    .map((sample) => ({ sampleTime: sample.sampleTime, value: sample.heartRateBpm ?? 0 }));
-  const paceSamples = workout.samples
+    .map((sample) => ({ sampleTime: sample.sampleTime, value: sample.heartRateBpm ?? 0 })));
+  const paceSamples = compactDeviceWorkoutGraphSamples(workout.samples
     .map((sample) => {
       const value = getDeviceWorkoutPaceSeconds(sample);
       return value === null ? null : { sampleTime: sample.sampleTime, value };
     })
-    .filter((sample): sample is { sampleTime: string; value: number } => sample !== null);
-  const speedSamples = workout.samples
+    .filter((sample): sample is { sampleTime: string; value: number } => sample !== null));
+  const speedSamples = compactDeviceWorkoutGraphSamples(workout.samples
     .filter((sample) => sample.speedMetersPerSecond !== null)
-    .map((sample) => ({ sampleTime: sample.sampleTime, value: (sample.speedMetersPerSecond ?? 0) * 3.6 }));
-  const spo2Samples = workout.samples
+    .map((sample) => ({ sampleTime: sample.sampleTime, value: (sample.speedMetersPerSecond ?? 0) * 3.6 })));
+  const spo2Samples = compactDeviceWorkoutGraphSamples(workout.samples
     .filter((sample) => sample.oxygenSaturationPercent !== null)
-    .map((sample) => ({ sampleTime: sample.sampleTime, value: sample.oxygenSaturationPercent ?? 0 }));
+    .map((sample) => ({ sampleTime: sample.sampleTime, value: sample.oxygenSaturationPercent ?? 0 })));
   const fallbackHeartRateSamples = heartRateSamples.length > 1
     ? []
     : getWatchWorkoutWindowSamples(workout, context?.heartRateSamples ?? []);
@@ -8170,7 +8358,7 @@ function buildDeviceWorkoutGraphSeries(
       detail: useFallback ? "дневные точки вокруг старта тренировки" : "точки тренировки",
       key: "heartRate",
       label: useFallback ? "Пульс вокруг тренировки" : "Пульс",
-      samples: useFallback ? fallbackHeartRateSamples : heartRateSamples,
+      samples: useFallback ? compactDeviceWorkoutGraphSamples(fallbackHeartRateSamples) : heartRateSamples,
       source: useFallback ? "day-window" : "workout",
       valueLabel: (value) => `${Math.round(value)} уд/мин`,
     });
@@ -8198,7 +8386,7 @@ function buildDeviceWorkoutGraphSeries(
       detail: useFallback ? "дневные точки вокруг старта тренировки" : "точки тренировки",
       key: "spo2",
       label: useFallback ? "SpO2 вокруг тренировки" : "SpO2",
-      samples: useFallback ? fallbackOxygenSamples : spo2Samples,
+      samples: useFallback ? compactDeviceWorkoutGraphSamples(fallbackOxygenSamples) : spo2Samples,
       source: useFallback ? "day-window" : "workout",
       valueLabel: (value) => `${Math.round(value)}%`,
     });
@@ -8209,13 +8397,19 @@ function buildDeviceWorkoutGraphSeries(
       detail: "дневные точки вокруг старта тренировки",
       key: "stress",
       label: "Стресс вокруг тренировки",
-      samples: fallbackStressSamples,
+      samples: compactDeviceWorkoutGraphSamples(fallbackStressSamples),
       source: "day-window",
       valueLabel: (value) => String(Math.round(value)),
     });
   }
 
   return series;
+}
+
+function compactDeviceWorkoutGraphSamples<T extends { sampleTime: string; value: number }>(
+  samples: T[],
+) {
+  return limitDeviceWorkoutSamples(samples, DEVICE_WORKOUT_SERIES_RENDER_LIMIT);
 }
 
 function getWatchWorkoutWindowSamples(
