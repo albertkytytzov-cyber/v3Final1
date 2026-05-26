@@ -4074,7 +4074,7 @@ function renderWatchWorkoutDetailScreen(state: MobileAppState, athleteId: string
     `;
   }
 
-  const context = getWatchWorkoutContextForDate(state, athleteId, workout.entryDate);
+  const context = getWatchWorkoutDetailContext(state, athleteId, workout);
   const graphSeries = buildDeviceWorkoutGraphSeries(workout, context);
   const primarySeries = graphSeries[0] ?? null;
   const secondarySeries = graphSeries.slice(1);
@@ -4092,7 +4092,7 @@ function renderWatchWorkoutDetailScreen(state: MobileAppState, athleteId: string
       ${renderWatchWorkoutParameterPanel(workout, context, graphSeries)}
       <section class="watch-detail-card">
         ${primarySeries
-          ? renderDeviceWorkoutSeriesUPlotGraph(primarySeries, workout)
+          ? renderDeviceWorkoutSeriesDetailGraph(primarySeries, workout)
           : renderDeviceWorkoutGraph(workout, context, graphSeries)}
         ${secondarySeries.length > 0 ? `
           <div class="device-workout-secondary-series">
@@ -4102,6 +4102,26 @@ function renderWatchWorkoutDetailScreen(state: MobileAppState, athleteId: string
       </section>
     </section>
   `;
+}
+
+function getWatchWorkoutDetailContext(
+  state: MobileAppState,
+  athleteId: string,
+  workout: DeviceWorkout,
+): WatchWorkoutContext {
+  const hasWorkoutHeartRate = workout.samples.some((sample) => sample.heartRateBpm !== null);
+  const hasWorkoutOxygen = workout.samples.some((sample) => sample.oxygenSaturationPercent !== null);
+  const hasWorkoutPaceOrSpeed = workout.samples.some((sample) =>
+    getDeviceWorkoutPaceSeconds(sample) !== null || sample.speedMetersPerSecond !== null
+  );
+  const canUseWorkoutOnly = hasWorkoutHeartRate || hasWorkoutOxygen || hasWorkoutPaceOrSpeed;
+
+  return {
+    heartRateSamples: hasWorkoutHeartRate ? [] : getDeviceHealthSamplesForDate(state, athleteId, workout.entryDate, "heart_rate"),
+    oxygenSamples: hasWorkoutOxygen ? [] : getDeviceHealthSamplesForDate(state, athleteId, workout.entryDate, "oxygen_saturation"),
+    stressSamples: canUseWorkoutOnly ? [] : getDeviceHealthSamplesForDate(state, athleteId, workout.entryDate, "stress"),
+    summary: getDeviceHealthSummaryForDate(state, athleteId, workout.entryDate),
+  };
 }
 
 function renderWatchMetricDetailBody(
@@ -7753,10 +7773,10 @@ function buildWatchWorkoutExtendedMetricCards(workout: DeviceWorkout): WatchWork
   const laps = readDeviceHealthRawNumber(summary ?? {}, "laps");
   const swolfAvg = readDeviceHealthRawNumber(summary ?? {}, "swolfAvg");
   const elevationGain = readDeviceHealthRawNumber(summary ?? {}, "elevationGainMeters");
-  const workoutLoad = readDeviceHealthRawNumber(summary ?? {}, "workoutLoad");
-  const trainingEffectAerobic = readDeviceHealthRawNumber(summary ?? {}, "trainingEffectAerobic");
-  const trainingEffectAnaerobic = readDeviceHealthRawNumber(summary ?? {}, "trainingEffectAnaerobic");
-  const vo2Max = readDeviceHealthRawNumber(summary ?? {}, "vo2Max");
+  const workoutLoad = readPositiveDeviceHealthRawNumber(summary ?? {}, "workoutLoad");
+  const trainingEffectAerobic = readPositiveDeviceHealthRawNumber(summary ?? {}, "trainingEffectAerobic");
+  const trainingEffectAnaerobic = readPositiveDeviceHealthRawNumber(summary ?? {}, "trainingEffectAnaerobic");
+  const vo2Max = readPositiveDeviceHealthRawNumber(summary ?? {}, "vo2Max");
 
   const cards: Array<WatchWorkoutMetricCard | null> = [
     paceAvg !== null ? {
@@ -7841,6 +7861,11 @@ function buildWatchWorkoutExtendedMetricCards(workout: DeviceWorkout): WatchWork
   ];
 
   return cards.filter((item): item is WatchWorkoutMetricCard => Boolean(item));
+}
+
+function readPositiveDeviceHealthRawNumber(rawPayload: Record<string, unknown>, key: string) {
+  const value = readDeviceHealthRawNumber(rawPayload, key);
+  return value !== null && value > 0 ? value : null;
 }
 
 function shouldRenderWatchWorkoutMetricCard(
@@ -8913,6 +8938,167 @@ function renderDeviceWorkoutGraph(
       ` : ""}
     </div>
   `;
+}
+
+function renderDeviceWorkoutSeriesDetailGraph(series: DeviceWorkoutGraphSeries, workout: DeviceWorkout) {
+  if (series.key !== "heartRate") {
+    return renderDeviceWorkoutSeriesGraph(series, workout);
+  }
+
+  const chart = buildDeviceWorkoutHeartRateDetailChart(series, workout);
+  if (!chart) {
+    return renderDeviceWorkoutSeriesGraph(series, workout);
+  }
+
+  return `
+    <div class="device-workout-series heartRate is-approved-detail">
+      <div class="watch-heart-rate-approved-head">
+        <div>
+          <span>${escapeHtml(series.source === "workout" ? "ТОЧКИ ТРЕНИРОВКИ" : "ОКНО ТРЕНИРОВКИ")}</span>
+          <h3>Пульс тренировки</h3>
+          <p>${escapeHtml(`${chart.sampleCountLabel} · ${chart.visiblePointLabel}`)}</p>
+        </div>
+        <strong>${escapeHtml(chart.averageLabel)}<span>средний</span></strong>
+      </div>
+      <div class="watch-heart-rate-approved-metrics">
+        <article><span>Мин</span><strong>${escapeHtml(chart.minLabel)}</strong></article>
+        <article><span>Сред</span><strong>${escapeHtml(chart.averageLabel)}</strong></article>
+        <article><span>Макс</span><strong>${escapeHtml(chart.maxLabel)}</strong></article>
+      </div>
+      <div class="watch-heart-rate-approved-layout is-workout-detail">
+        <div class="watch-heart-rate-approved-chart">
+          <div class="watch-heart-rate-approved-axis-y" aria-hidden="true">
+            ${chart.axisLabels.map((label) => `<span>${escapeHtml(label)}</span>`).join("")}
+          </div>
+          <div class="watch-heart-rate-approved-plot">
+            <svg aria-label="График пульса тренировки" role="img" viewBox="0 0 100 100" preserveAspectRatio="none">
+              ${chart.zoneStrips}
+              ${chart.gridLines}
+              <line class="average" x1="0" x2="100" y1="${escapeHtml(chart.averageY)}" y2="${escapeHtml(chart.averageY)}"></line>
+              ${chart.coverageLine}
+              <polyline fill="none" points="${escapeHtml(chart.points)}"></polyline>
+              ${chart.peakMarker}
+            </svg>
+          </div>
+          <div class="watch-heart-rate-approved-axis-x" aria-hidden="true">
+            ${chart.timeLabels.map((label) => `<span>${escapeHtml(label)}</span>`).join("")}
+          </div>
+        </div>
+        <aside class="watch-heart-rate-approved-zones">
+          <strong>Зоны ЧСС</strong>
+          ${chart.zoneRows.map((zone) => `
+            <div class="watch-heart-rate-approved-zone-row z${zone.zone}">
+              <span>${zone.zone}</span>
+              <i><b style="width: ${zone.width}"></b><em>${zone.percentLabel}</em></i>
+              <strong>${escapeHtml(zone.durationLabel)}</strong>
+            </div>
+          `).join("")}
+        </aside>
+      </div>
+    </div>
+  `;
+}
+
+function buildDeviceWorkoutHeartRateDetailChart(
+  series: DeviceWorkoutGraphSeries,
+  workout: DeviceWorkout,
+) {
+  const points = series.samples
+    .map((sample) => {
+      const sampledAt = getDeviceWorkoutGraphTime(sample.sampleTime);
+      if (sampledAt === null || sample.value < 25 || sample.value > 240) {
+        return null;
+      }
+
+      return { sampledAt, value: sample.value };
+    })
+    .filter((sample): sample is { sampledAt: number; value: number } => Boolean(sample))
+    .sort((left, right) => left.sampledAt - right.sampledAt);
+
+  if (points.length < 2) {
+    return null;
+  }
+
+  const values = points.map((point) => point.value);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const average = values.reduce((total, value) => total + value, 0) / values.length;
+  const scale = buildAdaptiveHeartRateScale(min, max);
+  const range = Math.max(1, scale.upper - scale.lower);
+  const workoutStartTime = getDeviceWorkoutGraphTime(workout.startTime);
+  const workoutEndTime = getDeviceWorkoutGraphTime(workout.endTime);
+  const sampleStartTime = points[0].sampledAt;
+  const sampleEndTime = points[points.length - 1].sampledAt;
+  let axisStartTime = workoutStartTime ?? sampleStartTime;
+  let axisEndTime = workoutEndTime ?? sampleEndTime;
+
+  if (
+    axisEndTime <= axisStartTime ||
+    sampleStartTime < axisStartTime ||
+    sampleEndTime > axisEndTime
+  ) {
+    axisStartTime = sampleStartTime;
+    axisEndTime = sampleEndTime;
+  }
+
+  const axisDuration = Math.max(1, axisEndTime - axisStartTime);
+  const valueToY = (value: number) => 92 - ((value - scale.lower) / range) * 84;
+  const timeToX = (value: number) => clampDeviceWorkoutGraphX(((value - axisStartTime) / axisDuration) * 100);
+  const visiblePoints = limitDeviceWorkoutSamples(points, 260);
+  const svgPoints = visiblePoints
+    .map((point) => `${timeToX(point.sampledAt).toFixed(2)},${valueToY(point.value).toFixed(2)}`)
+    .join(" ");
+  const estimatedHeartRateMax = getEstimatedHeartRateMax(max);
+  const heartRateZones = getDeviceWorkoutHeartRateZonesForRender(workout, series, estimatedHeartRateMax);
+  const gridLines = scale.axisValues.map((value) => {
+    const y = valueToY(value).toFixed(2);
+    return `<line class="grid" x1="0" x2="100" y1="${y}" y2="${y}"></line>`;
+  }).join("");
+  const zoneStrips = heartRateZones.map((zone) => {
+    const visibleTop = Math.min(scale.upper, zone.upper);
+    const visibleBottom = Math.max(scale.lower, zone.zone === 1 ? 0 : zone.lower);
+    if (visibleBottom >= visibleTop) {
+      return "";
+    }
+
+    const zoneTop = valueToY(visibleTop);
+    const zoneBottom = valueToY(visibleBottom);
+    return `<rect class="hr-zone-strip z${zone.zone}" height="${Math.max(0, zoneBottom - zoneTop).toFixed(2)}" width="1.7" x="0" y="${zoneTop.toFixed(2)}"></rect>`;
+  }).join("");
+  const peak = points.reduce((current, point) => point.value > current.value ? point : current, points[0]);
+  const peakX = timeToX(peak.sampledAt).toFixed(2);
+  const peakY = valueToY(peak.value).toFixed(2);
+  const coverageStartX = timeToX(sampleStartTime);
+  const coverageEndX = timeToX(sampleEndTime);
+
+  return {
+    averageY: valueToY(average).toFixed(2),
+    averageLabel: `${Math.round(average)}`,
+    axisLabels: scale.axisValues.map((value) => String(Math.round(value))),
+    coverageLine: `<line class="coverage" x1="${coverageStartX.toFixed(2)}" x2="${coverageEndX.toFixed(2)}" y1="97" y2="97"></line>`,
+    gridLines,
+    maxLabel: `${Math.round(max)}`,
+    minLabel: `${Math.round(min)}`,
+    peakMarker: `
+      <line class="peak-line" x1="${peakX}" x2="${peakX}" y1="${peakY}" y2="96"></line>
+      <circle class="peak-dot" cx="${peakX}" cy="${peakY}" r="1.8"></circle>
+    `,
+    points: svgPoints,
+    sampleCountLabel: `${points.length} точек ЧСС`,
+    timeLabels: [
+      formatDeviceWorkoutGraphTime(axisStartTime),
+      formatDeviceWorkoutGraphTime(axisStartTime + axisDuration / 2),
+      formatDeviceWorkoutGraphTime(axisEndTime),
+    ],
+    visiblePointLabel: `на графике ${visiblePoints.length} ключевых точек`,
+    zoneRows: heartRateZones.map((zone) => ({
+      durationLabel: formatHeartRateZoneCompactDurationMs(zone.durationMs),
+      percentLabel: `${Math.round(zone.percent)}%`,
+      width: zone.percent > 0 ? `${Math.max(2, zone.percent).toFixed(1)}%` : "0%",
+      zone: zone.zone,
+    })),
+    zoneStrips,
+  };
 }
 
 function renderDeviceWorkoutSeriesUPlotGraph(series: DeviceWorkoutGraphSeries, workout: DeviceWorkout) {
