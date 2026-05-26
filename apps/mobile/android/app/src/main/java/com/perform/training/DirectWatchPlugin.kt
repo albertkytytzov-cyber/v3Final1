@@ -3597,8 +3597,18 @@ class DirectWatchPlugin : Plugin() {
         dataEnd: Int,
     ): ClassicWorkoutSummary? {
         return when (file.subtype) {
+            1, 2 -> parseClassicOutdoorWalkingV1Summary(bytes, file, dataEnd)
+            3 -> parseClassicTreadmillSummary(bytes, file, dataEnd)
+            6 -> parseClassicOutdoorCyclingSummary(bytes, file, dataEnd)
+            7 -> parseClassicIndoorCyclingSummary(bytes, file, dataEnd)
             8 -> parseClassicFreestyleSummary(bytes, file, dataEnd)
+            9 -> parseClassicPoolSwimmingSummary(bytes, file, dataEnd)
+            11 -> parseClassicEllipticalSummary(bytes, file, dataEnd)
+            13 -> parseClassicRowingSummary(bytes, file, dataEnd)
+            14 -> parseClassicJumpRopingSummary(bytes, file, dataEnd)
+            16 -> parseClassicHiitSummary(bytes, file, dataEnd)
             22 -> parseClassicOutdoorWalkingV2Summary(bytes, file, dataEnd)
+            23 -> parseClassicOutdoorCyclingV2Summary(bytes, file, dataEnd)
             else -> null
         }
     }
@@ -3703,6 +3713,62 @@ class DirectWatchPlugin : Plugin() {
             zoneAerobicSeconds = zones?.getOrNull(2),
             zoneFatBurnSeconds = zones?.getOrNull(3),
             zoneWarmUpSeconds = zones?.getOrNull(4),
+        )
+    }
+
+    private fun parseClassicOutdoorWalkingV1Summary(
+        bytes: ByteArray,
+        file: ClassicActivityFileSummary,
+        dataEnd: Int,
+    ): ClassicWorkoutSummary? {
+        val headerSize = when (file.version) {
+            4 -> 4
+            else -> return null
+        }
+        var offset = 8 + headerSize
+        if (dataEnd < offset + 65) return null
+
+        val startSeconds = littleEndianUInt32(bytes, offset)
+        offset += 4
+        val endSeconds = littleEndianUInt32(bytes, offset)
+        offset += 4
+        val activeSeconds = littleEndianUInt32(bytes, offset)
+        offset += 4
+        val distanceMeters = littleEndianUInt32(bytes, offset).toInt().takeIf { it in 1..500_000 }
+        offset += 4
+        val calories = littleEndianUInt32(bytes, offset).toInt().takeIf { it in 1..20_000 }
+        offset += 4
+        offset += 4 // max pace
+        offset += 4 // min pace
+        offset += 4
+        val steps = littleEndianUInt32(bytes, offset).toInt().takeIf { it in 1..200_000 }
+        offset += 4
+        offset += 2
+        val heartRateAvg = byteAt(bytes, offset)
+        offset += 1
+        val heartRateMax = byteAt(bytes, offset)
+        offset += 1
+        val heartRateMin = byteAt(bytes, offset)
+        offset += 1
+        offset += 20
+        offset += 4
+        offset += 9
+        offset += 1
+        offset += 2
+        val zones = readClassicWorkoutHeartRateZonesAt(bytes, offset, dataEnd, activeSeconds)
+
+        return buildClassicWorkoutSummary(
+            file = file,
+            startSeconds = startSeconds,
+            endSeconds = endSeconds,
+            activeSeconds = activeSeconds,
+            distanceMeters = distanceMeters,
+            calories = calories,
+            steps = steps,
+            heartRateAvg = heartRateAvg,
+            heartRateMin = heartRateMin,
+            heartRateMax = heartRateMax,
+            zones = zones,
         )
     }
 
@@ -3817,6 +3883,411 @@ class DirectWatchPlugin : Plugin() {
             zoneFatBurnSeconds = zones?.getOrNull(3),
             zoneWarmUpSeconds = zones?.getOrNull(4),
         )
+    }
+
+    private fun parseClassicTreadmillSummary(
+        bytes: ByteArray,
+        file: ClassicActivityFileSummary,
+        dataEnd: Int,
+    ): ClassicWorkoutSummary? {
+        val headerSize = when (file.version) {
+            5 -> 4
+            10 -> 8
+            11 -> 9
+            else -> return null
+        }
+        var offset = 8 + headerSize
+        if (dataEnd < offset + 43) return null
+
+        val startSeconds = littleEndianUInt32(bytes, offset)
+        offset += 4
+        val endSeconds = littleEndianUInt32(bytes, offset)
+        offset += 4
+        val activeSeconds = littleEndianUInt32(bytes, offset)
+        offset += 4
+        val distanceMeters = littleEndianUInt32(bytes, offset).toInt().takeIf { it in 1..500_000 }
+        offset += 4
+        val calories = littleEndianUInt16(bytes, offset).takeIf { it in 1..20_000 }
+        offset += 2
+        if (file.version >= 10) offset += 4
+        offset += 4
+        offset += 4
+        val steps = littleEndianUInt32(bytes, offset).toInt().takeIf { it in 1..200_000 }
+        offset += 4
+        if (file.version >= 10) {
+            offset += 2
+            offset += 2
+        }
+        offset += 2
+        val heartRateAvg = byteAt(bytes, offset)
+        offset += 1
+        val heartRateMax = byteAt(bytes, offset)
+        offset += 1
+        val heartRateMin = byteAt(bytes, offset)
+        offset += 1
+        offset += 4
+        if (file.version >= 10) offset += 1
+        offset += 1
+        if (file.version >= 10) offset += 1
+        offset += 1
+        offset += 2
+        val zones = readClassicWorkoutHeartRateZonesAt(bytes, offset, dataEnd, activeSeconds)
+
+        return buildClassicWorkoutSummary(file, startSeconds, endSeconds, activeSeconds, distanceMeters, calories, steps, heartRateAvg, heartRateMin, heartRateMax, zones)
+    }
+
+    private fun parseClassicOutdoorCyclingSummary(
+        bytes: ByteArray,
+        file: ClassicActivityFileSummary,
+        dataEnd: Int,
+    ): ClassicWorkoutSummary? {
+        val headerSize = when (file.version) {
+            4, 5 -> 6
+            6 -> 7
+            else -> return null
+        }
+        var offset = 8 + headerSize
+        if (dataEnd < offset + 62) return null
+
+        offset += 2
+        val startSeconds = littleEndianUInt32(bytes, offset)
+        offset += 4
+        val endSeconds = littleEndianUInt32(bytes, offset)
+        offset += 4
+        val activeSeconds = littleEndianUInt32(bytes, offset)
+        offset += 4
+        offset += 4
+        val distanceMeters = littleEndianUInt32(bytes, offset).toInt().takeIf { it in 1..500_000 }
+        offset += 4
+        offset += 2
+        val calories = littleEndianUInt16(bytes, offset).takeIf { it in 1..20_000 }
+        offset += 2
+        offset += 4
+        offset += 4
+        if (file.version >= 5) offset += 4
+        offset += 4
+        val heartRateAvg = byteAt(bytes, offset)
+        offset += 1
+        val heartRateMax = byteAt(bytes, offset)
+        offset += 1
+        val heartRateMin = byteAt(bytes, offset)
+        offset += 1
+        offset += 20
+        offset += 4
+        offset += 1
+        offset += 4
+        offset += 1
+        offset += 1
+        offset += 1
+        offset += 1
+        offset += 2
+        offset += 1
+        val zones = readClassicWorkoutHeartRateZonesAt(bytes, offset, dataEnd, activeSeconds)
+
+        return buildClassicWorkoutSummary(file, startSeconds, endSeconds, activeSeconds, distanceMeters, calories, null, heartRateAvg, heartRateMin, heartRateMax, zones)
+    }
+
+    private fun parseClassicOutdoorCyclingV2Summary(
+        bytes: ByteArray,
+        file: ClassicActivityFileSummary,
+        dataEnd: Int,
+    ): ClassicWorkoutSummary? {
+        val headerSize = when (file.version) {
+            4 -> 5
+            else -> return null
+        }
+        var offset = 8 + headerSize
+        if (dataEnd < offset + 60) return null
+
+        val startSeconds = littleEndianUInt32(bytes, offset)
+        offset += 4
+        val endSeconds = littleEndianUInt32(bytes, offset)
+        offset += 4
+        val activeSeconds = littleEndianUInt32(bytes, offset)
+        offset += 4
+        val distanceMeters = littleEndianUInt32(bytes, offset).toInt().takeIf { it in 1..500_000 }
+        offset += 4
+        val calories = littleEndianUInt16(bytes, offset).takeIf { it in 1..20_000 }
+        offset += 2
+        offset += 8
+        offset += 4
+        val heartRateAvg = byteAt(bytes, offset)
+        offset += 1
+        val heartRateMax = byteAt(bytes, offset)
+        offset += 1
+        val heartRateMin = byteAt(bytes, offset)
+        offset += 1
+        offset += 28
+        val zones = readClassicWorkoutHeartRateZonesAt(bytes, offset, dataEnd, activeSeconds)
+
+        return buildClassicWorkoutSummary(file, startSeconds, endSeconds, activeSeconds, distanceMeters, calories, null, heartRateAvg, heartRateMin, heartRateMax, zones)
+    }
+
+    private fun parseClassicIndoorCyclingSummary(
+        bytes: ByteArray,
+        file: ClassicActivityFileSummary,
+        dataEnd: Int,
+    ): ClassicWorkoutSummary? {
+        val headerSize = when (file.version) {
+            8 -> 7
+            9 -> 8
+            else -> return null
+        }
+        var offset = 8 + headerSize
+        if (dataEnd < offset + 54) return null
+
+        val startSeconds = littleEndianUInt32(bytes, offset)
+        offset += 4
+        val endSeconds = littleEndianUInt32(bytes, offset)
+        offset += 4
+        val activeSeconds = littleEndianUInt32(bytes, offset)
+        offset += 4
+        offset += 4
+        val calories = littleEndianUInt16(bytes, offset).takeIf { it in 1..20_000 }
+        offset += 2
+        offset += 8
+        val heartRateAvg = byteAt(bytes, offset)
+        offset += 1
+        val heartRateMax = byteAt(bytes, offset)
+        offset += 1
+        val heartRateMin = byteAt(bytes, offset)
+        offset += 1
+        offset += 4
+        offset += 1
+        offset += 1
+        offset += 2
+        val zones = readClassicWorkoutHeartRateZonesAt(bytes, offset, dataEnd, activeSeconds)
+
+        return buildClassicWorkoutSummary(file, startSeconds, endSeconds, activeSeconds, null, calories, null, heartRateAvg, heartRateMin, heartRateMax, zones)
+    }
+
+    private fun parseClassicHiitSummary(
+        bytes: ByteArray,
+        file: ClassicActivityFileSummary,
+        dataEnd: Int,
+    ): ClassicWorkoutSummary? {
+        val headerSize = when (file.version) {
+            5 -> 4
+            else -> return null
+        }
+        var offset = 8 + headerSize
+        if (dataEnd < offset + 35) return null
+
+        val startSeconds = littleEndianUInt32(bytes, offset)
+        offset += 4
+        val endSeconds = littleEndianUInt32(bytes, offset)
+        offset += 4
+        val activeSeconds = littleEndianUInt32(bytes, offset)
+        offset += 4
+        val calories = littleEndianUInt16(bytes, offset).takeIf { it in 1..20_000 }
+        offset += 2
+        val heartRateAvg = byteAt(bytes, offset)
+        offset += 1
+        val heartRateMax = byteAt(bytes, offset)
+        offset += 1
+        val heartRateMin = byteAt(bytes, offset)
+        offset += 1
+        offset += 4
+        offset += 1
+        offset += 1
+        offset += 2
+        val zones = readClassicWorkoutHeartRateZonesAt(bytes, offset, dataEnd, activeSeconds)
+
+        return buildClassicWorkoutSummary(file, startSeconds, endSeconds, activeSeconds, null, calories, null, heartRateAvg, heartRateMin, heartRateMax, zones)
+    }
+
+    private fun parseClassicEllipticalSummary(
+        bytes: ByteArray,
+        file: ClassicActivityFileSummary,
+        dataEnd: Int,
+    ): ClassicWorkoutSummary? {
+        val headerSize = when (file.version) {
+            3, 4, 5, 6 -> 4
+            else -> return null
+        }
+        var offset = 8 + headerSize
+        if (dataEnd < offset + 40) return null
+
+        val startSeconds = littleEndianUInt32(bytes, offset)
+        offset += 4
+        val endSeconds = littleEndianUInt32(bytes, offset)
+        offset += 4
+        val activeSeconds = littleEndianUInt32(bytes, offset)
+        offset += 4
+        val calories = littleEndianUInt16(bytes, offset).takeIf { it in 1..20_000 }
+        offset += 2
+        val steps = littleEndianUInt32(bytes, offset).toInt().takeIf { it in 1..200_000 }
+        offset += 4
+        if (file.version >= 6) offset += 2
+        offset += 2
+        val heartRateAvg = byteAt(bytes, offset)
+        offset += 1
+        val heartRateMax = byteAt(bytes, offset)
+        offset += 1
+        val heartRateMin = byteAt(bytes, offset)
+        offset += 1
+        offset += 7
+        if (file.version >= 4) offset += 1
+        val zones = readClassicWorkoutHeartRateZonesAt(bytes, offset, dataEnd, activeSeconds)
+
+        return buildClassicWorkoutSummary(file, startSeconds, endSeconds, activeSeconds, null, calories, steps, heartRateAvg, heartRateMin, heartRateMax, zones)
+    }
+
+    private fun parseClassicRowingSummary(
+        bytes: ByteArray,
+        file: ClassicActivityFileSummary,
+        dataEnd: Int,
+    ): ClassicWorkoutSummary? {
+        val headerSize = when (file.version) {
+            4 -> 4
+            6, 7 -> 5
+            else -> return null
+        }
+        var offset = 8 + headerSize
+        if (dataEnd < offset + 40) return null
+
+        val startSeconds = littleEndianUInt32(bytes, offset)
+        offset += 4
+        val endSeconds = littleEndianUInt32(bytes, offset)
+        offset += 4
+        val activeSeconds = littleEndianUInt32(bytes, offset)
+        offset += 4
+        val calories = littleEndianUInt16(bytes, offset).takeIf { it in 1..20_000 }
+        offset += 2
+        val heartRateAvg = byteAt(bytes, offset)
+        offset += 1
+        val heartRateMax = byteAt(bytes, offset)
+        offset += 1
+        val heartRateMin = byteAt(bytes, offset)
+        offset += 1
+        offset += 7
+        if (file.version > 4) offset += 1
+        val zones = readClassicWorkoutHeartRateZonesAt(bytes, offset, dataEnd, activeSeconds)
+
+        return buildClassicWorkoutSummary(file, startSeconds, endSeconds, activeSeconds, null, calories, null, heartRateAvg, heartRateMin, heartRateMax, zones)
+    }
+
+    private fun parseClassicJumpRopingSummary(
+        bytes: ByteArray,
+        file: ClassicActivityFileSummary,
+        dataEnd: Int,
+    ): ClassicWorkoutSummary? {
+        val headerSize = when (file.version) {
+            3, 5 -> 5
+            else -> return null
+        }
+        var offset = 8 + headerSize
+        if (dataEnd < offset + 39) return null
+
+        val startSeconds = littleEndianUInt32(bytes, offset)
+        offset += 4
+        val endSeconds = littleEndianUInt32(bytes, offset)
+        offset += 4
+        val activeSeconds = littleEndianUInt32(bytes, offset)
+        offset += 4
+        val calories = littleEndianUInt16(bytes, offset).takeIf { it in 1..20_000 }
+        offset += 2
+        val heartRateAvg = byteAt(bytes, offset)
+        offset += 1
+        val heartRateMax = byteAt(bytes, offset)
+        offset += 1
+        val heartRateMin = byteAt(bytes, offset)
+        offset += 1
+        offset += 4
+        offset += if (file.version == 3) 3 else 4
+        val zones = readClassicWorkoutHeartRateZonesAt(bytes, offset, dataEnd, activeSeconds)
+
+        return buildClassicWorkoutSummary(file, startSeconds, endSeconds, activeSeconds, null, calories, null, heartRateAvg, heartRateMin, heartRateMax, zones)
+    }
+
+    private fun parseClassicPoolSwimmingSummary(
+        bytes: ByteArray,
+        file: ClassicActivityFileSummary,
+        dataEnd: Int,
+    ): ClassicWorkoutSummary? {
+        val headerSize = when (file.version) {
+            6 -> 4
+            7 -> 5
+            8 -> 8
+            else -> return null
+        }
+        var offset = 8 + headerSize
+        if (dataEnd < offset + 18) return null
+
+        val startSeconds = littleEndianUInt32(bytes, offset)
+        offset += 4
+        val endSeconds = littleEndianUInt32(bytes, offset)
+        offset += 4
+        val activeSeconds = littleEndianUInt32(bytes, offset)
+        offset += 4
+        val distanceMeters = littleEndianUInt32(bytes, offset).toInt().takeIf { it in 1..500_000 }
+        offset += 4
+        val calories = littleEndianUInt16(bytes, offset).takeIf { it in 1..20_000 }
+
+        return buildClassicWorkoutSummary(file, startSeconds, endSeconds, activeSeconds, distanceMeters, calories, null, null, null, null, null)
+    }
+
+    private fun buildClassicWorkoutSummary(
+        file: ClassicActivityFileSummary,
+        startSeconds: Long,
+        endSeconds: Long,
+        activeSeconds: Long,
+        distanceMeters: Int?,
+        calories: Int?,
+        steps: Int?,
+        heartRateAvg: Int?,
+        heartRateMin: Int?,
+        heartRateMax: Int?,
+        zones: List<Int>?,
+    ): ClassicWorkoutSummary? {
+        if (!isClassicWorkoutEpochSeconds(startSeconds) ||
+            !isClassicWorkoutEpochSeconds(endSeconds) ||
+            endSeconds <= startSeconds ||
+            activeSeconds <= 0L ||
+            activeSeconds > 24L * 60L * 60L
+        ) {
+            return null
+        }
+
+        return ClassicWorkoutSummary(
+            startTime = epochSecondsIso(startSeconds),
+            endTime = epochSecondsIso(endSeconds),
+            durationMinutes = (activeSeconds / 60).toInt().coerceAtLeast(1),
+            distanceMeters = distanceMeters,
+            calories = calories,
+            steps = steps,
+            heartRateAvg = heartRateAvg?.takeIf { it in 35..230 },
+            heartRateMin = heartRateMin?.takeIf { it in 30..230 },
+            heartRateMax = heartRateMax?.takeIf { it in 35..254 },
+            workoutType = classicWorkoutTypeLabel(file.subtype),
+            zoneExtremeSeconds = zones?.getOrNull(0),
+            zoneAnaerobicSeconds = zones?.getOrNull(1),
+            zoneAerobicSeconds = zones?.getOrNull(2),
+            zoneFatBurnSeconds = zones?.getOrNull(3),
+            zoneWarmUpSeconds = zones?.getOrNull(4),
+        )
+    }
+
+    private fun readClassicWorkoutHeartRateZonesAt(
+        bytes: ByteArray,
+        offset: Int,
+        dataEnd: Int,
+        activeSeconds: Long,
+    ): List<Int>? {
+        if (activeSeconds <= 0L || offset < 0 || offset + 20 > dataEnd || offset + 20 > bytes.size) {
+            return null
+        }
+        val zones = (0 until 5).map { index -> littleEndianUInt32(bytes, offset + index * 4).toInt() }
+        val total = zones.sum()
+        return zones.takeIf { values ->
+            values.all { it in 0..(24 * 60 * 60) } &&
+                total > 0 &&
+                total in (activeSeconds / 3).toInt()..(activeSeconds * 2).toInt()
+        }
+    }
+
+    private fun byteAt(bytes: ByteArray, offset: Int): Int? {
+        return bytes.getOrNull(offset)?.toInt()?.and(0xff)
     }
 
     private fun findClassicWorkoutTiming(
@@ -6567,7 +7038,7 @@ class DirectWatchPlugin : Plugin() {
         private const val CLASSIC_ACTIVITY_WORKOUT_DETAIL_READ_MS = 120_000L
         private const val CLASSIC_ACTIVITY_WORKOUT_DETAIL_NO_PROGRESS_MS = 30_000L
         private const val CLASSIC_ACTIVITY_FILE_QUEUE_POLL_MS = 250L
-        private const val CLASSIC_ACTIVITY_FILE_PROBE_LIMIT = 128
+        private const val CLASSIC_ACTIVITY_FILE_PROBE_LIMIT = 512
         private const val CLASSIC_ACTIVITY_FILE_ID_BYTES = 7
         private const val CLASSIC_MANUAL_SAMPLE_HR = 0x11
         private const val CLASSIC_MANUAL_SAMPLE_SPO2 = 0x12

@@ -2152,6 +2152,7 @@ function buildDirectWatchDeviceWorkout(
       source: "direct-watch-workout-file",
       sourceWorkoutGroupId,
       sourceFileKind: summaryPacket?.activityFile?.kind ?? null,
+      activityFileProbeRequests: getDirectWatchWorkoutProbeRequests(probe, sourceWorkoutGroupId),
       spo2Average: averageDirectWatchNumber(oxygenValues),
       steps,
       summaryHeartRateSamples: summaryHeartRates,
@@ -2171,6 +2172,32 @@ function buildDirectWatchDeviceWorkout(
     syncedAt: new Date().toISOString(),
     workoutType,
   };
+}
+
+function getDirectWatchWorkoutProbeRequests(
+  probe: DirectWatchClassicProbe,
+  sourceWorkoutGroupId: string | null | undefined,
+) {
+  if (!sourceWorkoutGroupId) {
+    return [];
+  }
+
+  return (probe.activityFileProbeRequests ?? [])
+    .filter((request) => getDirectWatchWorkoutFileGroupKey(request.activityFile) === sourceWorkoutGroupId)
+    .map((request) => ({
+      crcValid: request.crcValid ?? null,
+      detailType: request.activityFile?.detailType ?? request.detailType ?? null,
+      error: request.error ?? null,
+      idHex: request.idHex ?? request.activityFile?.idHex ?? null,
+      kind: request.kind ?? request.activityFile?.kind ?? null,
+      parsed: request.parsed ?? null,
+      payloadBytes: request.payloadBytes ?? null,
+      status: request.status ?? null,
+      subtype: request.activityFile?.subtype ?? request.subtype ?? null,
+      timestamp: request.activityFile?.timestamp ?? request.timestamp ?? null,
+      type: request.activityFile?.type ?? request.type ?? null,
+      version: request.activityFile?.version ?? request.version ?? null,
+    }));
 }
 
 function getDirectWatchWorkoutTypeLabel(subtype: number | null | undefined) {
@@ -2489,6 +2516,20 @@ function buildDirectWatchRawPayload(
     dataOrigin: "PERFORM Sync",
     fileCount: dayPackets.length,
     workoutFileCount: workouts.length,
+    activityFileProbeRequests: (probe.activityFileProbeRequests ?? []).slice(0, 48).map((request) => ({
+      crcValid: request.crcValid ?? null,
+      detailType: request.activityFile?.detailType ?? request.detailType ?? null,
+      error: request.error ?? null,
+      idHex: request.idHex ?? request.activityFile?.idHex ?? null,
+      kind: request.kind ?? request.activityFile?.kind ?? null,
+      parsed: request.parsed ?? null,
+      payloadBytes: request.payloadBytes ?? null,
+      status: request.status ?? null,
+      subtype: request.activityFile?.subtype ?? request.subtype ?? null,
+      timestamp: request.activityFile?.timestamp ?? request.timestamp ?? null,
+      type: request.activityFile?.type ?? request.type ?? null,
+      version: request.activityFile?.version ?? request.version ?? null,
+    })),
     restingHeartRateSource: getDirectWatchRestingHeartRateSource(dailySummary, details),
     calories: dailySummary?.activityCalories ?? null,
     steps: dailySummary?.activitySteps ?? details.steps,

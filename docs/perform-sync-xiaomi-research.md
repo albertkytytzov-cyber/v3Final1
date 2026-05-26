@@ -259,6 +259,32 @@
 - Теперь для Freestyle duration/calories/min-avg-max HR берутся из summary, а
   не из эвристического сканирования payload.
 
+## Разбор 26.05.2026: пропавшие поля тренировок
+
+Проверка на телефоне и боевой базе показала:
+
+- для 25.05 часы сейчас повторно отдают только файл сна `44A6146A0C0421`;
+- файлы тренировок 25.05 уже подтверждены и ушли из очереди часов, поэтому
+  повторно прочитать их с устройства нельзя;
+- в боевой базе walking-тренировки с summary-файлом содержат длительность,
+  дистанцию, калории, пульс и шаги;
+- длинная freestyle-тренировка `2026-05-25 13:52` сохранена только по
+  `DETAILS`-файлу `0554146A0C03A0`, без paired `SUMMARY`, поэтому у нее нет
+  дистанции и шагов. Для freestyle это ожидаемо: Gadgetbridge summary также не
+  содержит distance/steps, только duration/calories/HR/zones;
+- если новый workout придет без summary/GPS, теперь raw payload сохраняет
+  `activityFileProbeRequests`, чтобы было видно: файл отсутствовал в inventory,
+  не дочитался, не прошел CRC или не распарсился.
+
+Правки:
+
+- лимит очереди файлов активности поднят с `128` до `512`;
+- добавлены точные summary-parser'ы по схемам Gadgetbridge для основных
+  subtype: outdoor walk/run v1, treadmill, outdoor cycling, indoor cycling,
+  pool swimming, elliptical, rowing, jump rope, HIIT, outdoor cycling v2;
+- это закрывает главную дыру, где неизвестный subtype уходил в эвристику и мог
+  терять distance/steps/calories.
+
 Ограничение проверки:
 
 - Gadgetbridge Intent API broadcast в текущей сессии не запустил новый sync
