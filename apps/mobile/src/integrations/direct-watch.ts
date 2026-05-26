@@ -2706,7 +2706,13 @@ function buildDirectWatchRawPayload(
     })),
     restingHeartRateSource: getDirectWatchRestingHeartRateSource(dailySummary, details),
     calories: dailySummary?.activityCalories ?? null,
-    steps: dailySummary?.activitySteps ?? details.steps,
+    steps: dailySummary?.activitySteps ?? null,
+    minuteSteps: details.steps,
+    stepsSource: dailySummary?.activitySteps !== null && dailySummary?.activitySteps !== undefined
+      ? "daily-summary"
+      : details.steps !== null
+        ? "minute-details-partial"
+        : null,
     stressAvg: dailySummary?.activityStressAvg ?? details.stressAvg,
     stressMin: dailySummary?.activityStressMin ?? details.stressMin,
     stressMax: dailySummary?.activityStressMax ?? details.stressMax,

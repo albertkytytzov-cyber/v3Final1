@@ -204,6 +204,8 @@ export function bootstrapMobileApp(root: HTMLElement) {
     watchDetailPeriod: "day",
     watchExpandedWorkoutId: null,
     watchExpandedWorkoutGraphId: null,
+    watchWorkoutHistoryOpen: false,
+    watchWorkoutHistoryPeriod: "day",
     watchWorkoutDetailId: null,
     watchSettingsOpen: false,
     isOnline: navigator.onLine,
@@ -216,6 +218,10 @@ export function bootstrapMobileApp(root: HTMLElement) {
   const update = (patch: Partial<MobileAppState>) => {
     Object.assign(state, patch);
     render();
+  };
+
+  const scrollToScreenTop = () => {
+    window.requestAnimationFrame(() => window.scrollTo({ left: 0, top: 0 }));
   };
 
   const rememberDirectWatchConfig = (patch: Partial<DirectWatchLocalConfig>) => {
@@ -2382,9 +2388,11 @@ export function bootstrapMobileApp(root: HTMLElement) {
             watchDetailMetric: null,
             watchExpandedWorkoutId: null,
             watchExpandedWorkoutGraphId: null,
+            watchWorkoutHistoryOpen: false,
             watchWorkoutDetailId: null,
             watchSettingsOpen: false,
           });
+          scrollToScreenTop();
           return;
         }
 
@@ -2393,9 +2401,11 @@ export function bootstrapMobileApp(root: HTMLElement) {
           watchDetailMetric: null,
           watchExpandedWorkoutId: null,
           watchExpandedWorkoutGraphId: null,
+          watchWorkoutHistoryOpen: false,
           watchWorkoutDetailId: null,
           watchSettingsOpen: false,
         });
+        scrollToScreenTop();
       });
     });
 
@@ -2406,9 +2416,11 @@ export function bootstrapMobileApp(root: HTMLElement) {
           watchDetailPeriod: "day",
           watchExpandedWorkoutId: null,
           watchExpandedWorkoutGraphId: null,
+          watchWorkoutHistoryOpen: false,
           watchWorkoutDetailId: null,
           watchSettingsOpen: false,
         });
+        scrollToScreenTop();
       });
     });
 
@@ -2420,6 +2432,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
           watchExpandedWorkoutGraphId: null,
           watchWorkoutDetailId: null,
         });
+        scrollToScreenTop();
       });
     });
 
@@ -2429,9 +2442,11 @@ export function bootstrapMobileApp(root: HTMLElement) {
           watchDetailMetric: null,
           watchExpandedWorkoutId: null,
           watchExpandedWorkoutGraphId: null,
+          watchWorkoutHistoryOpen: false,
           watchWorkoutDetailId: null,
           watchSettingsOpen: true,
         });
+        scrollToScreenTop();
       });
     });
 
@@ -2443,12 +2458,64 @@ export function bootstrapMobileApp(root: HTMLElement) {
           watchWorkoutDetailId: null,
           watchSettingsOpen: false,
         });
+        scrollToScreenTop();
       });
     });
 
     root.querySelectorAll<HTMLButtonElement>("[data-watch-detail-period]").forEach((button) => {
       button.addEventListener("click", () => {
         update({ watchDetailPeriod: (button.dataset.watchDetailPeriod as WatchDetailPeriod) || "day" });
+      });
+    });
+
+    root.querySelectorAll<HTMLButtonElement>("[data-watch-workouts-open]").forEach((button) => {
+      button.addEventListener("click", () => {
+        update({
+          watchDetailMetric: null,
+          watchExpandedWorkoutId: null,
+          watchExpandedWorkoutGraphId: null,
+          watchWorkoutHistoryOpen: true,
+          watchWorkoutDetailId: null,
+          watchSettingsOpen: false,
+        });
+        scrollToScreenTop();
+      });
+    });
+
+    root.querySelectorAll<HTMLButtonElement>("[data-watch-workouts-back]").forEach((button) => {
+      button.addEventListener("click", () => {
+        update({
+          watchExpandedWorkoutId: null,
+          watchExpandedWorkoutGraphId: null,
+          watchWorkoutHistoryOpen: false,
+          watchWorkoutDetailId: null,
+        });
+        scrollToScreenTop();
+      });
+    });
+
+    root.querySelectorAll<HTMLButtonElement>("[data-watch-workouts-period]").forEach((button) => {
+      button.addEventListener("click", () => {
+        update({ watchWorkoutHistoryPeriod: (button.dataset.watchWorkoutsPeriod as WatchDetailPeriod) || "day" });
+      });
+    });
+
+    root.querySelectorAll<HTMLButtonElement>("[data-watch-workout-open]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const workoutId = button.dataset.watchWorkoutOpen;
+        if (!workoutId) {
+          return;
+        }
+
+        update({
+          watchDetailMetric: null,
+          watchExpandedWorkoutId: null,
+          watchExpandedWorkoutGraphId: null,
+          watchWorkoutDetailId: workoutId,
+          watchSettingsOpen: false,
+        });
+        scrollToScreenTop();
+        void hydrateDeviceWorkoutSamples(workoutId);
       });
     });
 
@@ -2465,6 +2532,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
           watchExpandedWorkoutGraphId: null,
           watchWorkoutDetailId: null,
         });
+        scrollToScreenTop();
         if (isOpening) {
           void hydrateDeviceWorkoutSamples(workoutId);
         }
@@ -2484,6 +2552,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
           watchExpandedWorkoutGraphId: null,
           watchWorkoutDetailId: workoutId,
         });
+        scrollToScreenTop();
         void hydrateDeviceWorkoutSamples(workoutId);
       });
     });
@@ -2491,6 +2560,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
     root.querySelectorAll<HTMLButtonElement>("[data-watch-workout-detail-back]").forEach((button) => {
       button.addEventListener("click", () => {
         update({ watchWorkoutDetailId: null });
+        scrollToScreenTop();
       });
     });
 
@@ -2894,7 +2964,10 @@ function renderAppShell(state: MobileAppState) {
   const selectedAthlete = getSelectedAthlete(state);
   const activeAthleteId = getActiveAthleteId(state);
   const isWatchDetailScreen = displayState.selectedScreen === "watches" && (
-    Boolean(displayState.watchDetailMetric) || displayState.watchSettingsOpen
+    Boolean(displayState.watchDetailMetric) ||
+    Boolean(displayState.watchWorkoutDetailId) ||
+    displayState.watchWorkoutHistoryOpen ||
+    displayState.watchSettingsOpen
   );
 
   return `
@@ -4018,8 +4091,7 @@ function renderWatchesScreen(state: MobileAppState) {
   const summary = getDeviceHealthSummaryForDate(state, athleteId, date);
   const heartRateSamples = getDeviceHealthSamplesForDate(state, athleteId, date, "heart_rate");
   const todayWorkouts = getDeviceWorkoutsForDate(state, athleteId, date);
-  const workouts = todayWorkouts.length ? todayWorkouts : getRecentDeviceWorkouts(state, athleteId, date, 3);
-  const showingRecentWorkouts = todayWorkouts.length === 0 && workouts.length > 0;
+  const recentWorkouts = getRecentDeviceWorkouts(state, athleteId, date, 30);
 
   if (state.watchDetailMetric) {
     return renderWatchMetricDetailScreen(state, athleteId, date);
@@ -4033,17 +4105,13 @@ function renderWatchesScreen(state: MobileAppState) {
     return renderWatchSettingsScreen(state, summary, date);
   }
 
+  if (state.watchWorkoutHistoryOpen) {
+    return renderWatchWorkoutHistoryScreen(state, athleteId, date);
+  }
+
   return `
     ${renderWatchParametersCard(summary, heartRateSamples, state, date)}
-    ${renderWatchWorkoutsCard(
-      workouts,
-      state,
-      athleteId,
-      date,
-      showingRecentWorkouts,
-      state.watchExpandedWorkoutId,
-      state.watchExpandedWorkoutGraphId,
-    )}
+    ${renderWatchWorkoutSummaryCard(todayWorkouts, recentWorkouts, date)}
     ${renderWatchSettingsEntryCard(state, summary)}
   `;
 }
@@ -4067,6 +4135,14 @@ type WatchMetricTrendPoint = {
   label: string;
   value: number | null;
 };
+
+interface WatchWorkoutHistoryGroup {
+  activeCalories: number;
+  date: string;
+  distanceMeters: number;
+  durationMinutes: number;
+  workouts: DeviceWorkout[];
+}
 
 const WATCH_DETAIL_METRIC_LABELS: Record<WatchDetailMetric, string> = {
   load: "Нагрузка",
@@ -4782,13 +4858,32 @@ function renderWatchSettingsScreen(
   `;
 }
 
+function hasDirectWatchSavedWeatherLocation(config: DirectWatchLocalConfig) {
+  return config.weatherLatitude !== null &&
+    config.weatherLongitude !== null &&
+    !(config.weatherLatitude === 0 && config.weatherLongitude === 0);
+}
+
+function formatDirectWatchWeatherSource(config: DirectWatchLocalConfig) {
+  if (!hasDirectWatchSavedWeatherLocation(config)) {
+    return "Геолокация телефона";
+  }
+
+  return getDirectWatchWeatherLocation(config).city;
+}
+
+function getDirectWatchWeatherFallbackCity(config: DirectWatchLocalConfig) {
+  return config.weatherCity ?? "";
+}
+
 function renderWatchSyncPanel(state: MobileAppState, date: string) {
   if (!isDirectWatchRuntime()) {
     return "";
   }
 
   const config = loadDirectWatchConfig();
-  const weatherLocation = getDirectWatchWeatherLocation(config);
+  const weatherSourceLabel = formatDirectWatchWeatherSource(config);
+  const weatherFallbackCity = getDirectWatchWeatherFallbackCity(config);
   const serviceStatus = state.directWatchDiagnostic.serviceStatus;
   const hasDevice = Boolean(config.deviceId);
   const hasAuthKey = Boolean(config.authKeyHex);
@@ -4820,7 +4915,7 @@ function renderWatchSyncPanel(state: MobileAppState, date: string) {
         </article>
         <article>
           <span>Погода</span>
-          <strong>${escapeHtml(weatherLocation.city)}</strong>
+          <strong>${escapeHtml(weatherSourceLabel)}</strong>
         </article>
         <article>
           <span>Канал</span>
@@ -4878,8 +4973,8 @@ function renderWatchSyncPanel(state: MobileAppState, date: string) {
       </section>
       <div class="watch-sync-setup-grid">
         <label class="wide-field">
-          <span>Город погоды</span>
-          <input data-direct-watch-weather-city inputmode="text" placeholder="Chisinau" type="text" value="${escapeHtml(weatherLocation.city)}">
+          <span>Запасной город погоды</span>
+          <input data-direct-watch-weather-city inputmode="text" placeholder="если геолокация недоступна" type="text" value="${escapeHtml(weatherFallbackCity)}">
         </label>
         <label class="wide-field">
           <span>Auth Key часов</span>
@@ -4888,7 +4983,7 @@ function renderWatchSyncPanel(state: MobileAppState, date: string) {
       </div>
       <div class="watch-sync-setup-actions">
         <button class="secondary-action" data-direct-watch-weather-save type="button" ${state.isBusy ? "disabled" : ""}>
-          Сохранить город
+          Сохранить запасной город
         </button>
         <button class="secondary-action" data-direct-watch-auth-key-save type="button" ${state.isBusy ? "disabled" : ""}>
           Сохранить ключ
@@ -5430,6 +5525,244 @@ function renderWatchWorkoutsCard(
       `}
     </section>
   `;
+}
+
+function renderWatchWorkoutSummaryCard(todayWorkouts: DeviceWorkout[], recentWorkouts: DeviceWorkout[], date: string) {
+  const latestWorkout = recentWorkouts[0] ?? null;
+  const totalDuration = sumWatchWorkoutDurationMinutes(todayWorkouts);
+  const totalCalories = sumWatchWorkoutActiveCalories(todayWorkouts);
+  const totalDistance = sumWatchWorkoutDistanceMeters(todayWorkouts);
+  const summaryStats = [
+    {
+      label: "Время",
+      value: totalDuration > 0 ? formatDeviceWorkoutDuration(totalDuration) : "нет данных",
+    },
+    {
+      label: "Калории",
+      value: totalCalories > 0 ? `${Math.round(totalCalories)} ккал` : "нет данных",
+    },
+    {
+      label: "Дистанция",
+      value: totalDistance > 0 ? formatDistanceMeters(totalDistance) : "нет данных",
+    },
+  ];
+
+  return `
+    <section class="watch-workouts-card is-summary">
+      <div class="watch-card-head">
+        <div>
+          <span>Тренировки</span>
+          <h3>Активность с часов</h3>
+          <p>${escapeHtml(formatWatchWorkoutSummaryHint(todayWorkouts, latestWorkout, date))}</p>
+        </div>
+      </div>
+      <div class="watch-workouts-summary-body">
+        <div class="watch-workouts-summary-main">
+          <span aria-hidden="true"></span>
+          <div>
+            <strong>${todayWorkouts.length}</strong>
+            <small>${escapeHtml(formatWorkoutCountLabel(todayWorkouts.length, "тренировка", "тренировки", "тренировок"))} сегодня</small>
+          </div>
+        </div>
+        <div class="watch-workouts-summary-grid">
+          ${summaryStats.map((item) => `
+            <article>
+              <span>${escapeHtml(item.label)}</span>
+              <strong>${escapeHtml(item.value)}</strong>
+            </article>
+          `).join("")}
+        </div>
+        <button class="primary-action" data-watch-workouts-open type="button">
+          Открыть все тренировки
+        </button>
+      </div>
+    </section>
+  `;
+}
+
+function renderWatchWorkoutHistoryScreen(state: MobileAppState, athleteId: string, date: string) {
+  const period = state.watchWorkoutHistoryPeriod;
+  const groups = getWatchWorkoutHistoryGroups(state, athleteId, date, period);
+  const allWorkouts = groups.flatMap((group) => group.workouts);
+  const totalDuration = sumWatchWorkoutDurationMinutes(allWorkouts);
+  const totalCalories = sumWatchWorkoutActiveCalories(allWorkouts);
+  const totalDistance = sumWatchWorkoutDistanceMeters(allWorkouts);
+
+  return `
+    <section class="watch-detail-screen watch-training-history-screen">
+      <div class="watch-detail-title-row">
+        <button aria-label="Назад" class="watch-detail-back-button" data-watch-workouts-back type="button">‹</button>
+        <h3>Тренировки</h3>
+      </div>
+      <p class="watch-detail-date">${escapeHtml(formatWatchDetailPeriodLabel(date, period))}</p>
+      <div class="watch-detail-period-tabs" role="tablist" aria-label="Период тренировок">
+        ${(["day", "week", "month"] as WatchDetailPeriod[]).map((item) => `
+          <button
+            class="${period === item ? "is-active" : ""}"
+            data-watch-workouts-period="${item}"
+            type="button"
+          >${escapeHtml(formatWatchDetailPeriodTab(item))}</button>
+        `).join("")}
+      </div>
+      <section class="watch-training-history-total">
+        <div>
+          <span>Всего за период</span>
+          <strong>${allWorkouts.length}</strong>
+          <small>${escapeHtml(formatWorkoutCountLabel(allWorkouts.length, "тренировка", "тренировки", "тренировок"))}</small>
+        </div>
+        <div>
+          <span>Время</span>
+          <strong>${escapeHtml(totalDuration > 0 ? formatDeviceWorkoutDuration(totalDuration) : "0 мин")}</strong>
+          <small>суммарно</small>
+        </div>
+        <div>
+          <span>Калории</span>
+          <strong>${escapeHtml(totalCalories > 0 ? `${Math.round(totalCalories)} ккал` : "0 ккал")}</strong>
+          <small>${escapeHtml(totalDistance > 0 ? formatDistanceMeters(totalDistance) : "без дистанции")}</small>
+        </div>
+      </section>
+      ${groups.length ? `
+        <div class="watch-training-date-list">
+          ${groups.map((group) => renderWatchWorkoutHistoryGroup(group, state, athleteId, date)).join("")}
+        </div>
+      ` : renderEmpty("Тренировок за период нет", "Синхронизируйте часы, и новые тренировки появятся здесь по датам.")}
+    </section>
+  `;
+}
+
+function getWatchWorkoutHistoryGroups(
+  state: MobileAppState,
+  athleteId: string,
+  date: string,
+  period: WatchDetailPeriod,
+): WatchWorkoutHistoryGroup[] {
+  return getWatchDetailPeriodDates(date, period)
+    .slice()
+    .reverse()
+    .map((entryDate) => buildWatchWorkoutHistoryGroup(entryDate, getDeviceWorkoutsForDate(state, athleteId, entryDate)))
+    .filter((group) => group.workouts.length > 0);
+}
+
+function buildWatchWorkoutHistoryGroup(date: string, workouts: DeviceWorkout[]): WatchWorkoutHistoryGroup {
+  return {
+    activeCalories: sumWatchWorkoutActiveCalories(workouts),
+    date,
+    distanceMeters: sumWatchWorkoutDistanceMeters(workouts),
+    durationMinutes: sumWatchWorkoutDurationMinutes(workouts),
+    workouts,
+  };
+}
+
+function renderWatchWorkoutHistoryGroup(
+  group: WatchWorkoutHistoryGroup,
+  state: MobileAppState,
+  athleteId: string,
+  currentDate: string,
+) {
+  const contextByDate = getWatchWorkoutContextForDate(state, athleteId, group.date);
+
+  return `
+    <section class="watch-training-date-group">
+      <div class="watch-training-date-head">
+        <div>
+          <span>${escapeHtml(formatDayRelativeLabel(group.date))}</span>
+          <strong>${escapeHtml(formatDate(group.date))}</strong>
+        </div>
+        <small>${escapeHtml(formatWatchWorkoutGroupSummary(group))}</small>
+      </div>
+      <div class="watch-training-history-list">
+        ${group.workouts.map((workout) => renderWatchWorkoutHistoryItem(workout, contextByDate, currentDate)).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderWatchWorkoutHistoryItem(
+  workout: DeviceWorkout,
+  context: WatchWorkoutContext,
+  currentDate: string,
+) {
+  const chips = getWatchWorkoutChips(workout);
+  const profile = getDeviceWorkoutProfile(workout.workoutType);
+  const hasGraphs = hasDeviceWorkoutGraph(workout, context) || getDeviceWorkoutRawHeartRateZones(workout).length > 0;
+
+  return `
+    <button class="watch-training-history-item is-${escapeHtml(profile.id)}" data-watch-workout-open="${escapeHtml(workout.id)}" type="button">
+      <span class="watch-training-type-dot" aria-hidden="true"></span>
+      <span class="watch-training-history-content">
+        <strong>${escapeHtml(formatDeviceWorkoutTypeLabel(workout))}</strong>
+        <small>${escapeHtml(formatWatchWorkoutListTimeLabel(workout, currentDate))}</small>
+        ${chips.length ? `
+          <span class="watch-workout-chip-list">
+            ${chips.map((chip) => `<span>${escapeHtml(chip)}</span>`).join("")}
+          </span>
+        ` : ""}
+        ${hasGraphs ? `<em>Есть графики и подробности</em>` : ""}
+      </span>
+      <span class="watch-training-history-arrow" aria-hidden="true">›</span>
+    </button>
+  `;
+}
+
+function formatWatchWorkoutSummaryHint(
+  todayWorkouts: DeviceWorkout[],
+  latestWorkout: DeviceWorkout | null,
+  date: string,
+) {
+  if (todayWorkouts.length > 0) {
+    return "Сводка за сегодня. Полная история открывается отдельным экраном.";
+  }
+
+  if (latestWorkout) {
+    const latestLabel = latestWorkout.entryDate === date
+      ? formatDeviceWorkoutTimeLabel(latestWorkout)
+      : `${formatDate(latestWorkout.entryDate)} · ${formatDeviceWorkoutTimeLabel(latestWorkout)}`;
+    return `Сегодня новых нет. Последняя: ${formatDeviceWorkoutTypeLabel(latestWorkout)}, ${latestLabel}.`;
+  }
+
+  return "После синхронизации тренировки будут собраны по датам.";
+}
+
+function formatWatchWorkoutGroupSummary(group: WatchWorkoutHistoryGroup) {
+  return [
+    `${group.workouts.length} ${formatWorkoutCountLabel(group.workouts.length, "тренировка", "тренировки", "тренировок")}`,
+    group.durationMinutes > 0 ? formatDeviceWorkoutDuration(group.durationMinutes) : null,
+    group.activeCalories > 0 ? `${Math.round(group.activeCalories)} ккал` : null,
+    group.distanceMeters > 0 ? formatDistanceMeters(group.distanceMeters) : null,
+  ].filter((item): item is string => Boolean(item)).join(" · ");
+}
+
+function sumWatchWorkoutDurationMinutes(workouts: DeviceWorkout[]) {
+  return workouts.reduce((sum, workout) => sum + (workout.durationMinutes ?? 0), 0);
+}
+
+function sumWatchWorkoutActiveCalories(workouts: DeviceWorkout[]) {
+  return workouts.reduce((sum, workout) => sum + (getTrustedWatchWorkoutActiveCalories(workout) ?? 0), 0);
+}
+
+function sumWatchWorkoutDistanceMeters(workouts: DeviceWorkout[]) {
+  return workouts.reduce((sum, workout) => {
+    if (!isDeviceWorkoutMetricRelevant(workout.workoutType, "distance")) {
+      return sum;
+    }
+
+    return sum + (getTrustedWatchWorkoutDistanceMeters(workout) ?? 0);
+  }, 0);
+}
+
+function formatWorkoutCountLabel(count: number, one: string, few: string, many: string) {
+  const mod10 = Math.abs(count) % 10;
+  const mod100 = Math.abs(count) % 100;
+
+  if (mod10 === 1 && mod100 !== 11) {
+    return one;
+  }
+
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) {
+    return few;
+  }
+
+  return many;
 }
 
 function renderWatchWorkoutItem(
@@ -6077,7 +6410,8 @@ function renderDirectWatchDiagnostics(state: MobileAppState, date: string) {
   const activeSessionDeviceId = session?.connected ? session.deviceId : null;
   const config = loadDirectWatchConfig();
   const hasAuthKey = Boolean(config.authKeyHex);
-  const weatherLocation = getDirectWatchWeatherLocation(config);
+  const weatherSourceLabel = formatDirectWatchWeatherSource(config);
+  const weatherFallbackCity = getDirectWatchWeatherFallbackCity(config);
   const services = inspection?.services ?? [];
   const knownServices = services
     .filter((service) => service.name && service.name !== "Unknown")
@@ -6120,7 +6454,7 @@ function renderDirectWatchDiagnostics(state: MobileAppState, date: string) {
           </article>
           <article>
             <span>Погода</span>
-            <strong>${escapeHtml(weatherLocation.city)}</strong>
+            <strong>${escapeHtml(weatherSourceLabel)}</strong>
           </article>
           <article>
             <span>Сервис часов</span>
@@ -6132,15 +6466,15 @@ function renderDirectWatchDiagnostics(state: MobileAppState, date: string) {
           <input data-direct-watch-auth-key inputmode="text" placeholder="32 hex-символа" type="password" autocomplete="off">
         </label>
         <label class="wide-field">
-          <span>Город погоды</span>
-          <input data-direct-watch-weather-city inputmode="text" placeholder="Chisinau" type="text" value="${escapeHtml(weatherLocation.city)}">
+          <span>Запасной город погоды</span>
+          <input data-direct-watch-weather-city inputmode="text" placeholder="если геолокация недоступна" type="text" value="${escapeHtml(weatherFallbackCity)}">
         </label>
         <div class="device-health-actions">
           <button class="secondary-action" data-direct-watch-auth-key-save type="button" ${state.isBusy ? "disabled" : ""}>
             Сохранить ключ
           </button>
           <button class="secondary-action" data-direct-watch-weather-save type="button" ${state.isBusy ? "disabled" : ""}>
-            Сохранить город
+            Сохранить запасной город
           </button>
           <button
             class="secondary-action"

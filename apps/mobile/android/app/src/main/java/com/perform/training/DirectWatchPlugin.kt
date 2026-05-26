@@ -44,6 +44,7 @@ import javax.crypto.Mac
 import javax.crypto.spec.IvParameterSpec
 import javax.crypto.spec.SecretKeySpec
 import kotlin.math.roundToInt
+import org.json.JSONArray
 import org.json.JSONObject
 
 @CapacitorPlugin(
@@ -59,7 +60,7 @@ import org.json.JSONObject
         ),
         Permission(
             alias = "location",
-            strings = [Manifest.permission.ACCESS_FINE_LOCATION],
+            strings = [Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION],
         ),
         Permission(
             alias = "notifications",
@@ -86,7 +87,7 @@ class DirectWatchPlugin : Plugin() {
         val adapter = bluetoothAdapter()
         response.put("available", adapter != null && context.packageManager.hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE))
         response.put("bluetoothEnabled", adapter?.isEnabled == true)
-        response.put("requiresLocationPermission", Build.VERSION.SDK_INT < Build.VERSION_CODES.S)
+        response.put("requiresLocationPermission", true)
         response.put("reason", if (adapter == null) "Bluetooth LE недоступен на этом телефоне." else null)
         call.resolve(response)
     }
@@ -1153,6 +1154,7 @@ class DirectWatchPlugin : Plugin() {
             var activityFileProbeFailedCount = 0
             val activityFileProbeRequests = mutableListOf<JSObject>()
             val combined = java.io.ByteArrayOutputStream()
+            val resolvedWeatherPayload = resolveClassicWeatherPayload(weatherPayload)
 
             fun resolveNow() {
                 if (resolved) {
@@ -1333,7 +1335,7 @@ class DirectWatchPlugin : Plugin() {
                             }
                         }
 
-                        val serviceSyncCommands = buildClassicServiceSyncCommands(weatherPayload, timeOffsetMinutes)
+                        val serviceSyncCommands = buildClassicServiceSyncCommands(resolvedWeatherPayload, timeOffsetMinutes)
                         serviceSyncCommands.forEach { command ->
                             socket.outputStream.write(
                                 buildClassicV2EncryptedCommandPacket(
@@ -1364,7 +1366,7 @@ class DirectWatchPlugin : Plugin() {
                                 combined = combined,
                                 encryptionKey = authStep2.encryptionKey,
                                 decryptionKey = authStep2.decryptionKey,
-                                weatherPayload = weatherPayload,
+                                weatherPayload = resolvedWeatherPayload,
                                 initialSequenceNumber = nextServiceSequence,
                                 durationMs = keepAliveMs.toLong(),
                             )
@@ -1663,7 +1665,11 @@ class DirectWatchPlugin : Plugin() {
 
     private fun requiredPermissions(): Array<String> {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
+            arrayOf(
+                Manifest.permission.BLUETOOTH_SCAN,
+                Manifest.permission.BLUETOOTH_CONNECT,
+                Manifest.permission.ACCESS_COARSE_LOCATION,
+            )
         } else {
             arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
         }
@@ -1671,9 +1677,9 @@ class DirectWatchPlugin : Plugin() {
 
     private fun requiredPermissionAliases(): Array<String> {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            arrayOf("bluetoothScan", "bluetoothConnect", "notifications")
+            arrayOf("bluetoothScan", "bluetoothConnect", "location", "notifications")
         } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            arrayOf("bluetoothScan", "bluetoothConnect")
+            arrayOf("bluetoothScan", "bluetoothConnect", "location")
         } else {
             arrayOf("location")
         }
@@ -3016,12 +3022,15 @@ class DirectWatchPlugin : Plugin() {
 
     private fun buildClassicWeatherRefreshCommands(weatherPayload: JSONObject): List<ClassicPostAuthProbeCommand> {
         Log.i(TAG, "classic bridge weather payload ${describeWeatherPayload(weatherPayload)}")
-        val commands = mutableListOf(
-            ClassicPostAuthProbeCommand("weather-locations-read-refresh", buildGetWeatherLocationsCommand()),
-            ClassicPostAuthProbeCommand("weather-locations-order-refresh", buildSetWeatherLocationsOrderCommand(weatherPayload)),
-            ClassicPostAuthProbeCommand("weather-temp-unit-refresh", buildSetWeatherTempUnitCommand()),
-            ClassicPostAuthProbeCommand("weather-alerts-refresh", buildSetWeatherAlertsCommand()),
-        )
+        val commands = mutableListOf<ClassicPostAuthProbeCommand>()
+        buildPostLocationCommand(weatherPayload)?.let {
+            commands.add(ClassicPostAuthProbeCommand("phone-location-refresh", it))
+        }
+        commands.add(ClassicPostAuthProbeCommand("weather-locations-read-refresh", buildGetWeatherLocationsCommand()))
+        commands.add(ClassicPostAuthProbeCommand("weather-location-add-refresh", buildAddWeatherLocationCommand(weatherPayload)))
+        commands.add(ClassicPostAuthProbeCommand("weather-locations-order-refresh", buildSetWeatherLocationsOrderCommand(weatherPayload)))
+        commands.add(ClassicPostAuthProbeCommand("weather-temp-unit-refresh", buildSetWeatherTempUnitCommand()))
+        commands.add(ClassicPostAuthProbeCommand("weather-alerts-refresh", buildSetWeatherAlertsCommand()))
         buildSetCurrentWeatherCommand(weatherPayload)?.let {
             commands.add(ClassicPostAuthProbeCommand("weather-current-refresh", it))
         }
@@ -3038,10 +3047,486 @@ class DirectWatchPlugin : Plugin() {
         val current = weatherPayload.optJSONObject("current")
         val dailyCount = weatherPayload.optJSONArray("daily")?.length() ?: 0
         val hourlyCount = weatherPayload.optJSONArray("hourly")?.length() ?: 0
+        val firstDaily = weatherPayload.optJSONArray("daily")?.optJSONObject(0)
+        val firstHourly = weatherPayload.optJSONArray("hourly")?.optJSONObject(0)
         return "location=${weatherPayload.optString("locationKey", "-")} " +
             "name=${weatherPayload.optString("locationName", "-")} " +
             "published=${weatherPayload.optString("publicationTimestamp", "-")} " +
-            "current=${current != null} daily=$dailyCount hourly=$hourlyCount"
+            "current=${current != null} temp=${current?.optString("temperatureC", "-") ?: "-"} " +
+            "humidity=${current?.optString("humidity", "-") ?: "-"} " +
+            "wind=${current?.optString("windSpeedBeaufort", "-") ?: "-"}/${current?.optString("windDirection", "-") ?: "-"} " +
+            "uv=${current?.optString("uvIndex", "-") ?: "-"} " +
+            "aqi=${current?.optString("aqi", "-") ?: "-"} " +
+            "pressure=${current?.optString("pressureHpa", "-") ?: "-"} " +
+            "daily=$dailyCount today=${firstDaily?.optString("temperatureMinC", "-") ?: "-"}.." +
+            "${firstDaily?.optString("temperatureMaxC", "-") ?: "-"} sunrise=${firstDaily?.optString("sunrise", "-") ?: "-"} " +
+            "sunset=${firstDaily?.optString("sunset", "-") ?: "-"} " +
+            "hourly=$hourlyCount next=${firstHourly?.optString("temperatureC", "-") ?: "-"}"
+    }
+
+    private fun resolveClassicWeatherPayload(seed: JSONObject?): JSONObject? {
+        if (seed == null) {
+            return null
+        }
+
+        val locationResolution = resolveWeatherPayloadPhoneLocation(seed)
+        val locatedPayload = locationResolution.payload
+        val hasForecast = locatedPayload.optJSONObject("current") != null &&
+            (locatedPayload.optJSONArray("daily")?.length() ?: 0) > 0 &&
+            (locatedPayload.optJSONArray("hourly")?.length() ?: 0) > 0
+
+        if (hasForecast && !locationResolution.changed) {
+            return locatedPayload
+        }
+
+        return fetchOpenMeteoWeatherPayload(locatedPayload) ?: locatedPayload
+    }
+
+    private fun resolveWeatherPayloadPhoneLocation(seed: JSONObject): WeatherLocationResolution {
+        val payload = JSONObject(seed.toString())
+        val location = bestPhoneWeatherLocation()
+            ?: return WeatherLocationResolution(payload, changed = false)
+
+        val latitude = location.latitude
+        val longitude = location.longitude
+        val previousLatitude = payload.optNullableDouble("latitude")
+        val previousLongitude = payload.optNullableDouble("longitude")
+        val changed = previousLatitude == null ||
+            previousLongitude == null ||
+            kotlin.math.abs(previousLatitude - latitude) > 0.01 ||
+            kotlin.math.abs(previousLongitude - longitude) > 0.01
+
+        if (!changed) {
+            return WeatherLocationResolution(payload, changed = false)
+        }
+
+        val locationName = resolveWeatherLocationName(latitude, longitude)
+        payload.put("cityName", locationName)
+        payload.put("locationName", locationName)
+        payload.put("locationKey", buildPhoneWeatherLocationKey(latitude, longitude, locationName))
+        payload.put("latitude", latitude)
+        payload.put("longitude", longitude)
+        payload.put("altitude", location.altitude.takeIf { location.hasAltitude() } ?: 0.0)
+        payload.put("isCurrentLocation", true)
+        payload.put("publicationTimestamp", formatWeatherPublicationTimestamp())
+        payload.remove("current")
+        payload.put("daily", JSONArray())
+        payload.put("hourly", JSONArray())
+
+        Log.i(
+            TAG,
+            "classic weather location resolved from phone name=$locationName " +
+                "lat=${"%.5f".format(Locale.US, latitude)} lon=${"%.5f".format(Locale.US, longitude)} " +
+                "ageMs=${System.currentTimeMillis() - location.time}",
+        )
+        return WeatherLocationResolution(payload, changed = true)
+    }
+
+    private fun bestPhoneWeatherLocation(): android.location.Location? {
+        val hasFine = ActivityCompat.checkSelfPermission(
+            context,
+            Manifest.permission.ACCESS_FINE_LOCATION,
+        ) == PackageManager.PERMISSION_GRANTED
+        val hasCoarse = ActivityCompat.checkSelfPermission(
+            context,
+            Manifest.permission.ACCESS_COARSE_LOCATION,
+        ) == PackageManager.PERMISSION_GRANTED
+        if (!hasFine && !hasCoarse) {
+            Log.w(TAG, "classic weather phone location unavailable: location permission is not granted")
+            return null
+        }
+
+        val manager = context.getSystemService(Context.LOCATION_SERVICE) as? android.location.LocationManager
+            ?: return null
+        val providers = listOf(
+            android.location.LocationManager.GPS_PROVIDER,
+            android.location.LocationManager.NETWORK_PROVIDER,
+            android.location.LocationManager.PASSIVE_PROVIDER,
+        )
+
+        val lastKnown = providers.mapNotNull { provider ->
+            try {
+                manager.getLastKnownLocation(provider)
+            } catch (_: SecurityException) {
+                null
+            } catch (_: IllegalArgumentException) {
+                null
+            }
+        }.maxWithOrNull(compareBy<android.location.Location> { it.time }.thenBy { it.accuracy * -1 })
+
+        val fresh = requestFreshPhoneWeatherLocation(manager, providers)
+        return listOfNotNull(fresh, lastKnown)
+            .maxWithOrNull(compareBy<android.location.Location> { it.time }.thenBy { it.accuracy * -1 })
+    }
+
+    private fun requestFreshPhoneWeatherLocation(
+        manager: android.location.LocationManager,
+        providers: List<String>,
+    ): android.location.Location? {
+        val provider = providers.firstOrNull { name ->
+            try {
+                manager.isProviderEnabled(name)
+            } catch (_: Exception) {
+                false
+            }
+        } ?: return null
+
+        val latch = java.util.concurrent.CountDownLatch(1)
+        val result = java.util.concurrent.atomic.AtomicReference<android.location.Location?>()
+
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                val cancellation = android.os.CancellationSignal()
+                manager.getCurrentLocation(provider, cancellation, context.mainExecutor) { location ->
+                    result.set(location)
+                    latch.countDown()
+                }
+                val completed = latch.await(4, java.util.concurrent.TimeUnit.SECONDS)
+                if (!completed) {
+                    cancellation.cancel()
+                }
+            } else {
+                @Suppress("DEPRECATION")
+                val listener = object : android.location.LocationListener {
+                    override fun onLocationChanged(location: android.location.Location) {
+                        result.set(location)
+                        latch.countDown()
+                    }
+
+                    @Deprecated("Deprecated in Android API")
+                    override fun onStatusChanged(provider: String?, status: Int, extras: android.os.Bundle?) = Unit
+
+                    override fun onProviderEnabled(provider: String) = Unit
+                    override fun onProviderDisabled(provider: String) = Unit
+                }
+                mainHandler.post {
+                    try {
+                        @Suppress("DEPRECATION")
+                        manager.requestSingleUpdate(provider, listener, Looper.getMainLooper())
+                    } catch (_: SecurityException) {
+                        latch.countDown()
+                    } catch (_: IllegalArgumentException) {
+                        latch.countDown()
+                    }
+                }
+                latch.await(4, java.util.concurrent.TimeUnit.SECONDS)
+                mainHandler.post {
+                    try {
+                        manager.removeUpdates(listener)
+                    } catch (_: SecurityException) {
+                        // The listener may already be detached.
+                    }
+                }
+            }
+        } catch (_: SecurityException) {
+            return null
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+            return null
+        }
+
+        return result.get()
+    }
+
+    private fun resolveWeatherLocationName(latitude: Double, longitude: Double): String {
+        return try {
+            @Suppress("DEPRECATION")
+            val address = android.location.Geocoder(context, Locale("ru"))
+                .getFromLocation(latitude, longitude, 1)
+                ?.firstOrNull()
+            listOfNotNull(
+                address?.locality,
+                address?.subAdminArea?.takeIf { it != address.locality },
+                address?.countryName,
+            ).filter { it.isNotBlank() }.joinToString(", ").ifBlank { "Текущее местоположение" }
+        } catch (_: Exception) {
+            "Текущее местоположение"
+        }
+    }
+
+    private fun buildPhoneWeatherLocationKey(latitude: Double, longitude: Double, locationName: String): String {
+        val rounded = "%.3f,%.3f:%s".format(Locale.US, latitude, longitude, locationName)
+        return "gps:${kotlin.math.abs(rounded.hashCode()) % 1_000_000}"
+    }
+
+    private fun fetchOpenMeteoWeatherPayload(seed: JSONObject): JSONObject? {
+        val latitude = seed.optNullableDouble("latitude") ?: return null
+        val longitude = seed.optNullableDouble("longitude") ?: return null
+        val url = buildOpenMeteoForecastUrl(latitude, longitude)
+
+        return try {
+            val connection = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+            connection.connectTimeout = 5_000
+            connection.readTimeout = 5_000
+            connection.requestMethod = "GET"
+            connection.setRequestProperty("Accept", "application/json")
+
+            val status = connection.responseCode
+            if (status !in 200..299) {
+                throw IOException("Open-Meteo HTTP $status")
+            }
+
+            val body = connection.inputStream.bufferedReader().use { it.readText() }
+            val data = JSONObject(body)
+            val airQuality = fetchOpenMeteoAirQuality(latitude, longitude)
+            val payload = JSONObject(seed.toString())
+            payload.put("current", buildOpenMeteoCurrentWeather(data, airQuality))
+            payload.put("daily", buildOpenMeteoDailyWeather(data, airQuality))
+            payload.put("hourly", buildOpenMeteoHourlyWeather(data, airQuality))
+            payload.put("publicationTimestamp", formatWeatherPublicationTimestamp(data.optJSONObject("current")?.optString("time", "")))
+            Log.i(TAG, "classic native weather fetched ${describeWeatherPayload(payload)}")
+            payload
+        } catch (error: Exception) {
+            Log.w(TAG, "classic native weather fetch failed: ${error.message}")
+            null
+        }
+    }
+
+    private fun buildOpenMeteoForecastUrl(latitude: Double, longitude: Double): String {
+        return "https://api.open-meteo.com/v1/forecast" +
+            "?latitude=${"%.6f".format(Locale.US, latitude)}" +
+            "&longitude=${"%.6f".format(Locale.US, longitude)}" +
+            "&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m,wind_direction_10m,pressure_msl" +
+            "&hourly=temperature_2m,weather_code,wind_speed_10m,wind_direction_10m" +
+            "&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset" +
+            "&timezone=auto&forecast_days=7"
+    }
+
+    private fun fetchOpenMeteoAirQuality(latitude: Double, longitude: Double): JSONObject? {
+        val url = "https://air-quality-api.open-meteo.com/v1/air-quality" +
+            "?latitude=${"%.6f".format(Locale.US, latitude)}" +
+            "&longitude=${"%.6f".format(Locale.US, longitude)}" +
+            "&current=european_aqi,uv_index" +
+            "&hourly=european_aqi,uv_index" +
+            "&timezone=auto&forecast_days=7"
+
+        return try {
+            val connection = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+            connection.connectTimeout = 5_000
+            connection.readTimeout = 5_000
+            connection.requestMethod = "GET"
+            connection.setRequestProperty("Accept", "application/json")
+
+            val status = connection.responseCode
+            if (status !in 200..299) {
+                throw IOException("Open-Meteo Air Quality HTTP $status")
+            }
+
+            val body = connection.inputStream.bufferedReader().use { it.readText() }
+            JSONObject(body)
+        } catch (error: Exception) {
+            Log.w(TAG, "classic native weather air-quality fetch failed: ${error.message}")
+            null
+        }
+    }
+
+    private fun buildOpenMeteoCurrentWeather(data: JSONObject, airQuality: JSONObject?): JSONObject? {
+        val current = data.optJSONObject("current") ?: return null
+        val temperature = current.optNullableDouble("temperature_2m") ?: return null
+        val airCurrent = airQuality?.optJSONObject("current")
+        val aqi = airCurrent?.optNullableInt("european_aqi")
+        val uvIndex = airCurrent?.optNullableDouble("uv_index")
+        val item = JSONObject()
+        item.put("conditionCode", mapOpenMeteoCodeToXiaomi(current.optNullableInt("weather_code")))
+        item.put("humidity", current.optNullableInt("relative_humidity_2m"))
+        item.put("pressureHpa", current.optNullableDouble("pressure_msl"))
+        item.put("temperatureC", temperature.roundToInt())
+        item.put("uvIndex", uvIndex?.roundToInt())
+        item.put("aqi", aqi)
+        item.put("aqiLabel", formatEuropeanAqiLabel(aqi))
+        item.put("windDirection", current.optNullableInt("wind_direction_10m"))
+        item.put("windSpeedBeaufort", kmhToBeaufort(current.optNullableDouble("wind_speed_10m")))
+        return item
+    }
+
+    private fun buildOpenMeteoDailyWeather(data: JSONObject, airQuality: JSONObject?): JSONArray {
+        val daily = data.optJSONObject("daily") ?: return JSONArray()
+        val times = daily.optJSONArray("time") ?: return JSONArray()
+        val weatherCodes = daily.optJSONArray("weather_code")
+        val maxTemperatures = daily.optJSONArray("temperature_2m_max")
+        val minTemperatures = daily.optJSONArray("temperature_2m_min")
+        val sunrises = daily.optJSONArray("sunrise")
+        val sunsets = daily.optJSONArray("sunset")
+        val dailyAqi = aggregateOpenMeteoHourlyDailyMax(airQuality, "european_aqi")
+        val dailyUv = aggregateOpenMeteoHourlyDailyMax(airQuality, "uv_index")
+        val result = JSONArray()
+        val count = minOf(times.length(), 7)
+
+        for (index in 0 until count) {
+            val date = times.optNullableString(index)
+            val aqi = date?.let { dailyAqi[it] }
+            val item = JSONObject()
+            item.put("conditionCode", mapOpenMeteoCodeToXiaomi(weatherCodes.optNullableInt(index)))
+            item.put("sunrise", formatOptionalWeatherTimestamp(sunrises.optNullableString(index)))
+            item.put("sunset", formatOptionalWeatherTimestamp(sunsets.optNullableString(index)))
+            item.put("temperatureMaxC", maxTemperatures.optNullableDouble(index)?.roundToInt() ?: 0)
+            item.put("temperatureMinC", minTemperatures.optNullableDouble(index)?.roundToInt() ?: 0)
+            item.put("uvIndex", date?.let { dailyUv[it] }?.roundToInt())
+            item.put("aqi", aqi?.roundToInt())
+            item.put("aqiLabel", formatEuropeanAqiLabel(aqi?.roundToInt()))
+            result.put(item)
+        }
+        return result
+    }
+
+    private fun buildOpenMeteoHourlyWeather(data: JSONObject, airQuality: JSONObject?): JSONArray {
+        val hourly = data.optJSONObject("hourly") ?: return JSONArray()
+        val times = hourly.optJSONArray("time") ?: return JSONArray()
+        val temperatures = hourly.optJSONArray("temperature_2m")
+        val weatherCodes = hourly.optJSONArray("weather_code")
+        val windSpeeds = hourly.optJSONArray("wind_speed_10m")
+        val windDirections = hourly.optJSONArray("wind_direction_10m")
+        val airHourly = airQuality?.optJSONObject("hourly")
+        val airTimes = airHourly?.optJSONArray("time")
+        val hourlyAqi = airHourly?.optJSONArray("european_aqi")
+        val hourlyUv = airHourly?.optJSONArray("uv_index")
+        val result = JSONArray()
+        val now = System.currentTimeMillis() - 60 * 60 * 1000L
+        var start = 0
+
+        for (index in 0 until times.length()) {
+            val timeMs = parseOpenMeteoLocalTimeMillis(times.optNullableString(index))
+            if (timeMs != null && timeMs >= now) {
+                start = index
+                break
+            }
+        }
+
+        val count = minOf(times.length() - start, 24)
+        for (offset in 0 until count) {
+            val index = start + offset
+            val item = JSONObject()
+            item.put("conditionCode", mapOpenMeteoCodeToXiaomi(weatherCodes.optNullableInt(index)))
+            item.put("temperatureC", temperatures.optNullableDouble(index)?.roundToInt() ?: 0)
+            item.put("windDirection", windDirections.optNullableInt(index))
+            item.put("windSpeedBeaufort", kmhToBeaufort(windSpeeds.optNullableDouble(index)))
+            val airIndex = findOpenMeteoTimeIndex(airTimes, times.optNullableString(index))
+            val aqi = if (airIndex >= 0) hourlyAqi.optNullableInt(airIndex) else null
+            item.put("uvIndex", if (airIndex >= 0) hourlyUv.optNullableDouble(airIndex)?.roundToInt() else null)
+            item.put("aqi", aqi)
+            item.put("aqiLabel", formatEuropeanAqiLabel(aqi))
+            result.put(item)
+        }
+        return result
+    }
+
+    private fun aggregateOpenMeteoHourlyDailyMax(data: JSONObject?, key: String): Map<String, Double> {
+        val hourly = data?.optJSONObject("hourly") ?: return emptyMap()
+        val times = hourly.optJSONArray("time") ?: return emptyMap()
+        val values = hourly.optJSONArray(key) ?: return emptyMap()
+        val result = mutableMapOf<String, Double>()
+
+        for (index in 0 until times.length()) {
+            val time = times.optNullableString(index) ?: continue
+            val date = time.substringBefore("T").takeIf { it.length == 10 } ?: continue
+            val value = values.optNullableDouble(index) ?: continue
+            val previous = result[date]
+            if (previous == null || value > previous) {
+                result[date] = value
+            }
+        }
+
+        return result
+    }
+
+    private fun findOpenMeteoTimeIndex(times: JSONArray?, target: String?): Int {
+        if (times == null || target.isNullOrBlank()) {
+            return -1
+        }
+
+        for (index in 0 until times.length()) {
+            if (times.optNullableString(index) == target) {
+                return index
+            }
+        }
+
+        return -1
+    }
+
+    private fun parseOpenMeteoLocalTimeMillis(value: String?): Long? {
+        if (value.isNullOrBlank()) {
+            return null
+        }
+        return try {
+            java.time.LocalDateTime.parse(value)
+                .atZone(java.time.ZoneId.systemDefault())
+                .toInstant()
+                .toEpochMilli()
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun formatWeatherPublicationTimestamp(value: String? = null): String {
+        val zonedDateTime = try {
+            if (value.isNullOrBlank()) {
+                java.time.ZonedDateTime.now()
+            } else {
+                java.time.LocalDateTime.parse(value).atZone(java.time.ZoneId.systemDefault())
+            }
+        } catch (_: Exception) {
+            java.time.ZonedDateTime.now()
+        }
+        return zonedDateTime.format(java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+    }
+
+    private fun formatOptionalWeatherTimestamp(value: String?): String {
+        return if (value.isNullOrBlank()) "" else formatWeatherPublicationTimestamp(value)
+    }
+
+    private fun formatEuropeanAqiLabel(value: Int?): String {
+        return when (value) {
+            null -> "Нет данных"
+            in 0..20 -> "Хорошо"
+            in 21..40 -> "Норма"
+            in 41..60 -> "Средне"
+            in 61..80 -> "Плохо"
+            in 81..100 -> "Очень плохо"
+            else -> "Опасно"
+        }
+    }
+
+    private fun mapOpenMeteoCodeToXiaomi(code: Int?): Int {
+        return when (code) {
+            0 -> 0
+            1, 2 -> 1
+            3 -> 2
+            45, 48 -> 18
+            51, 53, 56, 61 -> 7
+            55, 63 -> 8
+            57, 66, 67 -> 19
+            65 -> 10
+            71 -> 14
+            73, 77 -> 15
+            75 -> 16
+            80 -> 3
+            81 -> 8
+            82 -> 9
+            85 -> 13
+            86 -> 16
+            95 -> 4
+            96, 99 -> 5
+            else -> XIAOMI_WEATHER_CLEAR_SKY
+        }
+    }
+
+    private fun kmhToBeaufort(value: Double?): Int? {
+        val speed = value ?: return null
+        return when {
+            speed < 1 -> 0
+            speed < 6 -> 1
+            speed < 12 -> 2
+            speed < 20 -> 3
+            speed < 29 -> 4
+            speed < 39 -> 5
+            speed < 50 -> 6
+            speed < 62 -> 7
+            speed < 75 -> 8
+            speed < 89 -> 9
+            speed < 103 -> 10
+            speed < 118 -> 11
+            else -> 12
+        }
     }
 
     private fun buildSetCurrentTimeCommand(timeOffsetMinutes: Int = 0): ByteArray {
@@ -3164,7 +3649,7 @@ class DirectWatchPlugin : Plugin() {
         val windSpeed = current.optNullableInt("windSpeedBeaufort")
         writeProtoBytesField(currentWeather, 5, buildWeatherUnitValue(windSpeed ?: 0, if (windSpeed != null) current.optInt("windDirection", 0).toString() else ""))
         writeProtoBytesField(currentWeather, 6, buildWeatherUnitValue(current.optNullableInt("uvIndex") ?: 0, ""))
-        writeProtoBytesField(currentWeather, 7, buildWeatherUnitValue(current.optNullableInt("aqi") ?: 0, ""))
+        writeProtoBytesField(currentWeather, 7, buildWeatherAqiUnitValue(current))
         writeProtoBytesField(currentWeather, 8, buildEmptyWeatherAlertsList())
         current.optNullableFloat("pressureHpa")?.let {
             writeProtoFloatField(currentWeather, 9, it * 100f)
@@ -3187,9 +3672,9 @@ class DirectWatchPlugin : Plugin() {
         for (index in 0 until count) {
             val day = daily.optJSONObject(index) ?: continue
             val entry = java.io.ByteArrayOutputStream()
-            writeProtoBytesField(entry, 1, buildWeatherUnitValue(0, ""))
+            writeProtoBytesField(entry, 1, buildWeatherAqiUnitValue(day))
             writeProtoBytesField(entry, 2, buildWeatherRange(day.optInt("conditionCode", XIAOMI_WEATHER_CLEAR_SKY), day.optInt("conditionCode", XIAOMI_WEATHER_CLEAR_SKY)))
-            writeProtoBytesField(entry, 3, buildWeatherRange(day.optInt("temperatureMinC", 0), day.optInt("temperatureMaxC", 0)))
+            writeProtoBytesField(entry, 3, buildWeatherRange(day.optInt("temperatureMaxC", 0), day.optInt("temperatureMinC", 0)))
             writeProtoStringField(entry, 4, "℃")
             val sunrise = day.optString("sunrise", "")
             val sunset = day.optString("sunset", "")
@@ -3216,11 +3701,11 @@ class DirectWatchPlugin : Plugin() {
         }
 
         val entries = java.io.ByteArrayOutputStream()
-        val count = minOf(hourly.length(), 24)
+        val count = minOf(hourly.length(), 23)
         for (index in 0 until count) {
             val hour = hourly.optJSONObject(index) ?: continue
             val entry = java.io.ByteArrayOutputStream()
-            writeProtoBytesField(entry, 1, buildWeatherUnitValue(0, ""))
+            writeProtoBytesField(entry, 1, buildWeatherAqiUnitValue(hour))
             writeProtoBytesField(entry, 2, buildWeatherRange(0, hour.optInt("conditionCode", XIAOMI_WEATHER_CLEAR_SKY)))
             writeProtoBytesField(entry, 3, buildWeatherRange(0, hour.optInt("temperatureC", 0)))
             hour.optNullableInt("windSpeedBeaufort")?.let { speed ->
@@ -3279,14 +3764,20 @@ class DirectWatchPlugin : Plugin() {
     private fun buildWeatherUnitValue(value: Int, unit: String): ByteArray {
         val unitValue = java.io.ByteArrayOutputStream()
         writeProtoStringField(unitValue, 1, unit)
-        writeProtoInt32Field(unitValue, 2, value)
+        writeProtoSInt32Field(unitValue, 2, value)
         return unitValue.toByteArray()
+    }
+
+    private fun buildWeatherAqiUnitValue(item: JSONObject): ByteArray {
+        val value = item.optNullableInt("aqi") ?: 0
+        val label = item.optString("aqiLabel", "").ifBlank { "Unknown" }
+        return buildWeatherUnitValue(value, label)
     }
 
     private fun buildWeatherRange(from: Int, to: Int): ByteArray {
         val range = java.io.ByteArrayOutputStream()
-        writeProtoInt32Field(range, 1, from)
-        writeProtoInt32Field(range, 2, to)
+        writeProtoSInt32Field(range, 1, from)
+        writeProtoSInt32Field(range, 2, to)
         return range.toByteArray()
     }
 
@@ -3311,6 +3802,21 @@ class DirectWatchPlugin : Plugin() {
 
     private fun JSONObject.optNullableDouble(key: String): Double? {
         return if (has(key) && !isNull(key)) optDouble(key) else null
+    }
+
+    private fun JSONArray?.optNullableInt(index: Int): Int? {
+        val array = this ?: return null
+        return if (index in 0 until array.length() && !array.isNull(index)) array.optInt(index) else null
+    }
+
+    private fun JSONArray?.optNullableDouble(index: Int): Double? {
+        val array = this ?: return null
+        return if (index in 0 until array.length() && !array.isNull(index)) array.optDouble(index) else null
+    }
+
+    private fun JSONArray?.optNullableString(index: Int): String? {
+        val array = this ?: return null
+        return if (index in 0 until array.length() && !array.isNull(index)) array.optString(index).takeIf { it.isNotBlank() } else null
     }
 
     private fun classicActivityFileIds(bytes: ByteArray, decryptionKey: ByteArray?): List<ByteArray> {
@@ -6939,7 +7445,7 @@ class DirectWatchPlugin : Plugin() {
                     val packet = decryptedPackets[index]
                     Log.i(
                         TAG,
-                        "classic bridge incoming command type=${packet.optInt("commandType", -1)} subtype=${packet.optInt("commandSubtype", -1)} raw=${packet.optString("rawHex")}",
+                        "classic bridge incoming command type=${packet.optInt("commandType", -1)} subtype=${packet.optInt("commandSubtype", -1)} status=${packet.optInt("commandStatus", -1)} raw=${packet.optString("rawHex")}",
                     )
                     if (
                         packet.optString("channel") == "command" &&
@@ -7307,6 +7813,11 @@ class DirectWatchPlugin : Plugin() {
         var packetCount: Int = 0,
         val subscribed: MutableList<JSObject> = mutableListOf(),
         val packets: java.util.ArrayDeque<JSObject> = java.util.ArrayDeque(),
+    )
+
+    private data class WeatherLocationResolution(
+        val payload: JSONObject,
+        val changed: Boolean,
     )
 
     private data class ClassicProbeParse(

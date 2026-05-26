@@ -226,6 +226,102 @@ function hasMeaningfulWorkoutPayload(payload: DeviceHealthDailySummaryPayload) {
   ));
 }
 
+async function getExistingDeviceHealthRawPayload(input: {
+  athleteId: string;
+  entryDate: string;
+  provider: DeviceHealthProvider;
+}) {
+  const result = await pool.query<{ raw_payload_json: Record<string, unknown> | null }>(
+    `
+      SELECT raw_payload_json
+      FROM device_health_daily_summaries
+      WHERE athlete_id = $1
+        AND provider = $2
+        AND entry_date = $3::date
+      LIMIT 1
+    `,
+    [input.athleteId, input.provider, input.entryDate],
+  );
+
+  return result.rows[0]?.raw_payload_json ?? null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function readRawNumber(value: unknown) {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+
+  const numberValue = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(numberValue) ? numberValue : null;
+}
+
+function keepMaxRawNumber(
+  merged: Record<string, unknown>,
+  existing: Record<string, unknown>,
+  incoming: Record<string, unknown>,
+  key: string,
+) {
+  const existingValue = readRawNumber(existing[key]);
+  const incomingValue = readRawNumber(incoming[key]);
+  if (existingValue === null && incomingValue === null) {
+    return;
+  }
+
+  merged[key] = Math.max(existingValue ?? Number.NEGATIVE_INFINITY, incomingValue ?? Number.NEGATIVE_INFINITY);
+}
+
+function keepBestRawSteps(
+  merged: Record<string, unknown>,
+  existing: Record<string, unknown>,
+  incoming: Record<string, unknown>,
+) {
+  const existingSteps = readRawNumber(existing.steps);
+  const incomingSteps = readRawNumber(incoming.steps);
+  const incomingSource = typeof incoming.stepsSource === "string" ? incoming.stepsSource : null;
+
+  if (incomingSource === "minute-details-partial") {
+    if (existingSteps !== null) {
+      merged.steps = existingSteps;
+      merged.stepsSource = existing.stepsSource ?? "preserved-existing";
+    } else {
+      delete merged.steps;
+    }
+    return;
+  }
+
+  if (existingSteps === null && incomingSteps === null) {
+    return;
+  }
+
+  if (incomingSteps !== null && existingSteps !== null && existingSteps > incomingSteps) {
+    merged.steps = existingSteps;
+    merged.stepsSource = existing.stepsSource ?? "preserved-existing";
+    return;
+  }
+
+  merged.steps = incomingSteps ?? existingSteps;
+}
+
+function mergeDeviceHealthRawPayload(
+  existingRawPayload: Record<string, unknown> | null,
+  incomingRawPayload: Record<string, unknown> | null | undefined,
+) {
+  const existing = isRecord(existingRawPayload) ? existingRawPayload : {};
+  const incoming = isRecord(incomingRawPayload) ? incomingRawPayload : {};
+  const merged = { ...existing, ...incoming };
+
+  keepBestRawSteps(merged, existing, incoming);
+  ["stepCount", "totalSteps", "calories", "trainingLoadDay", "trainingLoadWeek", "vitality"].forEach((key) => {
+    keepMaxRawNumber(merged, existing, incoming, key);
+  });
+
+  return merged;
+}
+
 function mapDeviceHealthDailySummary(
   row: DeviceHealthDailySummaryRow,
 ): DeviceHealthDailySummary {
@@ -452,6 +548,12 @@ export async function upsertDeviceHealthDailySummary(input: {
   const hasHeartRatePayload = hasMeaningfulHeartRatePayload(input.payload);
   const hasOxygenSaturationPayload = hasMeaningfulOxygenSaturationPayload(input.payload);
   const hasWorkoutPayload = hasMeaningfulWorkoutPayload(input.payload);
+  const existingRawPayload = await getExistingDeviceHealthRawPayload({
+    athleteId: input.athleteId,
+    entryDate: input.payload.entryDate,
+    provider: input.payload.provider,
+  });
+  const mergedRawPayload = mergeDeviceHealthRawPayload(existingRawPayload, input.payload.rawPayload);
   const result = await pool.query<DeviceHealthDailySummaryRow>(
     `
       INSERT INTO device_health_daily_summaries (
@@ -541,12 +643,12 @@ export async function upsertDeviceHealthDailySummary(input: {
         oxygen_saturation_max_percent = CASE WHEN $33 THEN EXCLUDED.oxygen_saturation_max_percent ELSE device_health_daily_summaries.oxygen_saturation_max_percent END,
         oxygen_saturation_latest_percent = CASE WHEN $33 THEN EXCLUDED.oxygen_saturation_latest_percent ELSE device_health_daily_summaries.oxygen_saturation_latest_percent END,
         oxygen_saturation_sample_count = CASE WHEN $33 THEN EXCLUDED.oxygen_saturation_sample_count ELSE device_health_daily_summaries.oxygen_saturation_sample_count END,
-        workout_count = CASE WHEN $34 THEN EXCLUDED.workout_count ELSE device_health_daily_summaries.workout_count END,
-        workout_duration_minutes = CASE WHEN $34 THEN EXCLUDED.workout_duration_minutes ELSE device_health_daily_summaries.workout_duration_minutes END,
-        workout_distance_meters = CASE WHEN $34 THEN EXCLUDED.workout_distance_meters ELSE device_health_daily_summaries.workout_distance_meters END,
-        workout_active_calories = CASE WHEN $34 THEN EXCLUDED.workout_active_calories ELSE device_health_daily_summaries.workout_active_calories END,
-        workout_average_hr = CASE WHEN $34 THEN EXCLUDED.workout_average_hr ELSE device_health_daily_summaries.workout_average_hr END,
-        workout_max_hr = CASE WHEN $34 THEN EXCLUDED.workout_max_hr ELSE device_health_daily_summaries.workout_max_hr END,
+        workout_count = CASE WHEN $34 THEN GREATEST(device_health_daily_summaries.workout_count, EXCLUDED.workout_count) ELSE device_health_daily_summaries.workout_count END,
+        workout_duration_minutes = CASE WHEN $34 THEN COALESCE(GREATEST(device_health_daily_summaries.workout_duration_minutes, EXCLUDED.workout_duration_minutes), EXCLUDED.workout_duration_minutes, device_health_daily_summaries.workout_duration_minutes) ELSE device_health_daily_summaries.workout_duration_minutes END,
+        workout_distance_meters = CASE WHEN $34 THEN COALESCE(GREATEST(device_health_daily_summaries.workout_distance_meters, EXCLUDED.workout_distance_meters), EXCLUDED.workout_distance_meters, device_health_daily_summaries.workout_distance_meters) ELSE device_health_daily_summaries.workout_distance_meters END,
+        workout_active_calories = CASE WHEN $34 THEN COALESCE(GREATEST(device_health_daily_summaries.workout_active_calories, EXCLUDED.workout_active_calories), EXCLUDED.workout_active_calories, device_health_daily_summaries.workout_active_calories) ELSE device_health_daily_summaries.workout_active_calories END,
+        workout_average_hr = CASE WHEN $34 THEN COALESCE(EXCLUDED.workout_average_hr, device_health_daily_summaries.workout_average_hr) ELSE device_health_daily_summaries.workout_average_hr END,
+        workout_max_hr = CASE WHEN $34 THEN COALESCE(GREATEST(device_health_daily_summaries.workout_max_hr, EXCLUDED.workout_max_hr), EXCLUDED.workout_max_hr, device_health_daily_summaries.workout_max_hr) ELSE device_health_daily_summaries.workout_max_hr END,
         raw_payload_json = jsonb_strip_nulls(EXCLUDED.raw_payload_json || jsonb_build_object(
           'preservedExistingSleep', CASE WHEN $31 THEN NULL ELSE TRUE END,
           'preservedExistingHeartRate', CASE WHEN $32 THEN NULL ELSE TRUE END,
@@ -619,7 +721,7 @@ export async function upsertDeviceHealthDailySummary(input: {
       input.payload.workout?.activeCalories ?? null,
       input.payload.workout?.averageHeartRateBpm ?? null,
       input.payload.workout?.maxHeartRateBpm ?? null,
-      JSON.stringify(input.payload.rawPayload ?? {}),
+      JSON.stringify(mergedRawPayload),
       syncedAt,
       hasSleepPayload,
       hasHeartRatePayload,

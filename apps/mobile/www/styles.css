@@ -5848,6 +5848,249 @@ svg.watch-parameter-preview {
   gap: 12px;
 }
 
+.watch-workouts-card.is-summary {
+  gap: 14px;
+}
+
+.watch-workouts-summary-body {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.watch-workouts-summary-main {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr);
+  gap: 12px;
+  align-items: stretch;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid rgba(15, 118, 110, 0.12);
+  border-radius: 18px;
+  background:
+    linear-gradient(135deg, rgba(240, 253, 250, 0.92), rgba(255, 255, 255, 0.96)),
+    #ffffff;
+}
+
+.watch-workouts-summary-main > span {
+  display: block;
+  min-height: 54px;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+.watch-workouts-summary-main div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.watch-workouts-summary-main strong {
+  color: var(--text);
+  font-size: 2rem;
+  font-weight: 950;
+  line-height: 1;
+}
+
+.watch-workouts-summary-main small {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 840;
+  line-height: 1.25;
+}
+
+.watch-workouts-summary-grid,
+.watch-training-history-total {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+
+.watch-workouts-summary-grid article,
+.watch-training-history-total > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  min-height: 74px;
+  padding: 10px;
+  border: 1px solid rgba(15, 118, 110, 0.1);
+  border-radius: 15px;
+  background: rgba(248, 250, 252, 0.92);
+}
+
+.watch-workouts-summary-grid span,
+.watch-training-history-total span {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 900;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+
+.watch-workouts-summary-grid strong,
+.watch-training-history-total strong {
+  color: var(--text);
+  font-size: 0.94rem;
+  font-weight: 950;
+  line-height: 1.12;
+  overflow-wrap: anywhere;
+}
+
+.watch-training-history-total small {
+  color: var(--accent-dark);
+  font-size: 0.68rem;
+  font-weight: 840;
+  line-height: 1.2;
+}
+
+.watch-training-history-screen {
+  gap: 13px;
+}
+
+.watch-training-history-total {
+  padding: 12px;
+  border: 1px solid rgba(15, 118, 110, 0.1);
+  border-radius: 20px;
+  background:
+    linear-gradient(135deg, rgba(240, 253, 250, 0.78), rgba(255, 255, 255, 0.94)),
+    #ffffff;
+}
+
+.watch-training-date-list {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.watch-training-date-group {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 13px;
+  border: 1px solid rgba(15, 118, 110, 0.1);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 12px 26px rgba(13, 44, 39, 0.06);
+}
+
+.watch-training-date-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+  min-width: 0;
+}
+
+.watch-training-date-head div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.watch-training-date-head span {
+  color: var(--accent-dark);
+  font-size: 0.68rem;
+  font-weight: 950;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+
+.watch-training-date-head strong {
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 950;
+  line-height: 1.15;
+}
+
+.watch-training-date-head small {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 820;
+  line-height: 1.25;
+  text-align: right;
+}
+
+.watch-training-history-list {
+  display: grid;
+  gap: 9px;
+  min-width: 0;
+}
+
+.watch-training-history-item {
+  display: grid;
+  grid-template-columns: 6px minmax(0, 1fr) 30px;
+  gap: 11px;
+  align-items: stretch;
+  min-width: 0;
+  min-height: 94px;
+  padding: 12px;
+  border: 1px solid rgba(15, 118, 110, 0.1);
+  border-radius: 17px;
+  background: rgba(248, 250, 252, 0.88);
+  color: inherit;
+  text-align: left;
+}
+
+.watch-training-type-dot {
+  width: 6px;
+  min-height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+.watch-training-history-content {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  align-content: center;
+}
+
+.watch-training-history-content strong {
+  color: var(--text);
+  font-size: 0.98rem;
+  font-weight: 950;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.watch-training-history-content small,
+.watch-training-history-content em {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-style: normal;
+  font-weight: 780;
+  line-height: 1.2;
+}
+
+.watch-training-history-content em {
+  color: var(--accent-dark);
+}
+
+.watch-training-history-item .watch-workout-chip-list {
+  gap: 6px;
+}
+
+.watch-training-history-item .watch-workout-chip-list span {
+  min-height: 25px;
+  padding: 0 8px;
+  font-size: 0.68rem;
+}
+
+.watch-training-history-arrow {
+  display: grid;
+  place-items: center;
+  align-self: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  background: rgba(15, 118, 110, 0.08);
+  color: var(--accent-dark);
+  font-size: 1.4rem;
+  font-weight: 950;
+  line-height: 1;
+}
+
 .watch-workout-item {
   min-width: 0;
   overflow: hidden;

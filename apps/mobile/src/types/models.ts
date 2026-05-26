@@ -194,6 +194,8 @@ export interface MobileAppState {
   watchDetailPeriod: WatchDetailPeriod;
   watchExpandedWorkoutId: string | null;
   watchExpandedWorkoutGraphId: string | null;
+  watchWorkoutHistoryOpen: boolean;
+  watchWorkoutHistoryPeriod: WatchDetailPeriod;
   watchWorkoutDetailId: string | null;
   watchSettingsOpen: boolean;
   isOnline: boolean;

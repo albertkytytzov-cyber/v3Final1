@@ -16,6 +16,7 @@ export interface DirectWatchWeatherPayload {
 
 export interface DirectWatchWeatherCurrent {
   aqi?: number | null;
+  aqiLabel?: string | null;
   conditionCode: number;
   humidity?: number | null;
   pressureHpa?: number | null;
@@ -26,16 +27,22 @@ export interface DirectWatchWeatherCurrent {
 }
 
 export interface DirectWatchWeatherDaily {
+  aqi?: number | null;
+  aqiLabel?: string | null;
   conditionCode: number;
   sunrise?: string | null;
   sunset?: string | null;
   temperatureMaxC: number;
   temperatureMinC: number;
+  uvIndex?: number | null;
 }
 
 export interface DirectWatchWeatherHourly {
+  aqi?: number | null;
+  aqiLabel?: string | null;
   conditionCode: number;
   temperatureC: number;
+  uvIndex?: number | null;
   windDirection?: number | null;
   windSpeedBeaufort?: number | null;
 }
@@ -146,7 +153,10 @@ export async function fetchDirectWatchWeatherPayload(
   url.searchParams.set("timezone", "auto");
   url.searchParams.set("forecast_days", "7");
 
-  const response = await fetchWithTimeout(url, 5_000);
+  const [response, airQuality] = await Promise.all([
+    fetchWithTimeout(url, 5_000),
+    fetchDirectWatchAirQualityPayload(location).catch(() => null),
+  ]);
   if (!response.ok) {
     throw new Error("Погодный сервис не ответил.");
   }
@@ -155,9 +165,9 @@ export async function fetchDirectWatchWeatherPayload(
   return {
     altitude: 0,
     cityName: location.city,
-    current: buildCurrentWeather(data),
-    daily: buildDailyWeather(data),
-    hourly: buildHourlyWeather(data),
+    current: buildCurrentWeather(data, airQuality),
+    daily: buildDailyWeather(data, airQuality),
+    hourly: buildHourlyWeather(data, airQuality),
     isCurrentLocation: true,
     latitude: location.latitude,
     locationKey: buildDirectWatchLocationKey(location),
@@ -204,6 +214,10 @@ function formatDirectWatchPublicationTimestamp(value?: string | null) {
     `${sign}${pad2(offsetHours)}:${pad2(offsetRemainderMinutes)}`;
 }
 
+function formatDirectWatchOptionalTimestamp(value?: string | null) {
+  return value ? formatDirectWatchPublicationTimestamp(value) : "";
+}
+
 function pad2(value: number) {
   return String(value).padStart(2, "0");
 }
@@ -217,42 +231,93 @@ function buildDirectWatchLocationKey(location: DirectWatchWeatherLocation) {
     return DEFAULT_WEATHER_LOCATION_KEY;
   }
 
-  return `accu:${Math.abs(`${location.city}:${location.latitude}:${location.longitude}`.split("").reduce((sum, char) => sum + char.charCodeAt(0), 0)) % 1_000_000}`;
+  return `accu:${Math.abs(javaStringHashCode(location.city)) % 1_000_000}`;
 }
 
-function buildCurrentWeather(data: OpenMeteoForecastResponse): DirectWatchWeatherCurrent | null {
+function javaStringHashCode(value: string) {
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = Math.imul(31, hash) + value.charCodeAt(index);
+    hash |= 0;
+  }
+  return hash;
+}
+
+async function fetchDirectWatchAirQualityPayload(
+  location: DirectWatchWeatherLocation,
+): Promise<OpenMeteoAirQualityResponse> {
+  const url = new URL("https://air-quality-api.open-meteo.com/v1/air-quality");
+  url.searchParams.set("latitude", String(location.latitude));
+  url.searchParams.set("longitude", String(location.longitude));
+  url.searchParams.set("current", ["european_aqi", "uv_index"].join(","));
+  url.searchParams.set("hourly", ["european_aqi", "uv_index"].join(","));
+  url.searchParams.set("timezone", "auto");
+  url.searchParams.set("forecast_days", "7");
+
+  const response = await fetchWithTimeout(url, 5_000);
+  if (!response.ok) {
+    throw new Error("Погодный сервис качества воздуха не ответил.");
+  }
+
+  return response.json() as Promise<OpenMeteoAirQualityResponse>;
+}
+
+function buildCurrentWeather(
+  data: OpenMeteoForecastResponse,
+  airQuality: OpenMeteoAirQualityResponse | null,
+): DirectWatchWeatherCurrent | null {
   const current = data.current;
   const temperatureC = normalizeNumber(current?.temperature_2m);
   if (!current || temperatureC === null) {
     return null;
   }
 
+  const aqi = normalizeInteger(airQuality?.current?.european_aqi);
+  const uvIndex = normalizeInteger(airQuality?.current?.uv_index);
   return {
+    aqi,
+    aqiLabel: formatEuropeanAqiLabel(aqi),
     conditionCode: mapOpenMeteoCodeToXiaomi(current.weather_code),
     humidity: normalizeInteger(current.relative_humidity_2m),
     pressureHpa: normalizeNumber(current.pressure_msl),
     temperatureC: Math.round(temperatureC),
+    uvIndex,
     windDirection: normalizeInteger(current.wind_direction_10m),
     windSpeedBeaufort: kmhToBeaufort(current.wind_speed_10m),
   };
 }
 
-function buildDailyWeather(data: OpenMeteoForecastResponse): DirectWatchWeatherDaily[] {
+function buildDailyWeather(
+  data: OpenMeteoForecastResponse,
+  airQuality: OpenMeteoAirQualityResponse | null,
+): DirectWatchWeatherDaily[] {
   const daily = data.daily;
   if (!daily?.time?.length) {
     return [];
   }
 
-  return daily.time.map((_, index) => ({
-    conditionCode: mapOpenMeteoCodeToXiaomi(daily.weather_code?.[index]),
-    sunrise: daily.sunrise?.[index] ?? null,
-    sunset: daily.sunset?.[index] ?? null,
-    temperatureMaxC: Math.round(daily.temperature_2m_max?.[index] ?? 0),
-    temperatureMinC: Math.round(daily.temperature_2m_min?.[index] ?? 0),
-  }));
+  const dailyAqi = aggregateHourlyDailyMax(airQuality, "european_aqi");
+  const dailyUv = aggregateHourlyDailyMax(airQuality, "uv_index");
+
+  return daily.time.map((date, index) => {
+    const aqi = normalizeInteger(dailyAqi.get(date));
+    return {
+      aqi,
+      aqiLabel: formatEuropeanAqiLabel(aqi),
+      conditionCode: mapOpenMeteoCodeToXiaomi(daily.weather_code?.[index]),
+      sunrise: formatDirectWatchOptionalTimestamp(daily.sunrise?.[index]),
+      sunset: formatDirectWatchOptionalTimestamp(daily.sunset?.[index]),
+      temperatureMaxC: Math.round(daily.temperature_2m_max?.[index] ?? 0),
+      temperatureMinC: Math.round(daily.temperature_2m_min?.[index] ?? 0),
+      uvIndex: normalizeInteger(dailyUv.get(date)),
+    };
+  });
 }
 
-function buildHourlyWeather(data: OpenMeteoForecastResponse): DirectWatchWeatherHourly[] {
+function buildHourlyWeather(
+  data: OpenMeteoForecastResponse,
+  airQuality: OpenMeteoAirQualityResponse | null,
+): DirectWatchWeatherHourly[] {
   const hourly = data.hourly;
   if (!hourly?.time?.length) {
     return [];
@@ -263,13 +328,51 @@ function buildHourlyWeather(data: OpenMeteoForecastResponse): DirectWatchWeather
   const start = firstFutureIndex >= 0 ? firstFutureIndex : 0;
   return hourly.time.slice(start, start + 24).map((_, offset) => {
     const index = start + offset;
+    const airIndex = airQuality?.hourly?.time?.indexOf(hourly.time?.[index] ?? "") ?? -1;
+    const aqi = airIndex >= 0 ? normalizeInteger(airQuality?.hourly?.european_aqi?.[airIndex]) : null;
     return {
+      aqi,
+      aqiLabel: formatEuropeanAqiLabel(aqi),
       conditionCode: mapOpenMeteoCodeToXiaomi(hourly.weather_code?.[index]),
       temperatureC: Math.round(hourly.temperature_2m?.[index] ?? 0),
+      uvIndex: airIndex >= 0 ? normalizeInteger(airQuality?.hourly?.uv_index?.[airIndex]) : null,
       windDirection: normalizeInteger(hourly.wind_direction_10m?.[index]),
       windSpeedBeaufort: kmhToBeaufort(hourly.wind_speed_10m?.[index]),
     };
   });
+}
+
+function aggregateHourlyDailyMax(
+  data: OpenMeteoAirQualityResponse | null,
+  key: "european_aqi" | "uv_index",
+) {
+  const result = new Map<string, number>();
+  const times = data?.hourly?.time ?? [];
+  const values = data?.hourly?.[key] ?? [];
+
+  times.forEach((time, index) => {
+    const date = time.split("T")[0];
+    const value = normalizeNumber(values[index]);
+    if (!date || value === null) {
+      return;
+    }
+    const previous = result.get(date);
+    if (previous === undefined || value > previous) {
+      result.set(date, value);
+    }
+  });
+
+  return result;
+}
+
+function formatEuropeanAqiLabel(value: number | null) {
+  if (value === null) return "Нет данных";
+  if (value <= 20) return "Хорошо";
+  if (value <= 40) return "Норма";
+  if (value <= 60) return "Средне";
+  if (value <= 80) return "Плохо";
+  if (value <= 100) return "Очень плохо";
+  return "Опасно";
 }
 
 function mapOpenMeteoCodeToXiaomi(code: unknown) {
@@ -372,5 +475,17 @@ interface OpenMeteoForecastResponse {
     weather_code?: number[];
     wind_direction_10m?: number[];
     wind_speed_10m?: number[];
+  };
+}
+
+interface OpenMeteoAirQualityResponse {
+  current?: {
+    european_aqi?: number;
+    uv_index?: number;
+  };
+  hourly?: {
+    european_aqi?: number[];
+    time?: string[];
+    uv_index?: number[];
   };
 }
