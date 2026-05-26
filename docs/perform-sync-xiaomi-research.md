@@ -362,7 +362,7 @@
 - `DIRECT_WATCH_SERVICE_KEEP_ALIVE_MS = 2 hours`
 - `DIRECT_WATCH_AUTO_SYNC_INTERVAL_MS = 30 minutes`
 - `DIRECT_WATCH_HISTORY_SYNC_DAYS = 30`
-- `CLASSIC_ACTIVITY_FILE_PROBE_LIMIT = 128`
+- `CLASSIC_ACTIVITY_FILE_PROBE_LIMIT = 512`
 - `DIRECT_WATCH_TIME_OFFSET_MINUTES = 0` в `direct-watch.ts`; ручной `-90`
   больше не используется.
 
@@ -384,25 +384,26 @@
    - Осталось проверить по логам DirectWatch после установки на Android.
 
 3. Лимит файлов может быть слишком мал.
-   - Сейчас в коде `CLASSIC_ACTIVITY_FILE_PROBE_LIMIT = 128`.
+   - Сейчас в коде `CLASSIC_ACTIVITY_FILE_PROBE_LIMIT = 512`.
    - В проверке Gadgetbridge на Redmi Watch 5 за одну синхронизацию было
      найдено `71` raw files.
-   - Риск остается: при первой синхронизации истории фиксированного числа может
-     не хватить,
-     особенно если есть сон, ручные замеры, несколько тренировок, GPS и
-     дополнительные файлы прошивки.
+   - Риск стал ниже, но остается архитектурно: при первой синхронизации истории
+     фиксированного числа может не хватить, особенно если есть сон, ручные
+     замеры, несколько тренировок, GPS и дополнительные файлы прошивки.
    - Правильнее сделать лимит динамическим или читать очередь пачками до
      исчерпания нужных дат, а не резать общий список фиксированным числом.
 
-4. Тренировки парсятся поверхностно.
-   - Сейчас PERFORM строит тренировки в основном из generic activity samples и
-     выводит duration по точкам.
-   - Еще нет полноценного аналога `WorkoutSummaryParser`:
-     duration, calories, distance, steps, HR min/avg/max, зоны ЧСС,
-     training effect, workout load, sport type, recovery, pace/speed.
-   - GPS/track файлы тоже пока не разобраны.
-   - Риск: в тренировке есть только старт и пульс, но нет длительности,
-     калорий, дистанции и шагов.
+4. Тренировки больше не парсятся только поверхностно.
+   - 26.05 PERFORM сверили с `WorkoutSummaryParser` Gadgetbridge: основные
+     summary subtype/version закрыты для freestyle, walking/running,
+     treadmill, cycling, indoor cycling, HIIT, elliptical, rowing, jump rope и
+     pool swimming.
+   - Summary уже дает duration, calories, distance/steps где они есть,
+     HR min/avg/max, зоны ЧСС, training effect/load/recovery и профиль спорта.
+   - GPS/track v1/v2 разобран отдельно.
+   - Остающийся риск: sports DETAILS с точками пульса внутри тренировки -
+     собственная экспериментальная часть PERFORM, потому что Gadgetbridge не
+     дает готового parser для этих файлов.
 
 5. Ручные замеры не выделены как отдельный источник.
    - В Gadgetbridge есть `ManualSamplesParser`.
@@ -737,18 +738,19 @@ parser по реальным raw-файлам.
   -> ACK.
 - Дальше проверять новые типы файлов по фактическим `activityFileProbeRequests`,
   без fallback на "похожие" ID из payload.
-- `CLASSIC_ACTIVITY_FILE_PROBE_LIMIT` поднят до `128`. По проверке Gadgetbridge
+- `CLASSIC_ACTIVITY_FILE_PROBE_LIMIT` поднят до `512`. По проверке Gadgetbridge
   было видно, что `64` находится на границе: эталонный клиент сохранил `71` raw
   file. Следующий шаг - уйти от фиксированного лимита к date-scoped очереди без
   жесткого потолка.
 
 Приоритет 2 - тренировки:
 
-- Проверить новый walking v2 parser на следующей свежей тренировке: старая
-  тренировка 23.05 уже сохранена в кэше, но часы 24.05 больше не отдают ее ID в
-  inventory.
-- Добавить такие же точные parsers для других subtype, которые реально появятся
-  в логах спортсменов.
+- Проверять следующий свежий workout по фактическим
+  `activityFileProbeRequests`: subtype/version, CRC, summary, details, GPS и
+  сохранение в API.
+- Summary-parser coverage по основным subtype/version уже сверено с
+  Gadgetbridge 26.05; новые parser'ы добавлять только если в логах появится
+  неизвестный subtype/version.
 - GPS/track parser уже добавлен для версий `1/2`; следующий шаг - связать GPS с
   HR-точками на следующей свежей тренировке и проверить, что экран показывает
   duration/calories/distance/steps/zones без дублей.
