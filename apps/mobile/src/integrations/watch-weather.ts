@@ -173,7 +173,7 @@ export async function fetchDirectWatchWeatherPayload(
     locationKey: buildDirectWatchLocationKey(location),
     locationName: location.city,
     longitude: location.longitude,
-    publicationTimestamp: formatDirectWatchPublicationTimestamp(data.current?.time),
+    publicationTimestamp: formatDirectWatchPublicationTimestamp(data.current?.time, data.utc_offset_seconds),
   };
 }
 
@@ -196,7 +196,12 @@ export function buildDirectWatchWeatherLocationPayload(
   };
 }
 
-function formatDirectWatchPublicationTimestamp(value?: string | null) {
+function formatDirectWatchPublicationTimestamp(value?: string | null, utcOffsetSeconds?: number | null) {
+  const timestampWithWeatherOffset = formatOpenMeteoLocalTimestamp(value, utcOffsetSeconds);
+  if (timestampWithWeatherOffset) {
+    return timestampWithWeatherOffset;
+  }
+
   const date = value ? new Date(value) : new Date();
   const safeDate = Number.isNaN(date.getTime()) ? new Date() : date;
   const offsetMinutes = -safeDate.getTimezoneOffset();
@@ -214,12 +219,32 @@ function formatDirectWatchPublicationTimestamp(value?: string | null) {
     `${sign}${pad2(offsetHours)}:${pad2(offsetRemainderMinutes)}`;
 }
 
-function formatDirectWatchOptionalTimestamp(value?: string | null) {
-  return value ? formatDirectWatchPublicationTimestamp(value) : "";
+function formatDirectWatchOptionalTimestamp(value?: string | null, utcOffsetSeconds?: number | null) {
+  return value ? formatDirectWatchPublicationTimestamp(value, utcOffsetSeconds) : "";
 }
 
 function pad2(value: number) {
   return String(value).padStart(2, "0");
+}
+
+function formatOpenMeteoLocalTimestamp(value?: string | null, utcOffsetSeconds?: number | null) {
+  const offset = normalizeInteger(utcOffsetSeconds);
+  if (!value || offset === null) {
+    return null;
+  }
+
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(value);
+  if (!match) {
+    return null;
+  }
+
+  const sign = offset >= 0 ? "+" : "-";
+  const absoluteOffset = Math.abs(offset);
+  const offsetHours = Math.floor(absoluteOffset / 3600);
+  const offsetMinutes = Math.floor((absoluteOffset % 3600) / 60);
+
+  return `${match[1]}-${match[2]}-${match[3]}T${match[4]}:${match[5]}:${match[6] ?? "00"}` +
+    `${sign}${pad2(offsetHours)}:${pad2(offsetMinutes)}`;
 }
 
 function buildDirectWatchLocationKey(location: DirectWatchWeatherLocation) {
@@ -298,6 +323,7 @@ function buildDailyWeather(
 
   const dailyAqi = aggregateHourlyDailyMax(airQuality, "european_aqi");
   const dailyUv = aggregateHourlyDailyMax(airQuality, "uv_index");
+  const utcOffsetSeconds = normalizeInteger(data.utc_offset_seconds);
 
   return daily.time.map((date, index) => {
     const aqi = normalizeInteger(dailyAqi.get(date));
@@ -305,8 +331,8 @@ function buildDailyWeather(
       aqi,
       aqiLabel: formatEuropeanAqiLabel(aqi),
       conditionCode: mapOpenMeteoCodeToXiaomi(daily.weather_code?.[index]),
-      sunrise: formatDirectWatchOptionalTimestamp(daily.sunrise?.[index]),
-      sunset: formatDirectWatchOptionalTimestamp(daily.sunset?.[index]),
+      sunrise: formatDirectWatchOptionalTimestamp(daily.sunrise?.[index], utcOffsetSeconds),
+      sunset: formatDirectWatchOptionalTimestamp(daily.sunset?.[index], utcOffsetSeconds),
       temperatureMaxC: Math.round(daily.temperature_2m_max?.[index] ?? 0),
       temperatureMinC: Math.round(daily.temperature_2m_min?.[index] ?? 0),
       uvIndex: normalizeInteger(dailyUv.get(date)),
@@ -476,6 +502,9 @@ interface OpenMeteoForecastResponse {
     wind_direction_10m?: number[];
     wind_speed_10m?: number[];
   };
+  timezone?: string;
+  timezone_abbreviation?: string;
+  utc_offset_seconds?: number;
 }
 
 interface OpenMeteoAirQualityResponse {

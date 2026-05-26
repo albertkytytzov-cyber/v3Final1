@@ -3273,7 +3273,13 @@ class DirectWatchPlugin : Plugin() {
             payload.put("current", buildOpenMeteoCurrentWeather(data, airQuality))
             payload.put("daily", buildOpenMeteoDailyWeather(data, airQuality))
             payload.put("hourly", buildOpenMeteoHourlyWeather(data, airQuality))
-            payload.put("publicationTimestamp", formatWeatherPublicationTimestamp(data.optJSONObject("current")?.optString("time", "")))
+            payload.put(
+                "publicationTimestamp",
+                formatWeatherPublicationTimestamp(
+                    data.optJSONObject("current")?.optString("time", ""),
+                    data.optNullableInt("utc_offset_seconds"),
+                ),
+            )
             Log.i(TAG, "classic native weather fetched ${describeWeatherPayload(payload)}")
             payload
         } catch (error: Exception) {
@@ -3349,6 +3355,7 @@ class DirectWatchPlugin : Plugin() {
         val sunsets = daily.optJSONArray("sunset")
         val dailyAqi = aggregateOpenMeteoHourlyDailyMax(airQuality, "european_aqi")
         val dailyUv = aggregateOpenMeteoHourlyDailyMax(airQuality, "uv_index")
+        val utcOffsetSeconds = data.optNullableInt("utc_offset_seconds")
         val result = JSONArray()
         val count = minOf(times.length(), 7)
 
@@ -3357,8 +3364,8 @@ class DirectWatchPlugin : Plugin() {
             val aqi = date?.let { dailyAqi[it] }
             val item = JSONObject()
             item.put("conditionCode", mapOpenMeteoCodeToXiaomi(weatherCodes.optNullableInt(index)))
-            item.put("sunrise", formatOptionalWeatherTimestamp(sunrises.optNullableString(index)))
-            item.put("sunset", formatOptionalWeatherTimestamp(sunsets.optNullableString(index)))
+            item.put("sunrise", formatOptionalWeatherTimestamp(sunrises.optNullableString(index), utcOffsetSeconds))
+            item.put("sunset", formatOptionalWeatherTimestamp(sunsets.optNullableString(index), utcOffsetSeconds))
             item.put("temperatureMaxC", maxTemperatures.optNullableDouble(index)?.roundToInt() ?: 0)
             item.put("temperatureMinC", minTemperatures.optNullableDouble(index)?.roundToInt() ?: 0)
             item.put("uvIndex", date?.let { dailyUv[it] }?.roundToInt())
@@ -3380,12 +3387,13 @@ class DirectWatchPlugin : Plugin() {
         val airTimes = airHourly?.optJSONArray("time")
         val hourlyAqi = airHourly?.optJSONArray("european_aqi")
         val hourlyUv = airHourly?.optJSONArray("uv_index")
+        val utcOffsetSeconds = data.optNullableInt("utc_offset_seconds")
         val result = JSONArray()
         val now = System.currentTimeMillis() - 60 * 60 * 1000L
         var start = 0
 
         for (index in 0 until times.length()) {
-            val timeMs = parseOpenMeteoLocalTimeMillis(times.optNullableString(index))
+            val timeMs = parseOpenMeteoLocalTimeMillis(times.optNullableString(index), utcOffsetSeconds)
             if (timeMs != null && timeMs >= now) {
                 start = index
                 break
@@ -3443,21 +3451,30 @@ class DirectWatchPlugin : Plugin() {
         return -1
     }
 
-    private fun parseOpenMeteoLocalTimeMillis(value: String?): Long? {
+    private fun parseOpenMeteoLocalTimeMillis(value: String?, utcOffsetSeconds: Int? = null): Long? {
         if (value.isNullOrBlank()) {
             return null
         }
         return try {
-            java.time.LocalDateTime.parse(value)
-                .atZone(java.time.ZoneId.systemDefault())
-                .toInstant()
+            val localDateTime = java.time.LocalDateTime.parse(value)
+            val instant = if (utcOffsetSeconds != null) {
+                localDateTime.atOffset(java.time.ZoneOffset.ofTotalSeconds(utcOffsetSeconds)).toInstant()
+            } else {
+                localDateTime.atZone(java.time.ZoneId.systemDefault()).toInstant()
+            }
+            instant
                 .toEpochMilli()
         } catch (_: Exception) {
             null
         }
     }
 
-    private fun formatWeatherPublicationTimestamp(value: String? = null): String {
+    private fun formatWeatherPublicationTimestamp(value: String? = null, utcOffsetSeconds: Int? = null): String {
+        val openMeteoTimestamp = formatOpenMeteoLocalTimestamp(value, utcOffsetSeconds)
+        if (openMeteoTimestamp != null) {
+            return openMeteoTimestamp
+        }
+
         val zonedDateTime = try {
             if (value.isNullOrBlank()) {
                 java.time.ZonedDateTime.now()
@@ -3470,8 +3487,23 @@ class DirectWatchPlugin : Plugin() {
         return zonedDateTime.format(java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME)
     }
 
-    private fun formatOptionalWeatherTimestamp(value: String?): String {
-        return if (value.isNullOrBlank()) "" else formatWeatherPublicationTimestamp(value)
+    private fun formatOptionalWeatherTimestamp(value: String?, utcOffsetSeconds: Int? = null): String {
+        return if (value.isNullOrBlank()) "" else formatWeatherPublicationTimestamp(value, utcOffsetSeconds)
+    }
+
+    private fun formatOpenMeteoLocalTimestamp(value: String?, utcOffsetSeconds: Int?): String? {
+        if (value.isNullOrBlank() || utcOffsetSeconds == null) {
+            return null
+        }
+
+        return try {
+            val localDateTime = java.time.LocalDateTime.parse(value)
+            localDateTime
+                .atOffset(java.time.ZoneOffset.ofTotalSeconds(utcOffsetSeconds))
+                .format(java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+        } catch (_: Exception) {
+            null
+        }
     }
 
     private fun formatEuropeanAqiLabel(value: Int?): String {
