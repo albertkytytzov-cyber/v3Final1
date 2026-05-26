@@ -761,6 +761,24 @@ parser по реальным raw-файлам.
   файлы с часов без новой записи на устройстве; корректность новых parsers
   нужно подтверждать на следующей свежей тренировке.
 
+Проверка 26.05 на реальном Redmi Watch 5:
+
+- В 07:56 EEST приложение успело скачать свежую freestyle-тренировку:
+  summary `6925156A0C0AA1` (`type=1`, `subtype=8`, `detailType=1`,
+  `version=10`) и details `6925156A0C03A0` (`type=1`, `subtype=8`,
+  `detailType=0`, `version=3`).
+- Оба файла пришли полностью: `crc=true`, `parsed=true`; details дал `246`
+  точек пульса. API сохранил тренировку 26.05:
+  duration `4` мин, calories `15`, HR `56/66/78`, samples `246`.
+- Повторный probe после ACK уже не показывает sports-файлы в inventory. Это
+  нормальное поведение: часы отдают только еще не подтвержденные файлы.
+- Запись была создана старой установленной сборкой до обновления workout
+  profiles, поэтому в API сначала стояли `missingMetrics=["distance","steps"]`.
+  Для `freestyle` это неверно: профиль `gym`, дистанция и шаги не обязательны.
+  Метаданные этой записи переотправлены без повторного ACK и без удаления
+  samples: `dataCompleteness=complete`, `missingMetrics=[]`,
+  `workoutProfile.id=gym`.
+
 Приоритет 3 - сон и история:
 
 - Логировать unsupported sleep file versions.
