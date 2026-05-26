@@ -21,6 +21,7 @@ export type DeviceWorkoutProfileId =
   | "generic"
   | "outdoor-locomotion"
   | "outdoor-distance"
+  | "outdoor-variable"
   | "treadmill"
   | "outdoor-cycling"
   | "indoor-cycling"
@@ -61,6 +62,12 @@ const DEVICE_WORKOUT_PROFILES: Record<DeviceWorkoutProfileId, DeviceWorkoutProfi
     label: "Outdoor distance sport",
     requiredMetrics: ["duration", "distance", "calories", "heartRate"],
     optionalMetrics: ["speed", "gps", "pace", "cadence", "elevation"],
+  },
+  "outdoor-variable": {
+    id: "outdoor-variable",
+    label: "Outdoor variable sport",
+    requiredMetrics: ["duration", "calories", "heartRate"],
+    optionalMetrics: ["distance", "steps", "pace", "speed", "gps", "cadence", "elevation"],
   },
   treadmill: {
     id: "treadmill",
@@ -125,8 +132,8 @@ const DEVICE_WORKOUT_PROFILES: Record<DeviceWorkoutProfileId, DeviceWorkoutProfi
   elliptical: {
     id: "elliptical",
     label: "Elliptical",
-    requiredMetrics: ["duration", "steps", "calories", "heartRate"],
-    optionalMetrics: ["cadence", "distance"],
+    requiredMetrics: ["duration", "calories", "heartRate"],
+    optionalMetrics: ["steps", "cadence", "distance"],
   },
   static: {
     id: "static",
@@ -137,12 +144,12 @@ const DEVICE_WORKOUT_PROFILES: Record<DeviceWorkoutProfileId, DeviceWorkoutProfi
 };
 
 const DEVICE_WORKOUT_TYPE_PROFILE_MAP: Record<string, DeviceWorkoutProfileId> = {
-  athletics: "outdoor-locomotion",
-  "outdoor-sport": "outdoor-distance",
+  athletics: "outdoor-variable",
+  "outdoor-sport": "outdoor-variable",
   cycling: "outdoor-cycling",
   dance: "gym",
   "field-sport": "field-sport",
-  hiking: "outdoor-locomotion",
+  hiking: "outdoor-variable",
   "indoor-cycling": "indoor-cycling",
   "jump-rope": "jump-rope",
   "open-water": "swimming",
