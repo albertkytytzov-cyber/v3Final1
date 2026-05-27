@@ -154,6 +154,29 @@ const mobileUPlotTimeFormatter = new Intl.DateTimeFormat("ru-RU", {
   hour: "2-digit",
   minute: "2-digit",
 });
+const mobileDateFormatter = new Intl.DateTimeFormat("ru", {
+  day: "2-digit",
+  month: "short",
+  year: "numeric",
+});
+const mobileShortDateFormatter = new Intl.DateTimeFormat("ru", {
+  day: "2-digit",
+  month: "2-digit",
+});
+const mobileDateTimeFormatter = new Intl.DateTimeFormat("ru", {
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  month: "short",
+});
+const mobileTimeFormatter = new Intl.DateTimeFormat("ru", {
+  hour: "2-digit",
+  minute: "2-digit",
+});
+const formattedDateCache = new Map<string, string>();
+const formattedShortDateCache = new Map<string, string>();
+const formattedDateTimeCache = new Map<string, string>();
+const formattedTimeCache = new Map<string, string>();
 const deviceWorkoutGraphTimeCache = new Map<string, number | null>();
 const deviceWorkoutDisplayKeyCache = new WeakMap<DeviceWorkout, string>();
 const deviceWorkoutCompletenessScoreCache = new WeakMap<DeviceWorkout, number>();
@@ -225,6 +248,69 @@ export function bootstrapMobileApp(root: HTMLElement) {
   const scrollToScreenTop = () => {
     window.requestAnimationFrame(() => window.scrollTo({ left: 0, top: 0 }));
   };
+
+  const openWatchWorkoutDetail = (workoutId: string) => {
+    update({
+      watchDetailMetric: null,
+      watchExpandedWorkoutId: null,
+      watchExpandedWorkoutGraphId: null,
+      watchWorkoutDetailId: workoutId,
+      watchSettingsOpen: false,
+    });
+    scrollToScreenTop();
+    void hydrateDeviceWorkoutSamples(workoutId);
+  };
+
+  const bindWatchWorkoutHistoryEvents = (scope: ParentNode) => {
+    scope.querySelectorAll<HTMLButtonElement>("[data-watch-workouts-back]").forEach((button) => {
+      button.addEventListener("click", () => {
+        update({
+          watchExpandedWorkoutId: null,
+          watchExpandedWorkoutGraphId: null,
+          watchWorkoutHistoryOpen: false,
+          watchWorkoutDetailId: null,
+        });
+        scrollToScreenTop();
+      });
+    });
+
+    scope.querySelectorAll<HTMLButtonElement>("[data-watch-workouts-period]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const nextPeriod = (button.dataset.watchWorkoutsPeriod as WatchDetailPeriod) || "day";
+        updateWatchWorkoutHistoryPeriod(nextPeriod);
+      });
+    });
+
+    scope.querySelectorAll<HTMLButtonElement>("[data-watch-workout-open]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const workoutId = button.dataset.watchWorkoutOpen;
+        if (workoutId) {
+          openWatchWorkoutDetail(workoutId);
+        }
+      });
+    });
+  };
+
+  const renderWatchWorkoutHistoryPanel = () => {
+    const panel = root.querySelector<HTMLElement>(".screen-panel");
+    const athleteId = state.session.user?.athleteId;
+    if (!panel || state.selectedScreen !== "watches" || !state.watchWorkoutHistoryOpen || !athleteId) {
+      render();
+      return;
+    }
+
+    panel.innerHTML = renderWatchWorkoutHistoryScreen(state, athleteId, todayValue());
+    bindWatchWorkoutHistoryEvents(panel);
+  };
+
+  function updateWatchWorkoutHistoryPeriod(nextPeriod: WatchDetailPeriod) {
+    if (state.watchWorkoutHistoryPeriod === nextPeriod) {
+      return;
+    }
+
+    state.watchWorkoutHistoryPeriod = nextPeriod;
+    renderWatchWorkoutHistoryPanel();
+  }
 
   const rememberDirectWatchConfig = (patch: Partial<DirectWatchLocalConfig>) => {
     saveDirectWatchConfig({
@@ -2499,11 +2585,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
     root.querySelectorAll<HTMLButtonElement>("[data-watch-workouts-period]").forEach((button) => {
       button.addEventListener("click", () => {
         const nextPeriod = (button.dataset.watchWorkoutsPeriod as WatchDetailPeriod) || "day";
-        if (state.watchWorkoutHistoryPeriod === nextPeriod) {
-          return;
-        }
-
-        update({ watchWorkoutHistoryPeriod: nextPeriod });
+        updateWatchWorkoutHistoryPeriod(nextPeriod);
       });
     });
 
@@ -2514,15 +2596,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
           return;
         }
 
-        update({
-          watchDetailMetric: null,
-          watchExpandedWorkoutId: null,
-          watchExpandedWorkoutGraphId: null,
-          watchWorkoutDetailId: workoutId,
-          watchSettingsOpen: false,
-        });
-        scrollToScreenTop();
-        void hydrateDeviceWorkoutSamples(workoutId);
+        openWatchWorkoutDetail(workoutId);
       });
     });
 
@@ -14682,11 +14756,14 @@ function formatDate(value: string) {
     return "-";
   }
 
-  return new Intl.DateTimeFormat("ru", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  }).format(new Date(`${value}T00:00:00.000Z`));
+  const cached = formattedDateCache.get(value);
+  if (cached) {
+    return cached;
+  }
+
+  const formatted = mobileDateFormatter.format(new Date(`${value}T00:00:00.000Z`));
+  formattedDateCache.set(value, formatted);
+  return formatted;
 }
 
 function formatShortDate(value: string) {
@@ -14694,26 +14771,36 @@ function formatShortDate(value: string) {
     return "-";
   }
 
-  return new Intl.DateTimeFormat("ru", {
-    day: "2-digit",
-    month: "2-digit",
-  }).format(new Date(`${value}T00:00:00.000Z`));
+  const cached = formattedShortDateCache.get(value);
+  if (cached) {
+    return cached;
+  }
+
+  const formatted = mobileShortDateFormatter.format(new Date(`${value}T00:00:00.000Z`));
+  formattedShortDateCache.set(value, formatted);
+  return formatted;
 }
 
 function formatDateTime(value: string) {
-  return new Intl.DateTimeFormat("ru", {
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    month: "short",
-  }).format(new Date(value));
+  const cached = formattedDateTimeCache.get(value);
+  if (cached) {
+    return cached;
+  }
+
+  const formatted = mobileDateTimeFormatter.format(new Date(value));
+  formattedDateTimeCache.set(value, formatted);
+  return formatted;
 }
 
 function formatTime(value: string) {
-  return new Intl.DateTimeFormat("ru", {
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(value));
+  const cached = formattedTimeCache.get(value);
+  if (cached) {
+    return cached;
+  }
+
+  const formatted = mobileTimeFormatter.format(new Date(value));
+  formattedTimeCache.set(value, formatted);
+  return formatted;
 }
 
 function formatTimeRange(start: string, end: string) {
