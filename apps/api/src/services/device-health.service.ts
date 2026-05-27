@@ -184,7 +184,7 @@ function getSleepWindowDurationMinutes(sleep: DeviceHealthDailySummaryPayload["s
   return Math.round((end - start) / 60000);
 }
 
-function normalizeSleepSummary<T extends NonNullable<DeviceHealthDailySummaryPayload["sleep"]>>(sleep: T): T {
+export function normalizeSleepSummary<T extends NonNullable<DeviceHealthDailySummaryPayload["sleep"]>>(sleep: T): T {
   const stageTotal = sumSleepStages(sleep);
   const windowDuration = getSleepWindowDurationMinutes(sleep);
   const durationCandidates = [sleep.durationMinutes, stageTotal, windowDuration]
@@ -380,7 +380,7 @@ function keepBestRawSteps(
   });
 }
 
-function mergeDeviceHealthRawPayload(
+export function mergeDeviceHealthRawPayload(
   existingRawPayload: Record<string, unknown> | null,
   incomingRawPayload: Record<string, unknown> | null | undefined,
 ) {

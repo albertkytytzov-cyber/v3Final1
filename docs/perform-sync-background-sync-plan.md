@@ -127,6 +127,25 @@ payload/API submit в native слой оставлен отдельным бол
 - экран тренировок кеширует подготовленные серии графиков и HTML детального
   графика ЧСС, чтобы возврат в список/карточку не пересчитывал тяжелые точки.
 
+### Performance guard audit, 27.05.2026
+
+No UI layout changes were made in this pass. The check is intentionally about
+the heavy paths only:
+
+- history groups are cached by workout array, athlete, date and period, so
+  switching day/week/month does not rescan the same snapshot repeatedly;
+- graph series are cached per workout and context, with a small per-workout
+  eviction limit;
+- detail heart-rate HTML is cached, including the approved adaptive SVG chart;
+- heavy render paths are capped: the regular chart series use
+  `DEVICE_WORKOUT_SERIES_RENDER_LIMIT`, and the detailed heart-rate chart renders
+  only key visible points;
+- graph time parsing, display keys and duplicate-completeness scores are cached;
+- uPlot charts are destroyed on rerender and remounted from prepared payloads.
+
+The regression script `check:mobile-workout-performance` protects these guards
+so future changes do not accidentally bring back slow week/month transitions.
+
 ## Что требует телефона
 
 - реальная синхронизация часов;

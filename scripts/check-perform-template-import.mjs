@@ -12,17 +12,35 @@ const expectedDays = [
   {
     label: "ПН 18.05",
     rowCount: 8,
+    sessionRowCounts: [4, 4],
+    sessionTitles: [
+      "УТРО — техника борьбы + селуяновская вставка ИТ",
+      "ВЕЧЕР — физическая работа по слабому звену",
+    ],
     requiredRows: [
       ["Разминка", "8–12 мин"],
       ["ИТ-круг для митохондрий", "1 круг; 6×20–30 сек / 45–60 сек отдых"],
+      ["Техника борьбы", "30–45 мин"],
+      ["Заминка / стретчинг", "5–8 мин"],
+      ["Разминка + ИТ", "1 круг; 6×20 сек"],
       ["СДР руки / предплечье", "3 сета"],
       ["Тяговая работа", "2×6–8 легко"],
+      ["Стретчинг", "10 мин"],
     ],
   },
   {
     label: "ВТ 26.05",
     rowCount: 6,
+    sessionRowCounts: [4, 2],
+    sessionTitles: [
+      "УТРО — техника борьбы + селуяновская вставка ИТ",
+      "ВЕЧЕР — физическая работа по слабому звену",
+    ],
     requiredRows: [
+      ["Разминка", "8–12 мин"],
+      ["ИТ-круг для митохондрий", "1 круг; 6×20–30 сек / 45–60 сек отдых"],
+      ["Техника борьбы", "30–45 мин"],
+      ["Заминка / стретчинг", "5–8 мин"],
       ["Разминка", "10 мин"],
       ["Контроль АнП специальный", "3×5–6 мин / 3 мин"],
     ],
@@ -30,7 +48,16 @@ const expectedDays = [
   {
     label: "ПТ 29.05",
     rowCount: 7,
+    sessionRowCounts: [4, 3],
+    sessionTitles: [
+      "УТРО — техника борьбы + селуяновская вставка ИТ",
+      "ВЕЧЕР — физическая работа по слабому звену",
+    ],
     requiredRows: [
+      ["Разминка", "8–12 мин"],
+      ["ИТ-круг для митохондрий", "1 круг; 6×20–30 сек / 45–60 сек отдых"],
+      ["Техника борьбы", "30–45 мин"],
+      ["Заминка / стретчинг", "5–8 мин"],
       ["Борцовская работа", "15–20 мин"],
       ["Контрольные отрезки", "2×3 мин / пауза 30 сек"],
       ["Recovery HR", "пик / 1 мин / 2 мин / 3 мин"],
@@ -74,6 +101,11 @@ function extractRows(tableHtml) {
     .filter((cells) => cells.length > 0);
 }
 
+function extractSessionTitles(cardHtml) {
+  return [...cardHtml.matchAll(/<div class="stime"[^>]*>([\s\S]*?)<\/div>/giu)]
+    .map((match) => normalizeText(match[1]));
+}
+
 const cards = extractCards(html);
 const sampleHeaders = [...sampleHtml.matchAll(/<th[^>]*>([\s\S]*?)<\/th>/giu)].map((match) =>
   normalizeText(match[1]),
@@ -92,15 +124,26 @@ for (const expectedDay of expectedDays) {
   }
 
   const tables = [...card.matchAll(/<table[^>]*>([\s\S]*?)<\/table>/giu)].map((match) => match[1]);
+  const sessionTitles = extractSessionTitles(card);
 
   if (tables.length === 0) {
     fail(`day ${expectedDay.label} has no tables`);
     continue;
   }
 
+  if (tables.length !== expectedDay.sessionRowCounts.length) {
+    fail(`day ${expectedDay.label} has ${tables.length} sessions instead of ${expectedDay.sessionRowCounts.length}`);
+  }
+
+  expectedDay.sessionTitles.forEach((title, index) => {
+    if (sessionTitles[index] !== title) {
+      fail(`day ${expectedDay.label} session ${index + 1} title changed: "${sessionTitles[index] ?? ""}"`);
+    }
+  });
+
   const rows = [];
 
-  for (const table of tables) {
+  for (const [tableIndex, table] of tables.entries()) {
     const headers = extractHeaders(table);
 
     if (headers.join("|") !== "Блок|Объём") {
@@ -111,7 +154,24 @@ for (const expectedDay of expectedDays) {
       fail(`day ${expectedDay.label} returned the old Контроль column`);
     }
 
-    rows.push(...extractRows(table));
+    const tableRows = extractRows(table);
+    const expectedTableRows = expectedDay.sessionRowCounts[tableIndex];
+
+    if (expectedTableRows !== undefined && tableRows.length !== expectedTableRows) {
+      fail(`day ${expectedDay.label} session ${tableIndex + 1} has ${tableRows.length} rows instead of ${expectedTableRows}`);
+    }
+
+    tableRows.forEach((cells, rowIndex) => {
+      if (cells.length !== 2) {
+        fail(`day ${expectedDay.label} session ${tableIndex + 1} row ${rowIndex + 1} has ${cells.length} cells instead of 2`);
+      }
+
+      if (!cells[0] || !cells[1]) {
+        fail(`day ${expectedDay.label} session ${tableIndex + 1} row ${rowIndex + 1} has an empty block or volume`);
+      }
+    });
+
+    rows.push(...tableRows);
   }
 
   if (rows.length !== expectedDay.rowCount) {
@@ -128,5 +188,5 @@ for (const expectedDay of expectedDays) {
 }
 
 if (!process.exitCode) {
-  console.log("Import template check passed: 18.05, 26.05, 29.05 keep Блок | Объём and no Контроль column.");
+  console.log("Import template check passed: 18.05, 26.05, 29.05 keep session structure, Блок | Объём and no Контроль column.");
 }

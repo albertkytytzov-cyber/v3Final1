@@ -160,6 +160,36 @@ Gadgetbridge и реальные DirectWatch-логи.
 - ACK остается строже, чем в Gadgetbridge: только после API save/offline queue,
   чтобы часы не удаляли файл до сохранения в PERFORM.
 
+### Parser coverage audit, 27.05.2026
+
+Таблица ниже фиксирует, что именно закрыто кодом, а что остается
+экспериментальной зоной. Это рабочий стоп-лист против догадок: новый parser
+добавляем только после `activityFileProbeRequests -> subtype/version -> rawHex
+-> CRC -> сверка`.
+
+| Файл часов | Gadgetbridge | PERFORM | Статус | Проверка |
+| --- | --- | --- | --- | --- |
+| `ACTIVITY_DAILY` details, `type=0/subtype=0/detail=0` | `DailyDetailsParser` v1/v2/v3/v4 | `parseClassicDailyDetails`, `parseClassicDailyDetailsSample` v1/v2/v3/v4 | закрыто | шаги/пульс/SpO2/stress по минутам |
+| `ACTIVITY_DAILY` summary, `type=0/subtype=0/detail=1` | `DailySummaryParser` v3/v5 | `parseClassicDailySummary` v3/v5 | закрыто | дневные шаги, калории, ЧСС, stress, SpO2, load/vitality когда есть |
+| `ACTIVITY_SLEEP`, `type=0/subtype=8` | `SleepDetailsParser` v1/v2/v3/v4/v5 | `parseClassicSleepDetails` v1/v2/v3/v4/v5 | закрыто | сон + ночные HR/SpO2 samples |
+| `ACTIVITY_SLEEP_STAGES`, `type=0/subtype=3` | `SleepStagesParser` v2 | `parseClassicSleepStages` v2 | закрыто | стадии сна |
+| `ACTIVITY_MANUAL_SAMPLES`, `type=0/subtype=6` | `ManualSamplesParser` v2 | `parseClassicManualSamples` v2 | закрыто частично | HR/SpO2/stress сохраняем, temperature пока вне модели |
+| `SPORTS` summary, `detail=1` | `WorkoutSummaryParser` по основным subtype/version | `parseClassicKnownWorkoutSummary` и subtype-parser'ы | закрыто по summary | длительность, калории, дистанция/шаги/темп там, где тип спорта это даёт |
+| `SPORTS` GPS, `detail=2` | `WorkoutGpsParser` v1/v2 | `parseClassicWorkoutGps` v1/v2 | закрыто | GPS/distance/speed samples |
+| `SPORTS` details, `detail=0` | готового parser нет | `parseClassicWorkoutDetails` по реальным raw-файлам walking/freestyle | экспериментально | HR-точки внутри тренировки; проверять min/avg/max и sample count |
+| Time sync | system time + timezone blocks | `buildSetCurrentTimeCommand` | закрыто | локальное время, timezone, DST blocks |
+| Weather sync | current/daily/hourly/location/prefs | current/daily/hourly/location/order/prefs/bridge refresh | закрыто базово | temp, humidity, wind, UV, AQI, pressure, sunrise/sunset |
+
+Нерешенные зоны parser coverage:
+
+1. Sports details для новых subtype кроме проверенных walking/freestyle.
+2. Temperature из manual samples: данные видим, но в текущей модели PERFORM нет
+   отдельного показателя температуры часов.
+3. Неизвестные future-версии daily/sleep/workout parser'ов: не принимать по
+   похожим offset'ам, пока нет raw-файла и сверки.
+4. Общий лимит `CLASSIC_ACTIVITY_FILE_PROBE_LIMIT = 512` достаточен для текущих
+   тестов, но правильнее перейти к date-scoped очереди без глобального потолка.
+
 ### Workout summary coverage
 
 Сверка по `WorkoutSummaryParser` Gadgetbridge и
