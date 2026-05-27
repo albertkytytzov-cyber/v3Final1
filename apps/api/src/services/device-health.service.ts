@@ -783,6 +783,7 @@ async function replaceDeviceHealthSamples(input: {
     .filter((sample) => Number.isFinite(sample.value))
     .slice(0, 12000);
   const metrics = Array.from(new Set(samples.map((sample) => sample.metric)));
+  const incomingCountsByMetric = countDeviceHealthSamplesByMetric(samples);
 
   if (metrics.length === 0) {
     return;
@@ -792,16 +793,28 @@ async function replaceDeviceHealthSamples(input: {
 
   try {
     await client.query("BEGIN");
-    await client.query(
-      `
-        DELETE FROM device_health_samples
-        WHERE athlete_id = $1
-          AND provider = $2
-          AND entry_date = $3::date
-          AND metric = ANY($4::text[])
-      `,
-      [input.athleteId, input.provider, input.entryDate, metrics],
+    const existingCountsByMetric = await getExistingDeviceHealthSampleCountsByMetric(client, {
+      athleteId: input.athleteId,
+      entryDate: input.entryDate,
+      metrics,
+      provider: input.provider,
+    });
+    const metricsToReplace = metrics.filter((metric) =>
+      (incomingCountsByMetric.get(metric) ?? 0) >= (existingCountsByMetric.get(metric) ?? 0)
     );
+
+    if (metricsToReplace.length > 0) {
+      await client.query(
+        `
+          DELETE FROM device_health_samples
+          WHERE athlete_id = $1
+            AND provider = $2
+            AND entry_date = $3::date
+            AND metric = ANY($4::text[])
+        `,
+        [input.athleteId, input.provider, input.entryDate, metricsToReplace],
+      );
+    }
 
     for (let offset = 0; offset < samples.length; offset += 500) {
       const chunk = samples.slice(offset, offset + 500);
@@ -855,6 +868,41 @@ async function replaceDeviceHealthSamples(input: {
   } finally {
     client.release();
   }
+}
+
+function countDeviceHealthSamplesByMetric(samples: DeviceHealthSamplePayload[]) {
+  const counts = new Map<DeviceHealthSampleMetric, number>();
+  samples.forEach((sample) => {
+    counts.set(sample.metric, (counts.get(sample.metric) ?? 0) + 1);
+  });
+  return counts;
+}
+
+async function getExistingDeviceHealthSampleCountsByMetric(
+  client: PoolClient,
+  input: {
+    athleteId: string;
+    entryDate: string;
+    metrics: DeviceHealthSampleMetric[];
+    provider: DeviceHealthProvider;
+  },
+) {
+  const result = await client.query<{ metric: DeviceHealthSampleMetric; sample_count: string }>(
+    `
+      SELECT metric, COUNT(*)::text AS sample_count
+      FROM device_health_samples
+      WHERE athlete_id = $1
+        AND provider = $2
+        AND entry_date = $3::date
+        AND metric = ANY($4::text[])
+      GROUP BY metric
+    `,
+    [input.athleteId, input.provider, input.entryDate, input.metrics],
+  );
+
+  return new Map<DeviceHealthSampleMetric, number>(
+    result.rows.map((row) => [row.metric, Number(row.sample_count) || 0]),
+  );
 }
 
 export async function listDeviceWorkoutsForAthlete(

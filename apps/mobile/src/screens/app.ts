@@ -1323,6 +1323,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
     }
 
     try {
+      const weatherSourceLabel = formatDirectWatchWeatherSource(config);
       let weatherPayload = null;
       let weatherError: string | null = null;
       try {
@@ -1387,7 +1388,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
         error: ok ? null : serviceError,
         isBusy: false,
         message: ok
-          ? formatDirectWatchServiceSyncMessage(result, weatherPayload?.locationName ?? null, weatherError)
+          ? formatDirectWatchServiceSyncMessage(result, weatherSourceLabel, weatherError)
           : null,
       });
       return ok;
@@ -4988,7 +4989,7 @@ function renderWatchSettingsScreen(
         <button aria-label="Назад" class="watch-detail-back-button" data-watch-settings-back type="button">‹</button>
         <h3>Настройка часов</h3>
       </div>
-      <p class="watch-detail-date">Синхронизация, подключение и источник данных</p>
+      <p class="watch-detail-date">Синхронизация, погода и подключение</p>
       ${isDirectWatchRuntime()
         ? renderWatchSyncPanel(state, date)
         : renderWatchSettingsPanel(state, summary, date)}
@@ -5038,7 +5039,7 @@ function renderWatchSyncPanel(state: MobileAppState, date: string) {
     <section class="watch-sync-panel is-${escapeHtml(statusKind)}">
       <div class="watch-sync-head">
         <div>
-          <span>Состояние</span>
+          <span>Состояние часов</span>
           <h3>${escapeHtml(deviceLabel)}</h3>
           <p>${escapeHtml(lastSyncLabel)} · авто каждые 30 мин</p>
         </div>
@@ -5052,12 +5053,16 @@ function renderWatchSyncPanel(state: MobileAppState, date: string) {
           <strong>${escapeHtml(deviceLabel)}</strong>
         </article>
         <article>
-          <span>Погода</span>
+          <span>Город погоды</span>
           <strong>${escapeHtml(weatherSourceLabel)}</strong>
         </article>
         <article>
-          <span>Канал</span>
+          <span>Служба</span>
           <strong>${escapeHtml(bridgeLabel)}</strong>
+        </article>
+        <article>
+          <span>Погода на часы</span>
+          <strong>влажность · ветер · UV/AQI · солнце</strong>
         </article>
       </div>
       <div class="watch-sync-actions">
@@ -5068,7 +5073,7 @@ function renderWatchSyncPanel(state: MobileAppState, date: string) {
           type="button"
           ${state.isBusy || !canServiceSync ? "disabled" : ""}
         >
-          Синхронизировать всё сейчас
+          Обновить часы
         </button>
         <button
           class="secondary-action"
@@ -5077,7 +5082,7 @@ function renderWatchSyncPanel(state: MobileAppState, date: string) {
           type="button"
           ${state.isBusy || !canServiceSync ? "disabled" : ""}
         >
-          Только показатели и тренировки
+          Считать данные
         </button>
         <button
           class="secondary-action"
@@ -5143,8 +5148,8 @@ function renderWatchSyncPanel(state: MobileAppState, date: string) {
       </div>
       ${renderWatchSyncDevicePicker(state, config)}
       <article class="watch-source-note">
-        <strong>PERFORM Sync</strong>
-        <span>Источник данных, синхронизация, погода и служба часов находятся в этом блоке.</span>
+        <strong>Прямое подключение</strong>
+        <span>Здесь собраны служебные действия: выбор часов, ключ, погода, статус и остановка фоновой службы.</span>
       </article>
     </section>
   `;
@@ -6550,7 +6555,7 @@ function formatWatchSourceHint(summary: DeviceHealthDailySummary | null) {
 function formatWatchProviderLabel(summary: DeviceHealthDailySummary | null) {
   if (summary) {
     if (summary.provider === "direct-watch") {
-      return "PERFORM Sync";
+      return "Часы";
     }
     if (summary.provider === "apple-health") {
       return "Apple Health";
@@ -6568,7 +6573,7 @@ function formatWatchProviderLabel(summary: DeviceHealthDailySummary | null) {
   }
 
   if (isDirectWatchRuntime()) {
-    return "PERFORM Sync";
+    return "Часы";
   }
 
   return "Health Connect";
@@ -7227,10 +7232,13 @@ function formatDirectWatchServiceSyncMessage(
     result.sentWeatherCurrent ||
     result.sentWeatherDaily ||
     result.sentWeatherHourly;
+  const weatherLocationMessage = weatherLocation === "Геолокация телефона"
+    ? "Погода обновлена по геолокации телефона."
+    : weatherLocation
+      ? `Погода обновлена для ${weatherLocation}.`
+      : "";
   const baseMessage = hasUsefulSync
-    ? weatherLocation
-      ? `Часы синхронизированы. Погода обновлена для ${weatherLocation}.`
-      : "Часы синхронизированы."
+    ? `Часы синхронизированы.${weatherLocationMessage ? ` ${weatherLocationMessage}` : ""}`
     : "Часы подключились, но данные не обновились.";
   const bridgeMessage = result.keptBluetoothBridge
     ? `Сервис активен до ${result.bridgeUntil ? formatDateTime(result.bridgeUntil) : "окончания окна синхронизации"}.`
@@ -8425,14 +8433,9 @@ function renderWatchWorkoutParameterPanel(
     : canScanWorkoutSamples
       ? summarizeWorkoutValues(workout.samples.map((sample) => readWatchWorkoutRawNumber(sample.rawPayload, "stress")))
       : summarizeWorkoutValues([]);
-  const sampleCount = Math.max(
-    workout.sampleCount ?? 0,
-    heartRateSeries?.samples.length ?? 0,
-    oxygenSeries?.samples.length ?? 0,
-    stressSeries?.samples.length ?? 0,
-  );
+  const hasMeaningfulWorkoutStress = stressStats.avg !== null && (stressStats.max ?? 0) > 0;
   const sourceLabel = workout.provider === "direct-watch"
-    ? "PERFORM Sync"
+    ? "Данные с часов"
     : workout.sourceDevice || formatWatchProviderLabel(context.summary);
   const rawCards: WatchWorkoutMetricCard[] = [
     { label: "Старт", value: formatTime(workout.startTime), hasValue: true },
@@ -8489,14 +8492,13 @@ function renderWatchWorkoutParameterPanel(
     },
     {
       label: "Стресс",
-      value: stressStats.avg !== null ? formatLoadValue(stressStats.avg) : "-",
-      detail: stressStats.min !== null && stressStats.max !== null
+      value: hasMeaningfulWorkoutStress ? formatLoadValue(stressStats.avg) : "-",
+      detail: hasMeaningfulWorkoutStress && stressStats.min !== null && stressStats.max !== null
         ? `${formatLoadValue(stressStats.min)}-${formatLoadValue(stressStats.max)}`
         : undefined,
-      hasValue: stressStats.avg !== null,
+      hasValue: hasMeaningfulWorkoutStress,
     },
     ...buildWatchWorkoutExtendedMetricCards(workout),
-    { label: "Точки", value: sampleCount > 0 ? String(sampleCount) : "-", hasValue: sampleCount > 0 },
   ];
   const cards = rawCards.filter((card) => shouldRenderWatchWorkoutMetricCard(workout, card.metric, card.hasValue ?? false));
 
@@ -8808,7 +8810,6 @@ function deriveWatchWorkoutMetrics(
   workout: DeviceWorkout,
   context: WatchWorkoutContext,
 ): WatchWorkoutDerivedMetrics {
-  const profile = getDeviceWorkoutProfile(workout.workoutType);
   const expectsDistance = getDeviceWorkoutMetricExpectation(workout.workoutType, "distance") === "expected";
   const expectsSteps = getDeviceWorkoutMetricExpectation(workout.workoutType, "steps") === "expected";
   const allowsRawDistance = isDeviceWorkoutMetricRelevant(workout.workoutType, "distance");
@@ -8847,36 +8848,36 @@ function deriveWatchWorkoutMetrics(
   return {
     activeCalories: activeCalories ?? estimatedCalories,
     activeCaloriesDetail: activeCalories !== null
-      ? "из тренировки"
+      ? "с часов"
       : estimatedCalories !== null
-        ? "расчёт по доле шагов за день"
-        : "часы не отдали калории тренировки",
+        ? "примерно по шагам"
+        : "нет данных",
     activeCaloriesPrefix: activeCalories === null && estimatedCalories !== null ? "≈" : "",
     distanceDetail: distanceFromWorkout !== null
-      ? "из тренировки"
+      ? "с часов"
       : estimatedDistanceMeters !== null
-        ? "оценка по шагам"
+        ? "примерно по шагам"
         : expectsDistance
-          ? "часы не отдали дистанцию тренировки"
-          : `не требуется для профиля ${profile.label}`,
+          ? "нет данных"
+          : undefined,
     distanceMeters: distanceFromWorkout ?? estimatedDistanceMeters,
     distancePrefix: distanceFromWorkout === null && estimatedDistanceMeters !== null ? "≈" : "",
     durationDetail: workout.durationMinutes !== null
-      ? "из тренировки"
+      ? "с часов"
       : durationFromSamples !== null
-        ? "расчёт по точкам после старта"
-        : "часы отдали только старт",
+        ? "по точкам пульса"
+        : "только старт",
     durationMinutes,
     steps,
     stepsDetail: steps !== null
       ? rawWorkoutSteps !== null
-        ? "из итога тренировки"
+        ? "с часов"
         : workoutSampleSteps !== null
-        ? "из точек тренировки"
-        : "расчёт по точкам после старта"
+        ? "по точкам тренировки"
+        : "по точкам после старта"
       : expectsSteps
-        ? "шаги не пришли в точках"
-        : `не требуется для профиля ${profile.label}`,
+        ? "нет данных"
+        : undefined,
   };
 }
 
@@ -14659,19 +14660,33 @@ function replaceDeviceHealthSamplesForDay(
   entryDate: string,
   metric: DeviceHealthSample["metric"],
 ) {
-  const nextItems = items.filter((item) =>
+  const existingItems = items.filter((item) =>
+    item.athleteId === athleteId &&
+    item.entryDate === entryDate &&
+    item.metric === metric
+  );
+  const shouldReplaceMetric = samples.length >= existingItems.length;
+  const baseItems = shouldReplaceMetric ? items.filter((item) =>
     item.athleteId !== athleteId ||
     item.entryDate !== entryDate ||
     item.metric !== metric
-  );
-  nextItems.push(...samples);
-  return nextItems
+  ) : items;
+  const samplesByKey = new Map(baseItems.map((item) => [getDeviceHealthSampleStorageKey(item), item]));
+  samples.forEach((sample) => {
+    samplesByKey.set(getDeviceHealthSampleStorageKey(sample), sample);
+  });
+
+  return Array.from(samplesByKey.values())
     .sort((left, right) =>
       right.entryDate.localeCompare(left.entryDate) ||
       left.metric.localeCompare(right.metric) ||
       left.sampledAt.localeCompare(right.sampledAt),
     )
     .slice(0, 5000);
+}
+
+function getDeviceHealthSampleStorageKey(sample: DeviceHealthSample) {
+  return `${sample.athleteId}:${sample.provider}:${sample.metric}:${sample.sampledAt}`;
 }
 
 function normalizeMobileDataSnapshot(snapshot: MobileDataSnapshot): MobileDataSnapshot {
