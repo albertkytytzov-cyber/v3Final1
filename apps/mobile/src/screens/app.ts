@@ -4251,11 +4251,26 @@ function getWatchWorkoutDetailContext(
   athleteId: string,
   workout: DeviceWorkout,
 ): WatchWorkoutContext {
-  const hasWorkoutHeartRate = workout.samples.some((sample) => sample.heartRateBpm !== null);
-  const hasWorkoutOxygen = workout.samples.some((sample) => sample.oxygenSaturationPercent !== null);
-  const hasWorkoutPaceOrSpeed = workout.samples.some((sample) =>
-    getDeviceWorkoutPaceSeconds(sample) !== null || sample.speedMetersPerSecond !== null
-  );
+  let hasWorkoutHeartRate = false;
+  let hasWorkoutOxygen = false;
+  let hasWorkoutPaceOrSpeed = false;
+
+  for (const sample of workout.samples) {
+    if (sample.heartRateBpm !== null) {
+      hasWorkoutHeartRate = true;
+    }
+    if (sample.oxygenSaturationPercent !== null) {
+      hasWorkoutOxygen = true;
+    }
+    if (getDeviceWorkoutPaceSeconds(sample) !== null || sample.speedMetersPerSecond !== null) {
+      hasWorkoutPaceOrSpeed = true;
+    }
+
+    if (hasWorkoutHeartRate && hasWorkoutOxygen && hasWorkoutPaceOrSpeed) {
+      break;
+    }
+  }
+
   const canUseWorkoutOnly = hasWorkoutHeartRate || hasWorkoutOxygen || hasWorkoutPaceOrSpeed;
 
   return {
@@ -5623,7 +5638,7 @@ function renderWatchWorkoutHistoryScreen(state: MobileAppState, athleteId: strin
       </section>
       ${groups.length ? `
         <div class="watch-training-date-list">
-          ${groups.map((group) => renderWatchWorkoutHistoryGroup(group, state, athleteId, date)).join("")}
+          ${groups.map((group) => renderWatchWorkoutHistoryGroup(group, date)).join("")}
         </div>
       ` : renderEmpty("Тренировок за период нет", "Синхронизируйте часы, и новые тренировки появятся здесь по датам.")}
     </section>
@@ -5636,10 +5651,28 @@ function getWatchWorkoutHistoryGroups(
   date: string,
   period: WatchDetailPeriod,
 ): WatchWorkoutHistoryGroup[] {
-  return getWatchDetailPeriodDates(date, period)
+  const periodDates = getWatchDetailPeriodDates(date, period);
+  const periodDateSet = new Set(periodDates);
+  const workoutsByDate = new Map<string, DeviceWorkout[]>();
+
+  for (const workout of state.data.deviceWorkouts) {
+    if (
+      periodDateSet.has(workout.entryDate) &&
+      (!athleteId || workout.athleteId === athleteId)
+    ) {
+      const items = workoutsByDate.get(workout.entryDate);
+      if (items) {
+        items.push(workout);
+      } else {
+        workoutsByDate.set(workout.entryDate, [workout]);
+      }
+    }
+  }
+
+  return periodDates
     .slice()
     .reverse()
-    .map((entryDate) => buildWatchWorkoutHistoryGroup(entryDate, getDeviceWorkoutsForDate(state, athleteId, entryDate)))
+    .map((entryDate) => buildWatchWorkoutHistoryGroup(entryDate, getDisplayDeviceWorkoutsForDateItems(workoutsByDate.get(entryDate) ?? [])))
     .filter((group) => group.workouts.length > 0);
 }
 
@@ -5655,12 +5688,8 @@ function buildWatchWorkoutHistoryGroup(date: string, workouts: DeviceWorkout[]):
 
 function renderWatchWorkoutHistoryGroup(
   group: WatchWorkoutHistoryGroup,
-  state: MobileAppState,
-  athleteId: string,
   currentDate: string,
 ) {
-  const contextByDate = getWatchWorkoutContextForDate(state, athleteId, group.date);
-
   return `
     <section class="watch-training-date-group">
       <div class="watch-training-date-head">
@@ -5671,7 +5700,7 @@ function renderWatchWorkoutHistoryGroup(
         <small>${escapeHtml(formatWatchWorkoutGroupSummary(group))}</small>
       </div>
       <div class="watch-training-history-list">
-        ${group.workouts.map((workout) => renderWatchWorkoutHistoryItem(workout, contextByDate, currentDate)).join("")}
+        ${group.workouts.map((workout) => renderWatchWorkoutHistoryItem(workout, currentDate)).join("")}
       </div>
     </section>
   `;
@@ -5679,12 +5708,11 @@ function renderWatchWorkoutHistoryGroup(
 
 function renderWatchWorkoutHistoryItem(
   workout: DeviceWorkout,
-  context: WatchWorkoutContext,
   currentDate: string,
 ) {
   const chips = getWatchWorkoutChips(workout);
   const profile = getDeviceWorkoutProfile(workout.workoutType);
-  const hasGraphs = hasDeviceWorkoutGraph(workout, context) || getDeviceWorkoutRawHeartRateZones(workout).length > 0;
+  const hasGraphs = hasDeviceWorkoutGraphSummary(workout);
 
   return `
     <button class="watch-training-history-item is-${escapeHtml(profile.id)}" data-watch-workout-open="${escapeHtml(workout.id)}" type="button">
@@ -8488,16 +8516,33 @@ function summarizeWorkoutSeries(samples: { value: number }[]) {
 }
 
 function summarizeWorkoutValues(values: Array<number | null | undefined>) {
-  const cleanValues = values.filter((value): value is number => value !== null && value !== undefined);
+  let count = 0;
+  let max = Number.NEGATIVE_INFINITY;
+  let min = Number.POSITIVE_INFINITY;
+  let sum = 0;
 
-  if (!cleanValues.length) {
+  for (const value of values) {
+    if (value === null || value === undefined || !Number.isFinite(value)) {
+      continue;
+    }
+    count += 1;
+    sum += value;
+    if (value > max) {
+      max = value;
+    }
+    if (value < min) {
+      min = value;
+    }
+  }
+
+  if (count === 0) {
     return { avg: null, max: null, min: null };
   }
 
   return {
-    avg: Math.round(cleanValues.reduce((sum, value) => sum + value, 0) / cleanValues.length),
-    max: Math.max(...cleanValues),
-    min: Math.min(...cleanValues),
+    avg: Math.round(sum / count),
+    max,
+    min,
   };
 }
 
@@ -8672,16 +8717,28 @@ function isLegacyDirectWatchWorkoutParserShift(workout: DeviceWorkout) {
 }
 
 function inferWatchWorkoutDurationFromWorkoutSamples(workout: DeviceWorkout) {
-  const times = workout.samples
-    .map((sample) => getDeviceWorkoutGraphTime(sample.sampleTime))
-    .filter((time): time is number => time !== null);
+  let end = Number.NEGATIVE_INFINITY;
+  let start = Number.POSITIVE_INFINITY;
+  let count = 0;
 
-  if (times.length < 2) {
+  for (const sample of workout.samples) {
+    const time = getDeviceWorkoutGraphTime(sample.sampleTime);
+    if (time === null) {
+      continue;
+    }
+    count += 1;
+    if (time < start) {
+      start = time;
+    }
+    if (time > end) {
+      end = time;
+    }
+  }
+
+  if (count < 2) {
     return null;
   }
 
-  const start = Math.min(...times);
-  const end = Math.max(...times);
   return end > start ? Math.max(1, Math.round((end - start) / 60000)) : null;
 }
 
@@ -8707,16 +8764,18 @@ function getWatchWorkoutSamplesAfterStart(
   const end = knownEnd !== null && knownEnd > start ? knownEnd : fallbackEnd;
   const samplesByTime = new Map<string, DeviceHealthSample>();
 
-  [
-    ...context.heartRateSamples,
-    ...context.oxygenSamples,
-    ...context.stressSamples,
-  ].forEach((sample) => {
-    const time = getDeviceWorkoutGraphTime(sample.sampledAt);
-    if (time !== null && time >= start && time <= end) {
-      samplesByTime.set(`${sample.metric}:${sample.sampledAt}`, sample);
+  const addSamples = (samples: DeviceHealthSample[]) => {
+    for (const sample of samples) {
+      const time = getDeviceWorkoutGraphTime(sample.sampledAt);
+      if (time !== null && time >= start && time <= end) {
+        samplesByTime.set(`${sample.metric}:${sample.sampledAt}`, sample);
+      }
     }
-  });
+  };
+
+  addSamples(context.heartRateSamples);
+  addSamples(context.oxygenSamples);
+  addSamples(context.stressSamples);
 
   return Array.from(samplesByTime.values()).sort((left, right) => left.sampledAt.localeCompare(right.sampledAt));
 }
@@ -8954,21 +9013,34 @@ function buildDeviceWorkoutGraphSeries(
   workout: DeviceWorkout,
   context?: WatchWorkoutContext,
 ): DeviceWorkoutGraphSeries[] {
-  const heartRateSamples = compactDeviceWorkoutGraphSamples(workout.samples
-    .filter((sample) => sample.heartRateBpm !== null)
-    .map((sample) => ({ sampleTime: sample.sampleTime, value: sample.heartRateBpm ?? 0 })));
-  const paceSamples = compactDeviceWorkoutGraphSamples(workout.samples
-    .map((sample) => {
-      const value = getDeviceWorkoutPaceSeconds(sample);
-      return value === null ? null : { sampleTime: sample.sampleTime, value };
-    })
-    .filter((sample): sample is { sampleTime: string; value: number } => sample !== null));
-  const speedSamples = compactDeviceWorkoutGraphSamples(workout.samples
-    .filter((sample) => sample.speedMetersPerSecond !== null)
-    .map((sample) => ({ sampleTime: sample.sampleTime, value: (sample.speedMetersPerSecond ?? 0) * 3.6 })));
-  const spo2Samples = compactDeviceWorkoutGraphSamples(workout.samples
-    .filter((sample) => sample.oxygenSaturationPercent !== null)
-    .map((sample) => ({ sampleTime: sample.sampleTime, value: sample.oxygenSaturationPercent ?? 0 })));
+  const rawHeartRateSamples: { sampleTime: string; value: number }[] = [];
+  const rawPaceSamples: { sampleTime: string; value: number }[] = [];
+  const rawSpeedSamples: { sampleTime: string; value: number }[] = [];
+  const rawSpo2Samples: { sampleTime: string; value: number }[] = [];
+
+  for (const sample of workout.samples) {
+    if (sample.heartRateBpm !== null) {
+      rawHeartRateSamples.push({ sampleTime: sample.sampleTime, value: sample.heartRateBpm });
+    }
+
+    const pace = getDeviceWorkoutPaceSeconds(sample);
+    if (pace !== null) {
+      rawPaceSamples.push({ sampleTime: sample.sampleTime, value: pace });
+    }
+
+    if (sample.speedMetersPerSecond !== null) {
+      rawSpeedSamples.push({ sampleTime: sample.sampleTime, value: sample.speedMetersPerSecond * 3.6 });
+    }
+
+    if (sample.oxygenSaturationPercent !== null) {
+      rawSpo2Samples.push({ sampleTime: sample.sampleTime, value: sample.oxygenSaturationPercent });
+    }
+  }
+
+  const heartRateSamples = compactDeviceWorkoutGraphSamples(rawHeartRateSamples);
+  const paceSamples = compactDeviceWorkoutGraphSamples(rawPaceSamples);
+  const speedSamples = compactDeviceWorkoutGraphSamples(rawSpeedSamples);
+  const spo2Samples = compactDeviceWorkoutGraphSamples(rawSpo2Samples);
   const fallbackHeartRateSamples = heartRateSamples.length > 1
     ? []
     : getWatchWorkoutWindowSamples(workout, context?.heartRateSamples ?? []);
@@ -9098,6 +9170,39 @@ function hasDeviceWorkoutGraph(workout: DeviceWorkout, context?: WatchWorkoutCon
   return hasWatchWorkoutWindowSamples(workout, context.heartRateSamples) ||
     hasWatchWorkoutWindowSamples(workout, context.oxygenSamples) ||
     hasWatchWorkoutWindowSamples(workout, context.stressSamples);
+}
+
+function hasDeviceWorkoutGraphSummary(workout: DeviceWorkout) {
+  if (getDeviceWorkoutRawHeartRateZones(workout).length > 0) {
+    return true;
+  }
+
+  if (
+    workout.averageHeartRateBpm !== null ||
+    workout.maxHeartRateBpm !== null ||
+    workout.minHeartRateBpm !== null
+  ) {
+    return true;
+  }
+
+  if (workout.sampleCount <= 1 && workout.samples.length <= 1) {
+    return false;
+  }
+
+  const quickSampleLimit = Math.min(workout.samples.length, 48);
+  for (let index = 0; index < quickSampleLimit; index += 1) {
+    const sample = workout.samples[index];
+    if (
+      sample.heartRateBpm !== null ||
+      sample.oxygenSaturationPercent !== null ||
+      sample.speedMetersPerSecond !== null ||
+      sample.paceSecondsPerKm !== null
+    ) {
+      return true;
+    }
+  }
+
+  return workout.samples.length === 0 && workout.sampleCount > 1;
 }
 
 function hasWatchWorkoutWindowSamples(workout: DeviceWorkout, samples: DeviceHealthSample[]) {
@@ -12862,11 +12967,17 @@ function getDeviceWorkoutsForDate(
   athleteId: string | null,
   date: string,
 ) {
-  return dedupeDeviceWorkoutsForDisplay(
+  return getDisplayDeviceWorkoutsForDateItems(
     state.data.deviceWorkouts.filter((workout) =>
       workout.entryDate === date &&
       (!athleteId || workout.athleteId === athleteId)
     ),
+  );
+}
+
+function getDisplayDeviceWorkoutsForDateItems(workouts: DeviceWorkout[]) {
+  return dedupeDeviceWorkoutsForDisplay(
+    workouts,
   )
     .sort((left, right) => left.startTime.localeCompare(right.startTime));
 }
