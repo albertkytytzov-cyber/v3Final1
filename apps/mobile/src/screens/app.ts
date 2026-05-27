@@ -124,6 +124,8 @@ const DIRECT_WATCH_AUTO_SYNC_START_DELAY_MS = 10 * 1000;
 const DIRECT_WATCH_HISTORY_SYNC_DAYS = 30;
 const DIRECT_WATCH_HISTORY_SYNC_DAY_DELAY_MS = 350;
 const DEVICE_WORKOUT_SERIES_RENDER_LIMIT = 1_600;
+const WATCH_SLEEP_MIN_MEANINGFUL_MINUTES = 120;
+const WATCH_SLEEP_SHORTER_TOLERANCE_MINUTES = 30;
 
 interface UPlotInstance {
   destroy: () => void;
@@ -956,7 +958,9 @@ export function bootstrapMobileApp(root: HTMLElement) {
       payloadError = new Error(loadDirectWatchConfig().lastServiceError || "PERFORM Sync не смог открыть прямую сессию часов.");
     }
 
-    const activityDiagnostic = buildDirectWatchActivitySyncDiagnostic(payload, serviceResult, payloadError);
+    const completedServiceResult = serviceResult as DirectWatchServiceSyncResult | null;
+    const activityDiagnostic = buildDirectWatchActivitySyncDiagnostic(payload, completedServiceResult, payloadError);
+    const serviceSyncedAt = completedServiceResult?.syncedAt ?? activityDiagnostic.syncedAt;
     rememberDirectWatchConfig({
       lastActivitySyncAt: activityDiagnostic.syncedAt,
       lastActivitySyncDiagnostic: activityDiagnostic.message,
@@ -964,6 +968,14 @@ export function bootstrapMobileApp(root: HTMLElement) {
       lastActivitySyncSportsFileCount: activityDiagnostic.sportsFileCount,
       lastActivitySyncStatus: activityDiagnostic.status,
       lastActivitySyncWorkoutCount: activityDiagnostic.workoutCount,
+      ...(completedServiceResult?.sentTime
+        ? {
+            lastServiceError: null,
+            lastServiceStatus: completedServiceResult.keptBluetoothBridge ? "running" : "synced",
+            lastServiceSyncedAt: serviceSyncedAt,
+            lastServiceUpdatedAt: serviceSyncedAt,
+          }
+        : {}),
     });
 
     return {
@@ -1944,12 +1956,25 @@ export function bootstrapMobileApp(root: HTMLElement) {
     payload: DeviceHealthDailySummaryPayload,
     options: { silent?: boolean } = {},
   ): Promise<SubmitOrQueueResult> => {
-    return submitOrQueue("device-health", payload, async (idempotencyKey) => {
-      const result = await client().submitDeviceHealthSummary(payload, idempotencyKey);
-      const sampleMetrics = Array.from(new Set(payload.samples?.map((sample) => sample.metric) ?? []));
+    const payloadForSubmit = normalizeDeviceHealthPayloadForSubmit(payload, state.data);
+    return submitOrQueue("device-health", payloadForSubmit, async (idempotencyKey) => {
+      const result = await client().submitDeviceHealthSummary(payloadForSubmit, idempotencyKey);
+      const normalizedResultSummary = mergeDeviceHealthSummaryForStorage(
+        normalizeDeviceHealthDailySummaryForStorage(result.summary),
+        normalizeDeviceHealthDailySummaryForStorage({
+          ...result.summary,
+          ...payloadForSubmit,
+          athleteId: result.summary.athleteId,
+          createdAt: result.summary.createdAt,
+          id: result.summary.id,
+          syncedAt: payloadForSubmit.syncedAt ?? result.summary.syncedAt,
+          updatedAt: result.summary.updatedAt,
+        }),
+      );
+      const sampleMetrics = Array.from(new Set(payloadForSubmit.samples?.map((sample) => sample.metric) ?? []));
       const sampleResponses = sampleMetrics.length
         ? await Promise.all(sampleMetrics.map((metric) =>
-            client().listDeviceHealthSamples(payload.entryDate, metric).catch(() => null),
+            client().listDeviceHealthSamples(payloadForSubmit.entryDate, metric).catch(() => null),
           ))
         : [];
       const deviceHealthSamples = sampleMetrics.reduce((items, metric, index) => {
@@ -1961,8 +1986,8 @@ export function bootstrapMobileApp(root: HTMLElement) {
         return replaceDeviceHealthSamplesForDay(
           items,
           response.samples,
-          result.summary.athleteId,
-          payload.entryDate,
+          normalizedResultSummary.athleteId,
+          payloadForSubmit.entryDate,
           metric,
         );
       }, state.data.deviceHealthSamples);
@@ -1970,7 +1995,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
         ...state.data,
         deviceHealthSummaries: upsertDeviceHealthSummary(
           state.data.deviceHealthSummaries,
-          result.summary,
+          normalizedResultSummary,
         ),
         deviceHealthSamples,
         savedAt: new Date().toISOString(),
@@ -4402,9 +4427,8 @@ function renderWatchWorkoutDetailScreen(state: MobileAppState, athleteId: string
   const graphSeries = buildDeviceWorkoutGraphSeries(workout, context);
   const primarySeries = graphSeries[0] ?? null;
   const secondarySeries = graphSeries.slice(1);
-  const detailTitle = primarySeries
-    ? formatDeviceWorkoutDetailTitle(primarySeries)
-    : "Тренировка";
+  const detailTitle = formatDeviceWorkoutTypeLabel(workout);
+  const detailSubtitle = `${formatDate(workout.entryDate)} · ${formatDeviceWorkoutTimeLabel(workout)}`;
 
   return `
     <section class="watch-detail-screen">
@@ -4412,7 +4436,7 @@ function renderWatchWorkoutDetailScreen(state: MobileAppState, athleteId: string
         <button aria-label="Назад" class="watch-detail-back-button" data-watch-workout-detail-back type="button">‹</button>
         <h3>${escapeHtml(detailTitle)}</h3>
       </div>
-      <p class="watch-detail-date">${escapeHtml(`${formatDate(workout.entryDate)} · ${formatDeviceWorkoutTitle(workout)}`)}</p>
+      <p class="watch-detail-date">${escapeHtml(detailSubtitle)}</p>
       ${renderWatchWorkoutParameterPanel(workout, context, graphSeries)}
       <section class="watch-detail-card">
         ${primarySeries
@@ -4973,6 +4997,7 @@ function getDeviceHealthSummariesForDates(
       dateSet.has(summary.entryDate) &&
       (!athleteId || summary.athleteId === athleteId)
     )
+    .map(normalizeDeviceHealthDailySummaryForStorage)
     .sort((left, right) => left.entryDate.localeCompare(right.entryDate));
 }
 
@@ -6137,30 +6162,6 @@ function renderWatchWorkoutGraphGate(
       </button>
     </section>
   `;
-}
-
-function formatDeviceWorkoutDetailTitle(series: DeviceWorkoutGraphSeries) {
-  if (series.key === "heartRate") {
-    return "Пульс";
-  }
-
-  if (series.key === "pace") {
-    return "Темп";
-  }
-
-  if (series.key === "speed") {
-    return "Скорость";
-  }
-
-  if (series.key === "spo2") {
-    return "Кислород";
-  }
-
-  if (series.key === "stress") {
-    return "Стресс";
-  }
-
-  return "Тренировка";
 }
 
 function getWatchWorkoutChips(workout: DeviceWorkout) {
@@ -7465,18 +7466,22 @@ function shouldFetchDirectWatchSleep(data: MobileDataSnapshot, entryDate: string
 }
 
 function hasMeaningfulWatchSleep(sleep: DeviceHealthDailySummary["sleep"] | DeviceHealthDailySummaryPayload["sleep"]) {
-  return Boolean(sleep && (
-    Boolean(sleep.startTime || sleep.endTime) ||
-    isPositiveNumber(sleep.durationMinutes) ||
-    isPositiveNumber(sleep.deepMinutes) ||
-    isPositiveNumber(sleep.lightMinutes) ||
-    isPositiveNumber(sleep.remMinutes) ||
-    isPositiveNumber(sleep.awakeMinutes) ||
-    isPositiveNumber(sleep.score)
-  ));
+  if (!sleep) {
+    return false;
+  }
+
+  const stageTotal = getDeviceHealthSleepStageTotalMinutes(sleep);
+  const windowDuration = getDeviceHealthSleepWindowDurationMinutes(sleep);
+  const duration = sleep.durationMinutes ?? null;
+
+  return [duration, stageTotal, windowDuration].some((value) =>
+    typeof value === "number" &&
+      Number.isFinite(value) &&
+      value >= WATCH_SLEEP_MIN_MEANINGFUL_MINUTES
+  );
 }
 
-function isPositiveNumber(value: number | null | undefined) {
+function isPositiveNumber(value: number | null | undefined): value is number {
   return typeof value === "number" && Number.isFinite(value) && value > 0;
 }
 
@@ -13395,6 +13400,7 @@ function getDeviceHealthSummaryForDate(
       summary.entryDate === date &&
       (!athleteId || summary.athleteId === athleteId)
     )
+    .map(normalizeDeviceHealthDailySummaryForStorage)
     .sort(compareDeviceHealthSummaries)[0] ?? null;
 }
 
@@ -14703,24 +14709,134 @@ function mergeMaxValue(
   return incoming ?? existing ?? null;
 }
 
+function mergeSleepStageValue(
+  incoming: number | null | undefined,
+  existing: number | null | undefined,
+  preferExisting: boolean,
+) {
+  if (typeof incoming === "number" && typeof existing === "number") {
+    return preferExisting ? existing : incoming;
+  }
+
+  return incoming ?? existing ?? null;
+}
+
+type DeviceHealthSleepLike = NonNullable<DeviceHealthDailySummary["sleep"] | DeviceHealthDailySummaryPayload["sleep"]>;
+
+function getDeviceHealthSleepStageTotalMinutes(sleep: DeviceHealthSleepLike | null | undefined) {
+  if (!sleep) {
+    return null;
+  }
+
+  const values = [
+    sleep.awakeMinutes,
+    sleep.deepMinutes,
+    sleep.lightMinutes,
+    sleep.remMinutes,
+  ].filter(isPositiveNumber);
+
+  return values.length ? values.reduce((total, value) => total + value, 0) : null;
+}
+
+function getDeviceHealthSleepWindowDurationMinutes(sleep: DeviceHealthSleepLike | null | undefined) {
+  if (!sleep?.startTime || !sleep.endTime) {
+    return null;
+  }
+
+  const start = new Date(sleep.startTime).getTime();
+  const end = new Date(sleep.endTime).getTime();
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
+    return null;
+  }
+
+  return Math.round((end - start) / 60000);
+}
+
+function normalizeDeviceHealthSleepSummaryForStorage<T extends DeviceHealthSleepLike>(sleep: T): T {
+  const stageTotal = getDeviceHealthSleepStageTotalMinutes(sleep);
+  const windowDuration = getDeviceHealthSleepWindowDurationMinutes(sleep);
+  const durationCandidates = [sleep.durationMinutes, stageTotal, windowDuration]
+    .filter(isPositiveNumber);
+
+  if (!durationCandidates.length) {
+    return sleep;
+  }
+
+  const bestDuration = Math.max(...durationCandidates);
+  if (sleep.durationMinutes === bestDuration) {
+    return sleep;
+  }
+
+  return {
+    ...sleep,
+    durationMinutes: bestDuration,
+  };
+}
+
+function normalizeDeviceHealthDailySummaryForStorage<T extends DeviceHealthDailySummary | DeviceHealthDailySummaryPayload>(summary: T): T {
+  return {
+    ...summary,
+    sleep: summary.sleep ? normalizeDeviceHealthSleepSummaryForStorage(summary.sleep) : summary.sleep,
+  };
+}
+
+function normalizeDeviceHealthPayloadForSubmit(
+  payload: DeviceHealthDailySummaryPayload,
+  data: MobileDataSnapshot,
+): DeviceHealthDailySummaryPayload {
+  const normalizedPayload = normalizeDeviceHealthDailySummaryForStorage(payload);
+  if (normalizedPayload.sleep) {
+    return normalizedPayload;
+  }
+
+  const existingSummary = data.deviceHealthSummaries.find((summary) =>
+    summary.entryDate === payload.entryDate &&
+      summary.provider === payload.provider
+  );
+  const existingSleep = existingSummary?.sleep
+    ? normalizeDeviceHealthSleepSummaryForStorage(existingSummary.sleep)
+    : null;
+
+  return existingSleep && hasMeaningfulWatchSleep(existingSleep)
+    ? {
+        ...normalizedPayload,
+        sleep: existingSleep,
+      }
+    : normalizedPayload;
+}
+
 function mergeDeviceHealthSleepSummary(
   existing: DeviceHealthDailySummary["sleep"],
   incoming: DeviceHealthDailySummary["sleep"],
 ) {
   if (!existing || !incoming) {
-    return incoming ?? existing ?? null;
+    return incoming
+      ? normalizeDeviceHealthSleepSummaryForStorage(incoming)
+      : existing
+        ? normalizeDeviceHealthSleepSummaryForStorage(existing)
+        : null;
   }
 
-  return {
-    awakeMinutes: mergeValue(incoming.awakeMinutes, existing.awakeMinutes),
-    deepMinutes: mergeValue(incoming.deepMinutes, existing.deepMinutes),
-    durationMinutes: mergeValue(incoming.durationMinutes, existing.durationMinutes),
-    endTime: mergeValue(incoming.endTime, existing.endTime),
-    lightMinutes: mergeValue(incoming.lightMinutes, existing.lightMinutes),
-    remMinutes: mergeValue(incoming.remMinutes, existing.remMinutes),
-    score: mergeValue(incoming.score, existing.score),
-    startTime: mergeValue(incoming.startTime, existing.startTime),
-  };
+  const normalizedExisting = normalizeDeviceHealthSleepSummaryForStorage(existing);
+  const normalizedIncoming = normalizeDeviceHealthSleepSummaryForStorage(incoming);
+  const existingDuration = normalizedExisting.durationMinutes ?? null;
+  const incomingDuration = normalizedIncoming.durationMinutes ?? null;
+  const preferExisting = typeof existingDuration === "number" &&
+    typeof incomingDuration === "number" &&
+    incomingDuration + WATCH_SLEEP_SHORTER_TOLERANCE_MINUTES < existingDuration;
+
+  return normalizeDeviceHealthSleepSummaryForStorage({
+    awakeMinutes: mergeSleepStageValue(normalizedIncoming.awakeMinutes, normalizedExisting.awakeMinutes, preferExisting),
+    deepMinutes: mergeSleepStageValue(normalizedIncoming.deepMinutes, normalizedExisting.deepMinutes, preferExisting),
+    durationMinutes: preferExisting
+      ? existingDuration
+      : mergeValue(normalizedIncoming.durationMinutes, normalizedExisting.durationMinutes),
+    endTime: preferExisting ? mergeValue(normalizedExisting.endTime, normalizedIncoming.endTime) : mergeValue(normalizedIncoming.endTime, normalizedExisting.endTime),
+    lightMinutes: mergeSleepStageValue(normalizedIncoming.lightMinutes, normalizedExisting.lightMinutes, preferExisting),
+    remMinutes: mergeSleepStageValue(normalizedIncoming.remMinutes, normalizedExisting.remMinutes, preferExisting),
+    score: mergeValue(normalizedIncoming.score, normalizedExisting.score),
+    startTime: preferExisting ? mergeValue(normalizedExisting.startTime, normalizedIncoming.startTime) : mergeValue(normalizedIncoming.startTime, normalizedExisting.startTime),
+  });
 }
 
 function mergeDeviceHealthHeartRateSummary(
@@ -14795,15 +14911,16 @@ function upsertDeviceHealthSummary(
   items: DeviceHealthDailySummary[],
   summary: DeviceHealthDailySummary,
 ) {
+  const normalizedSummary = normalizeDeviceHealthDailySummaryForStorage(summary);
   const existingSummary = items.find((item) =>
-    item.id === summary.id ||
-    (item.athleteId === summary.athleteId &&
-      item.provider === summary.provider &&
-      item.entryDate === summary.entryDate)
+    item.id === normalizedSummary.id ||
+    (item.athleteId === normalizedSummary.athleteId &&
+      item.provider === normalizedSummary.provider &&
+      item.entryDate === normalizedSummary.entryDate)
   );
   const mergedSummary = existingSummary
-    ? mergeDeviceHealthSummaryForStorage(existingSummary, summary)
-    : summary;
+    ? mergeDeviceHealthSummaryForStorage(existingSummary, normalizedSummary)
+    : normalizedSummary;
   const nextItems = items.filter((item) =>
     item.id !== mergedSummary.id &&
     (item.athleteId !== mergedSummary.athleteId ||

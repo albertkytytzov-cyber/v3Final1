@@ -952,6 +952,7 @@ class DirectWatchPlugin : Plugin() {
             var postAuthDecryptionKey: ByteArray? = null
             var errorMessage: String? = null
             val combined = java.io.ByteArrayOutputStream()
+            val classicV2DataAckedSequences = mutableSetOf<Int>()
 
             try {
                 try {
@@ -1053,7 +1054,13 @@ class DirectWatchPlugin : Plugin() {
                                 CLASSIC_POST_AUTH_READ_MS
                             }
                             errorMessage = if (includeHistory) {
-                                readClassicPackets(socket, packets, combined, postAuthReadMs)
+                                readClassicPackets(
+                                    socket = socket,
+                                    packets = packets,
+                                    combined = combined,
+                                    durationMs = postAuthReadMs,
+                                    ackedClassicV2DataSequences = classicV2DataAckedSequences,
+                                )
                             } else {
                                 readClassicPacketsUntilActivitySelection(
                                     socket,
@@ -1063,6 +1070,7 @@ class DirectWatchPlugin : Plugin() {
                                     entryDate,
                                     includeSleep,
                                     postAuthReadMs,
+                                    classicV2DataAckedSequences,
                                 )
                             } ?: errorMessage
 
@@ -1087,6 +1095,7 @@ class DirectWatchPlugin : Plugin() {
                                     encryptionKey = authStep2.encryptionKey,
                                     decryptionKey = authStep2.decryptionKey,
                                     initialSequenceNumber = 2 + postAuthCommands.size,
+                                    ackedClassicV2DataSequences = classicV2DataAckedSequences,
                                 )
                                 sentActivityFileProbe = true
                                 activityFileProbeCount = fetchResult.requestedCount
@@ -1228,6 +1237,7 @@ class DirectWatchPlugin : Plugin() {
             var activityFileProbeFailedCount = 0
             val activityFileProbeRequests = mutableListOf<JSObject>()
             val combined = java.io.ByteArrayOutputStream()
+            val classicV2DataAckedSequences = mutableSetOf<Int>()
             val resolvedWeatherPayload = resolveClassicWeatherPayload(weatherPayload)
 
             fun resolveNow() {
@@ -1363,7 +1373,13 @@ class DirectWatchPlugin : Plugin() {
                                 CLASSIC_POST_AUTH_READ_MS
                             }
                             val inventoryError = if (includeHistory) {
-                                readClassicPackets(socket, packets, combined, postAuthReadMs)
+                                readClassicPackets(
+                                    socket = socket,
+                                    packets = packets,
+                                    combined = combined,
+                                    durationMs = postAuthReadMs,
+                                    ackedClassicV2DataSequences = classicV2DataAckedSequences,
+                                )
                             } else {
                                 readClassicPacketsUntilActivitySelection(
                                     socket,
@@ -1373,6 +1389,7 @@ class DirectWatchPlugin : Plugin() {
                                     entryDate,
                                     includeSleep,
                                     postAuthReadMs,
+                                    classicV2DataAckedSequences,
                                 )
                             }
                             if (inventoryError != null) {
@@ -1400,6 +1417,7 @@ class DirectWatchPlugin : Plugin() {
                                     encryptionKey = authStep2.encryptionKey,
                                     decryptionKey = authStep2.decryptionKey,
                                     initialSequenceNumber = nextServiceSequence,
+                                    ackedClassicV2DataSequences = classicV2DataAckedSequences,
                                 )
                                 nextServiceSequence = fetchResult.nextSequenceNumber
                                 sentActivityFileProbe = true
@@ -1426,7 +1444,13 @@ class DirectWatchPlugin : Plugin() {
                             Thread.sleep(CLASSIC_POST_AUTH_COMMAND_DELAY_MS)
                         }
                         socket.outputStream.flush()
-                        errorMessage = readClassicPackets(socket, packets, combined, CLASSIC_SERVICE_SYNC_READ_MS) ?: errorMessage
+                        errorMessage = readClassicPackets(
+                            socket = socket,
+                            packets = packets,
+                            combined = combined,
+                            durationMs = CLASSIC_SERVICE_SYNC_READ_MS,
+                            ackedClassicV2DataSequences = classicV2DataAckedSequences,
+                        ) ?: errorMessage
                         if (keepAliveMs > 0 && errorMessage == null) {
                             DirectWatchForegroundService.start(
                                 context.applicationContext,
@@ -7155,6 +7179,7 @@ class DirectWatchPlugin : Plugin() {
         packets: MutableList<JSObject>,
         combined: java.io.ByteArrayOutputStream,
         durationMs: Long,
+        ackedClassicV2DataSequences: MutableSet<Int>? = null,
     ): String? {
         val startedAt = android.os.SystemClock.uptimeMillis()
         val readBuffer = ByteArray(512)
@@ -7172,12 +7197,65 @@ class DirectWatchPlugin : Plugin() {
                     val bytes = readBuffer.copyOfRange(0, count)
                     combined.write(bytes)
                     packets.add(buildClassicPacket(bytes, packets.size + 1))
+                    if (ackedClassicV2DataSequences != null) {
+                        ackClassicV2DataPackets(
+                            socket = socket,
+                            bytes = combined.toByteArray(),
+                            ackedSequences = ackedClassicV2DataSequences,
+                        )
+                    }
                 }
             } else {
                 Thread.sleep(CLASSIC_PROBE_POLL_MS)
             }
         }
         return null
+    }
+
+    private fun ackClassicV2DataPackets(
+        socket: BluetoothSocket,
+        bytes: ByteArray,
+        ackedSequences: MutableSet<Int>,
+    ) {
+        var offset = 0
+        while (offset <= bytes.size - 8) {
+            if (bytes[offset] != 0xA5.toByte() || bytes[offset + 1] != 0xA5.toByte()) {
+                offset += 1
+                continue
+            }
+
+            val packetType = bytes[offset + 2].toInt() and 0x0f
+            val sequenceNumber = bytes[offset + 3].toInt() and 0xff
+            val payloadLength = littleEndianUInt16(bytes, offset + 4)
+            val packetSize = 8 + payloadLength
+            if (payloadLength < 0 || packetSize < 8) {
+                offset += 1
+                continue
+            }
+            if (offset + packetSize > bytes.size) {
+                break
+            }
+
+            val payloadStart = offset + 8
+            val payload = bytes.copyOfRange(payloadStart, payloadStart + payloadLength)
+            val expectedChecksum = littleEndianUInt16(bytes, offset + 6)
+            if (classicSppV2Checksum(payload) != expectedChecksum) {
+                offset += 1
+                continue
+            }
+
+            if (packetType == 3 && ackedSequences.add(sequenceNumber)) {
+                try {
+                    socket.outputStream.write(buildClassicV2AckPacket(sequenceNumber))
+                    socket.outputStream.flush()
+                    Log.d(TAG, "classic spp v2 data ack seq=$sequenceNumber")
+                } catch (error: IOException) {
+                    Log.w(TAG, "classic spp v2 data ack failed seq=$sequenceNumber: ${safeMessage(error)}")
+                }
+            }
+
+            offset += packetSize
+        }
     }
 
     private fun readClassicPacketsUntilAuthStage(
@@ -7240,13 +7318,20 @@ class DirectWatchPlugin : Plugin() {
         entryDate: String?,
         includeSleep: Boolean,
         durationMs: Long,
+        ackedClassicV2DataSequences: MutableSet<Int>? = null,
     ): String? {
         val startedAt = android.os.SystemClock.uptimeMillis()
         var lastError: String? = null
         var lastSelectionSignature: String? = null
         var lastSelectionChangedAt = startedAt
         while (android.os.SystemClock.uptimeMillis() - startedAt < durationMs) {
-            lastError = readClassicPackets(socket, packets, combined, CLASSIC_FAST_READ_POLL_MS) ?: lastError
+            lastError = readClassicPackets(
+                socket = socket,
+                packets = packets,
+                combined = combined,
+                durationMs = CLASSIC_FAST_READ_POLL_MS,
+                ackedClassicV2DataSequences = ackedClassicV2DataSequences,
+            ) ?: lastError
             val now = android.os.SystemClock.uptimeMillis()
             val selectedFileIds = selectClassicActivityFileIdsForEntryDate(
                 classicActivityFileIds(combined.toByteArray(), decryptionKey),
@@ -7277,6 +7362,7 @@ class DirectWatchPlugin : Plugin() {
         encryptionKey: ByteArray,
         decryptionKey: ByteArray?,
         initialSequenceNumber: Int,
+        ackedClassicV2DataSequences: MutableSet<Int>,
     ): ClassicActivityFetchQueueResult {
         val requests = mutableListOf<JSObject>()
         var nextSequenceNumber = initialSequenceNumber
@@ -7333,6 +7419,7 @@ class DirectWatchPlugin : Plugin() {
                 decryptionKey = decryptionKey,
                 targetFileIdHex = idHex,
                 targetFile = file,
+                ackedClassicV2DataSequences = ackedClassicV2DataSequences,
             )
             request.put("status", readResult.status)
             request.put("error", readResult.error)
@@ -7375,6 +7462,7 @@ class DirectWatchPlugin : Plugin() {
         decryptionKey: ByteArray?,
         targetFileIdHex: String?,
         targetFile: ClassicActivityFileSummary?,
+        ackedClassicV2DataSequences: MutableSet<Int>,
     ): ClassicActivityFileReadResult {
         val startedAt = android.os.SystemClock.uptimeMillis()
         val readLimitMs = classicActivityFileReadLimitMs(targetFile)
@@ -7389,7 +7477,13 @@ class DirectWatchPlugin : Plugin() {
         var lastTargetSignature: String? = null
 
         while (android.os.SystemClock.uptimeMillis() - startedAt < readLimitMs) {
-            lastError = readClassicPackets(socket, packets, combined, CLASSIC_ACTIVITY_FILE_QUEUE_POLL_MS) ?: lastError
+            lastError = readClassicPackets(
+                socket = socket,
+                packets = packets,
+                combined = combined,
+                durationMs = CLASSIC_ACTIVITY_FILE_QUEUE_POLL_MS,
+                ackedClassicV2DataSequences = ackedClassicV2DataSequences,
+            ) ?: lastError
             val now = android.os.SystemClock.uptimeMillis()
             val targetPacket = findClassicActivityFilePacket(
                 packets = collectClassicDecryptedPackets(combined.toByteArray(), decryptionKey),

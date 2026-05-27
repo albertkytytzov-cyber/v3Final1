@@ -1114,3 +1114,60 @@ parser по реальным raw-файлам.
 - Важная защита подтверждена по коду: partial-файлы с `crc=null` не попадают в
   payload сохранения и не ACK-аются. В API/ACK идут только `complete +
   crc=true + parsed=true`.
+
+Сверка с Gadgetbridge и коррекция SPP v2 ACK, 27.05:
+
+- На одном и том же файле часов `77A3166A0C02DA`
+  (`SPORTS_OUTDOOR_WALKING_V2 / GPS_TRACK / v2`) Gadgetbridge дочитал все
+  чанки `9/9` и успешно распарсил payload.
+- PERFORM до коррекции видел этот же файл, но останавливался на `chunk=6/9`,
+  `partial-timeout`, `crc=null`. Значит, файл на часах был доступен; проблема
+  была не в тренировке и не в Mi Fitness, а в нашем SPP-потоке.
+- В Gadgetbridge `XiaomiSppProtocolV2` после каждого входящего DATA-пакета
+  отправляет ACK по sequence number. В PERFORM ACK уходил только на auth-stage,
+  но не на поток DATA-пакетов с inventory/activity chunks.
+- В PERFORM перенесена логика ACK без копирования AGPL-кода:
+  - после auth весь post-auth поток сканируется на полные SPP v2 DATA-пакеты;
+  - checksum payload проверяется перед ACK;
+  - каждый sequence ACK-ается один раз в рамках сессии;
+  - чтение файлов активности использует тот же ACK-state.
+- Проверка после установки на Android:
+  - inventory за `2026-05-27`: `total=9`, `selected=7`;
+  - `D009166A0C0501` - daily summary, `complete`, `crc=true`,
+    `parsed=true`;
+  - `77A3166A0C02DA` - workout GPS, `complete`, `crc=true`, `chunk=9/9`,
+    `parsed=true`, `bytes=33427`, `durationMs=1240`;
+  - minute activity файлы `98F5166A0C0300`, `88F6166A0C0300`,
+    `B4F7166A0C0300`, `68F8166A0C0300`, `C0FA166A0C0300` также прочитаны как
+    `complete`, `crc=true`, `parsed=true`;
+  - время и погода отправлены после чтения файлов:
+    `zone=Europe/Sofia`, `temp=26`, `humidity=41`, `wind=2/31`, `uv=3`,
+    `aqi=36`, `sunrise=05:53`, `sunset=20:53`.
+- Практический вывод для тестов с другими приложениями: Gadgetbridge и Mi
+  Fitness нельзя держать подключенными одновременно с PERFORM, потому что часы
+  держат один RFCOMM/SPP-канал. При параллельном запуске Gadgetbridge выбил
+  соединение PERFORM; после `force-stop` Gadgetbridge/Mi Fitness PERFORM
+  прочитал тренировку полностью.
+
+Нормализация сна и защита от старого короткого значения, 27.05:
+
+- В реальной проверке после повторной синхронизации карточка часов показала
+  противоречивый сон: `0 ч 35`, но при этом стадии были длиннее
+  (`deep=1.9 ч`, `REM=1.4 ч`). Это не может быть корректной дневной
+  длительностью сна.
+- Исправление в Android/WebView-слое:
+  - sleep summary нормализуется по максимуму из `durationMinutes`, суммы стадий
+    сна и окна `startTime/endTime`;
+  - короткий incoming sleep больше не затирает более полный existing sleep;
+  - если текущий sync не читает sleep-файл, payload перед отправкой в API
+    дополняется уже нормализованным существующим sleep за этот день/provider.
+- Исправление в API:
+  - входящий sleep нормализуется перед upsert;
+  - ответ API также нормализуется при маппинге строки БД в summary, чтобы старые
+    строки с коротким `sleep_duration_minutes` не возвращались в интерфейс как
+    `0 ч 35`, если стадии/окно дают полный сон.
+- Проверка на Android:
+  - до правки во вкладке `Часы`: `0 ч 35 Сон глубокий 1.9 ч · REM 1.4 ч`;
+  - после установки и синхронизации: `6 ч 13 Сон глубокий 1.9 ч · REM 1.4 ч`;
+  - DirectWatch в 21:37 прочитал 5 файлов за день, все выбранные файлы
+    завершились `complete`, `crc=true`; время/погода отправлены на часы.

@@ -147,12 +147,67 @@ function canonicalIsoDateTime(value: string | null | undefined) {
   return Number.isFinite(parsedTime) ? new Date(parsedTime).toISOString() : null;
 }
 
-function hasPositiveNumber(value: number | null | undefined) {
+function hasPositiveNumber(value: number | null | undefined): value is number {
   return typeof value === "number" && Number.isFinite(value) && value > 0;
 }
 
 function hasText(value: string | null | undefined) {
   return typeof value === "string" && value.trim().length > 0;
+}
+
+function sumSleepStages(sleep: DeviceHealthDailySummaryPayload["sleep"]) {
+  if (!sleep) {
+    return null;
+  }
+
+  const values = [
+    sleep.awakeMinutes,
+    sleep.deepMinutes,
+    sleep.lightMinutes,
+    sleep.remMinutes,
+  ].filter(hasPositiveNumber);
+
+  return values.length ? values.reduce((total, value) => total + value, 0) : null;
+}
+
+function getSleepWindowDurationMinutes(sleep: DeviceHealthDailySummaryPayload["sleep"]) {
+  if (!sleep?.startTime || !sleep.endTime) {
+    return null;
+  }
+
+  const start = new Date(sleep.startTime).getTime();
+  const end = new Date(sleep.endTime).getTime();
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
+    return null;
+  }
+
+  return Math.round((end - start) / 60000);
+}
+
+function normalizeSleepSummary<T extends NonNullable<DeviceHealthDailySummaryPayload["sleep"]>>(sleep: T): T {
+  const stageTotal = sumSleepStages(sleep);
+  const windowDuration = getSleepWindowDurationMinutes(sleep);
+  const durationCandidates = [sleep.durationMinutes, stageTotal, windowDuration]
+    .filter(hasPositiveNumber);
+
+  if (!durationCandidates.length) {
+    return sleep;
+  }
+
+  const bestDuration = Math.max(...durationCandidates);
+  return sleep.durationMinutes === bestDuration
+    ? sleep
+    : {
+        ...sleep,
+        durationMinutes: bestDuration,
+      };
+}
+
+function normalizeDeviceHealthDailySummaryPayload<T extends DeviceHealthDailySummaryPayload>(payload: T): T {
+  return {
+    ...payload,
+    sleep: payload.sleep ? normalizeSleepSummary(payload.sleep) : payload.sleep,
+  };
 }
 
 function mapDeviceOxygenSaturationSummary(
@@ -176,7 +231,7 @@ function mapDeviceOxygenSaturationSummary(
 }
 
 function hasMeaningfulSleepPayload(payload: DeviceHealthDailySummaryPayload) {
-  const sleep = payload.sleep;
+  const sleep = payload.sleep ? normalizeSleepSummary(payload.sleep) : null;
 
   return Boolean(sleep && (
     hasText(sleep.startTime) ||
@@ -344,7 +399,7 @@ function mergeDeviceHealthRawPayload(
 function mapDeviceHealthDailySummary(
   row: DeviceHealthDailySummaryRow,
 ): DeviceHealthDailySummary {
-  return {
+  const summary = {
     id: row.id,
     athleteId: row.athlete_id,
     createdAt: row.created_at,
@@ -381,6 +436,7 @@ function mapDeviceHealthDailySummary(
       totalDurationMinutes: toNullableNumber(row.workout_duration_minutes),
     },
   };
+  return normalizeDeviceHealthDailySummaryPayload(summary);
 }
 
 function mapDeviceWorkoutSample(row: DeviceWorkoutSampleRow): DeviceWorkoutSample {
@@ -562,17 +618,18 @@ export async function upsertDeviceHealthDailySummary(input: {
   athleteId: string;
   payload: DeviceHealthDailySummaryPayload;
 }): Promise<DeviceHealthDailySummary> {
-  const syncedAt = input.payload.syncedAt ?? new Date().toISOString();
-  const hasSleepPayload = hasMeaningfulSleepPayload(input.payload);
-  const hasHeartRatePayload = hasMeaningfulHeartRatePayload(input.payload);
-  const hasOxygenSaturationPayload = hasMeaningfulOxygenSaturationPayload(input.payload);
-  const hasWorkoutPayload = hasMeaningfulWorkoutPayload(input.payload);
+  const payload = normalizeDeviceHealthDailySummaryPayload(input.payload);
+  const syncedAt = payload.syncedAt ?? new Date().toISOString();
+  const hasSleepPayload = hasMeaningfulSleepPayload(payload);
+  const hasHeartRatePayload = hasMeaningfulHeartRatePayload(payload);
+  const hasOxygenSaturationPayload = hasMeaningfulOxygenSaturationPayload(payload);
+  const hasWorkoutPayload = hasMeaningfulWorkoutPayload(payload);
   const existingRawPayload = await getExistingDeviceHealthRawPayload({
     athleteId: input.athleteId,
-    entryDate: input.payload.entryDate,
-    provider: input.payload.provider,
+    entryDate: payload.entryDate,
+    provider: payload.provider,
   });
-  const mergedRawPayload = mergeDeviceHealthRawPayload(existingRawPayload, input.payload.rawPayload);
+  const mergedRawPayload = mergeDeviceHealthRawPayload(existingRawPayload, payload.rawPayload);
   const result = await pool.query<DeviceHealthDailySummaryRow>(
     `
       INSERT INTO device_health_daily_summaries (
@@ -713,33 +770,33 @@ export async function upsertDeviceHealthDailySummary(input: {
     `,
     [
       input.athleteId,
-      input.payload.provider,
-      input.payload.entryDate,
-      input.payload.sourceDevice,
-      input.payload.sleep?.startTime ?? null,
-      input.payload.sleep?.endTime ?? null,
-      input.payload.sleep?.durationMinutes ?? null,
-      input.payload.sleep?.deepMinutes ?? null,
-      input.payload.sleep?.lightMinutes ?? null,
-      input.payload.sleep?.remMinutes ?? null,
-      input.payload.sleep?.awakeMinutes ?? null,
-      input.payload.sleep?.score ?? null,
-      input.payload.heartRate?.restingBpm ?? null,
-      input.payload.heartRate?.averageBpm ?? null,
-      input.payload.heartRate?.minBpm ?? null,
-      input.payload.heartRate?.maxBpm ?? null,
-      input.payload.heartRate?.hrvRmssdMs ?? null,
-      input.payload.oxygenSaturation?.averagePercent ?? null,
-      input.payload.oxygenSaturation?.minPercent ?? null,
-      input.payload.oxygenSaturation?.maxPercent ?? null,
-      input.payload.oxygenSaturation?.latestPercent ?? null,
-      input.payload.oxygenSaturation?.sampleCount ?? 0,
-      input.payload.workout?.count ?? 0,
-      input.payload.workout?.totalDurationMinutes ?? null,
-      input.payload.workout?.totalDistanceMeters ?? null,
-      input.payload.workout?.activeCalories ?? null,
-      input.payload.workout?.averageHeartRateBpm ?? null,
-      input.payload.workout?.maxHeartRateBpm ?? null,
+      payload.provider,
+      payload.entryDate,
+      payload.sourceDevice,
+      payload.sleep?.startTime ?? null,
+      payload.sleep?.endTime ?? null,
+      payload.sleep?.durationMinutes ?? null,
+      payload.sleep?.deepMinutes ?? null,
+      payload.sleep?.lightMinutes ?? null,
+      payload.sleep?.remMinutes ?? null,
+      payload.sleep?.awakeMinutes ?? null,
+      payload.sleep?.score ?? null,
+      payload.heartRate?.restingBpm ?? null,
+      payload.heartRate?.averageBpm ?? null,
+      payload.heartRate?.minBpm ?? null,
+      payload.heartRate?.maxBpm ?? null,
+      payload.heartRate?.hrvRmssdMs ?? null,
+      payload.oxygenSaturation?.averagePercent ?? null,
+      payload.oxygenSaturation?.minPercent ?? null,
+      payload.oxygenSaturation?.maxPercent ?? null,
+      payload.oxygenSaturation?.latestPercent ?? null,
+      payload.oxygenSaturation?.sampleCount ?? 0,
+      payload.workout?.count ?? 0,
+      payload.workout?.totalDurationMinutes ?? null,
+      payload.workout?.totalDistanceMeters ?? null,
+      payload.workout?.activeCalories ?? null,
+      payload.workout?.averageHeartRateBpm ?? null,
+      payload.workout?.maxHeartRateBpm ?? null,
       JSON.stringify(mergedRawPayload),
       syncedAt,
       hasSleepPayload,
@@ -751,13 +808,13 @@ export async function upsertDeviceHealthDailySummary(input: {
 
   const summary = mapDeviceHealthDailySummary(result.rows[0]);
 
-  if (input.payload.samples?.length) {
+  if (payload.samples?.length) {
     await replaceDeviceHealthSamples({
       athleteId: input.athleteId,
       entryDate: summary.entryDate,
-      provider: input.payload.provider,
-      samples: input.payload.samples,
-      sourceDevice: input.payload.sourceDevice,
+      provider: payload.provider,
+      samples: payload.samples,
+      sourceDevice: payload.sourceDevice,
       syncedAt,
     });
   }

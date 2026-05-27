@@ -2161,7 +2161,7 @@ function buildDirectWatchSleepSummary(packets: DirectWatchDecryptedPacket[]): De
     return null;
   }
 
-  const sleep: DeviceHealthSleepSummary = {
+  const sleep: DeviceHealthSleepSummary = normalizeDirectWatchSleepSummary({
     awakeMinutes: normalizeSleepMetric(sleepPacket.sleepAwakeMinutes),
     deepMinutes: normalizeSleepMetric(sleepPacket.sleepDeepMinutes),
     durationMinutes: normalizeSleepMetric(sleepPacket.sleepDurationMinutes),
@@ -2170,7 +2170,7 @@ function buildDirectWatchSleepSummary(packets: DirectWatchDecryptedPacket[]): De
     remMinutes: normalizeSleepMetric(sleepPacket.sleepRemMinutes),
     score: normalizeSleepMetric(sleepPacket.sleepScore),
     startTime: normalizeIsoString(sleepPacket.sleepStartTime),
-  };
+  });
 
   return hasDirectWatchSleepData(sleep) ? sleep : null;
 }
@@ -3040,6 +3040,43 @@ function hasDirectWatchSleepData(value: DeviceHealthSleepSummary) {
         value.score,
       ].some(isMeaningfulDirectWatchNumber),
   );
+}
+
+function normalizeDirectWatchSleepSummary(value: DeviceHealthSleepSummary): DeviceHealthSleepSummary {
+  const stageTotal = sumDirectWatchSleepStages(value);
+  const windowDuration = getDirectWatchSleepWindowDurationMinutes(value);
+  const durationCandidates = [value.durationMinutes, stageTotal, windowDuration]
+    .filter(isMeaningfulDirectWatchNumber);
+  const bestDuration = durationCandidates.length ? Math.max(...durationCandidates) : value.durationMinutes ?? null;
+
+  return {
+    ...value,
+    durationMinutes: bestDuration,
+  };
+}
+
+function sumDirectWatchSleepStages(value: DeviceHealthSleepSummary) {
+  const stages = [
+    value.awakeMinutes,
+    value.deepMinutes,
+    value.lightMinutes,
+    value.remMinutes,
+  ].filter(isMeaningfulDirectWatchNumber);
+  return stages.length ? stages.reduce((total, item) => total + item, 0) : null;
+}
+
+function getDirectWatchSleepWindowDurationMinutes(value: DeviceHealthSleepSummary) {
+  if (!value.startTime || !value.endTime) {
+    return null;
+  }
+
+  const start = new Date(value.startTime).getTime();
+  const end = new Date(value.endTime).getTime();
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
+    return null;
+  }
+
+  return Math.round((end - start) / 60000);
 }
 
 function weightedAverageDirectWatchValue(values: Array<{ value?: number | null; weight?: number | null }>) {
