@@ -4063,8 +4063,9 @@ class DirectWatchPlugin : Plugin() {
             }
 
         if (entryDate.isNullOrBlank()) {
-            return fetchable
+            val selected = fetchable
                 .filter { (_, file) -> includeSleep || !isClassicSleepActivityFile(file) }
+            return filterClassicOrphanWorkoutGpsFiles(selected)
                 .map { it.first }
         }
 
@@ -4085,10 +4086,29 @@ class DirectWatchPlugin : Plugin() {
         }
 
         if (selected.isNotEmpty()) {
-            return selected.map { it.first }
+            return filterClassicOrphanWorkoutGpsFiles(selected).map { it.first }
         }
 
         return emptyList()
+    }
+
+    private fun filterClassicOrphanWorkoutGpsFiles(
+        files: List<Pair<ByteArray, ClassicActivityFileSummary>>,
+    ): List<Pair<ByteArray, ClassicActivityFileSummary>> {
+        val workoutCoreKeys = files
+            .asSequence()
+            .mapNotNull { (_, file) ->
+                if (isClassicWorkoutCoreActivityFile(file)) classicWorkoutAttachmentKey(file) else null
+            }
+            .toSet()
+
+        if (workoutCoreKeys.isEmpty()) {
+            return files.filter { (_, file) -> !isClassicWorkoutGpsActivityFile(file) }
+        }
+
+        return files.filter { (_, file) ->
+            !isClassicWorkoutGpsActivityFile(file) || classicWorkoutAttachmentKey(file) in workoutCoreKeys
+        }
     }
 
     private fun sortClassicActivityFileIdsForFetch(fileIds: List<ByteArray>, entryDate: String?): List<ByteArray> {
@@ -4160,14 +4180,28 @@ class DirectWatchPlugin : Plugin() {
         return file.type == 0 && file.subtype == 6 && file.detailType == 0
     }
 
+    private fun isClassicWorkoutCoreActivityFile(file: ClassicActivityFileSummary): Boolean {
+        return file.type == 1 && (file.detailType == 0 || file.detailType == 1)
+    }
+
+    private fun isClassicWorkoutGpsActivityFile(file: ClassicActivityFileSummary): Boolean {
+        return file.type == 1 && file.detailType == 2
+    }
+
+    private fun classicWorkoutAttachmentKey(file: ClassicActivityFileSummary): String {
+        return listOf(
+            classicActivityFileEntryDate(file) ?: "-",
+            file.subtype,
+        ).joinToString(":")
+    }
+
     private fun isClassicFetchableActivityFile(file: ClassicActivityFileSummary): Boolean {
         return when {
             file.type == 0 && file.subtype == 0 -> true
             isClassicSleepActivityFile(file) -> true
             isClassicManualSampleActivityFile(file) -> true
-            file.type == 1 && file.detailType == 0 -> true
-            file.type == 1 && file.detailType == 1 -> true
-            file.type == 1 && file.detailType == 2 -> true
+            isClassicWorkoutCoreActivityFile(file) -> true
+            isClassicWorkoutGpsActivityFile(file) -> true
             else -> false
         }
     }
