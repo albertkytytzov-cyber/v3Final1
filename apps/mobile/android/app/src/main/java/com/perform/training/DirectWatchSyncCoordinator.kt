@@ -151,6 +151,7 @@ object DirectWatchSyncCoordinator {
         val editor = prefs(context).edit()
             .putString(KEY_LAST_COMPLETED_AT, now)
             .putString(KEY_LAST_OUTCOME, normalizedOutcome)
+            .putString(KEY_LAST_BLOCKED_REASON, null)
 
         if (isSuccessfulOutcome(normalizedOutcome)) {
             editor.putString(KEY_LAST_SUCCESSFUL_AT, now)
