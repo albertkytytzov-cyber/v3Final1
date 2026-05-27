@@ -474,7 +474,7 @@
 
 - если PERFORM не запрашивает workout details, тренировка может иметь только
   summary/GPS без полноценной детализации пульса;
-- текущий `classicActivityFetchOrder()` уже знает про workout details, но
+- на тот момент `classicActivityFetchOrder()` уже знал про workout details, но
   `isClassicFetchableActivityFile()` их не пропускает. Это внутренняя
   несогласованность, ее надо убрать.
 
@@ -1056,10 +1056,15 @@ parser по реальным raw-файлам.
 - Inventory за `2026-05-27`: `total=5`, breakdown
   `0/0/0/v3:2;0/0/1/v5:1;0/8/1/v4:1;1/22/2/v2:1`.
 - Найден отдельный GPS-файл `1/22/2/v2` без основного sports summary/details.
-  До правки такой файл попадал в очередь и давал частичный timeout. Теперь
-  orphan GPS не выбирается для обычной очереди: `selected=3`,
-  `selectedBreakdown=0/0/0/v3:2;0/0/1/v5:1`.
-- Прочитанные файлы после фильтра:
+  Первичная правка с фильтром `orphan GPS` была эвристикой и не соответствует
+  Gadgetbridge.
+- После точной сверки с `XiaomiActivityFileFetcher` /
+  `XiaomiActivityFileId` исправлено: PERFORM больше не отбрасывает такие файлы
+  заранее. Как Gadgetbridge, он берет все валидные activity fileId, читает их
+  очередью, сортирует по `timestamp -> timezone -> type -> subtype ->
+  detailType(summary, details, gps) -> version` и переходит к следующему файлу
+  после короткого no-progress timeout.
+- Прочитанные файлы в этом конкретном прогоне до коррекции фильтра:
   - `D009166A0C0501` - daily summary v5, `complete`, `crc=true`,
     `parsed=true`;
   - `1CEA166A0C0300` - minute activity v3, `complete`, `crc=true`,
@@ -1069,3 +1074,43 @@ parser по реальным raw-файлам.
 - Координатор завершил sync как `service-synced`, очистил pending request и
   выставил `lastSuccessfulAt=2026-05-27T13:06:27.847741Z`. Повторный авто-вход
   блокируется причиной `interval`, как и должно быть.
+
+Точная коррекция очереди файлов, 27.05:
+
+- По Gadgetbridge `XiaomiActivityFileFetcher`:
+  - использует `PriorityQueue<XiaomiActivityFileId>`;
+  - не фильтрует GPS-only / orphan GPS заранее;
+  - для каждого файла запускает таймер `5 секунд`; таймер сбрасывается на
+    каждом chunk; если файл не отвечает, очередь идет дальше;
+  - CRC32 проверяется только после сборки полного payload;
+  - ACK отправляется после чтения файла, если включено удаление данных с часов.
+- В PERFORM перенесено поведение очереди без копирования AGPL-кода:
+  - фильтр `orphan GPS` удален;
+  - порядок fileId приведен к `XiaomiActivityFileId.compareTo`;
+  - no-progress timeout для обычных файлов и workout details выставлен в
+    `5 секунд`;
+  - ACK оставлен более безопасным для продукта: только после успешного
+    сохранения в API/очередь, чтобы не потерять тренировку.
+
+Проверка после коррекции на подключенном Android, 27.05 16:36-16:37:
+
+- Установлена debug-сборка `versionName=1.0.23`, `versionCode=24`,
+  `lastUpdateTime=2026-05-27 16:33:27`.
+- Ручная синхронизация через вкладку `Часы`:
+  - геолокация с телефона: `София, Болгария`;
+  - погода: `temp=27`, `humidity=38`, `wind=2/29`, `uv=5`, `aqi=36`,
+    `pressure=1015.1`, `sunrise=05:53`, `sunset=20:53`.
+- Inventory за `2026-05-27`: `total=4`, breakdown
+  `0/0/0/v3:1;0/0/1/v5:1;0/8/1/v4:1;1/22/2/v2:1`.
+- Новая очередь выбрала GPS-файл, а не отфильтровала его:
+  `selectedBreakdown=0/0/0/v3:1;0/0/1/v5:1;1/22/2/v2:1`.
+- Порядок чтения после сортировки:
+  - `D009166A0C0501` - daily summary v5, `complete`, `crc=true`,
+    `parsed=true`;
+  - `77A3166A0C02DA` - workout GPS v2, `partial-timeout`, `crc=null`,
+    `chunk=6/9`;
+  - `48EB166A0C0300` - minute activity v3, `complete`, `crc=true`,
+    `parsed=true`.
+- Важная защита подтверждена по коду: partial-файлы с `crc=null` не попадают в
+  payload сохранения и не ACK-аются. В API/ACK идут только `complete +
+  crc=true + parsed=true`.

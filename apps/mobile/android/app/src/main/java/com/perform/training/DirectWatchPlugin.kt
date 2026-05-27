@@ -4063,9 +4063,8 @@ class DirectWatchPlugin : Plugin() {
             }
 
         if (entryDate.isNullOrBlank()) {
-            val selected = fetchable
+            return fetchable
                 .filter { (_, file) -> includeSleep || !isClassicSleepActivityFile(file) }
-            return filterClassicOrphanWorkoutGpsFiles(selected)
                 .map { it.first }
         }
 
@@ -4086,79 +4085,51 @@ class DirectWatchPlugin : Plugin() {
         }
 
         if (selected.isNotEmpty()) {
-            return filterClassicOrphanWorkoutGpsFiles(selected).map { it.first }
+            return selected.map { it.first }
         }
 
         return emptyList()
     }
 
-    private fun filterClassicOrphanWorkoutGpsFiles(
-        files: List<Pair<ByteArray, ClassicActivityFileSummary>>,
-    ): List<Pair<ByteArray, ClassicActivityFileSummary>> {
-        val workoutCoreKeys = files
-            .asSequence()
-            .mapNotNull { (_, file) ->
-                if (isClassicWorkoutCoreActivityFile(file)) classicWorkoutAttachmentKey(file) else null
-            }
-            .toSet()
-
-        if (workoutCoreKeys.isEmpty()) {
-            return files.filter { (_, file) -> !isClassicWorkoutGpsActivityFile(file) }
-        }
-
-        return files.filter { (_, file) ->
-            !isClassicWorkoutGpsActivityFile(file) || classicWorkoutAttachmentKey(file) in workoutCoreKeys
-        }
-    }
-
-    private fun sortClassicActivityFileIdsForFetch(fileIds: List<ByteArray>, entryDate: String?): List<ByteArray> {
-        val targetDate = entryDate?.let {
-            try {
-                java.time.LocalDate.parse(it)
-            } catch (_: Exception) {
-                null
-            }
-        }
+    private fun sortClassicActivityFileIdsForFetch(fileIds: List<ByteArray>, _entryDate: String?): List<ByteArray> {
         return fileIds
             .distinctBy { fullHex(it) ?: "" }
             .sortedWith(
                 compareBy<ByteArray> { fileId ->
-                    parseClassicActivityFileIds(fileId).firstOrNull()?.let { file ->
-                        classicActivityDateDistance(file, targetDate)
-                    } ?: Int.MAX_VALUE
+                    parseClassicActivityFileIds(fileId).firstOrNull()?.let { classicActivityFileEpochSeconds(it) }
+                        ?: Long.MAX_VALUE
                 }.thenBy { fileId ->
-                    parseClassicActivityFileIds(fileId).firstOrNull()?.let { classicActivityFetchOrder(it) } ?: 100
-                }.thenByDescending { fileId ->
-                    parseClassicActivityFileIds(fileId).firstOrNull()?.timestamp ?: ""
+                    parseClassicActivityFileIds(fileId).firstOrNull()?.timezone ?: Int.MAX_VALUE
+                }.thenBy { fileId ->
+                    parseClassicActivityFileIds(fileId).firstOrNull()?.type ?: Int.MAX_VALUE
+                }.thenBy { fileId ->
+                    parseClassicActivityFileIds(fileId).firstOrNull()?.subtype ?: Int.MAX_VALUE
+                }.thenBy { fileId ->
+                    parseClassicActivityFileIds(fileId).firstOrNull()?.let { classicActivityDetailFetchOrder(it) }
+                        ?: Int.MAX_VALUE
+                }.thenBy { fileId ->
+                    parseClassicActivityFileIds(fileId).firstOrNull()?.version ?: Int.MAX_VALUE
                 }.thenBy { fileId ->
                     fullHex(fileId) ?: ""
                 },
             )
     }
 
-    private fun classicActivityDateDistance(file: ClassicActivityFileSummary, targetDate: java.time.LocalDate?): Int {
-        if (targetDate == null) {
-            return 0
-        }
-        val fileDate = classicActivityFileEntryLocalDate(file) ?: return Int.MAX_VALUE
-        return kotlin.math.abs(java.time.temporal.ChronoUnit.DAYS.between(targetDate, fileDate)).toInt()
-    }
-
-    private fun classicActivityFetchOrder(file: ClassicActivityFileSummary): Int {
-        return when {
-            file.type == 0 && file.subtype == 0 && file.detailType == 1 -> 0
-            file.type == 0 && file.subtype == 0 && file.detailType == 0 -> 1
-            isClassicSleepActivityFile(file) -> 2
-            isClassicManualSampleActivityFile(file) -> 3
-            file.type == 1 && file.detailType == 1 -> 10
-            file.type == 1 && file.detailType == 0 -> 11
-            file.type == 1 && file.detailType == 2 -> 12
-            else -> 50
+    private fun classicActivityFileEpochSeconds(file: ClassicActivityFileSummary): Long {
+        return try {
+            java.time.Instant.parse(file.timestamp).epochSecond
+        } catch (_: Exception) {
+            Long.MAX_VALUE
         }
     }
 
-    private fun classicActivityFileEntryDate(file: ClassicActivityFileSummary): String? {
-        return classicActivityFileEntryLocalDate(file)?.toString()
+    private fun classicActivityDetailFetchOrder(file: ClassicActivityFileSummary): Int {
+        return when (file.detailType) {
+            1 -> 0
+            0 -> 1
+            2 -> 2
+            else -> 3
+        }
     }
 
     private fun classicActivityFileEntryLocalDate(file: ClassicActivityFileSummary): java.time.LocalDate? {
@@ -4186,13 +4157,6 @@ class DirectWatchPlugin : Plugin() {
 
     private fun isClassicWorkoutGpsActivityFile(file: ClassicActivityFileSummary): Boolean {
         return file.type == 1 && file.detailType == 2
-    }
-
-    private fun classicWorkoutAttachmentKey(file: ClassicActivityFileSummary): String {
-        return listOf(
-            classicActivityFileEntryDate(file) ?: "-",
-            file.subtype,
-        ).joinToString(":")
     }
 
     private fun isClassicFetchableActivityFile(file: ClassicActivityFileSummary): Boolean {
@@ -8421,10 +8385,10 @@ class DirectWatchPlugin : Plugin() {
         private const val CLASSIC_POST_AUTH_HISTORY_READ_MS = 10_000L
         private const val CLASSIC_SERVICE_SYNC_READ_MS = 4_000L
         private const val CLASSIC_ACTIVITY_ACK_READ_MS = 1_500L
-        private const val CLASSIC_ACTIVITY_FILE_READ_MS = 45_000L
-        private const val CLASSIC_ACTIVITY_FILE_NO_PROGRESS_MS = 12_000L
-        private const val CLASSIC_ACTIVITY_WORKOUT_DETAIL_READ_MS = 120_000L
-        private const val CLASSIC_ACTIVITY_WORKOUT_DETAIL_NO_PROGRESS_MS = 30_000L
+        private const val CLASSIC_ACTIVITY_FILE_READ_MS = 30_000L
+        private const val CLASSIC_ACTIVITY_FILE_NO_PROGRESS_MS = 5_000L
+        private const val CLASSIC_ACTIVITY_WORKOUT_DETAIL_READ_MS = 60_000L
+        private const val CLASSIC_ACTIVITY_WORKOUT_DETAIL_NO_PROGRESS_MS = 5_000L
         private const val CLASSIC_ACTIVITY_FILE_QUEUE_POLL_MS = 250L
         private const val CLASSIC_ACTIVITY_FILE_PROBE_LIMIT = 512
         private const val CLASSIC_ACTIVITY_FILE_ID_BYTES = 7
