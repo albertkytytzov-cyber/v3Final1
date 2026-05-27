@@ -78,8 +78,18 @@ class DirectWatchPlugin : Plugin() {
     private var activeClassicThread: Thread? = null
     private var activeClassicForegroundBridge = false
     private var activeSession: DirectWatchSession? = null
+    private val syncCoordinatorListener = DirectWatchSyncCoordinator.Listener { request ->
+        mainHandler.post {
+            notifyListeners("directWatchSyncRequested", request)
+        }
+    }
     private val sessionSubscribeQueue = java.util.ArrayDeque<NotifyCharacteristicSubscription>()
     private var pendingSessionSubscribe: NotifyCharacteristicSubscription? = null
+
+    override fun load() {
+        super.load()
+        DirectWatchSyncCoordinator.addListener(context.applicationContext, syncCoordinatorListener)
+    }
 
     @PluginMethod
     fun isAvailable(call: PluginCall) {
@@ -608,6 +618,61 @@ class DirectWatchPlugin : Plugin() {
     }
 
     @PluginMethod
+    fun getSyncCoordinatorStatus(call: PluginCall) {
+        call.resolve(DirectWatchSyncCoordinator.status(context.applicationContext))
+    }
+
+    @PluginMethod
+    fun configureSyncCoordinator(call: PluginCall) {
+        val deviceId = call.getString("deviceId")
+        val deviceName = call.getString("deviceName")
+        val authKeyHex = call.getString("authKeyHex")
+        val enabled = call.getBoolean("enabled") ?: true
+        call.resolve(
+            DirectWatchSyncCoordinator.configure(
+                context = context.applicationContext,
+                deviceId = deviceId,
+                deviceName = deviceName,
+                authKeyHex = authKeyHex,
+                enabled = enabled,
+            ),
+        )
+    }
+
+    @PluginMethod
+    fun notifyAppVisible(call: PluginCall) {
+        DirectWatchSyncCoordinator.requestSync(
+            context.applicationContext,
+            DirectWatchSyncCoordinator.REASON_APP_VISIBLE,
+        )
+        call.resolve(DirectWatchSyncCoordinator.status(context.applicationContext))
+    }
+
+    @PluginMethod
+    fun requestCoordinatorSync(call: PluginCall) {
+        val reason = call.getString("reason") ?: "manual"
+        val force = call.getBoolean("force") ?: false
+        call.resolve(
+            DirectWatchSyncCoordinator.requestSync(
+                context = context.applicationContext,
+                reason = reason,
+                force = force,
+            ),
+        )
+    }
+
+    @PluginMethod
+    fun markSyncRequestHandled(call: PluginCall) {
+        call.resolve(
+            DirectWatchSyncCoordinator.markHandled(
+                context = context.applicationContext,
+                requestId = call.getString("requestId"),
+                outcome = call.getString("outcome"),
+            ),
+        )
+    }
+
+    @PluginMethod
     fun stopSyncService(call: PluginCall) {
         stopActiveClassicSocket()
         DirectWatchForegroundService.stop(context.applicationContext)
@@ -1118,6 +1183,15 @@ class DirectWatchPlugin : Plugin() {
             return
         }
 
+        DirectWatchSyncCoordinator.configure(
+            context = context.applicationContext,
+            deviceId = address,
+            deviceName = devicesByAddress[address]?.name,
+            authKeyHex = authKeyHex,
+            enabled = true,
+        )
+        DirectWatchSyncCoordinator.noteSyncStarted(context.applicationContext, "sync-service")
+
         val device = try {
             adapter.getRemoteDevice(address)
         } catch (error: IllegalArgumentException) {
@@ -1181,6 +1255,10 @@ class DirectWatchPlugin : Plugin() {
                     activityFileProbeCompletedCount = activityFileProbeCompletedCount,
                     activityFileProbeFailedCount = activityFileProbeFailedCount,
                     activityFileProbeRequests = activityFileProbeRequests,
+                )
+                DirectWatchSyncCoordinator.markCompleted(
+                    context.applicationContext,
+                    if (errorMessage == null) "service-synced" else "service-error",
                 )
                 mainHandler.post {
                     call.resolve(response)
@@ -1649,7 +1727,16 @@ class DirectWatchPlugin : Plugin() {
             stopActiveClassicSocket()
         }
         stopActiveBondReceiver()
+        DirectWatchSyncCoordinator.removeListener(syncCoordinatorListener)
         super.handleOnDestroy()
+    }
+
+    override fun handleOnResume() {
+        super.handleOnResume()
+        DirectWatchSyncCoordinator.requestSync(
+            context.applicationContext,
+            DirectWatchSyncCoordinator.REASON_APP_VISIBLE,
+        )
     }
 
     private fun bluetoothAdapter(): BluetoothAdapter? {
@@ -5836,11 +5923,16 @@ class DirectWatchPlugin : Plugin() {
         file: ClassicActivityFileSummary,
         dataEnd: Int,
     ): ClassicDailySummary? {
-        if (file.type != 0 || file.subtype != 0 || file.detailType != 1 || file.version != 5) {
+        if (file.type != 0 || file.subtype != 0 || file.detailType != 1) {
             return null
         }
 
-        var offset = 12 // 7 bytes file id + 1 padding + 4 bytes validity header.
+        val headerSize = when (file.version) {
+            3 -> 3
+            5 -> 4
+            else -> return null
+        }
+        var offset = 8 + headerSize // 7 bytes file id + 1 padding + versioned header.
         fun takeByte(): Int? {
             if (offset + 1 > dataEnd) return null
             return bytes[offset++].toInt() and 0xff
@@ -5882,13 +5974,18 @@ class DirectWatchPlugin : Plugin() {
         val spo2Min = takeByte() ?: return null
         if (takeInt() == null) return null
         val spo2Avg = takeByte() ?: return null
-        val trainingLoadDay = takeShort() ?: return null
-        val trainingLoadWeek = takeShort() ?: return null
-        if (takeByte() == null) return null
-        if (takeByte() == null) return null
-        if (takeByte() == null) return null
-        if (takeByte() == null) return null
-        val vitality = takeShort()
+        var trainingLoadDay: Int? = null
+        var trainingLoadWeek: Int? = null
+        var vitality: Int? = null
+        if (file.version > 3) {
+            trainingLoadDay = takeShort() ?: return null
+            trainingLoadWeek = takeShort() ?: return null
+            if (takeByte() == null) return null
+            if (takeByte() == null) return null
+            if (takeByte() == null) return null
+            if (takeByte() == null) return null
+            vitality = takeShort()
+        }
 
         return ClassicDailySummary(
             steps = steps,

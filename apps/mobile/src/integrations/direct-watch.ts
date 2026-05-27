@@ -411,6 +411,46 @@ export interface DirectWatchSyncServiceStatus {
   updatedAt?: string | null;
 }
 
+export interface DirectWatchSyncCoordinatorRequest {
+  blockedReason?: string | null;
+  createdAt?: string | null;
+  deviceId?: string | null;
+  deviceName?: string | null;
+  entryDate?: string | null;
+  force?: boolean;
+  id?: string | null;
+  reason?: string | null;
+  requested?: boolean;
+  source?: string | null;
+}
+
+export interface DirectWatchSyncCoordinatorStatus {
+  configured?: boolean;
+  deviceId?: string | null;
+  deviceName?: string | null;
+  enabled?: boolean;
+  failureBackoffMs?: number | null;
+  hasAuthKey?: boolean;
+  intervalMs?: number | null;
+  lastBlockedReason?: string | null;
+  lastCompletedAt?: string | null;
+  lastEventAt?: string | null;
+  lastHandledAt?: string | null;
+  lastOutcome?: string | null;
+  lastReason?: string | null;
+  lastRequestedAt?: string | null;
+  lastSuccessfulAt?: string | null;
+  nextAllowedAt?: string | null;
+  nextAllowedReason?: string | null;
+  pendingAgeMs?: number | null;
+  pendingCreatedAt?: string | null;
+  pendingEntryDate?: string | null;
+  pendingReason?: string | null;
+  pendingRequestId?: string | null;
+  pendingTtlMs?: number | null;
+  retryAfterMs?: number | null;
+}
+
 export interface DirectWatchPayloadPreview {
   byteLength?: number | null;
   companyId?: number | null;
@@ -425,12 +465,24 @@ export interface DirectWatchScanResult {
 
 interface DirectWatchPlugin {
   addListener?: (
-    eventName: "directWatchPacket" | "directWatchSession",
+    eventName: "directWatchPacket" | "directWatchSession" | "directWatchSyncRequested",
     listenerFunc: (event: unknown) => void,
   ) => Promise<DirectWatchListenerHandle> | DirectWatchListenerHandle;
+  configureSyncCoordinator?: (input: {
+    authKeyHex?: string | null;
+    deviceId?: string | null;
+    deviceName?: string | null;
+    enabled?: boolean;
+  }) => Promise<DirectWatchSyncCoordinatorStatus>;
   getSessionStatus?: () => Promise<DirectWatchSessionStatus>;
+  getSyncCoordinatorStatus?: () => Promise<DirectWatchSyncCoordinatorStatus>;
   inspectDevice?: (input: { deviceId: string }) => Promise<DirectWatchInspection>;
   isAvailable?: () => Promise<DirectWatchAvailability>;
+  markSyncRequestHandled?: (input: {
+    outcome?: string;
+    requestId?: string | null;
+  }) => Promise<DirectWatchSyncCoordinatorStatus>;
+  notifyAppVisible?: () => Promise<DirectWatchSyncCoordinatorStatus>;
   pairDevice?: (input: { deviceId: string }) => Promise<DirectWatchPairingResult>;
   ackActivityFiles?: (input: {
     authKeyHex: string;
@@ -447,6 +499,10 @@ interface DirectWatchPlugin {
     postAuthProbe?: boolean;
   }) => Promise<DirectWatchClassicProbe>;
   requestAuthorization?: () => Promise<DirectWatchPermissionResult>;
+  requestCoordinatorSync?: (input: {
+    force?: boolean;
+    reason?: string;
+  }) => Promise<DirectWatchSyncCoordinatorRequest>;
   scanDevices?: (input?: { durationMs?: number }) => Promise<DirectWatchScanResult>;
   startSession?: (input: { deviceId: string }) => Promise<DirectWatchSessionStatus>;
   stopSession?: () => Promise<DirectWatchSessionStatus>;
@@ -628,6 +684,72 @@ export async function stopDirectWatchSyncService(): Promise<DirectWatchSyncServi
 
   const status = await plugin.stopSyncService();
   return normalizeDirectWatchSyncServiceStatus(status);
+}
+
+export async function configureDirectWatchSyncCoordinator(input: {
+  authKeyHex?: string | null;
+  deviceId?: string | null;
+  deviceName?: string | null;
+  enabled?: boolean;
+}): Promise<DirectWatchSyncCoordinatorStatus> {
+  const plugin = getDirectWatchPlugin();
+
+  if (!plugin?.configureSyncCoordinator) {
+    return { configured: false, enabled: false };
+  }
+
+  const status = await plugin.configureSyncCoordinator(input);
+  return normalizeDirectWatchSyncCoordinatorStatus(status);
+}
+
+export async function getDirectWatchSyncCoordinatorStatus(): Promise<DirectWatchSyncCoordinatorStatus> {
+  const plugin = getDirectWatchPlugin();
+
+  if (!plugin?.getSyncCoordinatorStatus) {
+    return { configured: false, enabled: false };
+  }
+
+  const status = await plugin.getSyncCoordinatorStatus();
+  return normalizeDirectWatchSyncCoordinatorStatus(status);
+}
+
+export async function notifyDirectWatchAppVisible(): Promise<DirectWatchSyncCoordinatorStatus> {
+  const plugin = getDirectWatchPlugin();
+
+  if (!plugin?.notifyAppVisible) {
+    return { configured: false, enabled: false };
+  }
+
+  const status = await plugin.notifyAppVisible();
+  return normalizeDirectWatchSyncCoordinatorStatus(status);
+}
+
+export async function requestDirectWatchCoordinatorSync(
+  reason: string,
+  force = false,
+): Promise<DirectWatchSyncCoordinatorRequest> {
+  const plugin = getDirectWatchPlugin();
+
+  if (!plugin?.requestCoordinatorSync) {
+    return { requested: false, reason, blockedReason: "not-supported" };
+  }
+
+  const request = await plugin.requestCoordinatorSync({ force, reason });
+  return normalizeDirectWatchSyncCoordinatorRequest(request);
+}
+
+export async function markDirectWatchSyncRequestHandled(
+  requestId?: string | null,
+  outcome = "handled",
+): Promise<DirectWatchSyncCoordinatorStatus> {
+  const plugin = getDirectWatchPlugin();
+
+  if (!plugin?.markSyncRequestHandled) {
+    return { configured: false, enabled: false };
+  }
+
+  const status = await plugin.markSyncRequestHandled({ outcome, requestId });
+  return normalizeDirectWatchSyncCoordinatorStatus(status);
 }
 
 export async function probeDirectWatchClassicSession(
@@ -1234,6 +1356,23 @@ export async function addDirectWatchSessionListener(
   return handle ?? null;
 }
 
+export async function addDirectWatchSyncRequestListener(
+  callback: (request: DirectWatchSyncCoordinatorRequest) => void,
+): Promise<DirectWatchListenerHandle | null> {
+  const plugin = getDirectWatchPlugin();
+
+  if (!plugin?.addListener) {
+    return null;
+  }
+
+  const handle = await Promise.resolve(
+    plugin.addListener("directWatchSyncRequested", (event) => {
+      callback(normalizeDirectWatchSyncCoordinatorRequest(event));
+    }),
+  );
+  return handle ?? null;
+}
+
 function getDirectWatchPlugin() {
   return (globalThis as CapacitorWithDirectWatch).Capacitor?.Plugins?.DirectWatch ?? null;
 }
@@ -1432,6 +1571,58 @@ function normalizeDirectWatchSyncServiceStatus(value: unknown): DirectWatchSyncS
     message: normalizeString(value.message),
     running: Boolean(value.running),
     updatedAt: normalizeString(value.updatedAt),
+  };
+}
+
+function normalizeDirectWatchSyncCoordinatorRequest(value: unknown): DirectWatchSyncCoordinatorRequest {
+  if (!isRecord(value)) {
+    return { requested: false };
+  }
+
+  return {
+    blockedReason: normalizeString(value.blockedReason),
+    createdAt: normalizeString(value.createdAt),
+    deviceId: normalizeString(value.deviceId),
+    deviceName: normalizeString(value.deviceName),
+    entryDate: normalizeString(value.entryDate),
+    force: normalizeBoolean(value.force),
+    id: normalizeString(value.id),
+    reason: normalizeString(value.reason),
+    requested: normalizeBoolean(value.requested),
+    source: normalizeString(value.source),
+  };
+}
+
+function normalizeDirectWatchSyncCoordinatorStatus(value: unknown): DirectWatchSyncCoordinatorStatus {
+  if (!isRecord(value)) {
+    return { configured: false, enabled: false };
+  }
+
+  return {
+    configured: normalizeBoolean(value.configured),
+    deviceId: normalizeString(value.deviceId),
+    deviceName: normalizeString(value.deviceName),
+    enabled: normalizeBoolean(value.enabled),
+    failureBackoffMs: normalizeNumber(value.failureBackoffMs),
+    hasAuthKey: normalizeBoolean(value.hasAuthKey),
+    intervalMs: normalizeNumber(value.intervalMs),
+    lastBlockedReason: normalizeString(value.lastBlockedReason),
+    lastCompletedAt: normalizeString(value.lastCompletedAt),
+    lastEventAt: normalizeString(value.lastEventAt),
+    lastHandledAt: normalizeString(value.lastHandledAt),
+    lastOutcome: normalizeString(value.lastOutcome),
+    lastReason: normalizeString(value.lastReason),
+    lastRequestedAt: normalizeString(value.lastRequestedAt),
+    lastSuccessfulAt: normalizeString(value.lastSuccessfulAt),
+    nextAllowedAt: normalizeString(value.nextAllowedAt),
+    nextAllowedReason: normalizeString(value.nextAllowedReason),
+    pendingAgeMs: normalizeNumber(value.pendingAgeMs),
+    pendingCreatedAt: normalizeString(value.pendingCreatedAt),
+    pendingEntryDate: normalizeString(value.pendingEntryDate),
+    pendingReason: normalizeString(value.pendingReason),
+    pendingRequestId: normalizeString(value.pendingRequestId),
+    pendingTtlMs: normalizeNumber(value.pendingTtlMs),
+    retryAfterMs: normalizeNumber(value.retryAfterMs),
   };
 }
 

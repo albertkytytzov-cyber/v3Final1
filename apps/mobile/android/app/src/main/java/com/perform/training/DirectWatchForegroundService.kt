@@ -5,11 +5,17 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothDevice
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import androidx.core.content.ContextCompat
 import com.getcapacitor.JSObject
 import java.time.Instant
@@ -17,9 +23,22 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 class DirectWatchForegroundService : Service() {
+    private val handler = Handler(Looper.getMainLooper())
+    private val syncReceiver: BroadcastReceiver = DirectWatchSyncReceiver()
+    private val periodicSyncRunnable = object : Runnable {
+        override fun run() {
+            DirectWatchSyncCoordinator.requestSync(
+                applicationContext,
+                DirectWatchSyncCoordinator.REASON_SERVICE_TIMER,
+            )
+            handler.postDelayed(this, DIRECT_WATCH_NATIVE_SYNC_INTERVAL_MS)
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
         ensureNotificationChannel()
+        registerSyncReceiver()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -49,12 +68,23 @@ class DirectWatchForegroundService : Service() {
                     message = message,
                 )
                 startForegroundCompat(buildNotification(deviceName, bridgeUntil))
+                startNativeSyncTimer()
+                DirectWatchSyncCoordinator.requestSync(
+                    applicationContext,
+                    DirectWatchSyncCoordinator.REASON_SERVICE_START,
+                )
                 return START_STICKY
             }
         }
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    override fun onDestroy() {
+        stopNativeSyncTimer()
+        unregisterSyncReceiver()
+        super.onDestroy()
+    }
 
     private fun ensureNotificationChannel() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
@@ -133,6 +163,42 @@ class DirectWatchForegroundService : Service() {
         }
     }
 
+    private fun registerSyncReceiver() {
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_USER_PRESENT)
+            addAction(BluetoothAdapter.ACTION_STATE_CHANGED)
+            addAction(BluetoothAdapter.ACTION_CONNECTION_STATE_CHANGED)
+            addAction(BluetoothDevice.ACTION_ACL_CONNECTED)
+        }
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                registerReceiver(syncReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+            } else {
+                @Suppress("DEPRECATION")
+                registerReceiver(syncReceiver, filter)
+            }
+        } catch (_: RuntimeException) {
+            // The service may be restarted while Android is still unwinding the old receiver.
+        }
+    }
+
+    private fun unregisterSyncReceiver() {
+        try {
+            unregisterReceiver(syncReceiver)
+        } catch (_: RuntimeException) {
+            // Receiver may already be gone if Android stopped the service abruptly.
+        }
+    }
+
+    private fun startNativeSyncTimer() {
+        handler.removeCallbacks(periodicSyncRunnable)
+        handler.postDelayed(periodicSyncRunnable, DIRECT_WATCH_NATIVE_SYNC_INTERVAL_MS)
+    }
+
+    private fun stopNativeSyncTimer() {
+        handler.removeCallbacks(periodicSyncRunnable)
+    }
+
     private fun saveState(
         running: Boolean,
         deviceId: String?,
@@ -166,6 +232,7 @@ class DirectWatchForegroundService : Service() {
         private const val KEY_BRIDGE_UNTIL = "bridgeUntil"
         private const val KEY_MESSAGE = "message"
         private const val KEY_UPDATED_AT = "updatedAt"
+        private const val DIRECT_WATCH_NATIVE_SYNC_INTERVAL_MS = 30 * 60 * 1000L
 
         fun start(
             context: Context,

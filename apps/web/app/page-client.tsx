@@ -3588,16 +3588,16 @@ function getImportedStandaloneDurationUnit(value: string): ImportedSetDurationUn
   return null;
 }
 
-function inferDetachedImportedSetDurationUnit(volume: string, control: string) {
+function inferDetachedImportedSetDurationUnit(volume: string, extraText: string) {
   const normalizedVolume = normalizeImportedPlanText(volume);
 
   if (!hasImportedSetPattern(normalizedVolume) || hasImportedDurationUnit(normalizedVolume)) {
     return null;
   }
 
-  const controlParts = normalizeImportedPlanText(control).split(/\s*\/\s*/u);
+  const extraTextParts = normalizeImportedPlanText(extraText).split(/\s*\/\s*/u);
 
-  for (const part of controlParts) {
+  for (const part of extraTextParts) {
     const standaloneUnit = getImportedStandaloneDurationUnit(part);
 
     if (standaloneUnit) {
@@ -3605,7 +3605,7 @@ function inferDetachedImportedSetDurationUnit(volume: string, control: string) {
     }
   }
 
-  const leadingUnitMatch = normalizeImportedPlanText(control)
+  const leadingUnitMatch = normalizeImportedPlanText(extraText)
     .toLowerCase()
     .match(/^(сек|s|sec|мин|m|min)\.?(?:\s+|$)/iu);
 
@@ -3616,9 +3616,9 @@ function inferDetachedImportedSetDurationUnit(volume: string, control: string) {
   return /^(?:сек|s|sec)$/iu.test(leadingUnitMatch[1]) ? "seconds" : "minutes";
 }
 
-function removeDetachedImportedSetDurationUnit(control: string, unit: ImportedSetDurationUnit | null) {
+function removeDetachedImportedSetDurationUnit(extraText: string, unit: ImportedSetDurationUnit | null) {
   if (!unit) {
-    return normalizeImportedPlanText(control);
+    return normalizeImportedPlanText(extraText);
   }
 
   const unitPattern =
@@ -3626,7 +3626,7 @@ function removeDetachedImportedSetDurationUnit(control: string, unit: ImportedSe
       ? /^(?:сек|s|sec)\.?(?:\s+|$)/iu
       : /^(?:мин|m|min)\.?(?:\s+|$)/iu;
 
-  return normalizeImportedPlanText(control)
+  return normalizeImportedPlanText(extraText)
     .split(/\s*\/\s*/u)
     .map((part) => part.replace(unitPattern, "").trim())
     .filter((part) => part && getImportedStandaloneDurationUnit(part) !== unit)
@@ -3636,7 +3636,7 @@ function removeDetachedImportedSetDurationUnit(control: string, unit: ImportedSe
 function normalizeImportedVolumeText(
   name: string,
   volume: string,
-  control: string,
+  extraText: string,
   blockType: PlanBlockType,
   detachedUnit: ImportedSetDurationUnit | null = null,
 ) {
@@ -3644,7 +3644,7 @@ function normalizeImportedVolumeText(
   const inferredUnit =
     detachedUnit ??
     inferImportedSetDurationUnit(
-      normalizeImportedPlanText(`${name} ${normalizedVolume} ${control}`),
+      normalizeImportedPlanText(`${name} ${normalizedVolume} ${extraText}`),
       blockType,
     );
 
@@ -3731,8 +3731,8 @@ function splitImportedExerciseItems(value: string) {
     .filter((item) => /[a-zа-яё]/iu.test(item));
 }
 
-function buildImportedExerciseItems(name: string, volume: string, control: string) {
-  const details = [volume, control].filter(Boolean);
+function buildImportedExerciseItems(name: string, volume: string, extraText: string) {
+  const details = [volume, extraText].filter(Boolean);
 
   if (!isGenericImportedExerciseGroup(name) || details.length === 0) {
     return [];
@@ -3780,9 +3780,9 @@ function inferImportedBlockType(value: string): PlanBlockType {
   return "metabolic";
 }
 
-function inferImportedRowKind(name: string, volume: string, control: string): PlanBlockRowKind {
+function inferImportedRowKind(name: string, volume: string, extraText: string): PlanBlockRowKind {
   const normalizedName = name.toLowerCase();
-  const normalized = `${name} ${volume} ${control}`.toLowerCase();
+  const normalized = `${name} ${volume} ${extraText}`.toLowerCase();
 
   if (/замет|коммент|note/u.test(normalized)) {
     return "note";
@@ -3815,34 +3815,34 @@ function inferImportedRowKind(name: string, volume: string, control: string): Pl
 function createImportedPlanBlock(
   name: string,
   volume: string,
-  control: string,
+  extraText: string,
   displayOrder: number,
 ): PlanTemplatePayload["blocks"][number] {
-  const rawDetails = normalizeImportedPlanText(`${name} ${volume} ${control}`);
+  const rawDetails = normalizeImportedPlanText(`${name} ${volume} ${extraText}`);
   const blockType = inferImportedBlockType(rawDetails);
-  const rowKind = inferImportedRowKind(name, volume, control);
-  const detachedSetDurationUnit = inferDetachedImportedSetDurationUnit(volume, control);
+  const rowKind = inferImportedRowKind(name, volume, extraText);
+  const detachedSetDurationUnit = inferDetachedImportedSetDurationUnit(volume, extraText);
   const normalizedVolume = normalizeImportedVolumeText(
     name,
     volume,
-    control,
+    extraText,
     blockType,
     detachedSetDurationUnit,
   );
-  const normalizedControl = removeDetachedImportedSetDurationUnit(control, detachedSetDurationUnit);
+  const normalizedExtraText = removeDetachedImportedSetDurationUnit(extraText, detachedSetDurationUnit);
   const volumeNote = formatImportedVolumeNotePart(normalizedVolume);
-  const blockNotes = normalizedControl;
+  const blockNotes = normalizedExtraText;
   const exerciseNotes = normalizeImportedPlanText(
-    [volumeNote, normalizedControl].filter(Boolean).join(" / "),
+    [volumeNote, normalizedExtraText].filter(Boolean).join(" / "),
   );
-  const details = normalizeImportedPlanText(`${name} ${volumeNote || normalizedVolume} ${normalizedControl}`);
+  const details = normalizeImportedPlanText(`${name} ${volumeNote || normalizedVolume} ${normalizedExtraText}`);
   const inferredSetDurationUnit = inferImportedSetDurationUnit(details, blockType);
   const setDuration = extractImportedSetDuration(details, inferredSetDurationUnit);
   const duration = setDuration?.totalDurationMinutes ?? extractImportedDurationMinutes(details);
   const rpe = extractImportedRpe(details);
   const { sets, reps } = extractImportedSetsReps(details);
   const isMandatory = blockType !== "recovery" && blockType !== "mobility";
-  const exerciseItems = buildImportedExerciseItems(name, normalizedVolume, normalizedControl);
+  const exerciseItems = buildImportedExerciseItems(name, normalizedVolume, normalizedExtraText);
   const exercises = exerciseItems.length
     ? exerciseItems.map((item, exerciseIndex) => {
         const itemDuration = extractImportedDurationMinutes(item) ?? duration;
@@ -3962,12 +3962,12 @@ function getImportedTableColumnIndexes(headers: string[], firstDataCellCount: nu
   };
 }
 
-function getImportedTableControlIndexes(
+function getImportedTableExtraNoteIndexes(
   headers: string[],
   firstDataCellCount: number,
   indexes: ReturnType<typeof getImportedTableColumnIndexes>,
 ) {
-  const explicitControlIndexes = headers
+  const explicitExtraNoteIndexes = headers
     .map((header, index) => ({ header: header.toLowerCase(), index }))
     .filter(({ header, index }) =>
       index < firstDataCellCount &&
@@ -3977,8 +3977,8 @@ function getImportedTableControlIndexes(
     )
     .map(({ index }) => index);
 
-  if (explicitControlIndexes.length > 0) {
-    return explicitControlIndexes;
+  if (explicitExtraNoteIndexes.length > 0) {
+    return explicitExtraNoteIndexes;
   }
 
   return Array.from({ length: firstDataCellCount }, (_, index) => index).filter(
@@ -3989,18 +3989,18 @@ function getImportedTableControlIndexes(
   );
 }
 
-function formatImportedTableCommonNote(name: string, volume: string, controlValues: string[]) {
-  const control = controlValues.map(normalizeImportedPlanText).filter(Boolean).join(" / ");
+function formatImportedTableCommonNote(name: string, volume: string, extraNoteValues: string[]) {
+  const extraNote = extraNoteValues.map(normalizeImportedPlanText).filter(Boolean).join(" / ");
 
-  if (!control) {
+  if (!extraNote) {
     return "";
   }
 
   if (isImportedServiceTableRow(name)) {
-    return [name, volume, control].map(normalizeImportedPlanText).filter(Boolean).join(": ");
+    return [name, volume, extraNote].map(normalizeImportedPlanText).filter(Boolean).join(": ");
   }
 
-  return control;
+  return extraNote;
 }
 
 function parseImportedPlanTable(table: HTMLTableElement, startOrderIndex: number) {
@@ -4009,7 +4009,7 @@ function parseImportedPlanTable(table: HTMLTableElement, startOrderIndex: number
   const rows = Array.from(table.querySelectorAll("tr"));
   const headers = getImportedTableHeaders(table);
   let indexes: ReturnType<typeof getImportedTableColumnIndexes> | null = null;
-  let controlIndexes: number[] = [];
+  let extraNoteIndexes: number[] = [];
 
   rows.forEach((row) => {
     if (row.querySelector("th") && !row.querySelector("td")) {
@@ -4026,7 +4026,7 @@ function parseImportedPlanTable(table: HTMLTableElement, startOrderIndex: number
 
     if (!indexes) {
       indexes = getImportedTableColumnIndexes(headers, cells.length);
-      controlIndexes = getImportedTableControlIndexes(headers, cells.length, indexes);
+      extraNoteIndexes = getImportedTableExtraNoteIndexes(headers, cells.length, indexes);
     }
 
     const name = cells[indexes.nameIndex] ?? "";
@@ -4034,7 +4034,7 @@ function parseImportedPlanTable(table: HTMLTableElement, startOrderIndex: number
     const commonNote = formatImportedTableCommonNote(
       name,
       volume,
-      controlIndexes.map((index) => cells[index] ?? ""),
+      extraNoteIndexes.map((index) => cells[index] ?? ""),
     );
 
     if (commonNote) {

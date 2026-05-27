@@ -24,7 +24,10 @@ import {
   ackDirectWatchActivityFiles,
   addDirectWatchPacketListener,
   addDirectWatchSessionListener,
+  addDirectWatchSyncRequestListener,
   getDirectWatchSessionStatus,
+  configureDirectWatchSyncCoordinator,
+  markDirectWatchSyncRequestHandled,
   getDirectWatchSyncServiceStatus,
   inspectDirectWatchDevice,
   isDirectWatchRuntime,
@@ -38,6 +41,7 @@ import {
   buildDirectWatchDailySyncPayloadFromProbe,
   readDirectWatchActivityInventory,
   readDirectWatchDailySync,
+  notifyDirectWatchAppVisible,
   scanDirectWatchDevices,
   startDirectWatchSession,
   stopDirectWatchSession,
@@ -48,6 +52,7 @@ import {
 import type {
   DirectWatchDailySyncPayload,
   DirectWatchDecryptedPacket,
+  DirectWatchSyncCoordinatorRequest,
   DirectWatchServiceSyncResult,
 } from "../integrations/direct-watch.js";
 import { readHuaweiHealthDailySummary } from "../integrations/huawei-health.js";
@@ -179,6 +184,8 @@ const formattedDateTimeCache = new Map<string, string>();
 const formattedTimeCache = new Map<string, string>();
 const watchWorkoutHistoryGroupsCache = new WeakMap<DeviceWorkout[], Map<string, WatchWorkoutHistoryGroup[]>>();
 const deviceWorkoutGraphSummaryCache = new WeakMap<DeviceWorkout, boolean>();
+const deviceWorkoutGraphSeriesCache = new WeakMap<DeviceWorkout, Map<string, DeviceWorkoutGraphSeries[]>>();
+const deviceWorkoutHeartRateDetailHtmlCache = new WeakMap<DeviceWorkout, Map<string, string>>();
 const deviceWorkoutGraphTimeCache = new Map<string, number | null>();
 const deviceWorkoutDisplayKeyCache = new WeakMap<DeviceWorkout, string>();
 const deviceWorkoutCompletenessScoreCache = new WeakMap<DeviceWorkout, number>();
@@ -369,8 +376,49 @@ export function bootstrapMobileApp(root: HTMLElement) {
   let directWatchAutoSyncTimer: ReturnType<typeof window.setInterval> | null = null;
   let directWatchAutoSyncInFlight = false;
   let directWatchHistorySyncInFlight = false;
+  let directWatchNativeSyncInFlight = false;
+
+  const syncDirectWatchNativeCoordinatorConfig = async (
+    config: DirectWatchLocalConfig = loadDirectWatchConfig(),
+  ) => {
+    if (!isDirectWatchRuntime()) {
+      return;
+    }
+
+    await configureDirectWatchSyncCoordinator({
+      authKeyHex: config.authKeyHex,
+      deviceId: config.deviceId,
+      deviceName: config.deviceName,
+      enabled: Boolean(config.deviceId && config.authKeyHex),
+    }).catch(() => undefined);
+  };
+
+  const handleDirectWatchNativeSyncRequest = async (request: DirectWatchSyncCoordinatorRequest) => {
+    if (!request.requested || !request.deviceId || directWatchNativeSyncInFlight) {
+      return;
+    }
+
+    if (state.isBusy || directWatchAutoSyncInFlight || directWatchHistorySyncInFlight) {
+      return;
+    }
+
+    directWatchNativeSyncInFlight = true;
+    try {
+      const completed = await runDirectWatchAutoSync({
+        entryDate: request.entryDate || todayValue(),
+        force: request.force === true,
+      });
+      await markDirectWatchSyncRequestHandled(
+        request.id,
+        completed ? "synced" : "skipped",
+      ).catch(() => undefined);
+    } finally {
+      directWatchNativeSyncInFlight = false;
+    }
+  };
 
   if (isDirectWatchRuntime()) {
+    void syncDirectWatchNativeCoordinatorConfig();
     void addDirectWatchPacketListener((packet) => {
       update({
         directWatchDiagnostic: {
@@ -397,6 +445,11 @@ export function bootstrapMobileApp(root: HTMLElement) {
           session,
         },
       });
+    });
+    void addDirectWatchSyncRequestListener((request) => {
+      window.setTimeout(() => {
+        void handleDirectWatchNativeSyncRequest(request);
+      }, 0);
     });
     void getDirectWatchSyncServiceStatus().then((serviceStatus) => {
       update({
@@ -955,11 +1008,13 @@ export function bootstrapMobileApp(root: HTMLElement) {
     }
 
     const targetDevice = state.directWatchDiagnostic.devices.find((device) => device.id === targetDeviceId);
-    saveDirectWatchConfig({
+    const nextConfig = {
       ...config,
       deviceId: targetDeviceId,
       deviceName: targetDevice?.name ?? config.deviceName,
-    });
+    };
+    saveDirectWatchConfig(nextConfig);
+    void syncDirectWatchNativeCoordinatorConfig(nextConfig);
 
     if (!options.silent) {
       update({ error: null, isBusy: true, message: "PERFORM Sync читает день напрямую с часов..." });
@@ -1410,7 +1465,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
     }
   };
 
-  const shouldRunDirectWatchAutoSync = () => {
+  function shouldRunDirectWatchAutoSync(options: { force?: boolean } = {}) {
     if (!isDirectWatchRuntime() || state.session.user?.role !== "athlete") {
       return false;
     }
@@ -1424,7 +1479,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
       return false;
     }
 
-    if (!config.lastServiceSyncedAt) {
+    if (options.force || !config.lastServiceSyncedAt) {
       return true;
     }
 
@@ -1434,39 +1489,38 @@ export function bootstrapMobileApp(root: HTMLElement) {
     }
 
     return Date.now() - lastSyncedAt >= DIRECT_WATCH_AUTO_SYNC_INTERVAL_MS;
-  };
+  }
 
-  const runDirectWatchAutoSync = async () => {
-    if (!shouldRunDirectWatchAutoSync()) {
-      return;
+  async function runDirectWatchAutoSync(options: {
+    entryDate?: string;
+    force?: boolean;
+  } = {}) {
+    if (!shouldRunDirectWatchAutoSync({ force: options.force })) {
+      return false;
     }
 
     const config = loadDirectWatchConfig();
     directWatchAutoSyncInFlight = true;
 
     try {
-      await syncDirectWatch(todayValue(), config.deviceId, { silent: true });
+      return await syncDirectWatch(options.entryDate || todayValue(), config.deviceId, { silent: true });
     } finally {
       directWatchAutoSyncInFlight = false;
     }
-  };
+  }
 
   const startDirectWatchAutoSync = () => {
     if (!isDirectWatchRuntime() || directWatchAutoSyncTimer !== null) {
       return;
     }
 
-    window.setTimeout(() => {
-      void runDirectWatchAutoSync();
+    directWatchAutoSyncTimer = window.setTimeout(() => {
+      void notifyDirectWatchAppVisible().catch(() => undefined);
     }, DIRECT_WATCH_AUTO_SYNC_START_DELAY_MS);
-
-    directWatchAutoSyncTimer = window.setInterval(() => {
-      void runDirectWatchAutoSync();
-    }, DIRECT_WATCH_AUTO_SYNC_INTERVAL_MS);
 
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "visible") {
-        void runDirectWatchAutoSync();
+        void notifyDirectWatchAppVisible().catch(() => undefined);
       }
     });
   };
@@ -1523,7 +1577,9 @@ export function bootstrapMobileApp(root: HTMLElement) {
       return;
     }
 
-    saveDirectWatchConfig({ ...config, authKeyHex: normalized });
+    const nextConfig = { ...config, authKeyHex: normalized };
+    saveDirectWatchConfig(nextConfig);
+    void syncDirectWatchNativeCoordinatorConfig(nextConfig);
     if (input) {
       input.value = "";
     }
@@ -1537,11 +1593,13 @@ export function bootstrapMobileApp(root: HTMLElement) {
     }
 
     const device = state.directWatchDiagnostic.devices.find((item) => item.id === deviceId);
-    saveDirectWatchConfig({
+    const nextConfig = {
       ...loadDirectWatchConfig(),
       deviceId,
       deviceName: device?.name ?? null,
-    });
+    };
+    saveDirectWatchConfig(nextConfig);
+    void syncDirectWatchNativeCoordinatorConfig(nextConfig);
     update({
       error: null,
       message: `${device?.name || "Часы"} выбраны для PERFORM Sync.`,
@@ -9251,6 +9309,86 @@ function buildDeviceWorkoutGraphSeries(
   workout: DeviceWorkout,
   context?: WatchWorkoutContext,
 ): DeviceWorkoutGraphSeries[] {
+  const cacheKey = getDeviceWorkoutGraphSeriesCacheKey(workout, context);
+  const workoutCache = deviceWorkoutGraphSeriesCache.get(workout);
+  const cachedSeries = workoutCache?.get(cacheKey);
+  if (cachedSeries) {
+    return cachedSeries;
+  }
+
+  const series = buildDeviceWorkoutGraphSeriesUncached(workout, context);
+  const nextWorkoutCache = workoutCache ?? new Map<string, DeviceWorkoutGraphSeries[]>();
+  if (nextWorkoutCache.size >= 6) {
+    const oldestKey = nextWorkoutCache.keys().next().value;
+    if (oldestKey) {
+      nextWorkoutCache.delete(oldestKey);
+    }
+  }
+  nextWorkoutCache.set(cacheKey, series);
+  if (!workoutCache) {
+    deviceWorkoutGraphSeriesCache.set(workout, nextWorkoutCache);
+  }
+  return series;
+}
+
+function getDeviceWorkoutGraphSeriesCacheKey(
+  workout: DeviceWorkout,
+  context?: WatchWorkoutContext,
+) {
+  return [
+    workout.samples.length,
+    workout.sampleCount,
+    workout.startTime,
+    workout.endTime,
+    workout.averageHeartRateBpm ?? "",
+    workout.maxHeartRateBpm ?? "",
+    workout.minHeartRateBpm ?? "",
+    context ? context.summary?.updatedAt ?? "summary-none" : "context-none",
+    getDeviceHealthSampleListCacheKey(context?.heartRateSamples),
+    getDeviceHealthSampleListCacheKey(context?.oxygenSamples),
+    getDeviceHealthSampleListCacheKey(context?.stressSamples),
+  ].join("|");
+}
+
+function getDeviceHealthSampleListCacheKey(samples?: DeviceHealthSample[]) {
+  if (!samples || samples.length === 0) {
+    return "0";
+  }
+
+  const first = samples[0];
+  const last = samples[samples.length - 1];
+  return [
+    samples.length,
+    first.sampledAt,
+    first.value,
+    last.sampledAt,
+    last.value,
+  ].join(":");
+}
+
+function getDeviceWorkoutSeriesCacheKey(series: DeviceWorkoutGraphSeries, workout: DeviceWorkout) {
+  const first = series.samples[0];
+  const last = series.samples[series.samples.length - 1];
+  return [
+    series.key,
+    series.source ?? "",
+    series.samples.length,
+    first?.sampleTime ?? "",
+    first?.value ?? "",
+    last?.sampleTime ?? "",
+    last?.value ?? "",
+    workout.startTime,
+    workout.endTime,
+    workout.averageHeartRateBpm ?? "",
+    workout.maxHeartRateBpm ?? "",
+    workout.minHeartRateBpm ?? "",
+  ].join("|");
+}
+
+function buildDeviceWorkoutGraphSeriesUncached(
+  workout: DeviceWorkout,
+  context?: WatchWorkoutContext,
+): DeviceWorkoutGraphSeries[] {
   const rawHeartRateSamples: { sampleTime: string; value: number }[] = [];
   const rawPaceSamples: { sampleTime: string; value: number }[] = [];
   const rawSpeedSamples: { sampleTime: string; value: number }[] = [];
@@ -9916,12 +10054,25 @@ function renderDeviceWorkoutSeriesDetailGraph(series: DeviceWorkoutGraphSeries, 
     return renderDeviceWorkoutSeriesGraph(series, workout);
   }
 
-  const chart = buildDeviceWorkoutHeartRateDetailChart(series, workout);
-  if (!chart) {
-    return renderDeviceWorkoutSeriesGraph(series, workout);
+  const cacheKey = getDeviceWorkoutSeriesCacheKey(series, workout);
+  const workoutCache = deviceWorkoutHeartRateDetailHtmlCache.get(workout);
+  const cachedHtml = workoutCache?.get(cacheKey);
+  if (cachedHtml) {
+    return cachedHtml;
   }
 
-  return `
+  const chart = buildDeviceWorkoutHeartRateDetailChart(series, workout);
+  if (!chart) {
+    const fallbackHtml = renderDeviceWorkoutSeriesGraph(series, workout);
+    const nextWorkoutCache = workoutCache ?? new Map<string, string>();
+    nextWorkoutCache.set(cacheKey, fallbackHtml);
+    if (!workoutCache) {
+      deviceWorkoutHeartRateDetailHtmlCache.set(workout, nextWorkoutCache);
+    }
+    return fallbackHtml;
+  }
+
+  const html = `
     <div class="device-workout-series heartRate is-approved-detail">
       <div class="watch-heart-rate-approved-head">
         <div>
@@ -9974,6 +10125,18 @@ function renderDeviceWorkoutSeriesDetailGraph(series: DeviceWorkoutGraphSeries, 
       </div>
     </div>
   `;
+  const nextWorkoutCache = workoutCache ?? new Map<string, string>();
+  if (nextWorkoutCache.size >= 6) {
+    const oldestKey = nextWorkoutCache.keys().next().value;
+    if (oldestKey) {
+      nextWorkoutCache.delete(oldestKey);
+    }
+  }
+  nextWorkoutCache.set(cacheKey, html);
+  if (!workoutCache) {
+    deviceWorkoutHeartRateDetailHtmlCache.set(workout, nextWorkoutCache);
+  }
+  return html;
 }
 
 function buildDeviceWorkoutHeartRateDetailChart(
