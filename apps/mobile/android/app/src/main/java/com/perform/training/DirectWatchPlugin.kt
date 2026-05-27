@@ -1192,15 +1192,6 @@ class DirectWatchPlugin : Plugin() {
             return
         }
 
-        DirectWatchSyncCoordinator.configure(
-            context = context.applicationContext,
-            deviceId = address,
-            deviceName = devicesByAddress[address]?.name,
-            authKeyHex = authKeyHex,
-            enabled = true,
-        )
-        DirectWatchSyncCoordinator.noteSyncStarted(context.applicationContext, "sync-service")
-
         val device = try {
             adapter.getRemoteDevice(address)
         } catch (error: IllegalArgumentException) {
@@ -1212,6 +1203,15 @@ class DirectWatchPlugin : Plugin() {
             call.reject("Для служебной синхронизации часы должны быть в системном сопряжении.")
             return
         }
+
+        DirectWatchSyncCoordinator.configure(
+            context = context.applicationContext,
+            deviceId = address,
+            deviceName = devicesByAddress[address]?.name ?: scanResultNameFallback(device),
+            authKeyHex = authKeyHex,
+            enabled = true,
+        )
+        DirectWatchSyncCoordinator.noteSyncStarted(context.applicationContext, "sync-service")
 
         stopActiveGatt()
         stopActiveClassicSocket()

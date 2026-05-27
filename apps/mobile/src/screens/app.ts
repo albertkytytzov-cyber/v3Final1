@@ -27,6 +27,7 @@ import {
   addDirectWatchSyncRequestListener,
   getDirectWatchSessionStatus,
   configureDirectWatchSyncCoordinator,
+  getDirectWatchSyncCoordinatorStatus,
   markDirectWatchSyncRequestHandled,
   getDirectWatchSyncServiceStatus,
   inspectDirectWatchDevice,
@@ -121,6 +122,7 @@ const DIRECT_WATCH_AUTH_KEY_PATTERN = /^[0-9a-f]{32}$/i;
 const DIRECT_WATCH_SERVICE_KEEP_ALIVE_MS = 2 * 60 * 60 * 1000;
 const DIRECT_WATCH_AUTO_SYNC_INTERVAL_MS = 30 * 60 * 1000;
 const DIRECT_WATCH_AUTO_SYNC_START_DELAY_MS = 10 * 1000;
+const DIRECT_WATCH_NATIVE_SYNC_RETRY_DELAY_MS = 15 * 1000;
 const DIRECT_WATCH_HISTORY_SYNC_DAYS = 30;
 const DIRECT_WATCH_HISTORY_SYNC_DAY_DELAY_MS = 350;
 const DEVICE_WORKOUT_SERIES_RENDER_LIMIT = 1_600;
@@ -226,6 +228,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
       packets: [],
       scannedAt: null,
       session: null,
+      syncCoordinatorStatus: null,
       serviceStatus: null,
     },
     aiReviewByDay: buildCoachAiReviewByDay(initialData.coachAiReviews),
@@ -376,6 +379,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
   };
 
   let directWatchAutoSyncTimer: ReturnType<typeof window.setInterval> | null = null;
+  let directWatchNativeSyncRetryTimer: ReturnType<typeof window.setTimeout> | null = null;
   let directWatchAutoSyncInFlight = false;
   let directWatchHistorySyncInFlight = false;
   let directWatchNativeSyncInFlight = false;
@@ -387,36 +391,73 @@ export function bootstrapMobileApp(root: HTMLElement) {
       return;
     }
 
-    await configureDirectWatchSyncCoordinator({
+    const syncCoordinatorStatus = await configureDirectWatchSyncCoordinator({
       authKeyHex: config.authKeyHex,
       deviceId: config.deviceId,
       deviceName: config.deviceName,
       enabled: Boolean(config.deviceId && config.authKeyHex),
     }).catch(() => undefined);
+
+    if (syncCoordinatorStatus) {
+      update({
+        directWatchDiagnostic: {
+          ...state.directWatchDiagnostic,
+          syncCoordinatorStatus,
+        },
+      });
+    }
   };
 
   const handleDirectWatchNativeSyncRequest = async (request: DirectWatchSyncCoordinatorRequest) => {
-    if (!request.requested || !request.deviceId || directWatchNativeSyncInFlight) {
+    if (!request.requested || !request.deviceId) {
       return;
     }
 
-    if (state.isBusy || directWatchAutoSyncInFlight || directWatchHistorySyncInFlight) {
+    if (directWatchNativeSyncInFlight || state.isBusy || directWatchAutoSyncInFlight || directWatchHistorySyncInFlight) {
+      scheduleDirectWatchNativeSyncRetry(request);
       return;
     }
 
     directWatchNativeSyncInFlight = true;
     try {
+      const serviceSyncedAtBefore = loadDirectWatchConfig().lastServiceSyncedAt;
       const completed = await runDirectWatchAutoSync({
         entryDate: request.entryDate || todayValue(),
         force: request.force === true,
       });
-      await markDirectWatchSyncRequestHandled(
+      const serviceSyncedAtAfter = loadDirectWatchConfig().lastServiceSyncedAt;
+      const serviceSynced = Boolean(
+        serviceSyncedAtAfter && serviceSyncedAtAfter !== serviceSyncedAtBefore,
+      );
+      const syncCoordinatorStatus = await markDirectWatchSyncRequestHandled(
         request.id,
-        completed ? "synced" : "skipped",
+        completed || serviceSynced ? "synced" : "skipped",
       ).catch(() => undefined);
+      if (syncCoordinatorStatus) {
+        update({
+          directWatchDiagnostic: {
+            ...state.directWatchDiagnostic,
+            syncCoordinatorStatus,
+          },
+        });
+      }
     } finally {
       directWatchNativeSyncInFlight = false;
     }
+  };
+
+  const scheduleDirectWatchNativeSyncRetry = (
+    request: DirectWatchSyncCoordinatorRequest,
+    delayMs = DIRECT_WATCH_NATIVE_SYNC_RETRY_DELAY_MS,
+  ) => {
+    if (directWatchNativeSyncRetryTimer !== null) {
+      return;
+    }
+
+    directWatchNativeSyncRetryTimer = window.setTimeout(() => {
+      directWatchNativeSyncRetryTimer = null;
+      void handleDirectWatchNativeSyncRequest(request);
+    }, delayMs);
   };
 
   if (isDirectWatchRuntime()) {
@@ -462,6 +503,16 @@ export function bootstrapMobileApp(root: HTMLElement) {
       });
     }).catch(() => {
       // Статус служебного режима не критичен для запуска приложения.
+    });
+    void getDirectWatchSyncCoordinatorStatus().then((syncCoordinatorStatus) => {
+      update({
+        directWatchDiagnostic: {
+          ...state.directWatchDiagnostic,
+          syncCoordinatorStatus,
+        },
+      });
+    }).catch(() => {
+      // Координатор нужен только для диагностики фоновой синхронизации.
     });
   }
 
@@ -1643,6 +1694,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
           packets: state.directWatchDiagnostic.packets,
           scannedAt: result.scannedAt ?? new Date().toISOString(),
           session: state.directWatchDiagnostic.session,
+          syncCoordinatorStatus: state.directWatchDiagnostic.syncCoordinatorStatus,
           serviceStatus: state.directWatchDiagnostic.serviceStatus,
         },
         error: null,
@@ -5175,6 +5227,7 @@ function renderWatchSyncPanel(state: MobileAppState, date: string) {
       </div>
       ${config.lastServiceError ? `<p class="watch-sync-error">${escapeHtml(config.lastServiceError)}</p>` : ""}
       ${renderWatchActivitySyncDiagnostic(config)}
+      ${renderWatchCoordinatorStatus(state.directWatchDiagnostic.syncCoordinatorStatus)}
       <div class="watch-sync-grid">
         <article>
           <span>Часы</span>
@@ -5311,6 +5364,57 @@ function renderWatchActivitySyncDiagnostic(config: DirectWatchLocalConfig) {
       ${meta.length ? `<small>${escapeHtml(meta.join(" · "))}</small>` : ""}
     </article>
   `;
+}
+
+function renderWatchCoordinatorStatus(status: MobileAppState["directWatchDiagnostic"]["syncCoordinatorStatus"]) {
+  if (!status || (!status.pendingRequestId && !status.nextAllowedReason && !status.lastBlockedReason)) {
+    return "";
+  }
+
+  const title = status.pendingRequestId
+    ? "Запрос в очереди"
+    : status.nextAllowedReason
+      ? "Следующее автообновление"
+      : "Последний автозапуск";
+  const details = [
+    status.pendingReason ? formatDirectWatchCoordinatorReason(status.pendingReason) : null,
+    status.nextAllowedReason ? formatDirectWatchCoordinatorReason(status.nextAllowedReason) : null,
+    status.lastBlockedReason ? formatDirectWatchCoordinatorReason(status.lastBlockedReason) : null,
+    status.retryAfterMs && status.retryAfterMs > 0 ? `через ${formatDeviceWorkoutDuration(status.retryAfterMs / 60000)}` : null,
+    status.lastSuccessfulAt ? `успешно ${formatDateTime(status.lastSuccessfulAt)}` : null,
+  ].filter((item): item is string => Boolean(item));
+
+  return `
+    <article class="watch-sync-diagnostic is-warning">
+      <div>
+        <span>Автосинхронизация</span>
+        <strong>${escapeHtml(title)}</strong>
+      </div>
+      <p>${escapeHtml(details.join(" · ") || "координатор ждёт следующего события")}</p>
+    </article>
+  `;
+}
+
+function formatDirectWatchCoordinatorReason(reason: string) {
+  const labels: Record<string, string> = {
+    "app-visible": "возврат в приложение",
+    "bluetooth-on": "Bluetooth включён",
+    "bluetooth-reconnect": "Bluetooth reconnect",
+    boot: "запуск телефона",
+    disabled: "координатор выключен",
+    "failure-backoff": "пауза после ошибки",
+    interval: "интервал 30 мин",
+    "missing-config": "нет настройки часов",
+    "other-device": "другое устройство",
+    "package-replaced": "обновление приложения",
+    "quick-throttle": "слишком частый запуск",
+    "service-start": "старт службы",
+    "service-timer": "таймер службы",
+    "sync-in-progress": "синхронизация уже идёт",
+    "user-present": "разблокировка телефона",
+  };
+
+  return labels[reason] ?? reason;
 }
 
 function renderWatchSyncDevicePicker(state: MobileAppState, config: DirectWatchLocalConfig) {

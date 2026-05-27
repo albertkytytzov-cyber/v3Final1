@@ -50,6 +50,7 @@ import type {
   DirectWatchInspection,
   DirectWatchSessionPacket,
   DirectWatchSessionStatus,
+  DirectWatchSyncCoordinatorStatus,
   DirectWatchSyncServiceStatus,
 } from "../integrations/direct-watch.js";
 
@@ -180,6 +181,7 @@ export interface MobileAppState {
     packets: DirectWatchSessionPacket[];
     scannedAt: string | null;
     session: DirectWatchSessionStatus | null;
+    syncCoordinatorStatus: DirectWatchSyncCoordinatorStatus | null;
     serviceStatus: DirectWatchSyncServiceStatus | null;
   };
   aiReviewByDay: Record<string, CoachDayAiReview>;
