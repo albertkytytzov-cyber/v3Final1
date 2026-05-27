@@ -703,7 +703,7 @@ export async function upsertDeviceHealthDailySummary(input: {
         source_device = COALESCE(EXCLUDED.source_device, device_health_daily_summaries.source_device),
         sleep_start_time = CASE WHEN $31 THEN COALESCE(EXCLUDED.sleep_start_time, device_health_daily_summaries.sleep_start_time) ELSE device_health_daily_summaries.sleep_start_time END,
         sleep_end_time = CASE WHEN $31 THEN COALESCE(EXCLUDED.sleep_end_time, device_health_daily_summaries.sleep_end_time) ELSE device_health_daily_summaries.sleep_end_time END,
-        sleep_duration_minutes = CASE WHEN $31 THEN COALESCE(EXCLUDED.sleep_duration_minutes, device_health_daily_summaries.sleep_duration_minutes) ELSE device_health_daily_summaries.sleep_duration_minutes END,
+        sleep_duration_minutes = CASE WHEN $31 THEN COALESCE(GREATEST(device_health_daily_summaries.sleep_duration_minutes, EXCLUDED.sleep_duration_minutes), EXCLUDED.sleep_duration_minutes, device_health_daily_summaries.sleep_duration_minutes) ELSE device_health_daily_summaries.sleep_duration_minutes END,
         deep_sleep_minutes = CASE WHEN $31 THEN COALESCE(EXCLUDED.deep_sleep_minutes, device_health_daily_summaries.deep_sleep_minutes) ELSE device_health_daily_summaries.deep_sleep_minutes END,
         light_sleep_minutes = CASE WHEN $31 THEN COALESCE(EXCLUDED.light_sleep_minutes, device_health_daily_summaries.light_sleep_minutes) ELSE device_health_daily_summaries.light_sleep_minutes END,
         rem_sleep_minutes = CASE WHEN $31 THEN COALESCE(EXCLUDED.rem_sleep_minutes, device_health_daily_summaries.rem_sleep_minutes) ELSE device_health_daily_summaries.rem_sleep_minutes END,
