@@ -961,6 +961,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
     const completedServiceResult = serviceResult as DirectWatchServiceSyncResult | null;
     const activityDiagnostic = buildDirectWatchActivitySyncDiagnostic(payload, completedServiceResult, payloadError);
     const serviceSyncedAt = completedServiceResult?.syncedAt ?? activityDiagnostic.syncedAt;
+    const serviceSyncOk = isDirectWatchServiceSyncSuccessful(completedServiceResult);
     rememberDirectWatchConfig({
       lastActivitySyncAt: activityDiagnostic.syncedAt,
       lastActivitySyncDiagnostic: activityDiagnostic.message,
@@ -968,7 +969,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
       lastActivitySyncSportsFileCount: activityDiagnostic.sportsFileCount,
       lastActivitySyncStatus: activityDiagnostic.status,
       lastActivitySyncWorkoutCount: activityDiagnostic.workoutCount,
-      ...(completedServiceResult?.sentTime
+      ...(serviceSyncOk && completedServiceResult
         ? {
             lastServiceError: null,
             lastServiceStatus: completedServiceResult.keptBluetoothBridge ? "running" : "synced",
@@ -1414,7 +1415,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
       );
       options.onResult?.(result);
       const serviceStatus = await getDirectWatchSyncServiceStatus().catch(() => null);
-      const ok = result.authKeyStatus === "valid" && result.sentTime;
+      const ok = isDirectWatchServiceSyncSuccessful(result);
       const syncedAt = result.syncedAt ?? new Date().toISOString();
       const serviceIsRunning = Boolean(serviceStatus?.running || result.keptBluetoothBridge);
       const serviceBridgeUntil = serviceIsRunning
@@ -1491,11 +1492,12 @@ export function bootstrapMobileApp(root: HTMLElement) {
       return false;
     }
 
-    if (options.force || !config.lastServiceSyncedAt) {
+    const lastSyncAt = getLatestDirectWatchConfigSyncAt(config);
+    if (options.force || !lastSyncAt) {
       return true;
     }
 
-    const lastSyncedAt = new Date(config.lastServiceSyncedAt).getTime();
+    const lastSyncedAt = new Date(lastSyncAt).getTime();
     if (Number.isNaN(lastSyncedAt)) {
       return true;
     }
@@ -5022,6 +5024,47 @@ function formatWatchDetailPeriodLabel(date: string, period: WatchDetailPeriod) {
   return `${formatShortDate(dates[0])} - ${formatShortDate(dates[dates.length - 1])}`;
 }
 
+function getLatestIsoTimestamp(values: Array<string | null | undefined>) {
+  let latestValue: string | null = null;
+  let latestTime = Number.NEGATIVE_INFINITY;
+
+  for (const value of values) {
+    if (!value) {
+      continue;
+    }
+
+    const time = new Date(value).getTime();
+    if (!Number.isNaN(time) && time > latestTime) {
+      latestTime = time;
+      latestValue = value;
+    }
+  }
+
+  return latestValue;
+}
+
+function getLatestDirectWatchConfigSyncAt(config: DirectWatchLocalConfig) {
+  return getLatestIsoTimestamp([
+    config.lastServiceSyncedAt,
+    config.lastActivitySyncAt,
+  ]);
+}
+
+function getWatchDisplaySyncedAt(
+  summary: DeviceHealthDailySummary | null,
+  config?: DirectWatchLocalConfig | null,
+) {
+  if (!summary) {
+    return null;
+  }
+
+  return getLatestIsoTimestamp([
+    summary.syncedAt,
+    summary.provider === "direct-watch" ? config?.lastServiceSyncedAt : null,
+    summary.provider === "direct-watch" ? config?.lastActivitySyncAt : null,
+  ]) ?? summary.syncedAt;
+}
+
 function renderWatchSettingsEntryCard(
   state: MobileAppState,
   summary: DeviceHealthDailySummary | null,
@@ -5041,7 +5084,8 @@ function renderWatchSettingsEntryCard(
   const config = loadDirectWatchConfig();
   const statusKind = getDirectWatchServiceStatusKind(config, state.directWatchDiagnostic.serviceStatus);
   const statusLabel = formatDirectWatchServiceStatusLabel(config, state.directWatchDiagnostic.serviceStatus);
-  const lastSyncLabel = config.lastServiceSyncedAt ? formatDateTime(config.lastServiceSyncedAt) : "ещё не было";
+  const lastSyncAt = getLatestDirectWatchConfigSyncAt(config);
+  const lastSyncLabel = lastSyncAt ? formatDateTime(lastSyncAt) : "ещё не было";
   const deviceLabel = config.deviceName || (config.deviceId ? formatDirectWatchDeviceId(config.deviceId) : "часы не выбраны");
   const historyProgress = getDirectWatchHistorySyncProgress(config);
   const historyLabel = config.lastHistorySyncStatus === "running"
@@ -5113,7 +5157,8 @@ function renderWatchSyncPanel(state: MobileAppState, date: string) {
   const isRunning = isDirectWatchServiceRunning(config, serviceStatus);
   const statusKind = getDirectWatchServiceStatusKind(config, serviceStatus);
   const statusLabel = formatDirectWatchServiceStatusLabel(config, serviceStatus);
-  const lastSyncLabel = config.lastServiceSyncedAt ? formatDateTime(config.lastServiceSyncedAt) : "ещё не было";
+  const lastSyncAt = getLatestDirectWatchConfigSyncAt(config);
+  const lastSyncLabel = lastSyncAt ? formatDateTime(lastSyncAt) : "ещё не было";
   const bridgeLabel = formatDirectWatchServiceRuntime(config, serviceStatus);
   const deviceLabel = config.deviceName || (config.deviceId ? formatDirectWatchDeviceId(config.deviceId) : "часы не выбраны");
   const historyProgress = getDirectWatchHistorySyncProgress(config);
@@ -5318,7 +5363,9 @@ function renderWatchRecoveryCard(
   date: string,
 ) {
   const status = getDeviceHealthStatus(summary);
-  const syncLabel = summary ? formatDateTime(summary.syncedAt) : "данных за сегодня нет";
+  const directWatchConfig = isDirectWatchRuntime() ? loadDirectWatchConfig() : null;
+  const displaySyncedAt = getWatchDisplaySyncedAt(summary, directWatchConfig);
+  const syncLabel = displaySyncedAt ? formatDateTime(displaySyncedAt) : "данных за сегодня нет";
   const sleepProgress = getWatchSleepProgress(summary);
 
   return `
@@ -5435,8 +5482,10 @@ function renderWatchParametersCard(
   const trainingLoadDay = readDeviceHealthRawNumber(rawPayload, "trainingLoadDay");
   const vitality = readDeviceHealthRawNumber(rawPayload, "vitality");
   const statusLabel = summary ? "обновлено" : "нет данных";
+  const directWatchConfig = isDirectWatchRuntime() ? loadDirectWatchConfig() : null;
+  const displaySyncedAt = getWatchDisplaySyncedAt(summary, directWatchConfig);
   const sourceLabel = summary
-    ? `Источник: ${formatWatchProviderLabel(summary)} · ${formatDateTime(summary.syncedAt)}`
+    ? `Источник: ${formatWatchProviderLabel(summary)} · ${formatDateTime(displaySyncedAt ?? summary.syncedAt)}`
     : "Источник появится после синхронизации";
 
   const rows = [
@@ -5530,8 +5579,9 @@ function renderWatchQuickSyncAction(state: MobileAppState, date: string) {
 
   const config = loadDirectWatchConfig();
   const canSync = Boolean(config.deviceId && config.authKeyHex);
-  const lastSyncedLabel = config.lastServiceSyncedAt
-    ? `Последняя синхронизация: ${formatDateTime(config.lastServiceSyncedAt)}`
+  const lastSyncedAt = getLatestDirectWatchConfigSyncAt(config);
+  const lastSyncedLabel = lastSyncedAt
+    ? `Последняя синхронизация: ${formatDateTime(lastSyncedAt)}`
     : "После нажатия обновятся показатели и тренировки за сегодня.";
 
   if (!canSync) {
@@ -6597,7 +6647,9 @@ function formatWatchInsightText(summary: DeviceHealthDailySummary | null) {
 
 function formatWatchSourceHint(summary: DeviceHealthDailySummary | null) {
   if (summary) {
-    return `${formatWatchProviderLabel(summary)} · ${formatDateTime(summary.syncedAt)}`;
+    const directWatchConfig = isDirectWatchRuntime() ? loadDirectWatchConfig() : null;
+    const displaySyncedAt = getWatchDisplaySyncedAt(summary, directWatchConfig);
+    return `${formatWatchProviderLabel(summary)} · ${formatDateTime(displaySyncedAt ?? summary.syncedAt)}`;
   }
 
   if (isAppleHealthRuntime()) {
@@ -7278,19 +7330,36 @@ function formatDirectWatchClassicProbeMessage(
   return "Classic/SPP канал не подтвердился.";
 }
 
-function formatDirectWatchServiceSyncMessage(
-  result: DirectWatchServiceSyncResult,
-  weatherLocation: string | null,
-  weatherError: string | null,
-) {
-  const hasUsefulSync =
+function hasDirectWatchServiceSyncSignal(result: DirectWatchServiceSyncResult | null | undefined) {
+  return Boolean(result && (
+    result.sentServiceSync ||
     result.sentTime ||
     result.sentPhoneLocation ||
     result.sentWeatherPrefs ||
     result.sentWeatherLocation ||
     result.sentWeatherCurrent ||
     result.sentWeatherDaily ||
-    result.sentWeatherHourly;
+    result.sentWeatherHourly ||
+    result.sentActivityFileProbe
+  ));
+}
+
+function isDirectWatchServiceSyncSuccessful(result: DirectWatchServiceSyncResult | null | undefined) {
+  return Boolean(
+    result &&
+      result.authKeyStatus === "valid" &&
+      !result.error &&
+      !result.authKeyError &&
+      hasDirectWatchServiceSyncSignal(result),
+  );
+}
+
+function formatDirectWatchServiceSyncMessage(
+  result: DirectWatchServiceSyncResult,
+  weatherLocation: string | null,
+  weatherError: string | null,
+) {
+  const hasUsefulSync = hasDirectWatchServiceSyncSignal(result);
   const weatherLocationMessage = weatherLocation === "Геолокация телефона"
     ? "Погода обновлена по геолокации телефона."
     : weatherLocation
@@ -7558,7 +7627,7 @@ function formatDirectWatchServiceStatusLabel(
     return "ошибка";
   }
 
-  return config.lastServiceSyncedAt ? "не подключено" : "ещё не запускалось";
+  return getLatestDirectWatchConfigSyncAt(config) ? "не подключено" : "ещё не запускалось";
 }
 
 function formatDirectWatchServiceRuntime(
@@ -8128,9 +8197,13 @@ function hasDeviceOxygenSaturationData(summary: DeviceHealthDailySummary | null)
 }
 
 function formatDeviceHealthSyncLabel(summary: DeviceHealthDailySummary | null) {
-  return summary
-    ? `последняя синхронизация: ${formatDateTime(summary.syncedAt)}`
-    : "за этот день синхронизации пока нет";
+  if (!summary) {
+    return "за этот день синхронизации пока нет";
+  }
+
+  const directWatchConfig = isDirectWatchRuntime() ? loadDirectWatchConfig() : null;
+  const displaySyncedAt = getWatchDisplaySyncedAt(summary, directWatchConfig);
+  return `последняя синхронизация: ${formatDateTime(displaySyncedAt ?? summary.syncedAt)}`;
 }
 
 function formatDeviceHealthProviderLabel(summary: DeviceHealthDailySummary | null) {
@@ -8156,7 +8229,13 @@ function formatDeviceHealthCardTitle(summary: DeviceHealthDailySummary | null) {
 }
 
 function formatReadinessDeviceHealthSyncLabel(summary: DeviceHealthDailySummary | null) {
-  return summary ? `обновлено ${formatDateTime(summary.syncedAt)}` : "нет данных за сегодня";
+  if (!summary) {
+    return "нет данных за сегодня";
+  }
+
+  const directWatchConfig = isDirectWatchRuntime() ? loadDirectWatchConfig() : null;
+  const displaySyncedAt = getWatchDisplaySyncedAt(summary, directWatchConfig);
+  return `обновлено ${formatDateTime(displaySyncedAt ?? summary.syncedAt)}`;
 }
 
 function formatCompactDeviceHealthStatus(summary: DeviceHealthDailySummary | null) {
