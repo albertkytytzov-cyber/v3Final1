@@ -155,6 +155,8 @@ const mobileUPlotTimeFormatter = new Intl.DateTimeFormat("ru-RU", {
   minute: "2-digit",
 });
 const deviceWorkoutGraphTimeCache = new Map<string, number | null>();
+const deviceWorkoutDisplayKeyCache = new WeakMap<DeviceWorkout, string>();
+const deviceWorkoutCompletenessScoreCache = new WeakMap<DeviceWorkout, number>();
 
 const TRAINING_ABBREVIATION_EXPLANATIONS: Record<string, string> = {
   "АНП": "Анаэробный порог. Граница между устойчивой работой и зоной, где усталость начинает быстро накапливаться. Если в плане указана работа около АнП, держи высокую, но контролируемую интенсивность без развала техники.",
@@ -2496,7 +2498,12 @@ export function bootstrapMobileApp(root: HTMLElement) {
 
     root.querySelectorAll<HTMLButtonElement>("[data-watch-workouts-period]").forEach((button) => {
       button.addEventListener("click", () => {
-        update({ watchWorkoutHistoryPeriod: (button.dataset.watchWorkoutsPeriod as WatchDetailPeriod) || "day" });
+        const nextPeriod = (button.dataset.watchWorkoutsPeriod as WatchDetailPeriod) || "day";
+        if (state.watchWorkoutHistoryPeriod === nextPeriod) {
+          return;
+        }
+
+        update({ watchWorkoutHistoryPeriod: nextPeriod });
       });
     });
 
@@ -4088,10 +4095,6 @@ function renderWatchesScreen(state: MobileAppState) {
   }
 
   const date = todayValue();
-  const summary = getDeviceHealthSummaryForDate(state, athleteId, date);
-  const heartRateSamples = getDeviceHealthSamplesForDate(state, athleteId, date, "heart_rate");
-  const todayWorkouts = getDeviceWorkoutsForDate(state, athleteId, date);
-  const recentWorkouts = getRecentDeviceWorkouts(state, athleteId, date, 30);
 
   if (state.watchDetailMetric) {
     return renderWatchMetricDetailScreen(state, athleteId, date);
@@ -4101,13 +4104,19 @@ function renderWatchesScreen(state: MobileAppState) {
     return renderWatchWorkoutDetailScreen(state, athleteId, state.watchWorkoutDetailId);
   }
 
+  if (state.watchWorkoutHistoryOpen) {
+    return renderWatchWorkoutHistoryScreen(state, athleteId, date);
+  }
+
+  const summary = getDeviceHealthSummaryForDate(state, athleteId, date);
+
   if (state.watchSettingsOpen) {
     return renderWatchSettingsScreen(state, summary, date);
   }
 
-  if (state.watchWorkoutHistoryOpen) {
-    return renderWatchWorkoutHistoryScreen(state, athleteId, date);
-  }
+  const heartRateSamples = getDeviceHealthSamplesForDate(state, athleteId, date, "heart_rate");
+  const todayWorkouts = getDeviceWorkoutsForDate(state, athleteId, date);
+  const recentWorkouts = getRecentDeviceWorkouts(state, athleteId, date, 30);
 
   return `
     ${renderWatchParametersCard(summary, heartRateSamples, state, date)}
@@ -4142,6 +4151,13 @@ interface WatchWorkoutHistoryGroup {
   distanceMeters: number;
   durationMinutes: number;
   workouts: DeviceWorkout[];
+}
+
+interface WatchWorkoutHistoryTotals {
+  activeCalories: number;
+  distanceMeters: number;
+  durationMinutes: number;
+  workoutCount: number;
 }
 
 const WATCH_DETAIL_METRIC_LABELS: Record<WatchDetailMetric, string> = {
@@ -5598,10 +5614,7 @@ function renderWatchWorkoutSummaryCard(todayWorkouts: DeviceWorkout[], recentWor
 function renderWatchWorkoutHistoryScreen(state: MobileAppState, athleteId: string, date: string) {
   const period = state.watchWorkoutHistoryPeriod;
   const groups = getWatchWorkoutHistoryGroups(state, athleteId, date, period);
-  const allWorkouts = groups.flatMap((group) => group.workouts);
-  const totalDuration = sumWatchWorkoutDurationMinutes(allWorkouts);
-  const totalCalories = sumWatchWorkoutActiveCalories(allWorkouts);
-  const totalDistance = sumWatchWorkoutDistanceMeters(allWorkouts);
+  const totals = summarizeWatchWorkoutHistoryGroups(groups);
 
   return `
     <section class="watch-detail-screen watch-training-history-screen">
@@ -5622,18 +5635,18 @@ function renderWatchWorkoutHistoryScreen(state: MobileAppState, athleteId: strin
       <section class="watch-training-history-total">
         <div>
           <span>Всего за период</span>
-          <strong>${allWorkouts.length}</strong>
-          <small>${escapeHtml(formatWorkoutCountLabel(allWorkouts.length, "тренировка", "тренировки", "тренировок"))}</small>
+          <strong>${totals.workoutCount}</strong>
+          <small>${escapeHtml(formatWorkoutCountLabel(totals.workoutCount, "тренировка", "тренировки", "тренировок"))}</small>
         </div>
         <div>
           <span>Время</span>
-          <strong>${escapeHtml(totalDuration > 0 ? formatDeviceWorkoutDuration(totalDuration) : "0 мин")}</strong>
+          <strong>${escapeHtml(totals.durationMinutes > 0 ? formatDeviceWorkoutDuration(totals.durationMinutes) : "0 мин")}</strong>
           <small>суммарно</small>
         </div>
         <div>
           <span>Калории</span>
-          <strong>${escapeHtml(totalCalories > 0 ? `${Math.round(totalCalories)} ккал` : "0 ккал")}</strong>
-          <small>${escapeHtml(totalDistance > 0 ? formatDistanceMeters(totalDistance) : "без дистанции")}</small>
+          <strong>${escapeHtml(totals.activeCalories > 0 ? `${Math.round(totals.activeCalories)} ккал` : "0 ккал")}</strong>
+          <small>${escapeHtml(totals.distanceMeters > 0 ? formatDistanceMeters(totals.distanceMeters) : "без дистанции")}</small>
         </div>
       </section>
       ${groups.length ? `
@@ -5677,13 +5690,29 @@ function getWatchWorkoutHistoryGroups(
 }
 
 function buildWatchWorkoutHistoryGroup(date: string, workouts: DeviceWorkout[]): WatchWorkoutHistoryGroup {
+  const totals = summarizeWatchWorkouts(workouts);
+
   return {
-    activeCalories: sumWatchWorkoutActiveCalories(workouts),
+    activeCalories: totals.activeCalories,
     date,
-    distanceMeters: sumWatchWorkoutDistanceMeters(workouts),
-    durationMinutes: sumWatchWorkoutDurationMinutes(workouts),
+    distanceMeters: totals.distanceMeters,
+    durationMinutes: totals.durationMinutes,
     workouts,
   };
+}
+
+function summarizeWatchWorkoutHistoryGroups(groups: WatchWorkoutHistoryGroup[]): WatchWorkoutHistoryTotals {
+  return groups.reduce<WatchWorkoutHistoryTotals>((totals, group) => ({
+    activeCalories: totals.activeCalories + group.activeCalories,
+    distanceMeters: totals.distanceMeters + group.distanceMeters,
+    durationMinutes: totals.durationMinutes + group.durationMinutes,
+    workoutCount: totals.workoutCount + group.workouts.length,
+  }), {
+    activeCalories: 0,
+    distanceMeters: 0,
+    durationMinutes: 0,
+    workoutCount: 0,
+  });
 }
 
 function renderWatchWorkoutHistoryGroup(
@@ -5758,6 +5787,27 @@ function formatWatchWorkoutGroupSummary(group: WatchWorkoutHistoryGroup) {
     group.activeCalories > 0 ? `${Math.round(group.activeCalories)} ккал` : null,
     group.distanceMeters > 0 ? formatDistanceMeters(group.distanceMeters) : null,
   ].filter((item): item is string => Boolean(item)).join(" · ");
+}
+
+function summarizeWatchWorkouts(workouts: DeviceWorkout[]): Omit<WatchWorkoutHistoryTotals, "workoutCount"> {
+  let activeCalories = 0;
+  let distanceMeters = 0;
+  let durationMinutes = 0;
+
+  for (const workout of workouts) {
+    durationMinutes += workout.durationMinutes ?? 0;
+    activeCalories += getTrustedWatchWorkoutActiveCalories(workout) ?? 0;
+
+    if (isDeviceWorkoutMetricRelevant(workout.workoutType, "distance")) {
+      distanceMeters += getTrustedWatchWorkoutDistanceMeters(workout) ?? 0;
+    }
+  }
+
+  return {
+    activeCalories,
+    distanceMeters,
+    durationMinutes,
+  };
 }
 
 function sumWatchWorkoutDurationMinutes(workouts: DeviceWorkout[]) {
@@ -13090,11 +13140,16 @@ function dedupeDeviceWorkoutsForDisplay(workouts: DeviceWorkout[]) {
 }
 
 function getDeviceWorkoutDisplayKey(workout: DeviceWorkout) {
+  const cachedKey = deviceWorkoutDisplayKeyCache.get(workout);
+  if (cachedKey) {
+    return cachedKey;
+  }
+
   const startTime = Number.isFinite(new Date(workout.startTime).getTime())
     ? new Date(workout.startTime).getTime()
     : workout.startTime;
   const distanceMeters = getTrustedWatchWorkoutDistanceMeters(workout);
-  return [
+  const key = [
     workout.athleteId,
     workout.provider,
     workout.entryDate,
@@ -13103,11 +13158,18 @@ function getDeviceWorkoutDisplayKey(workout: DeviceWorkout) {
     workout.durationMinutes ?? "",
     distanceMeters ?? "",
   ].join("|");
+  deviceWorkoutDisplayKeyCache.set(workout, key);
+  return key;
 }
 
 function getDeviceWorkoutCompletenessScore(workout: DeviceWorkout) {
+  const cachedScore = deviceWorkoutCompletenessScoreCache.get(workout);
+  if (cachedScore !== undefined) {
+    return cachedScore;
+  }
+
   const rawFiles = Array.isArray(workout.rawPayload?.files) ? workout.rawPayload.files.length : 0;
-  return (
+  const score = (
     (workout.sampleCount ?? 0) * 4 +
     rawFiles * 3 +
     (workout.activeCalories !== null ? 2 : 0) +
@@ -13116,6 +13178,8 @@ function getDeviceWorkoutCompletenessScore(workout: DeviceWorkout) {
     (workout.maxHeartRateBpm !== null ? 1 : 0) +
     (workout.minHeartRateBpm !== null ? 1 : 0)
   );
+  deviceWorkoutCompletenessScoreCache.set(workout, score);
+  return score;
 }
 
 function getDeviceWorkoutById(
