@@ -177,6 +177,8 @@ const formattedDateCache = new Map<string, string>();
 const formattedShortDateCache = new Map<string, string>();
 const formattedDateTimeCache = new Map<string, string>();
 const formattedTimeCache = new Map<string, string>();
+const watchWorkoutHistoryGroupsCache = new WeakMap<DeviceWorkout[], Map<string, WatchWorkoutHistoryGroup[]>>();
+const deviceWorkoutGraphSummaryCache = new WeakMap<DeviceWorkout, boolean>();
 const deviceWorkoutGraphTimeCache = new Map<string, number | null>();
 const deviceWorkoutDisplayKeyCache = new WeakMap<DeviceWorkout, string>();
 const deviceWorkoutCompletenessScoreCache = new WeakMap<DeviceWorkout, number>();
@@ -239,10 +241,16 @@ export function bootstrapMobileApp(root: HTMLElement) {
     message: null,
     error: null,
   };
+  let mountedUPlotCharts: UPlotInstance[] = [];
 
   const update = (patch: Partial<MobileAppState>) => {
     Object.assign(state, patch);
     render();
+  };
+
+  const updateWatchState = (patch: Partial<MobileAppState>) => {
+    Object.assign(state, patch);
+    renderWatchPanel();
   };
 
   const scrollToScreenTop = () => {
@@ -250,7 +258,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
   };
 
   const openWatchWorkoutDetail = (workoutId: string) => {
-    update({
+    updateWatchState({
       watchDetailMetric: null,
       watchExpandedWorkoutId: null,
       watchExpandedWorkoutGraphId: null,
@@ -261,16 +269,43 @@ export function bootstrapMobileApp(root: HTMLElement) {
     void hydrateDeviceWorkoutSamples(workoutId);
   };
 
-  const bindWatchWorkoutHistoryEvents = (scope: ParentNode) => {
+  const openWatchWorkoutHistory = () => {
+    updateWatchState({
+      watchDetailMetric: null,
+      watchExpandedWorkoutId: null,
+      watchExpandedWorkoutGraphId: null,
+      watchWorkoutHistoryOpen: true,
+      watchWorkoutDetailId: null,
+      watchSettingsOpen: false,
+    });
+    scrollToScreenTop();
+  };
+
+  const closeWatchWorkoutHistory = () => {
+    updateWatchState({
+      watchExpandedWorkoutId: null,
+      watchExpandedWorkoutGraphId: null,
+      watchWorkoutHistoryOpen: false,
+      watchWorkoutDetailId: null,
+    });
+    scrollToScreenTop();
+  };
+
+  const closeWatchWorkoutDetail = () => {
+    updateWatchState({ watchWorkoutDetailId: null });
+    scrollToScreenTop();
+  };
+
+  const destroyMountedUPlotCharts = () => {
+    mountedUPlotCharts.forEach((chart) => chart.destroy());
+    mountedUPlotCharts = [];
+    resetMobileUPlotPayloads();
+  };
+
+  const bindWatchPanelEvents = (scope: ParentNode) => {
     scope.querySelectorAll<HTMLButtonElement>("[data-watch-workouts-back]").forEach((button) => {
       button.addEventListener("click", () => {
-        update({
-          watchExpandedWorkoutId: null,
-          watchExpandedWorkoutGraphId: null,
-          watchWorkoutHistoryOpen: false,
-          watchWorkoutDetailId: null,
-        });
-        scrollToScreenTop();
+        closeWatchWorkoutHistory();
       });
     });
 
@@ -289,18 +324,30 @@ export function bootstrapMobileApp(root: HTMLElement) {
         }
       });
     });
+
+    scope.querySelectorAll<HTMLButtonElement>("[data-watch-workout-detail-back]").forEach((button) => {
+      button.addEventListener("click", () => {
+        closeWatchWorkoutDetail();
+      });
+    });
   };
 
-  const renderWatchWorkoutHistoryPanel = () => {
+  const renderWatchPanel = () => {
     const panel = root.querySelector<HTMLElement>(".screen-panel");
-    const athleteId = state.session.user?.athleteId;
-    if (!panel || state.selectedScreen !== "watches" || !state.watchWorkoutHistoryOpen || !athleteId) {
+    const athleteId = getActiveAthleteId(state);
+    if (!panel || state.selectedScreen !== "watches" || !athleteId) {
       render();
       return;
     }
 
-    panel.innerHTML = renderWatchWorkoutHistoryScreen(state, athleteId, todayValue());
-    bindWatchWorkoutHistoryEvents(panel);
+    root.querySelector<HTMLElement>(".mobile-shell")?.classList.toggle(
+      "is-watch-detail",
+      isWatchSubscreenActive(state),
+    );
+    destroyMountedUPlotCharts();
+    panel.innerHTML = renderScreen(state, athleteId);
+    bindWatchPanelEvents(panel);
+    mountedUPlotCharts = mountMobileUPlotCharts(panel);
   };
 
   function updateWatchWorkoutHistoryPeriod(nextPeriod: WatchDetailPeriod) {
@@ -309,7 +356,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
     }
 
     state.watchWorkoutHistoryPeriod = nextPeriod;
-    renderWatchWorkoutHistoryPanel();
+    renderWatchPanel();
   }
 
   const rememberDirectWatchConfig = (patch: Partial<DirectWatchLocalConfig>) => {
@@ -484,12 +531,9 @@ export function bootstrapMobileApp(root: HTMLElement) {
     state.session.apiBaseUrl,
     state.session.sessionToken,
   );
-  let mountedUPlotCharts: UPlotInstance[] = [];
 
   const render = () => {
-    mountedUPlotCharts.forEach((chart) => chart.destroy());
-    mountedUPlotCharts = [];
-    resetMobileUPlotPayloads();
+    destroyMountedUPlotCharts();
     root.innerHTML = state.session.user ? renderAppShell(state) : renderLogin(state);
     bindEvents();
     mountedUPlotCharts = mountMobileUPlotCharts(root);
@@ -2558,27 +2602,13 @@ export function bootstrapMobileApp(root: HTMLElement) {
 
     root.querySelectorAll<HTMLButtonElement>("[data-watch-workouts-open]").forEach((button) => {
       button.addEventListener("click", () => {
-        update({
-          watchDetailMetric: null,
-          watchExpandedWorkoutId: null,
-          watchExpandedWorkoutGraphId: null,
-          watchWorkoutHistoryOpen: true,
-          watchWorkoutDetailId: null,
-          watchSettingsOpen: false,
-        });
-        scrollToScreenTop();
+        openWatchWorkoutHistory();
       });
     });
 
     root.querySelectorAll<HTMLButtonElement>("[data-watch-workouts-back]").forEach((button) => {
       button.addEventListener("click", () => {
-        update({
-          watchExpandedWorkoutId: null,
-          watchExpandedWorkoutGraphId: null,
-          watchWorkoutHistoryOpen: false,
-          watchWorkoutDetailId: null,
-        });
-        scrollToScreenTop();
+        closeWatchWorkoutHistory();
       });
     });
 
@@ -2640,8 +2670,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
 
     root.querySelectorAll<HTMLButtonElement>("[data-watch-workout-detail-back]").forEach((button) => {
       button.addEventListener("click", () => {
-        update({ watchWorkoutDetailId: null });
-        scrollToScreenTop();
+        closeWatchWorkoutDetail();
       });
     });
 
@@ -3044,16 +3073,11 @@ function renderAppShell(state: MobileAppState) {
     : { ...state, selectedScreen: activeScreen };
   const selectedAthlete = getSelectedAthlete(state);
   const activeAthleteId = getActiveAthleteId(state);
-  const isWatchDetailScreen = displayState.selectedScreen === "watches" && (
-    Boolean(displayState.watchDetailMetric) ||
-    Boolean(displayState.watchWorkoutDetailId) ||
-    displayState.watchWorkoutHistoryOpen ||
-    displayState.watchSettingsOpen
-  );
+  const isWatchDetailScreen = isWatchSubscreenActive(displayState);
 
   return `
-    <main class="mobile-shell">
-      ${isWatchDetailScreen ? "" : renderAppTopBar(state, selectedAthlete)}
+    <main class="mobile-shell ${isWatchDetailScreen ? "is-watch-detail" : ""}">
+      ${renderAppTopBar(state, selectedAthlete)}
 
       ${renderStatus(state)}
 
@@ -3077,6 +3101,15 @@ function renderAppShell(state: MobileAppState) {
       </nav>
     </main>
   `;
+}
+
+function isWatchSubscreenActive(state: MobileAppState) {
+  return state.selectedScreen === "watches" && (
+    Boolean(state.watchDetailMetric) ||
+    Boolean(state.watchWorkoutDetailId) ||
+    state.watchWorkoutHistoryOpen ||
+    state.watchSettingsOpen
+  );
 }
 
 function renderAppTopBar(state: MobileAppState, selectedAthlete: CoachAthleteSummary | null) {
@@ -5738,11 +5771,19 @@ function getWatchWorkoutHistoryGroups(
   date: string,
   period: WatchDetailPeriod,
 ): WatchWorkoutHistoryGroup[] {
+  const cacheKey = `${athleteId}|${date}|${period}`;
+  const sourceWorkouts = state.data.deviceWorkouts;
+  const sourceCache = watchWorkoutHistoryGroupsCache.get(sourceWorkouts);
+  const cachedGroups = sourceCache?.get(cacheKey);
+  if (cachedGroups) {
+    return cachedGroups;
+  }
+
   const periodDates = getWatchDetailPeriodDates(date, period);
   const periodDateSet = new Set(periodDates);
   const workoutsByDate = new Map<string, DeviceWorkout[]>();
 
-  for (const workout of state.data.deviceWorkouts) {
+  for (const workout of sourceWorkouts) {
     if (
       periodDateSet.has(workout.entryDate) &&
       (!athleteId || workout.athleteId === athleteId)
@@ -5756,11 +5797,17 @@ function getWatchWorkoutHistoryGroups(
     }
   }
 
-  return periodDates
+  const groups = periodDates
     .slice()
     .reverse()
     .map((entryDate) => buildWatchWorkoutHistoryGroup(entryDate, getDisplayDeviceWorkoutsForDateItems(workoutsByDate.get(entryDate) ?? [])))
     .filter((group) => group.workouts.length > 0);
+  const nextSourceCache = sourceCache ?? new Map<string, WatchWorkoutHistoryGroup[]>();
+  nextSourceCache.set(cacheKey, groups);
+  if (!sourceCache) {
+    watchWorkoutHistoryGroupsCache.set(sourceWorkouts, nextSourceCache);
+  }
+  return groups;
 }
 
 function buildWatchWorkoutHistoryGroup(date: string, workouts: DeviceWorkout[]): WatchWorkoutHistoryGroup {
@@ -9385,32 +9432,40 @@ function hasDeviceWorkoutGraph(workout: DeviceWorkout, context?: WatchWorkoutCon
 }
 
 function hasDeviceWorkoutGraphSummary(workout: DeviceWorkout) {
+  const cached = deviceWorkoutGraphSummaryCache.get(workout);
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  let hasGraph = false;
   if (getDeviceWorkoutRawHeartRateZones(workout).length > 0) {
-    return true;
-  }
+    hasGraph = true;
+  } else if (hasWorkoutSummaryHeartRate(workout)) {
+    hasGraph = true;
+  } else if (workout.sampleCount <= 1 && workout.samples.length <= 1) {
+    hasGraph = false;
+  } else {
+    const quickSampleLimit = Math.min(workout.samples.length, 48);
+    for (let index = 0; index < quickSampleLimit; index += 1) {
+      const sample = workout.samples[index];
+      if (
+        sample.heartRateBpm !== null ||
+        sample.oxygenSaturationPercent !== null ||
+        sample.speedMetersPerSecond !== null ||
+        sample.paceSecondsPerKm !== null
+      ) {
+        hasGraph = true;
+        break;
+      }
+    }
 
-  if (hasWorkoutSummaryHeartRate(workout)) {
-    return true;
-  }
-
-  if (workout.sampleCount <= 1 && workout.samples.length <= 1) {
-    return false;
-  }
-
-  const quickSampleLimit = Math.min(workout.samples.length, 48);
-  for (let index = 0; index < quickSampleLimit; index += 1) {
-    const sample = workout.samples[index];
-    if (
-      sample.heartRateBpm !== null ||
-      sample.oxygenSaturationPercent !== null ||
-      sample.speedMetersPerSecond !== null ||
-      sample.paceSecondsPerKm !== null
-    ) {
-      return true;
+    if (!hasGraph) {
+      hasGraph = workout.samples.length === 0 && workout.sampleCount > 1;
     }
   }
 
-  return workout.samples.length === 0 && workout.sampleCount > 1;
+  deviceWorkoutGraphSummaryCache.set(workout, hasGraph);
+  return hasGraph;
 }
 
 function hasWatchWorkoutWindowSamples(workout: DeviceWorkout, samples: DeviceHealthSample[]) {
