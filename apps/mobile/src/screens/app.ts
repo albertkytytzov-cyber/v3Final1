@@ -4251,7 +4251,7 @@ function getWatchWorkoutDetailContext(
   athleteId: string,
   workout: DeviceWorkout,
 ): WatchWorkoutContext {
-  let hasWorkoutHeartRate = false;
+  let hasWorkoutHeartRate = hasWorkoutSummaryHeartRate(workout);
   let hasWorkoutOxygen = false;
   let hasWorkoutPaceOrSpeed = false;
 
@@ -8238,7 +8238,7 @@ function renderWatchWorkoutParameterPanel(
   const metrics = deriveWatchWorkoutMetrics(workout, context);
   const canScanWorkoutSamples = series.length > 0 || workout.samples.length <= 600;
   const heartRateStats = heartRateSeries
-    ? summarizeWorkoutSeries(heartRateSeries.samples)
+    ? summarizeDeviceWorkoutHeartRateSeries(workout, heartRateSeries)
     : {
         avg: workout.averageHeartRateBpm,
         max: workout.maxHeartRateBpm,
@@ -8515,6 +8515,12 @@ function summarizeWorkoutSeries(samples: { value: number }[]) {
   return summarizeWorkoutValues(samples.map((sample) => sample.value));
 }
 
+function summarizeDeviceWorkoutHeartRateSeries(workout: DeviceWorkout, series: DeviceWorkoutGraphSeries) {
+  return series.source === "summary"
+    ? getDeviceWorkoutSummaryHeartRateStats(workout)
+    : summarizeWorkoutSeries(series.samples);
+}
+
 function summarizeWorkoutValues(values: Array<number | null | undefined>) {
   let count = 0;
   let max = Number.NEGATIVE_INFINITY;
@@ -8544,6 +8550,66 @@ function summarizeWorkoutValues(values: Array<number | null | undefined>) {
     max,
     min,
   };
+}
+
+function hasWorkoutSummaryHeartRate(workout: DeviceWorkout) {
+  const stats = getDeviceWorkoutSummaryHeartRateStats(workout);
+  return stats.avg !== null || stats.min !== null || stats.max !== null;
+}
+
+function getDeviceWorkoutSummaryHeartRateStats(workout: DeviceWorkout) {
+  const rawSamples = readDeviceWorkoutSummaryHeartRateSamples(workout);
+  const averageFromRaw = rawSamples[0] ?? null;
+  const minFromRaw = rawSamples[1] ?? null;
+  const maxFromRaw = rawSamples[2] ?? null;
+
+  return {
+    avg: workout.averageHeartRateBpm ?? averageFromRaw,
+    max: workout.maxHeartRateBpm ?? maxFromRaw,
+    min: workout.minHeartRateBpm ?? minFromRaw,
+  };
+}
+
+function readDeviceWorkoutSummaryHeartRateSamples(workout: DeviceWorkout) {
+  const value = workout.rawPayload?.summaryHeartRateSamples;
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((item) => typeof item === "number" && Number.isFinite(item) ? item : null)
+    .filter((item): item is number => item !== null && item >= 25 && item <= 240);
+}
+
+function buildDeviceWorkoutSummaryHeartRateSamples(workout: DeviceWorkout): { sampleTime: string; value: number }[] {
+  const stats = getDeviceWorkoutSummaryHeartRateStats(workout);
+  if (stats.avg === null && stats.min === null && stats.max === null) {
+    return [];
+  }
+
+  const start = getDeviceWorkoutGraphTime(workout.startTime);
+  const end = getDeviceWorkoutGraphTime(workout.endTime);
+  if (start === null || end === null || end <= start) {
+    const value = stats.avg ?? stats.min ?? stats.max;
+    return value !== null ? [{ sampleTime: workout.startTime, value }] : [];
+  }
+
+  const avg = stats.avg ?? stats.min ?? stats.max;
+  const min = stats.min ?? avg;
+  const max = stats.max ?? avg;
+  if (avg === null || min === null || max === null) {
+    return [];
+  }
+
+  const middle = start + (end - start) / 2;
+  const midValue = Math.max(min, Math.min(max, avg * 3 - min - max));
+  const points = [
+    { sampleTime: new Date(start).toISOString(), value: min },
+    { sampleTime: new Date(middle).toISOString(), value: midValue },
+    { sampleTime: new Date(end).toISOString(), value: max },
+  ];
+
+  return points;
 }
 
 interface WatchWorkoutDerivedMetrics {
@@ -8969,7 +9035,7 @@ interface DeviceWorkoutGraphSeries {
   key: DeviceWorkoutGraphKind;
   label: string;
   samples: { sampleTime: string; value: number }[];
-  source?: "day-window" | "workout";
+  source?: "day-window" | "summary" | "workout";
   valueLabel: (value: number) => string;
 }
 
@@ -9041,8 +9107,13 @@ function buildDeviceWorkoutGraphSeries(
   const paceSamples = compactDeviceWorkoutGraphSamples(rawPaceSamples);
   const speedSamples = compactDeviceWorkoutGraphSamples(rawSpeedSamples);
   const spo2Samples = compactDeviceWorkoutGraphSamples(rawSpo2Samples);
+  const summaryHeartRateSamples = heartRateSamples.length > 1
+    ? []
+    : buildDeviceWorkoutSummaryHeartRateSamples(workout);
   const fallbackHeartRateSamples = heartRateSamples.length > 1
     ? []
+    : summaryHeartRateSamples.length > 1
+      ? []
     : getWatchWorkoutWindowSamples(workout, context?.heartRateSamples ?? []);
   const fallbackOxygenSamples = spo2Samples.length > 1
     ? []
@@ -9051,14 +9122,27 @@ function buildDeviceWorkoutGraphSeries(
 
   const series: DeviceWorkoutGraphSeries[] = [];
 
-  if (heartRateSamples.length > 1 || fallbackHeartRateSamples.length > 1) {
-    const useFallback = heartRateSamples.length <= 1;
+  if (heartRateSamples.length > 1 || summaryHeartRateSamples.length > 1 || fallbackHeartRateSamples.length > 1) {
+    const useSummary = heartRateSamples.length <= 1 && summaryHeartRateSamples.length > 1;
+    const useFallback = heartRateSamples.length <= 1 && !useSummary;
     series.push({
-      detail: useFallback ? "дневные точки вокруг старта тренировки" : "точки тренировки",
+      detail: useSummary
+        ? "сводка часов min/avg/max без секундных точек"
+        : useFallback
+          ? "дневные точки вокруг старта тренировки"
+          : "точки тренировки",
       key: "heartRate",
-      label: useFallback ? "Пульс вокруг тренировки" : "Пульс",
-      samples: useFallback ? compactDeviceWorkoutGraphSamples(fallbackHeartRateSamples) : heartRateSamples,
-      source: useFallback ? "day-window" : "workout",
+      label: useSummary
+        ? "Пульс по сводке"
+        : useFallback
+          ? "Пульс вокруг тренировки"
+          : "Пульс",
+      samples: useSummary
+        ? summaryHeartRateSamples
+        : useFallback
+          ? compactDeviceWorkoutGraphSamples(fallbackHeartRateSamples)
+          : heartRateSamples,
+      source: useSummary ? "summary" : useFallback ? "day-window" : "workout",
       valueLabel: (value) => `${Math.round(value)} уд/мин`,
     });
   }
@@ -9139,6 +9223,10 @@ function getWatchWorkoutWindowSamples(
 }
 
 function hasDeviceWorkoutGraph(workout: DeviceWorkout, context?: WatchWorkoutContext) {
+  if (hasWorkoutSummaryHeartRate(workout)) {
+    return true;
+  }
+
   let heartRateSamples = 0;
   let paceSamples = 0;
   let speedSamples = 0;
@@ -9177,11 +9265,7 @@ function hasDeviceWorkoutGraphSummary(workout: DeviceWorkout) {
     return true;
   }
 
-  if (
-    workout.averageHeartRateBpm !== null ||
-    workout.maxHeartRateBpm !== null ||
-    workout.minHeartRateBpm !== null
-  ) {
+  if (hasWorkoutSummaryHeartRate(workout)) {
     return true;
   }
 
@@ -9661,7 +9745,13 @@ function renderDeviceWorkoutSeriesDetailGraph(series: DeviceWorkoutGraphSeries, 
     <div class="device-workout-series heartRate is-approved-detail">
       <div class="watch-heart-rate-approved-head">
         <div>
-          <span>${escapeHtml(series.source === "workout" ? "ТОЧКИ ТРЕНИРОВКИ" : "ОКНО ТРЕНИРОВКИ")}</span>
+          <span>${escapeHtml(
+            series.source === "workout"
+              ? "ТОЧКИ ТРЕНИРОВКИ"
+              : series.source === "summary"
+                ? "СВОДКА ЧАСОВ"
+                : "ОКНО ТРЕНИРОВКИ",
+          )}</span>
           <h3>Пульс тренировки</h3>
           <p>${escapeHtml(`${chart.sampleCountLabel} · ${chart.visiblePointLabel}`)}</p>
         </div>
@@ -9726,10 +9816,11 @@ function buildDeviceWorkoutHeartRateDetailChart(
     return null;
   }
 
+  const summaryStats = series.source === "summary" ? getDeviceWorkoutSummaryHeartRateStats(workout) : null;
   const values = points.map((point) => point.value);
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const average = values.reduce((total, value) => total + value, 0) / values.length;
+  const min = summaryStats?.min ?? Math.min(...values);
+  const max = summaryStats?.max ?? Math.max(...values);
+  const average = summaryStats?.avg ?? values.reduce((total, value) => total + value, 0) / values.length;
   const scale = buildAdaptiveHeartRateScale(min, max);
   const range = Math.max(1, scale.upper - scale.lower);
   const workoutStartTime = getDeviceWorkoutGraphTime(workout.startTime);
@@ -9791,13 +9882,15 @@ function buildDeviceWorkoutHeartRateDetailChart(
       <circle class="peak-dot" cx="${peakX}" cy="${peakY}" r="1.8"></circle>
     `,
     points: svgPoints,
-    sampleCountLabel: `${points.length} точек ЧСС`,
+    sampleCountLabel: series.source === "summary" ? "сводка ЧСС" : `${points.length} точек ЧСС`,
     timeLabels: [
       formatDeviceWorkoutGraphTime(axisStartTime),
       formatDeviceWorkoutGraphTime(axisStartTime + axisDuration / 2),
       formatDeviceWorkoutGraphTime(axisEndTime),
     ],
-    visiblePointLabel: `на графике ${visiblePoints.length} ключевых точек`,
+    visiblePointLabel: series.source === "summary"
+      ? "min / avg / max от часов"
+      : `на графике ${visiblePoints.length} ключевых точек`,
     zoneRows: heartRateZones.map((zone) => ({
       durationLabel: formatHeartRateZoneCompactDurationMs(zone.durationMs),
       percentLabel: `${Math.round(zone.percent)}%`,
