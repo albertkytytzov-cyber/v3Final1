@@ -7412,7 +7412,7 @@ class DirectWatchPlugin : Plugin() {
             }
 
             Thread.sleep(CLASSIC_POST_AUTH_COMMAND_DELAY_MS)
-            val readResult = readClassicActivityFileUntil(
+            var readResult = readClassicActivityFileUntil(
                 socket = socket,
                 packets = packets,
                 combined = combined,
@@ -7421,6 +7421,49 @@ class DirectWatchPlugin : Plugin() {
                 targetFile = file,
                 ackedClassicV2DataSequences = ackedClassicV2DataSequences,
             )
+            var retryCount = 0
+            if (shouldRetryClassicActivityFileRead(readResult)) {
+                retryCount += 1
+                Log.i(
+                    TAG,
+                    "classic activity retry file=${idHex ?: "-"} status=${readResult.status} " +
+                        "chunk=${readResult.chunkNumber}/${readResult.chunkTotal}",
+                )
+                Thread.sleep(CLASSIC_ACTIVITY_FILE_RETRY_DELAY_MS)
+                try {
+                    val retrySequenceNumber = nextSequenceNumber
+                    socket.outputStream.write(
+                        buildClassicV2EncryptedCommandPacket(
+                            command = buildActivityFetchRequestCommand(fileId),
+                            sequenceNumber = nextSequenceNumber++,
+                            encryptionKey = encryptionKey,
+                        ),
+                    )
+                    socket.outputStream.flush()
+                    request.put("retrySequenceNumber", retrySequenceNumber)
+                    val retryResult = readClassicActivityFileUntil(
+                        socket = socket,
+                        packets = packets,
+                        combined = combined,
+                        decryptionKey = decryptionKey,
+                        targetFileIdHex = idHex,
+                        targetFile = file,
+                        ackedClassicV2DataSequences = ackedClassicV2DataSequences,
+                    )
+                    readResult = preferClassicActivityFileReadResult(readResult, retryResult)
+                    request.put("retryStatus", retryResult.status)
+                    request.put("retryCrcValid", retryResult.crcValid)
+                    request.put("retryChunkNumber", retryResult.chunkNumber)
+                    request.put("retryChunkTotal", retryResult.chunkTotal)
+                    request.put("retryPayloadBytes", retryResult.payloadBytes)
+                } catch (error: IOException) {
+                    request.put("retryStatus", "write-error")
+                    request.put(
+                        "retryError",
+                        "Не удалось повторно запросить файл часов ${idHex ?: "-"}: ${safeMessage(error)}",
+                    )
+                }
+            }
             request.put("status", readResult.status)
             request.put("error", readResult.error)
             request.put("crcValid", readResult.crcValid)
@@ -7429,11 +7472,12 @@ class DirectWatchPlugin : Plugin() {
             request.put("chunkTotal", readResult.chunkTotal)
             request.put("payloadBytes", readResult.payloadBytes)
             request.put("durationMs", readResult.durationMs)
+            request.put("retryCount", retryCount)
             requests.add(request)
             Log.i(
                 TAG,
                 "classic activity result file=${idHex ?: "-"} status=${readResult.status} " +
-                    "crc=${readResult.crcValid} chunk=${readResult.chunkNumber}/${readResult.chunkTotal} " +
+                    "crc=${readResult.crcValid} chunk=${readResult.chunkNumber}/${readResult.chunkTotal} retry=$retryCount " +
                     "parsed=${readResult.parsed} bytes=${readResult.payloadBytes} durationMs=${readResult.durationMs}",
             )
 
@@ -7453,6 +7497,36 @@ class DirectWatchPlugin : Plugin() {
             nextSequenceNumber = nextSequenceNumber,
             error = if (completedCount == 0) firstError else null,
         )
+    }
+
+    private fun shouldRetryClassicActivityFileRead(result: ClassicActivityFileReadResult): Boolean {
+        return result.status == "partial-timeout" || result.status == "crc-error"
+    }
+
+    private fun preferClassicActivityFileReadResult(
+        first: ClassicActivityFileReadResult,
+        retry: ClassicActivityFileReadResult,
+    ): ClassicActivityFileReadResult {
+        if (retry.status == "complete") {
+            return retry
+        }
+        if (first.status == "complete") {
+            return first
+        }
+
+        val retryPayloadBytes = retry.payloadBytes ?: 0
+        val firstPayloadBytes = first.payloadBytes ?: 0
+        val retryChunkNumber = retry.chunkNumber ?: 0
+        val firstChunkNumber = first.chunkNumber ?: 0
+        return if (
+            retryPayloadBytes > firstPayloadBytes ||
+            retryChunkNumber > firstChunkNumber ||
+            (retry.parsed == true && first.parsed != true)
+        ) {
+            retry
+        } else {
+            first
+        }
     }
 
     private fun readClassicActivityFileUntil(
@@ -8484,6 +8558,7 @@ class DirectWatchPlugin : Plugin() {
         private const val CLASSIC_ACTIVITY_WORKOUT_DETAIL_READ_MS = 60_000L
         private const val CLASSIC_ACTIVITY_WORKOUT_DETAIL_NO_PROGRESS_MS = 5_000L
         private const val CLASSIC_ACTIVITY_FILE_QUEUE_POLL_MS = 250L
+        private const val CLASSIC_ACTIVITY_FILE_RETRY_DELAY_MS = 450L
         private const val CLASSIC_ACTIVITY_FILE_PROBE_LIMIT = 512
         private const val CLASSIC_ACTIVITY_FILE_ID_BYTES = 7
         private const val CLASSIC_MANUAL_SAMPLE_HR = 0x11

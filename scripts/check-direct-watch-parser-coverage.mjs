@@ -19,6 +19,8 @@ const requiredPluginPatterns = [
   ["workout summary dispatcher", /private fun parseClassicKnownWorkoutSummary\(/u],
   ["workout details parser", /private fun parseClassicWorkoutDetails\(/u],
   ["workout GPS parser", /private fun parseClassicWorkoutGps\(/u],
+  ["activity file partial retry guard", /private fun shouldRetryClassicActivityFileRead\(result: ClassicActivityFileReadResult\): Boolean/u],
+  ["activity file retry result selector", /private fun preferClassicActivityFileReadResult\(/u],
   ["daily details v1-v4", /val headerSize = when \(file\.version\) \{\s+1, 2 -> 4\s+3 -> 5\s+4 -> 6/u],
   ["manual samples v2", /file\.version != 2/u],
   ["sleep details v1-v5", /file\.type != 0 \|\| file\.subtype != 8 \|\| file\.version > 5/u],

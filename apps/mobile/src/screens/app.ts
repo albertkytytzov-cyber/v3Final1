@@ -1580,11 +1580,13 @@ export function bootstrapMobileApp(root: HTMLElement) {
     }
 
     directWatchAutoSyncTimer = window.setTimeout(() => {
+      void refreshDirectWatchSyncService().catch(() => undefined);
       void notifyDirectWatchAppVisible().catch(() => undefined);
     }, DIRECT_WATCH_AUTO_SYNC_START_DELAY_MS);
 
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "visible") {
+        void refreshDirectWatchSyncService().catch(() => undefined);
         void notifyDirectWatchAppVisible().catch(() => undefined);
       }
     });
@@ -1952,11 +1954,12 @@ export function bootstrapMobileApp(root: HTMLElement) {
   const refreshDirectWatchSyncService = async () => {
     try {
       const serviceStatus = await getDirectWatchSyncServiceStatus();
+      const currentConfig = loadDirectWatchConfig();
       rememberDirectWatchConfig({
-        deviceId: serviceStatus.deviceId ?? loadDirectWatchConfig().deviceId,
-        deviceName: serviceStatus.deviceName ?? loadDirectWatchConfig().deviceName,
-        lastServiceBridgeUntil: serviceStatus.bridgeUntil ?? null,
-        lastServiceError: serviceStatus.running ? null : loadDirectWatchConfig().lastServiceError,
+        deviceId: serviceStatus.deviceId ?? currentConfig.deviceId,
+        deviceName: serviceStatus.deviceName ?? currentConfig.deviceName,
+        lastServiceBridgeUntil: serviceStatus.running ? serviceStatus.bridgeUntil ?? null : null,
+        lastServiceError: serviceStatus.running ? null : currentConfig.lastServiceError,
         lastServiceStatus: serviceStatus.running ? "running" : "stopped",
         lastServiceUpdatedAt: serviceStatus.updatedAt ?? new Date().toISOString(),
       });
@@ -7704,8 +7707,8 @@ function isDirectWatchServiceRunning(
   config: DirectWatchLocalConfig,
   status: MobileAppState["directWatchDiagnostic"]["serviceStatus"],
 ) {
-  if (status?.running) {
-    return true;
+  if (status) {
+    return status.running === true;
   }
 
   return config.lastServiceStatus === "running" && isFutureDate(config.lastServiceBridgeUntil);
