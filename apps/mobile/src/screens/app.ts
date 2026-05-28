@@ -316,6 +316,72 @@ export function bootstrapMobileApp(root: HTMLElement) {
   };
 
   const bindWatchPanelEvents = (scope: ParentNode) => {
+    scope.querySelectorAll<HTMLButtonElement>("[data-watch-detail]").forEach((button) => {
+      button.addEventListener("click", () => {
+        updateWatchState({
+          watchDetailMetric: (button.dataset.watchDetail as WatchDetailMetric) || null,
+          watchDetailPeriod: "day",
+          watchExpandedWorkoutId: null,
+          watchExpandedWorkoutGraphId: null,
+          watchWorkoutHistoryOpen: false,
+          watchWorkoutDetailId: null,
+          watchSettingsOpen: false,
+        });
+        scrollToScreenTop();
+      });
+    });
+
+    scope.querySelectorAll<HTMLButtonElement>("[data-watch-detail-back]").forEach((button) => {
+      button.addEventListener("click", () => {
+        updateWatchState({
+          watchDetailMetric: null,
+          watchExpandedWorkoutId: null,
+          watchExpandedWorkoutGraphId: null,
+          watchWorkoutDetailId: null,
+        });
+        scrollToScreenTop();
+      });
+    });
+
+    scope.querySelectorAll<HTMLButtonElement>("[data-watch-detail-period]").forEach((button) => {
+      button.addEventListener("click", () => {
+        state.watchDetailPeriod = (button.dataset.watchDetailPeriod as WatchDetailPeriod) || "day";
+        renderWatchPanel();
+      });
+    });
+
+    scope.querySelectorAll<HTMLButtonElement>("[data-watch-settings-open]").forEach((button) => {
+      button.addEventListener("click", () => {
+        updateWatchState({
+          watchDetailMetric: null,
+          watchExpandedWorkoutId: null,
+          watchExpandedWorkoutGraphId: null,
+          watchWorkoutHistoryOpen: false,
+          watchWorkoutDetailId: null,
+          watchSettingsOpen: true,
+        });
+        scrollToScreenTop();
+      });
+    });
+
+    scope.querySelectorAll<HTMLButtonElement>("[data-watch-settings-back]").forEach((button) => {
+      button.addEventListener("click", () => {
+        updateWatchState({
+          watchExpandedWorkoutId: null,
+          watchExpandedWorkoutGraphId: null,
+          watchWorkoutDetailId: null,
+          watchSettingsOpen: false,
+        });
+        scrollToScreenTop();
+      });
+    });
+
+    scope.querySelectorAll<HTMLButtonElement>("[data-watch-workouts-open]").forEach((button) => {
+      button.addEventListener("click", () => {
+        openWatchWorkoutHistory();
+      });
+    });
+
     scope.querySelectorAll<HTMLButtonElement>("[data-watch-workouts-back]").forEach((button) => {
       button.addEventListener("click", () => {
         closeWatchWorkoutHistory();
@@ -338,9 +404,157 @@ export function bootstrapMobileApp(root: HTMLElement) {
       });
     });
 
+    scope.querySelectorAll<HTMLButtonElement>("[data-watch-workout-toggle]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const workoutId = button.dataset.watchWorkoutToggle;
+        if (!workoutId) {
+          return;
+        }
+
+        const isOpening = state.watchExpandedWorkoutId !== workoutId;
+        updateWatchState({
+          watchExpandedWorkoutId: isOpening ? workoutId : null,
+          watchExpandedWorkoutGraphId: null,
+          watchWorkoutDetailId: null,
+        });
+        scrollToScreenTop();
+        if (isOpening) {
+          void hydrateDeviceWorkoutSamples(workoutId);
+        }
+      });
+    });
+
+    scope.querySelectorAll<HTMLButtonElement>("[data-watch-workout-graph]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const workoutId = button.dataset.watchWorkoutGraph;
+        if (!workoutId) {
+          return;
+        }
+
+        updateWatchState({
+          watchDetailMetric: null,
+          watchExpandedWorkoutId: workoutId,
+          watchExpandedWorkoutGraphId: null,
+          watchWorkoutDetailId: workoutId,
+        });
+        scrollToScreenTop();
+        void hydrateDeviceWorkoutSamples(workoutId);
+      });
+    });
+
     scope.querySelectorAll<HTMLButtonElement>("[data-watch-workout-detail-back]").forEach((button) => {
       button.addEventListener("click", () => {
         closeWatchWorkoutDetail();
+      });
+    });
+
+    scope.querySelectorAll<HTMLButtonElement>("[data-direct-watch-scan]").forEach((button) => {
+      button.addEventListener("click", () => {
+        void scanDirectWatch();
+      });
+    });
+
+    scope.querySelector<HTMLButtonElement>("[data-direct-watch-auth-key-save]")?.addEventListener("click", () => {
+      saveDirectWatchAuthKey();
+    });
+
+    scope.querySelector<HTMLButtonElement>("[data-direct-watch-weather-save]")?.addEventListener("click", () => {
+      void saveDirectWatchWeatherLocation();
+    });
+
+    scope.querySelectorAll<HTMLButtonElement>("[data-direct-watch-select]").forEach((button) => {
+      button.addEventListener("click", () => {
+        selectDirectWatchDevice(button.dataset.directWatchSelect ?? "");
+      });
+    });
+
+    scope.querySelectorAll<HTMLButtonElement>("[data-direct-watch-full-sync]").forEach((button) => {
+      button.addEventListener("click", () => {
+        void syncDirectWatchFull(
+          button.dataset.directWatchFullSyncDate || todayValue(),
+          button.dataset.directWatchFullSync || null,
+        );
+      });
+    });
+
+    scope.querySelectorAll<HTMLButtonElement>("[data-direct-watch-sync]").forEach((button) => {
+      button.addEventListener("click", () => {
+        void syncDirectWatch(
+          button.dataset.directWatchSyncDate ?? todayValue(),
+          button.dataset.directWatchSync ?? null,
+        );
+      });
+    });
+
+    scope.querySelectorAll<HTMLButtonElement>("[data-direct-watch-history-sync]").forEach((button) => {
+      button.addEventListener("click", () => {
+        void syncDirectWatchHistory(button.dataset.directWatchHistorySync ?? null);
+      });
+    });
+
+    scope.querySelectorAll<HTMLButtonElement>("[data-direct-watch-service-sync]").forEach((button) => {
+      button.addEventListener("click", () => {
+        void syncDirectWatchServiceSettings(button.dataset.directWatchServiceSync ?? null);
+      });
+    });
+
+    scope.querySelectorAll<HTMLButtonElement>("[data-direct-watch-service-status]").forEach((button) => {
+      button.addEventListener("click", () => {
+        void refreshDirectWatchSyncService();
+      });
+    });
+
+    scope.querySelectorAll<HTMLButtonElement>("[data-direct-watch-service-stop]").forEach((button) => {
+      button.addEventListener("click", () => {
+        void stopDirectWatchForegroundService();
+      });
+    });
+
+    scope.querySelectorAll<HTMLButtonElement>("[data-direct-watch-inspect]").forEach((button) => {
+      button.addEventListener("click", () => {
+        void inspectDirectWatch(button.dataset.directWatchInspect ?? "");
+      });
+    });
+
+    scope.querySelectorAll<HTMLButtonElement>("[data-direct-watch-pair]").forEach((button) => {
+      button.addEventListener("click", () => {
+        void pairDirectWatch(button.dataset.directWatchPair ?? "");
+      });
+    });
+
+    scope.querySelectorAll<HTMLButtonElement>("[data-direct-watch-unpair]").forEach((button) => {
+      button.addEventListener("click", () => {
+        void unpairDirectWatch(button.dataset.directWatchUnpair ?? "");
+      });
+    });
+
+    scope.querySelectorAll<HTMLButtonElement>("[data-direct-watch-classic-probe]").forEach((button) => {
+      button.addEventListener("click", () => {
+        void probeDirectWatchClassic(button.dataset.directWatchClassicProbe ?? "");
+      });
+    });
+
+    scope.querySelectorAll<HTMLButtonElement>("[data-direct-watch-auth-probe]").forEach((button) => {
+      button.addEventListener("click", () => {
+        void probeDirectWatchClassic(button.dataset.directWatchAuthProbe ?? "", true);
+      });
+    });
+
+    scope.querySelectorAll<HTMLButtonElement>("[data-direct-watch-session-start]").forEach((button) => {
+      button.addEventListener("click", () => {
+        void startDirectWatchConnection(button.dataset.directWatchSessionStart ?? "");
+      });
+    });
+
+    scope.querySelectorAll<HTMLButtonElement>("[data-direct-watch-session-stop]").forEach((button) => {
+      button.addEventListener("click", () => {
+        void stopDirectWatchConnection();
+      });
+    });
+
+    scope.querySelectorAll<HTMLButtonElement>("[data-direct-watch-session-refresh]").forEach((button) => {
+      button.addEventListener("click", () => {
+        void refreshDirectWatchSession();
       });
     });
   };
@@ -4805,7 +5019,8 @@ function buildWatchSampleUPlotPayload(
     return null;
   }
 
-  const points = buildWatchTimedPoints(samples, dayBounds, Number.NEGATIVE_INFINITY, Number.POSITIVE_INFINITY);
+  const validRange = getWatchSampleValidRange(metric);
+  const points = buildWatchTimedPoints(samples, dayBounds, validRange.lower, validRange.upper);
   if (points.length < 2) {
     return null;
   }
@@ -4830,6 +5045,18 @@ function buildWatchSampleUPlotPayload(
     x: visiblePoints.map((point) => Math.round(point.sampledAt.getTime() / 1000)),
     y: visiblePoints.map((point) => point.value),
   };
+}
+
+function getWatchSampleValidRange(metric: WatchDetailMetric) {
+  if (metric === "oxygen") {
+    return { lower: 70, upper: 100 };
+  }
+
+  if (metric === "stress") {
+    return { lower: 1, upper: 100 };
+  }
+
+  return { lower: Number.NEGATIVE_INFINITY, upper: Number.POSITIVE_INFINITY };
 }
 
 function buildWatchTimedPoints(
@@ -6599,6 +6826,7 @@ function buildWatchSampleChart(
     return null;
   }
 
+  const validRange = getWatchSampleValidRange(metric);
   const points = samples
     .map((sample) => {
       const sampledAt = new Date(sample.sampledAt);
@@ -6607,7 +6835,9 @@ function buildWatchSampleChart(
         Number.isNaN(sampledAt.getTime()) ||
         sampledAt.getTime() < dayBounds.start.getTime() ||
         sampledAt.getTime() > dayBounds.end.getTime() ||
-        !Number.isFinite(value)
+        !Number.isFinite(value) ||
+        value < validRange.lower ||
+        value > validRange.upper
       ) {
         return null;
       }
