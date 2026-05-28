@@ -15,6 +15,13 @@ object DirectWatchSyncCoordinator {
         fun onDirectWatchSyncRequested(request: JSObject)
     }
 
+    data class NativeSyncConfig(
+        val deviceId: String,
+        val deviceName: String?,
+        val authKeyHex: String,
+        val enabled: Boolean,
+    )
+
     private const val PREFS_NAME = "perform.direct_watch_sync_coordinator"
     private const val KEY_ENABLED = "enabled"
     private const val KEY_DEVICE_ID = "deviceId"
@@ -115,6 +122,23 @@ object DirectWatchSyncCoordinator {
         response.put("nextAllowedReason", gate.reason)
         response.put("retryAfterMs", gate.nextAllowedAtMs?.let { (it - nowMs).coerceAtLeast(0) } ?: 0)
         return response
+    }
+
+    fun nativeSyncConfig(context: Context): NativeSyncConfig? {
+        val prefs = prefs(context)
+        if (!prefs.getBoolean(KEY_ENABLED, false)) {
+            return null
+        }
+        val deviceId = prefs.getString(KEY_DEVICE_ID, null)?.trim()?.takeIf { it.isNotBlank() }
+            ?: return null
+        val authKeyHex = prefs.getString(KEY_AUTH_KEY_HEX, null)?.trim()?.takeIf { it.isNotBlank() }
+            ?: return null
+        return NativeSyncConfig(
+            deviceId = deviceId,
+            deviceName = prefs.getString(KEY_DEVICE_NAME, null),
+            authKeyHex = authKeyHex,
+            enabled = true,
+        )
     }
 
     fun markHandled(context: Context, requestId: String?, outcome: String?): JSObject {

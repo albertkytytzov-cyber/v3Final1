@@ -403,12 +403,31 @@ export interface DirectWatchServiceSyncResult extends DirectWatchClassicProbe {
 }
 
 export interface DirectWatchSyncServiceStatus {
+  backgroundSync?: DirectWatchBackgroundSyncStatus | null;
   bridgeUntil?: string | null;
   deviceId?: string | null;
   deviceName?: string | null;
   message?: string | null;
   running?: boolean;
   updatedAt?: string | null;
+}
+
+export interface DirectWatchBackgroundSyncStatus {
+  available?: boolean;
+  deviceId?: string | null;
+  entryDate?: string | null;
+  message?: string | null;
+  reason?: string | null;
+  updatedAt?: string | null;
+}
+
+export interface DirectWatchBackgroundSyncResult extends DirectWatchServiceSyncResult {
+  available?: boolean;
+  backgroundAvailable?: boolean;
+  backgroundDeviceId?: string | null;
+  backgroundEntryDate?: string | null;
+  backgroundReason?: string | null;
+  backgroundSavedAt?: string | null;
 }
 
 export interface DirectWatchSyncCoordinatorRequest {
@@ -507,6 +526,8 @@ interface DirectWatchPlugin {
   startSession?: (input: { deviceId: string }) => Promise<DirectWatchSessionStatus>;
   stopSession?: () => Promise<DirectWatchSessionStatus>;
   getSyncServiceStatus?: () => Promise<DirectWatchSyncServiceStatus>;
+  getBackgroundSyncResult?: () => Promise<DirectWatchBackgroundSyncResult | DirectWatchBackgroundSyncStatus>;
+  clearBackgroundSyncResult?: () => Promise<DirectWatchBackgroundSyncStatus>;
   stopSyncService?: () => Promise<DirectWatchSyncServiceStatus>;
   syncService?: (input: {
     authKeyHex: string;
@@ -673,6 +694,31 @@ export async function getDirectWatchSyncServiceStatus(): Promise<DirectWatchSync
 
   const status = await plugin.getSyncServiceStatus();
   return normalizeDirectWatchSyncServiceStatus(status);
+}
+
+export async function getDirectWatchBackgroundSyncResult(): Promise<DirectWatchBackgroundSyncResult | null> {
+  const plugin = getDirectWatchPlugin();
+
+  if (!plugin?.getBackgroundSyncResult) {
+    return null;
+  }
+
+  const result = await plugin.getBackgroundSyncResult();
+  if (!isRecord(result) || result.available === false) {
+    return null;
+  }
+
+  return normalizeDirectWatchBackgroundSyncResult(result);
+}
+
+export async function clearDirectWatchBackgroundSyncResult(): Promise<DirectWatchBackgroundSyncStatus> {
+  const plugin = getDirectWatchPlugin();
+
+  if (!plugin?.clearBackgroundSyncResult) {
+    return { available: false };
+  }
+
+  return normalizeDirectWatchBackgroundSyncStatus(await plugin.clearBackgroundSyncResult());
 }
 
 export async function stopDirectWatchSyncService(): Promise<DirectWatchSyncServiceStatus> {
@@ -1559,12 +1605,45 @@ function normalizeDirectWatchServiceSyncResult(value: unknown): DirectWatchServi
   };
 }
 
+function normalizeDirectWatchBackgroundSyncResult(value: unknown): DirectWatchBackgroundSyncResult {
+  const base = normalizeDirectWatchServiceSyncResult(value);
+  if (!isRecord(value)) {
+    return base;
+  }
+
+  return {
+    ...base,
+    available: normalizeBoolean(value.available),
+    backgroundAvailable: normalizeBoolean(value.backgroundAvailable),
+    backgroundDeviceId: normalizeString(value.backgroundDeviceId),
+    backgroundEntryDate: normalizeString(value.backgroundEntryDate),
+    backgroundReason: normalizeString(value.backgroundReason),
+    backgroundSavedAt: normalizeString(value.backgroundSavedAt),
+  };
+}
+
+function normalizeDirectWatchBackgroundSyncStatus(value: unknown): DirectWatchBackgroundSyncStatus {
+  if (!isRecord(value)) {
+    return { available: false };
+  }
+
+  return {
+    available: normalizeBoolean(value.available),
+    deviceId: normalizeString(value.deviceId),
+    entryDate: normalizeString(value.entryDate),
+    message: normalizeString(value.message),
+    reason: normalizeString(value.reason),
+    updatedAt: normalizeString(value.updatedAt),
+  };
+}
+
 function normalizeDirectWatchSyncServiceStatus(value: unknown): DirectWatchSyncServiceStatus {
   if (!isRecord(value)) {
     return { running: false };
   }
 
   return {
+    backgroundSync: normalizeDirectWatchBackgroundSyncStatus(value.backgroundSync),
     bridgeUntil: normalizeString(value.bridgeUntil),
     deviceId: normalizeString(value.deviceId),
     deviceName: normalizeString(value.deviceName),

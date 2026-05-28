@@ -39,6 +39,7 @@ import java.util.GregorianCalendar
 import java.util.Locale
 import java.util.TimeZone
 import java.util.UUID
+import java.time.LocalDate
 import javax.crypto.Cipher
 import javax.crypto.Mac
 import javax.crypto.spec.IvParameterSpec
@@ -614,7 +615,27 @@ class DirectWatchPlugin : Plugin() {
 
     @PluginMethod
     fun getSyncServiceStatus(call: PluginCall) {
-        call.resolve(DirectWatchForegroundService.status(context))
+        val status = DirectWatchForegroundService.status(context)
+        status.put("backgroundSync", DirectWatchBackgroundSyncStore.status(context.applicationContext))
+        call.resolve(status)
+    }
+
+    @PluginMethod
+    fun getBackgroundSyncResult(call: PluginCall) {
+        val result = DirectWatchBackgroundSyncStore.readLatest(context.applicationContext)
+        if (result == null) {
+            val response = DirectWatchBackgroundSyncStore.status(context.applicationContext)
+            response.put("available", false)
+            call.resolve(response)
+            return
+        }
+        result.put("available", true)
+        call.resolve(result)
+    }
+
+    @PluginMethod
+    fun clearBackgroundSyncResult(call: PluginCall) {
+        call.resolve(DirectWatchBackgroundSyncStore.clearLatest(context.applicationContext))
     }
 
     @PluginMethod
@@ -1452,26 +1473,35 @@ class DirectWatchPlugin : Plugin() {
                             ackedClassicV2DataSequences = classicV2DataAckedSequences,
                         ) ?: errorMessage
                         if (keepAliveMs > 0 && errorMessage == null) {
-                            DirectWatchForegroundService.start(
+                            foregroundServiceStarted = DirectWatchForegroundService.start(
                                 context.applicationContext,
                                 device.address,
                                 devicesByAddress[device.address]?.name ?: scanResultNameFallback(device),
                                 keepAliveMs.toLong(),
                             )
-                            foregroundServiceStarted = true
-                            activeClassicForegroundBridge = true
-                            serviceCommands.add("bluetooth-bridge")
-                            resolveNow()
-                            keepAliveClassicServiceBridge(
-                                socket = socket,
-                                packets = packets,
-                                combined = combined,
-                                encryptionKey = authStep2.encryptionKey,
-                                decryptionKey = authStep2.decryptionKey,
-                                weatherPayload = resolvedWeatherPayload,
-                                initialSequenceNumber = nextServiceSequence,
-                                durationMs = keepAliveMs.toLong(),
-                            )
+                            if (foregroundServiceStarted) {
+                                activeClassicForegroundBridge = true
+                                serviceCommands.add("bluetooth-bridge")
+                                resolveNow()
+                                keepAliveClassicServiceBridge(
+                                    context = context.applicationContext,
+                                    device = device,
+                                    socket = socket,
+                                    packets = packets,
+                                    combined = combined,
+                                    authKeyHex = authKeyHex,
+                                    phoneNonce = phoneNonce,
+                                    encryptionKey = authStep2.encryptionKey,
+                                    decryptionKey = authStep2.decryptionKey,
+                                    entryDate = entryDate,
+                                    includeSleep = includeSleep,
+                                    weatherPayload = resolvedWeatherPayload,
+                                    initialSequenceNumber = nextServiceSequence,
+                                    durationMs = keepAliveMs.toLong(),
+                                )
+                            } else {
+                                serviceCommands.add("bluetooth-bridge-blocked")
+                            }
                         }
                     }
                 }
@@ -1494,10 +1524,7 @@ class DirectWatchPlugin : Plugin() {
                 if (activeClassicThread == Thread.currentThread()) {
                     activeClassicThread = null
                 }
-                if (foregroundServiceStarted) {
-                    activeClassicForegroundBridge = false
-                    DirectWatchForegroundService.stop(context.applicationContext)
-                }
+                activeClassicForegroundBridge = false
             }
 
             resolveNow()
@@ -3190,7 +3217,15 @@ class DirectWatchPlugin : Plugin() {
             return locatedPayload
         }
 
-        return fetchOpenMeteoWeatherPayload(locatedPayload) ?: locatedPayload
+        val fetchedPayload = fetchOpenMeteoWeatherPayload(locatedPayload)
+        if (fetchedPayload != null) {
+            return fetchedPayload
+        }
+
+        val seedHasForecast = seed.optJSONObject("current") != null &&
+            (seed.optJSONArray("daily")?.length() ?: 0) > 0 &&
+            (seed.optJSONArray("hourly")?.length() ?: 0) > 0
+        return if (seedHasForecast) seed else null
     }
 
     private fun resolveWeatherPayloadPhoneLocation(seed: JSONObject): WeatherLocationResolution {
@@ -7707,12 +7742,157 @@ class DirectWatchPlugin : Plugin() {
         return if (item.has(key) && !item.isNull(key)) item.optBoolean(key) else null
     }
 
+    private fun fetchClassicBridgeActivitySnapshot(
+        context: Context,
+        device: BluetoothDevice,
+        socket: BluetoothSocket,
+        encryptionKey: ByteArray,
+        decryptionKey: ByteArray?,
+        authKeyHex: String?,
+        phoneNonce: ByteArray?,
+        entryDate: String,
+        includeSleep: Boolean,
+        initialSequenceNumber: Int,
+    ): ClassicBridgeActivitySnapshotResult {
+        if (decryptionKey == null) {
+            return ClassicBridgeActivitySnapshotResult(
+                nextSequenceNumber = initialSequenceNumber,
+                response = null,
+                message = "Фоновая синхронизация часов пропущена: нет ключа расшифровки.",
+            )
+        }
+
+        val packets = mutableListOf<JSObject>()
+        val combined = java.io.ByteArrayOutputStream()
+        val ackedSequences = mutableSetOf<Int>()
+        var nextSequenceNumber = initialSequenceNumber
+
+        Log.i(TAG, "classic bridge activity refresh entryDate=$entryDate")
+        buildClassicPostAuthProbeCommands(includeHistory = false).forEach { command ->
+            socket.outputStream.write(
+                buildClassicV2EncryptedCommandPacket(
+                    command = command.payload,
+                    sequenceNumber = nextSequenceNumber++,
+                    encryptionKey = encryptionKey,
+                ),
+            )
+            Thread.sleep(CLASSIC_POST_AUTH_COMMAND_DELAY_MS)
+        }
+        socket.outputStream.flush()
+
+        val inventoryError = readClassicPacketsUntilActivitySelection(
+            socket,
+            packets,
+            combined,
+            decryptionKey,
+            entryDate,
+            includeSleep,
+            CLASSIC_POST_AUTH_READ_MS,
+            ackedSequences,
+        )
+        if (inventoryError != null) {
+            Log.w(TAG, "classic bridge activity inventory warning: $inventoryError")
+        }
+
+        val allActivityFileIds = classicActivityFileIds(combined.toByteArray(), decryptionKey)
+        val activityFileIds = selectClassicActivityFileIdsForEntryDate(allActivityFileIds, entryDate, includeSleep)
+        val allActivityFiles = allActivityFileIds.mapNotNull { parseClassicActivityFileIds(it).firstOrNull() }
+        val selectedActivityFiles = activityFileIds.mapNotNull { parseClassicActivityFileIds(it).firstOrNull() }
+        Log.i(
+            TAG,
+            "classic bridge activity inventory entryDate=$entryDate total=${allActivityFileIds.size} " +
+                "selected=${activityFileIds.size} breakdown=${describeClassicActivityInventoryFiles(allActivityFiles)} " +
+                "selectedBreakdown=${describeClassicActivityInventoryFiles(selectedActivityFiles)}",
+        )
+
+        var sentActivityFileProbe = false
+        var activityFileProbeCount = 0
+        var activityFileProbeCompletedCount = 0
+        var activityFileProbeFailedCount = 0
+        val activityFileProbeRequests = mutableListOf<JSObject>()
+
+        if (activityFileIds.isNotEmpty()) {
+            val fetchResult = requestClassicActivityFilesSequentially(
+                socket = socket,
+                packets = packets,
+                combined = combined,
+                fileIds = activityFileIds,
+                entryDate = entryDate,
+                encryptionKey = encryptionKey,
+                decryptionKey = decryptionKey,
+                initialSequenceNumber = nextSequenceNumber,
+                ackedClassicV2DataSequences = ackedSequences,
+            )
+            nextSequenceNumber = fetchResult.nextSequenceNumber
+            sentActivityFileProbe = true
+            activityFileProbeCount = fetchResult.requestedCount
+            activityFileProbeCompletedCount = fetchResult.completedCount
+            activityFileProbeFailedCount = fetchResult.failedCount
+            activityFileProbeRequests.addAll(fetchResult.requests)
+            if (fetchResult.completedCount == 0 && fetchResult.error != null) {
+                Log.w(TAG, "classic bridge activity fetch warning: ${fetchResult.error}")
+            }
+        }
+
+        if (!sentActivityFileProbe && packets.isEmpty()) {
+            return ClassicBridgeActivitySnapshotResult(
+                nextSequenceNumber = nextSequenceNumber,
+                response = null,
+                message = "Часы не отдали файлы активности для фонового обновления.",
+            )
+        }
+
+        val response = buildServiceSyncResponse(
+            device = device,
+            connected = true,
+            sentVersionRequest = true,
+            sentSessionConfig = true,
+            sentAuthStep1 = true,
+            sentAuthStep2 = true,
+            sentServiceCommands = listOf("background-activity"),
+            keepAliveMs = 0,
+            phoneNonce = phoneNonce,
+            authKeyHex = authKeyHex,
+            postAuthDecryptionKey = decryptionKey,
+            packets = packets,
+            combinedBytes = combined.toByteArray(),
+            error = inventoryError,
+            sentActivityFileProbe = sentActivityFileProbe,
+            activityFileProbeCount = activityFileProbeCount,
+            activityFileProbeCompletedCount = activityFileProbeCompletedCount,
+            activityFileProbeFailedCount = activityFileProbeFailedCount,
+            activityFileProbeRequests = activityFileProbeRequests,
+        )
+        response.put("backgroundSync", true)
+        response.put("backgroundEntryDate", entryDate)
+        response.put("backgroundSavedBy", "classic-bridge")
+        response.put("authKeyStatus", "valid")
+        response.put("authStage", "authenticated")
+
+        DirectWatchSyncCoordinator.markCompleted(
+            context.applicationContext,
+            if (activityFileProbeFailedCount > 0 && activityFileProbeCompletedCount == 0) "service-error" else "service-synced",
+        )
+
+        return ClassicBridgeActivitySnapshotResult(
+            nextSequenceNumber = nextSequenceNumber,
+            response = response,
+            message = null,
+        )
+    }
+
     private fun keepAliveClassicServiceBridge(
+        context: Context,
+        device: BluetoothDevice,
         socket: BluetoothSocket,
         packets: MutableList<JSObject>,
         combined: java.io.ByteArrayOutputStream,
+        authKeyHex: String?,
+        phoneNonce: ByteArray?,
         encryptionKey: ByteArray,
         decryptionKey: ByteArray?,
+        entryDate: String?,
+        includeSleep: Boolean,
         weatherPayload: JSONObject?,
         initialSequenceNumber: Int,
         durationMs: Long,
@@ -7720,6 +7900,7 @@ class DirectWatchPlugin : Plugin() {
         val startedAt = android.os.SystemClock.uptimeMillis()
         var nextSequenceNumber = initialSequenceNumber
         var nextWeatherRefreshAt = startedAt + CLASSIC_SERVICE_BRIDGE_REFRESH_MS
+        var nextActivityRefreshAt = startedAt + CLASSIC_SERVICE_BRIDGE_ACTIVITY_INITIAL_DELAY_MS
         var processedDecryptedPacketCount = collectClassicDecryptedPackets(
             combined.toByteArray(),
             decryptionKey,
@@ -7729,6 +7910,11 @@ class DirectWatchPlugin : Plugin() {
             !Thread.currentThread().isInterrupted &&
             android.os.SystemClock.uptimeMillis() - startedAt < durationMs
         ) {
+            if (!DirectWatchForegroundService.status(context).optBoolean("running", false)) {
+                Log.i(TAG, "classic bridge stopped because foreground service is no longer running")
+                break
+            }
+
             readClassicPackets(socket, packets, combined, CLASSIC_SERVICE_BRIDGE_POLL_MS)
 
             val now = android.os.SystemClock.uptimeMillis()
@@ -7795,6 +7981,68 @@ class DirectWatchPlugin : Plugin() {
                 }
                 socket.outputStream.flush()
                 nextWeatherRefreshAt = now + CLASSIC_SERVICE_BRIDGE_REFRESH_MS
+            }
+
+            if (now >= nextActivityRefreshAt) {
+                val targetEntryDate = entryDate ?: LocalDate.now().toString()
+                try {
+                    val fetchResult = fetchClassicBridgeActivitySnapshot(
+                        context = context,
+                        device = device,
+                        socket = socket,
+                        encryptionKey = encryptionKey,
+                        decryptionKey = decryptionKey,
+                        authKeyHex = authKeyHex,
+                        phoneNonce = phoneNonce,
+                        entryDate = targetEntryDate,
+                        includeSleep = includeSleep,
+                        initialSequenceNumber = nextSequenceNumber,
+                    )
+                    nextSequenceNumber = fetchResult.nextSequenceNumber
+                    if (fetchResult.response != null) {
+                        DirectWatchBackgroundSyncStore.saveLatest(
+                            context = context,
+                            result = fetchResult.response,
+                            deviceId = device.address,
+                            entryDate = targetEntryDate,
+                            reason = "service-bridge",
+                        )
+                    } else {
+                        DirectWatchBackgroundSyncStore.recordMessage(
+                            context = context,
+                            deviceId = device.address,
+                            entryDate = targetEntryDate,
+                            reason = "service-bridge",
+                            message = fetchResult.message ?: "Фоновая синхронизация часов не нашла новых файлов.",
+                        )
+                    }
+                } catch (error: IOException) {
+                    DirectWatchBackgroundSyncStore.recordMessage(
+                        context = context,
+                        deviceId = device.address,
+                        entryDate = targetEntryDate,
+                        reason = "service-bridge",
+                        message = classicSocketUserMessage(error),
+                    )
+                } catch (error: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    DirectWatchBackgroundSyncStore.recordMessage(
+                        context = context,
+                        deviceId = device.address,
+                        entryDate = targetEntryDate,
+                        reason = "service-bridge",
+                        message = "Фоновая синхронизация часов была остановлена.",
+                    )
+                } catch (error: Exception) {
+                    DirectWatchBackgroundSyncStore.recordMessage(
+                        context = context,
+                        deviceId = device.address,
+                        entryDate = targetEntryDate,
+                        reason = "service-bridge",
+                        message = "Фоновая синхронизация часов не прошла: ${error.message}",
+                    )
+                }
+                nextActivityRefreshAt = now + CLASSIC_SERVICE_BRIDGE_ACTIVITY_REFRESH_MS
             }
         }
     }
@@ -8184,6 +8432,12 @@ class DirectWatchPlugin : Plugin() {
         val requests: List<JSObject>,
         val nextSequenceNumber: Int,
         val error: String?,
+    )
+
+    private data class ClassicBridgeActivitySnapshotResult(
+        val nextSequenceNumber: Int,
+        val response: JSObject?,
+        val message: String?,
     )
 
     private data class ClassicActivityFileReadResult(
@@ -8578,9 +8832,11 @@ class DirectWatchPlugin : Plugin() {
         private const val CLASSIC_SOCKET_RETRY_DELAY_MS = 1_500L
         private const val CLASSIC_SOCKET_DIRECT_CHANNEL_ATTEMPT = 3
         private const val CLASSIC_SPP_RFCOMM_CHANNEL = 5
-        private const val CLASSIC_SERVICE_BRIDGE_MAX_MS = 2 * 60 * 60 * 1000
+        private const val CLASSIC_SERVICE_BRIDGE_MAX_MS = 12 * 60 * 60 * 1000
         private const val CLASSIC_SERVICE_BRIDGE_POLL_MS = 1_000L
         private const val CLASSIC_SERVICE_BRIDGE_REFRESH_MS = 15 * 60 * 1000L
+        private const val CLASSIC_SERVICE_BRIDGE_ACTIVITY_INITIAL_DELAY_MS = 60 * 1000L
+        private const val CLASSIC_SERVICE_BRIDGE_ACTIVITY_REFRESH_MS = 10 * 60 * 1000L
         private const val XIAOMI_WEATHER_CLEAR_SKY = 0
         private val PAIRING_TIMEOUT_TOKEN = Any()
         private val SESSION_TIMEOUT_TOKEN = Any()

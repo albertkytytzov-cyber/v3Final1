@@ -25,7 +25,9 @@ import {
   addDirectWatchPacketListener,
   addDirectWatchSessionListener,
   addDirectWatchSyncRequestListener,
+  clearDirectWatchBackgroundSyncResult,
   getDirectWatchSessionStatus,
+  getDirectWatchBackgroundSyncResult,
   configureDirectWatchSyncCoordinator,
   getDirectWatchSyncCoordinatorStatus,
   markDirectWatchSyncRequestHandled,
@@ -119,8 +121,9 @@ type SubmitOrQueueResult = "queued" | "skipped" | "submitted";
 const runtimeConfig = readRuntimeConfig();
 const SHOW_DIRECT_WATCH_DIAGNOSTICS = false;
 const DIRECT_WATCH_AUTH_KEY_PATTERN = /^[0-9a-f]{32}$/i;
-const DIRECT_WATCH_SERVICE_KEEP_ALIVE_MS = 2 * 60 * 60 * 1000;
-const DIRECT_WATCH_AUTO_SYNC_INTERVAL_MS = 30 * 60 * 1000;
+const DIRECT_WATCH_SERVICE_KEEP_ALIVE_MS = 12 * 60 * 60 * 1000;
+const DIRECT_WATCH_AUTO_SYNC_TICK_MS = 60 * 1000;
+const DIRECT_WATCH_BACKGROUND_RESULT_TICK_MS = 60 * 1000;
 const DIRECT_WATCH_AUTO_SYNC_START_DELAY_MS = 10 * 1000;
 const DIRECT_WATCH_NATIVE_SYNC_RETRY_DELAY_MS = 15 * 1000;
 const DIRECT_WATCH_SERVICE_STATUS_SETTLE_MS = 8_000;
@@ -595,7 +598,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
 
   let directWatchAutoSyncTimer: ReturnType<typeof window.setInterval> | null = null;
   let directWatchNativeSyncRetryTimer: ReturnType<typeof window.setTimeout> | null = null;
-  let directWatchAutoSyncInFlight = false;
+  let directWatchBridgeEnsureInFlight = false;
   let directWatchHistorySyncInFlight = false;
   let directWatchNativeSyncInFlight = false;
 
@@ -628,25 +631,18 @@ export function bootstrapMobileApp(root: HTMLElement) {
       return;
     }
 
-    if (directWatchNativeSyncInFlight || state.isBusy || directWatchAutoSyncInFlight || directWatchHistorySyncInFlight) {
+    if (directWatchNativeSyncInFlight || state.isBusy || directWatchHistorySyncInFlight) {
       scheduleDirectWatchNativeSyncRetry(request);
       return;
     }
 
     directWatchNativeSyncInFlight = true;
     try {
-      const serviceSyncedAtBefore = loadDirectWatchConfig().lastServiceSyncedAt;
-      const completed = await runDirectWatchAutoSync({
-        entryDate: request.entryDate || todayValue(),
-        force: request.force === true,
-      });
-      const serviceSyncedAtAfter = loadDirectWatchConfig().lastServiceSyncedAt;
-      const serviceSynced = Boolean(
-        serviceSyncedAtAfter && serviceSyncedAtAfter !== serviceSyncedAtBefore,
-      );
+      await ensureDirectWatchServiceBridge();
+      const completed = await processDirectWatchBackgroundSyncResult({ allowNativeInFlight: true });
       const syncCoordinatorStatus = await markDirectWatchSyncRequestHandled(
         request.id,
-        completed || serviceSynced ? "synced" : "skipped",
+        completed ? "synced" : "service-queued",
       ).catch(() => undefined);
       if (syncCoordinatorStatus) {
         update({
@@ -1255,6 +1251,66 @@ export function bootstrapMobileApp(root: HTMLElement) {
     };
   };
 
+  async function processDirectWatchBackgroundSyncResult(options: { allowNativeInFlight?: boolean } = {}) {
+    if (!isDirectWatchRuntime() || state.session.user?.role !== "athlete") {
+      return false;
+    }
+
+    if ((!options.allowNativeInFlight && directWatchNativeSyncInFlight) || directWatchHistorySyncInFlight) {
+      return false;
+    }
+
+    const backgroundResult = await getDirectWatchBackgroundSyncResult().catch(() => null);
+    if (!backgroundResult) {
+      return false;
+    }
+
+    const config = loadDirectWatchConfig();
+    const entryDate = backgroundResult.backgroundEntryDate || todayValue();
+    const deviceId = backgroundResult.backgroundDeviceId || config.deviceId;
+    if (!deviceId) {
+      return false;
+    }
+
+    directWatchNativeSyncInFlight = true;
+    try {
+      const payload = buildDirectWatchDailySyncPayloadFromProbe(entryDate, deviceId, backgroundResult);
+      await submitDirectWatchSyncPayload(payload, { silent: true, skipWatchAck: true });
+      const activityDiagnostic = buildDirectWatchActivitySyncDiagnostic(payload, backgroundResult, null);
+      rememberDirectWatchConfig({
+        lastActivitySyncAt: activityDiagnostic.syncedAt,
+        lastActivitySyncDiagnostic: activityDiagnostic.message,
+        lastActivitySyncFileCount: activityDiagnostic.fileCount,
+        lastActivitySyncSportsFileCount: activityDiagnostic.sportsFileCount,
+        lastActivitySyncStatus: activityDiagnostic.status,
+        lastActivitySyncWorkoutCount: activityDiagnostic.workoutCount,
+        lastServiceSyncedAt: backgroundResult.syncedAt ?? activityDiagnostic.syncedAt,
+        lastServiceUpdatedAt: backgroundResult.backgroundSavedAt ?? backgroundResult.syncedAt ?? activityDiagnostic.syncedAt,
+      });
+      await clearDirectWatchBackgroundSyncResult().catch(() => undefined);
+      const serviceStatus = await getDirectWatchSyncServiceStatus().catch(() => null);
+      update({
+        directWatchDiagnostic: {
+          ...state.directWatchDiagnostic,
+          classicProbe: backgroundResult,
+          ...(serviceStatus ? { serviceStatus } : {}),
+        },
+      });
+      return true;
+    } catch (error) {
+      rememberDirectWatchConfig({
+        lastActivitySyncDiagnostic: error instanceof Error
+          ? error.message
+          : "Фоновая синхронизация часов сохранена, но не обработана.",
+        lastActivitySyncStatus: "error",
+        lastServiceUpdatedAt: new Date().toISOString(),
+      });
+      return false;
+    } finally {
+      directWatchNativeSyncInFlight = false;
+    }
+  }
+
   const syncDirectWatch = async (
     entryDate: string,
     deviceId?: string | null,
@@ -1753,48 +1809,37 @@ export function bootstrapMobileApp(root: HTMLElement) {
     }
   };
 
-  function shouldRunDirectWatchAutoSync(options: { force?: boolean } = {}) {
-    if (!isDirectWatchRuntime() || state.session.user?.role !== "athlete") {
-      return false;
-    }
-
-    if (directWatchAutoSyncInFlight || directWatchHistorySyncInFlight || state.isBusy) {
-      return false;
+  async function ensureDirectWatchServiceBridge() {
+    if (
+      !isDirectWatchRuntime() ||
+      state.session.user?.role !== "athlete" ||
+      state.isBusy ||
+      directWatchBridgeEnsureInFlight ||
+      directWatchHistorySyncInFlight
+    ) {
+      return;
     }
 
     const config = loadDirectWatchConfig();
     if (!config.deviceId || !config.authKeyHex) {
-      return false;
+      return;
     }
 
-    const lastSyncAt = getLatestDirectWatchConfigSyncAt(config);
-    if (options.force || !lastSyncAt) {
-      return true;
-    }
-
-    const lastSyncedAt = new Date(lastSyncAt).getTime();
-    if (Number.isNaN(lastSyncedAt)) {
-      return true;
-    }
-
-    return Date.now() - lastSyncedAt >= DIRECT_WATCH_AUTO_SYNC_INTERVAL_MS;
-  }
-
-  async function runDirectWatchAutoSync(options: {
-    entryDate?: string;
-    force?: boolean;
-  } = {}) {
-    if (!shouldRunDirectWatchAutoSync({ force: options.force })) {
-      return false;
-    }
-
-    const config = loadDirectWatchConfig();
-    directWatchAutoSyncInFlight = true;
-
+    directWatchBridgeEnsureInFlight = true;
     try {
-      return await syncDirectWatch(options.entryDate || todayValue(), config.deviceId, { silent: true });
+      const serviceStatus = await getDirectWatchSyncServiceStatus().catch(() => null);
+      if (serviceStatus?.running) {
+        return;
+      }
+
+      await syncDirectWatchServiceSettings(config.deviceId, {
+        fetchActivity: false,
+        includeHistory: false,
+        includeSleep: false,
+        silent: true,
+      }).catch(() => undefined);
     } finally {
-      directWatchAutoSyncInFlight = false;
+      directWatchBridgeEnsureInFlight = false;
     }
   }
 
@@ -1803,15 +1848,31 @@ export function bootstrapMobileApp(root: HTMLElement) {
       return;
     }
 
-    directWatchAutoSyncTimer = window.setTimeout(() => {
+    const tick = () => {
       void refreshDirectWatchSyncService().catch(() => undefined);
-      void notifyDirectWatchAppVisible().catch(() => undefined);
-    }, DIRECT_WATCH_AUTO_SYNC_START_DELAY_MS);
+      void processDirectWatchBackgroundSyncResult().catch(() => undefined);
+      void notifyDirectWatchAppVisible()
+        .then((status) => {
+          if (status?.lastBlockedReason === "interval") {
+            void ensureDirectWatchServiceBridge();
+          }
+        })
+        .catch(() => undefined);
+    };
+
+    window.setTimeout(tick, DIRECT_WATCH_AUTO_SYNC_START_DELAY_MS);
+    window.setTimeout(tick, 30_000);
+    window.setTimeout(() => {
+      void processDirectWatchBackgroundSyncResult().catch(() => undefined);
+    }, DIRECT_WATCH_AUTO_SYNC_START_DELAY_MS + 2_000);
+    directWatchAutoSyncTimer = window.setInterval(tick, DIRECT_WATCH_AUTO_SYNC_TICK_MS);
+    window.setInterval(() => {
+      void processDirectWatchBackgroundSyncResult().catch(() => undefined);
+    }, DIRECT_WATCH_BACKGROUND_RESULT_TICK_MS);
 
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "visible") {
-        void refreshDirectWatchSyncService().catch(() => undefined);
-        void notifyDirectWatchAppVisible().catch(() => undefined);
+        tick();
       }
     });
   };
@@ -2343,7 +2404,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
 
   const submitDirectWatchSyncPayload = async (
     payload: DirectWatchDailySyncPayload,
-    options: { silent?: boolean } = {},
+    options: { silent?: boolean; skipWatchAck?: boolean } = {},
   ): Promise<boolean> => {
     const healthResult = await submitDeviceHealthPayload(payload.summary, options);
     let workoutsResult: SubmitOrQueueResult = "submitted";
@@ -2361,6 +2422,11 @@ export function bootstrapMobileApp(root: HTMLElement) {
     }
 
     if (didSubmitToServer && ackFileIds.length > 0) {
+      if (options.skipWatchAck) {
+        markDirectWatchRawCacheAcked(payload.rawCacheId, ackFileIds);
+        return true;
+      }
+
       const config = loadDirectWatchConfig();
       if (config.deviceId && config.authKeyHex) {
         markDirectWatchRawCacheSubmitted(payload.rawCacheId);
@@ -2369,6 +2435,13 @@ export function bootstrapMobileApp(root: HTMLElement) {
           markDirectWatchRawCacheAcked(payload.rawCacheId, ack.activityFileAckIds ?? ackFileIds);
         } catch (error) {
           markDirectWatchRawCacheAckError(payload.rawCacheId, error);
+        } finally {
+          await syncDirectWatchServiceSettings(config.deviceId, {
+            fetchActivity: false,
+            includeHistory: false,
+            includeSleep: false,
+            silent: true,
+          }).catch(() => undefined);
         }
       }
     }
