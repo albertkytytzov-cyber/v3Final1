@@ -1,0 +1,550 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PERFORM Watch Tab Clean Concept</title>
+  <style>
+    :root {
+      --bg: #f4f7f5;
+      --ink: #15221f;
+      --muted: #6d7b77;
+      --line: #d7e4df;
+      --panel: #ffffff;
+      --soft: #eaf4f0;
+      --brand: #2f7d70;
+      --brand-dark: #0d5f55;
+      --mint: #c9f2e7;
+      --amber: #f3b756;
+      --rose: #e56c5f;
+      --blue: #4f8fc8;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: #dfe8e4;
+      color: var(--ink);
+      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    .phone {
+      width: 390px;
+      height: 844px;
+      background: var(--bg);
+      border-radius: 36px;
+      overflow: hidden;
+      box-shadow: 0 26px 70px rgba(21, 34, 31, 0.24);
+      position: relative;
+    }
+
+    .screen {
+      padding: 16px 18px 84px;
+    }
+
+    .topline {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 14px;
+      margin-bottom: 10px;
+    }
+
+    .kicker {
+      margin: 0 0 4px;
+      font-size: 11px;
+      line-height: 1;
+      color: var(--brand-dark);
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 27px;
+      line-height: 1.05;
+      font-weight: 850;
+      letter-spacing: 0;
+    }
+
+    .sync-pill {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      color: var(--muted);
+      border-radius: 999px;
+      padding: 7px 10px;
+      font-size: 12px;
+      font-weight: 750;
+      white-space: nowrap;
+    }
+
+    .hero {
+      border-radius: 26px;
+      background: linear-gradient(145deg, #ffffff 0%, #eff8f5 100%);
+      border: 1px solid var(--line);
+      padding: 14px;
+      margin-bottom: 10px;
+    }
+
+    .hero-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      background: var(--brand);
+      box-shadow: 0 0 0 5px rgba(47, 125, 112, .12);
+      flex: 0 0 auto;
+    }
+
+    .status strong {
+      display: block;
+      font-size: 15px;
+      line-height: 1.15;
+    }
+
+    .status span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 3px;
+    }
+
+    .action {
+      border: 0;
+      border-radius: 999px;
+      background: var(--brand);
+      color: white;
+      height: 34px;
+      padding: 0 13px;
+      font-size: 13px;
+      font-weight: 820;
+      white-space: nowrap;
+    }
+
+    .rings {
+      display: grid;
+      grid-template-columns: 108px 1fr;
+      gap: 14px;
+      align-items: center;
+    }
+
+    .arc {
+      width: 108px;
+      height: 62px;
+      border-radius: 108px 108px 16px 16px;
+      position: relative;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 50% 102%, var(--panel) 0 31px, transparent 32px),
+        conic-gradient(from 270deg at 50% 100%, var(--brand) 0 52deg, #cde1da 52deg 180deg, transparent 180deg 360deg);
+    }
+
+    .arc::before {
+      content: "";
+      position: absolute;
+      inset: 13px 15px 0;
+      border-radius: 82px 82px 14px 14px;
+      background:
+        radial-gradient(circle at 50% 100%, var(--panel) 0 22px, transparent 23px),
+        conic-gradient(from 270deg at 50% 100%, var(--amber) 0 42deg, #f2dec4 42deg 180deg, transparent 180deg 360deg);
+    }
+
+    .arc::after {
+      content: "";
+      position: absolute;
+      inset: 26px 31px 0;
+      border-radius: 54px 54px 12px 12px;
+      background:
+        radial-gradient(circle at 50% 100%, var(--panel) 0 12px, transparent 13px),
+        conic-gradient(from 270deg at 50% 100%, var(--blue) 0 24deg, #cfe2ef 24deg 180deg, transparent 180deg 360deg);
+    }
+
+    .summary {
+      display: grid;
+      gap: 7px;
+    }
+
+    .summary-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .summary-row b {
+      color: var(--ink);
+      font-size: 18px;
+      letter-spacing: 0;
+    }
+
+    .summary-row i {
+      width: 21px;
+      height: 21px;
+      display: grid;
+      place-items: center;
+      border-radius: 999px;
+      color: white;
+      font-style: normal;
+      font-size: 12px;
+      font-weight: 850;
+    }
+
+    .metric-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+
+    .metric {
+      min-height: 106px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      padding: 12px;
+      overflow: hidden;
+    }
+
+    .metric-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 10px;
+      margin-bottom: 7px;
+    }
+
+    .icon {
+      width: 30px;
+      height: 30px;
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      color: white;
+      font-size: 16px;
+      font-weight: 900;
+      flex: 0 0 auto;
+    }
+
+    .metric-value {
+      margin: 0;
+      font-size: 19px;
+      line-height: 1;
+      font-weight: 880;
+      letter-spacing: 0;
+    }
+
+    .metric h2 {
+      margin: 4px 0 3px;
+      font-size: 15px;
+      line-height: 1.15;
+      font-weight: 830;
+      letter-spacing: 0;
+    }
+
+    .metric p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.25;
+      min-height: 30px;
+    }
+
+    .spark {
+      height: 18px;
+      margin-top: 4px;
+      display: flex;
+      align-items: end;
+      gap: 4px;
+      opacity: .9;
+    }
+
+    .spark span {
+      width: 5px;
+      border-radius: 999px 999px 0 0;
+      background: currentColor;
+      min-height: 4px;
+    }
+
+    .section-card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      padding: 13px 14px;
+      margin-bottom: 8px;
+    }
+
+    .section-title {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 0;
+    }
+
+    .section-title h2 {
+      margin: 0;
+      font-size: 18px;
+      line-height: 1.1;
+      letter-spacing: 0;
+    }
+
+    .section-title span {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .training-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 12px;
+      padding: 0;
+      border-top: 0;
+    }
+
+    .training-row:first-of-type {
+      border-top: 0;
+      padding-top: 0;
+    }
+
+    .training-row strong {
+      display: block;
+      font-size: 15px;
+      line-height: 1.2;
+    }
+
+    .training-row small {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 3px;
+    }
+
+    .badge {
+      align-self: center;
+      border-radius: 999px;
+      background: var(--soft);
+      color: var(--brand-dark);
+      padding: 7px 10px;
+      font-size: 12px;
+      font-weight: 850;
+      white-space: nowrap;
+    }
+
+    .settings {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      padding: 11px 14px;
+    }
+
+    .settings strong {
+      display: block;
+      font-size: 16px;
+    }
+
+    .settings span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 3px;
+    }
+
+    .chevron {
+      width: 34px;
+      height: 34px;
+      border-radius: 999px;
+      background: var(--soft);
+      display: grid;
+      place-items: center;
+      color: var(--brand-dark);
+      font-size: 22px;
+      line-height: 1;
+      flex: 0 0 auto;
+    }
+
+    .tabbar {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 72px;
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      background: rgba(255, 255, 255, .92);
+      border-top: 1px solid var(--line);
+      backdrop-filter: blur(18px);
+    }
+
+    .tab {
+      display: grid;
+      place-items: center;
+      gap: 3px;
+      padding-top: 9px;
+      color: #8a9692;
+      font-size: 11px;
+      font-weight: 750;
+    }
+
+    .tab b {
+      width: 25px;
+      height: 25px;
+      display: grid;
+      place-items: center;
+      border-radius: 999px;
+      font-size: 13px;
+    }
+
+    .tab.active {
+      color: var(--brand-dark);
+    }
+
+    .tab.active b {
+      background: var(--mint);
+    }
+  </style>
+</head>
+<body>
+  <main class="phone">
+    <section class="screen">
+      <header class="topline">
+        <div>
+          <p class="kicker">спортсмен</p>
+          <h1>Часы</h1>
+        </div>
+        <div class="sync-pill">28 мая · 07:13</div>
+      </header>
+
+      <section class="hero">
+        <div class="hero-head">
+          <div class="status">
+            <div class="dot"></div>
+            <div>
+              <strong>Redmi Watch 5</strong>
+              <span>последняя синхронизация 2 мин назад</span>
+            </div>
+          </div>
+          <button class="action">Обновить</button>
+        </div>
+
+        <div class="rings">
+          <div class="arc"></div>
+          <div class="summary">
+            <div class="summary-row"><span><i style="background: var(--brand)">♥</i> Пульс</span><b>52</b></div>
+            <div class="summary-row"><span><i style="background: var(--blue)">O₂</i> SpO₂</span><b>96%</b></div>
+            <div class="summary-row"><span><i style="background: var(--amber)">↟</i> Шаги</span><b>0</b></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="metric-grid">
+        <article class="metric">
+          <div class="metric-top">
+            <div class="icon" style="background: var(--brand)">♥</div>
+            <p class="metric-value">52</p>
+          </div>
+          <h2>Пульс</h2>
+          <p>мин 46 · макс 68 · 37 точек</p>
+          <div class="spark" style="color: var(--brand)">
+            <span style="height: 16px"></span><span style="height: 25px"></span><span style="height: 19px"></span><span style="height: 28px"></span><span style="height: 18px"></span><span style="height: 24px"></span><span style="height: 14px"></span>
+          </div>
+        </article>
+
+        <article class="metric">
+          <div class="metric-top">
+            <div class="icon" style="background: #7e6bd8">◔</div>
+            <p class="metric-value">6:10</p>
+          </div>
+          <h2>Сон</h2>
+          <p>глубокий 2.3 ч · REM 1.8 ч</p>
+          <div class="spark" style="color: #7e6bd8">
+            <span style="height: 26px"></span><span style="height: 26px"></span><span style="height: 15px"></span><span style="height: 31px"></span><span style="height: 18px"></span>
+          </div>
+        </article>
+
+        <article class="metric">
+          <div class="metric-top">
+            <div class="icon" style="background: var(--blue)">O₂</div>
+            <p class="metric-value">96%</p>
+          </div>
+          <h2>Кислород</h2>
+          <p>средний 96% · диапазон 91-98%</p>
+          <div class="spark" style="color: var(--blue)">
+            <span style="height: 20px"></span><span style="height: 22px"></span><span style="height: 21px"></span><span style="height: 28px"></span><span style="height: 24px"></span>
+          </div>
+        </article>
+
+        <article class="metric">
+          <div class="metric-top">
+            <div class="icon" style="background: var(--rose)">−</div>
+            <p class="metric-value">17</p>
+          </div>
+          <h2>Стресс</h2>
+          <p>низкий уровень за день</p>
+          <div class="spark" style="color: var(--rose)">
+            <span style="height: 8px"></span><span style="height: 15px"></span><span style="height: 11px"></span><span style="height: 17px"></span><span style="height: 10px"></span>
+          </div>
+        </article>
+      </section>
+
+      <section class="section-card">
+        <div class="section-title">
+          <h2>Тренировки</h2>
+          <span>0 сегодня</span>
+        </div>
+        <div class="training-row">
+          <div>
+            <strong>Сегодня новых нет</strong>
+            <small>последняя: ходьба 27 мая · 34 мин</small>
+          </div>
+          <div class="badge">Открыть</div>
+        </div>
+      </section>
+
+      <button class="settings">
+        <div>
+          <strong>Настройка часов</strong>
+          <span>устройство, погода, автосинхронизация, диагностика</span>
+        </div>
+        <div class="chevron">›</div>
+      </button>
+    </section>
+
+    <nav class="tabbar">
+      <div class="tab"><b>⌂</b><span>Главная</span></div>
+      <div class="tab"><b>●</b><span>Готовность</span></div>
+      <div class="tab active"><b>◌</b><span>Часы</span></div>
+      <div class="tab"><b>□</b><span>Календарь</span></div>
+      <div class="tab"><b>✓</b><span>Вып.</span></div>
+    </nav>
+  </main>
+</body>
+</html>
