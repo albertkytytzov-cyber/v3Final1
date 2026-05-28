@@ -5,8 +5,10 @@ import { dirname, join } from "node:path";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const fixturePath = join(__dirname, "..", "docs", "examples", "perform-template-v1-import-check.html");
 const samplePath = join(__dirname, "..", "docs", "examples", "perform-template-v1-one-day.html");
+const pageClientPath = join(__dirname, "..", "apps", "web", "app", "page-client.tsx");
 const html = readFileSync(fixturePath, "utf8");
 const sampleHtml = readFileSync(samplePath, "utf8");
+const pageClient = readFileSync(pageClientPath, "utf8");
 
 const expectedDays = [
   {
@@ -113,6 +115,18 @@ const sampleHeaders = [...sampleHtml.matchAll(/<th[^>]*>([\s\S]*?)<\/th>/giu)].m
 
 if (sampleHeaders.includes("Контроль")) {
   fail("one-day PERFORM_TEMPLATE_V1 sample still contains the old Контроль column");
+}
+
+const importPreviewTableStart = pageClient.indexOf('<div className="planning-template-import-session-table">');
+const importPreviewTableSource =
+  importPreviewTableStart >= 0 ? pageClient.slice(importPreviewTableStart, importPreviewTableStart + 2500) : "";
+
+if (!importPreviewTableSource) {
+  fail("could not find the planning template import preview table");
+} else if (
+  /PLAN_BLOCK_ROW_KIND_LABELS|copyFor\(language,\s*\{\s*en:\s*"Type",\s*ru:\s*"Тип"/u.test(importPreviewTableSource)
+) {
+  fail("planning import preview still exposes the service Type column instead of only Блок | Объём");
 }
 
 for (const expectedDay of expectedDays) {

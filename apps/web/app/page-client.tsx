@@ -21628,9 +21628,6 @@ export function PageClient({
                                 <div className="planning-template-import-session-table">
                                   <div>
                                     <span>
-                                      {copyFor(language, { en: "Type", ru: "Тип", bg: "Тип" })}
-                                    </span>
-                                    <span>
                                       {copyFor(language, { en: "Block", ru: "Блок", bg: "Блок" })}
                                     </span>
                                     <span>
@@ -21651,13 +21648,6 @@ export function PageClient({
 
                                     return (
                                       <div key={`${block.name}-${blockIndex}`}>
-                                        <span>
-                                          {localizedOptionLabel(
-                                            block.rowKind ?? "exercise",
-                                            language,
-                                            PLAN_BLOCK_ROW_KIND_LABELS,
-                                          )}
-                                        </span>
                                         <span>{renderTrainingTextWithTooltips(block.name)}</span>
                                         <span>
                                           {renderTrainingTextWithTooltips(
