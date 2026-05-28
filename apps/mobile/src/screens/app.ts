@@ -123,6 +123,7 @@ const DIRECT_WATCH_SERVICE_KEEP_ALIVE_MS = 2 * 60 * 60 * 1000;
 const DIRECT_WATCH_AUTO_SYNC_INTERVAL_MS = 30 * 60 * 1000;
 const DIRECT_WATCH_AUTO_SYNC_START_DELAY_MS = 10 * 1000;
 const DIRECT_WATCH_NATIVE_SYNC_RETRY_DELAY_MS = 15 * 1000;
+const DIRECT_WATCH_SERVICE_STATUS_SETTLE_MS = 8_000;
 const DIRECT_WATCH_HISTORY_SYNC_DAYS = 30;
 const DIRECT_WATCH_HISTORY_SYNC_DAY_DELAY_MS = 350;
 const DEVICE_WORKOUT_SERIES_RENDER_LIMIT = 1_600;
@@ -1013,6 +1014,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
     const activityDiagnostic = buildDirectWatchActivitySyncDiagnostic(payload, completedServiceResult, payloadError);
     const serviceSyncedAt = completedServiceResult?.syncedAt ?? activityDiagnostic.syncedAt;
     const serviceSyncOk = isDirectWatchServiceSyncSuccessful(completedServiceResult);
+    const currentServiceConfig = loadDirectWatchConfig();
     rememberDirectWatchConfig({
       lastActivitySyncAt: activityDiagnostic.syncedAt,
       lastActivitySyncDiagnostic: activityDiagnostic.message,
@@ -1023,9 +1025,10 @@ export function bootstrapMobileApp(root: HTMLElement) {
       ...(serviceSyncOk && completedServiceResult
         ? {
             lastServiceError: null,
-            lastServiceStatus: completedServiceResult.keptBluetoothBridge ? "running" : "synced",
+            lastServiceBridgeUntil: currentServiceConfig.lastServiceBridgeUntil,
+            lastServiceStatus: currentServiceConfig.lastServiceStatus,
             lastServiceSyncedAt: serviceSyncedAt,
-            lastServiceUpdatedAt: serviceSyncedAt,
+            lastServiceUpdatedAt: currentServiceConfig.lastServiceUpdatedAt ?? serviceSyncedAt,
           }
         : {}),
     });
@@ -1465,10 +1468,12 @@ export function bootstrapMobileApp(root: HTMLElement) {
         },
       );
       options.onResult?.(result);
-      const serviceStatus = await getDirectWatchSyncServiceStatus().catch(() => null);
+      const serviceStatus = await getSettledDirectWatchSyncServiceStatus();
       const ok = isDirectWatchServiceSyncSuccessful(result);
       const syncedAt = result.syncedAt ?? new Date().toISOString();
-      const serviceIsRunning = Boolean(serviceStatus?.running || result.keptBluetoothBridge);
+      const serviceIsRunning = serviceStatus
+        ? serviceStatus.running === true
+        : Boolean(result.keptBluetoothBridge && isFutureDate(result.bridgeUntil));
       const serviceBridgeUntil = serviceIsRunning
         ? serviceStatus?.bridgeUntil ?? result.bridgeUntil ?? null
         : null;
@@ -1486,6 +1491,11 @@ export function bootstrapMobileApp(root: HTMLElement) {
         lastServiceSyncedAt: ok ? syncedAt : config.lastServiceSyncedAt,
         lastServiceUpdatedAt: serviceStatus?.updatedAt ?? syncedAt,
       });
+      if (ok && serviceIsRunning) {
+        window.setTimeout(() => {
+          void refreshDirectWatchSyncService().catch(() => undefined);
+        }, DIRECT_WATCH_SERVICE_STATUS_SETTLE_MS);
+      }
       update(options.silent ? {
         directWatchDiagnostic: {
           ...state.directWatchDiagnostic,
@@ -1974,6 +1984,16 @@ export function bootstrapMobileApp(root: HTMLElement) {
         error: error instanceof Error ? error.message : "Не удалось обновить статус сервиса часов.",
       });
     }
+  };
+
+  const getSettledDirectWatchSyncServiceStatus = async () => {
+    let status = await getDirectWatchSyncServiceStatus().catch(() => null);
+    for (let attempt = 0; attempt < 5 && status?.running; attempt += 1) {
+      await delay(1_000);
+      status = await getDirectWatchSyncServiceStatus().catch(() => status);
+    }
+
+    return status;
   };
 
   const stopDirectWatchForegroundService = async () => {

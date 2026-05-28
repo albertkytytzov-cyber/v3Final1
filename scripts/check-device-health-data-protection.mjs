@@ -144,6 +144,14 @@ check("mobile workout list keeps the more complete duplicate", () => {
   assert.match(mobileApp, /getDeviceWorkoutCompletenessScore\(workout\) > getDeviceWorkoutCompletenessScore\(previous\)/u);
 });
 
+check("mobile service status trusts native status over bridge hint", () => {
+  assert.match(mobileApp, /const getSettledDirectWatchSyncServiceStatus = async \(\) =>/u);
+  assert.match(mobileApp, /DIRECT_WATCH_SERVICE_STATUS_SETTLE_MS/u);
+  assert.match(mobileApp, /window\.setTimeout\(\(\) => \{\s+void refreshDirectWatchSyncService\(\)\.catch\(\(\) => undefined\);\s+\}, DIRECT_WATCH_SERVICE_STATUS_SETTLE_MS\);/u);
+  assert.match(mobileApp, /serviceStatus\s+\?\s+serviceStatus\.running === true\s+:\s+Boolean\(result\.keptBluetoothBridge && isFutureDate\(result\.bridgeUntil\)\)/u);
+  assert.doesNotMatch(mobileApp, /lastServiceStatus: completedServiceResult\.keptBluetoothBridge \? "running" : "synced"/u);
+});
+
 if (!process.exitCode) {
   console.log("Device health data protection check passed: partial watch packets cannot downgrade steps, sleep, samples, SpO2, pulse or workout totals.");
 }
