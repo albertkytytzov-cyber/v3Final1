@@ -5517,6 +5517,89 @@ function getDirectWatchWeatherFallbackCity(config: DirectWatchLocalConfig) {
   return config.weatherCity ?? "";
 }
 
+function formatDirectWatchUserError(message?: string | null) {
+  if (!message) {
+    return null;
+  }
+
+  const lowerMessage = message.toLowerCase();
+  if (
+    lowerMessage.includes("spp-канал занят") ||
+    lowerMessage.includes("mi fitness") ||
+    lowerMessage.includes("xiaomi mi connect") ||
+    lowerMessage.includes("broken pipe")
+  ) {
+    return "Bluetooth занят другим приложением или системной службой Xiaomi. Закройте Mi Fitness/Gadgetbridge и повторите синхронизацию.";
+  }
+
+  if (lowerMessage.includes("auth")) {
+    return "Часы не прошли авторизацию. Проверьте Auth Key и подключение часов.";
+  }
+
+  if (lowerMessage.includes("crc")) {
+    return "Часы отдали повреждённый пакет данных. Повторите синхронизацию рядом с телефоном.";
+  }
+
+  return message;
+}
+
+function getDirectWatchUserDiagnostics(
+  config: DirectWatchLocalConfig,
+  serviceStatus: MobileAppState["directWatchDiagnostic"]["serviceStatus"],
+  coordinatorStatus: MobileAppState["directWatchDiagnostic"]["syncCoordinatorStatus"],
+) {
+  const backgroundSync = serviceStatus?.backgroundSync;
+  const isRunning = isDirectWatchServiceRunning(config, serviceStatus);
+  const lastSyncAt = getLatestDirectWatchConfigSyncAt(config);
+  const retryAfterMs = coordinatorStatus?.retryAfterMs ?? null;
+  const hasPending = Boolean(coordinatorStatus?.pendingRequestId || backgroundSync?.available);
+  const userError = formatDirectWatchUserError(config.lastServiceError);
+  const connectionLabel = !config.deviceId
+    ? "часы не выбраны"
+    : !config.authKeyHex
+      ? "нужен Auth Key"
+      : userError
+        ? "Bluetooth занят"
+        : isRunning
+          ? "подключено"
+          : "не подключено";
+  const dataLabel = backgroundSync?.available
+    ? "есть пакет, обрабатываем"
+    : config.lastActivitySyncStatus === "ok"
+      ? "часы отдали данные"
+      : config.lastActivitySyncStatus === "error"
+        ? "данные не считались"
+        : config.lastActivitySyncDiagnostic
+          ? "данные проверены"
+          : "данных пока нет";
+  const autoLabel = hasPending
+    ? "синхронизация в очереди"
+    : retryAfterMs && retryAfterMs > 0
+      ? `ожидание ${formatDeviceWorkoutDuration(retryAfterMs / 60000)}`
+      : coordinatorStatus?.lastBlockedReason
+        ? formatDirectWatchCoordinatorReason(coordinatorStatus.lastBlockedReason)
+        : "ожидание следующей синхронизации";
+  const headline = userError
+    ? userError
+    : isRunning
+      ? "Служба часов активна: время, погода и данные обновляются через PERFORM Sync."
+      : config.deviceId && config.authKeyHex
+        ? "Служба часов готова к запуску."
+        : "Для прямой синхронизации выберите часы и сохраните Auth Key.";
+
+  return {
+    autoLabel,
+    cards: [
+      { label: "Подключение", value: connectionLabel },
+      { label: "Последняя синхронизация", value: lastSyncAt ? formatDateTime(lastSyncAt) : "ещё не было" },
+      { label: "Данные часов", value: dataLabel },
+      { label: "Автообновление", value: autoLabel },
+    ],
+    headline,
+    userError,
+  };
+}
+
 function renderWatchSyncPanel(state: MobileAppState, date: string) {
   if (!isDirectWatchRuntime()) {
     return "";
@@ -5532,11 +5615,14 @@ function renderWatchSyncPanel(state: MobileAppState, date: string) {
   const isRunning = isDirectWatchServiceRunning(config, serviceStatus);
   const statusKind = getDirectWatchServiceStatusKind(config, serviceStatus);
   const statusLabel = formatDirectWatchServiceStatusLabel(config, serviceStatus);
-  const lastSyncAt = getLatestDirectWatchConfigSyncAt(config);
-  const lastSyncLabel = lastSyncAt ? formatDateTime(lastSyncAt) : "ещё не было";
   const bridgeLabel = formatDirectWatchServiceRuntime(config, serviceStatus);
   const deviceLabel = config.deviceName || (config.deviceId ? formatDirectWatchDeviceId(config.deviceId) : "часы не выбраны");
   const historyProgress = getDirectWatchHistorySyncProgress(config);
+  const userDiagnostics = getDirectWatchUserDiagnostics(
+    config,
+    serviceStatus,
+    state.directWatchDiagnostic.syncCoordinatorStatus,
+  );
 
   return `
     <section class="watch-sync-panel is-${escapeHtml(statusKind)}">
@@ -5544,20 +5630,22 @@ function renderWatchSyncPanel(state: MobileAppState, date: string) {
         <div>
           <span>Состояние часов</span>
           <h3>${escapeHtml(deviceLabel)}</h3>
-          <p>${escapeHtml(lastSyncLabel)} · авто каждые 30 мин</p>
+          <p>${escapeHtml(userDiagnostics.headline)}</p>
         </div>
         <strong class="watch-sync-status">${escapeHtml(statusLabel)}</strong>
       </div>
-      ${config.lastServiceError ? `<p class="watch-sync-error">${escapeHtml(config.lastServiceError)}</p>` : ""}
+      ${userDiagnostics.userError ? `<p class="watch-sync-error">${escapeHtml(userDiagnostics.userError)}</p>` : ""}
       ${renderWatchActivitySyncDiagnostic(config)}
       ${renderWatchCoordinatorStatus(state.directWatchDiagnostic.syncCoordinatorStatus)}
       <div class="watch-sync-grid">
+        ${userDiagnostics.cards.map((card) => `
+          <article>
+            <span>${escapeHtml(card.label)}</span>
+            <strong>${escapeHtml(card.value)}</strong>
+          </article>
+        `).join("")}
         <article>
-          <span>Часы</span>
-          <strong>${escapeHtml(deviceLabel)}</strong>
-        </article>
-        <article>
-          <span>Город погоды</span>
+          <span>Погода</span>
           <strong>${escapeHtml(weatherSourceLabel)}</strong>
         </article>
         <article>
@@ -8129,7 +8217,9 @@ function formatDirectWatchServiceStatusLabel(
   }
 
   if (config.lastServiceStatus === "error") {
-    return "ошибка";
+    return formatDirectWatchUserError(config.lastServiceError)?.includes("Bluetooth занят")
+      ? "Bluetooth занят"
+      : "ошибка";
   }
 
   return getLatestDirectWatchConfigSyncAt(config) ? "не подключено" : "ещё не запускалось";
