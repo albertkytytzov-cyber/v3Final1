@@ -5161,7 +5161,7 @@ function renderWatchSettingsEntryCard(
   const statusLabel = formatDirectWatchServiceStatusLabel(config, state.directWatchDiagnostic.serviceStatus);
   const lastSyncAt = getLatestDirectWatchConfigSyncAt(config);
   const lastSyncLabel = lastSyncAt ? formatDateTime(lastSyncAt) : "ещё не было";
-  const deviceLabel = config.deviceName || (config.deviceId ? formatDirectWatchDeviceId(config.deviceId) : "часы не выбраны");
+  const deviceLabel = config.deviceName || (config.deviceId ? "часы выбраны" : "часы не выбраны");
   const historyProgress = getDirectWatchHistorySyncProgress(config);
   const historyLabel = config.lastHistorySyncStatus === "running"
     ? ` · история ${historyProgress.label}`
@@ -5170,7 +5170,7 @@ function renderWatchSettingsEntryCard(
       : "";
 
   return `
-    <button class="watch-settings-entry-card is-${escapeHtml(statusKind)}" data-watch-settings-open type="button">
+    <button class="watch-settings-entry-card watch-clean-settings-entry is-${escapeHtml(statusKind)}" data-watch-settings-open type="button">
       <div>
         <strong>Настройка часов</strong>
         <span>${escapeHtml(`${deviceLabel} · ${statusLabel} · ${lastSyncLabel}${historyLabel}`)}</span>
@@ -5608,12 +5608,40 @@ function renderWatchParametersCard(
   const stressAvg = readDeviceHealthRawNumber(rawPayload, "stressAvg");
   const trainingLoadDay = readDeviceHealthRawNumber(rawPayload, "trainingLoadDay");
   const vitality = readDeviceHealthRawNumber(rawPayload, "vitality");
-  const statusLabel = summary ? "обновлено" : "нет данных";
   const directWatchConfig = isDirectWatchRuntime() ? loadDirectWatchConfig() : null;
+  const directWatchStatus = directWatchConfig
+    ? state.directWatchDiagnostic.serviceStatus
+    : null;
+  const directWatchStatusKind = directWatchConfig
+    ? getDirectWatchServiceStatusKind(directWatchConfig, directWatchStatus)
+    : summary ? "running" : "setup";
+  const directWatchStatusLabel = directWatchConfig
+    ? formatDirectWatchServiceStatusLabel(directWatchConfig, directWatchStatus)
+    : summary ? "обновлено" : "нет данных";
   const displaySyncedAt = getWatchDisplaySyncedAt(summary, directWatchConfig);
+  const lastSyncAt = directWatchConfig
+    ? getLatestDirectWatchConfigSyncAt(directWatchConfig) ?? displaySyncedAt ?? summary?.syncedAt ?? null
+    : displaySyncedAt ?? summary?.syncedAt ?? null;
+  const lastSyncLabel = lastSyncAt
+    ? `Обновлено ${formatDateTime(lastSyncAt)}`
+    : "После синхронизации здесь появятся данные часов";
   const sourceLabel = summary
-    ? `Источник: ${formatWatchProviderLabel(summary)} · ${formatDateTime(displaySyncedAt ?? summary.syncedAt)}`
+    ? `${formatWatchProviderLabel(summary)} · ${formatDateTime(displaySyncedAt ?? summary.syncedAt)}`
     : "Источник появится после синхронизации";
+  const deviceLabel = directWatchConfig
+    ? directWatchConfig.deviceName || (directWatchConfig.deviceId ? "Часы выбраны" : "Часы не выбраны")
+    : formatWatchProviderLabel(summary);
+  const canDirectSync = Boolean(directWatchConfig?.deviceId && directWatchConfig.authKeyHex);
+  const oxygenValue = summary?.oxygenSaturation?.latestPercent ?? summary?.oxygenSaturation?.averagePercent ?? null;
+  const restingPulse = getDeviceRestingHeartRateValue(summary);
+  const pulseProgress = Math.max(8, Math.min(100, Math.round(((restingPulse ?? 64) / 150) * 100)));
+  const oxygenProgress = Math.max(8, Math.min(100, Math.round(oxygenValue ?? 0)));
+  const sleepProgress = Math.max(8, getWatchSleepProgress(summary));
+  const heroStats = [
+    { detail: "покой", label: "Пульс", value: formatDeviceHealthRestingHrValue(summary) },
+    { detail: "сатурация", label: "SpO2", value: formatDeviceHealthOxygenValue(summary) },
+    { detail: "сегодня", label: "Шаги", value: formatWatchStepsValue(summary) },
+  ];
 
   const rows = [
     {
@@ -5667,29 +5695,83 @@ function renderWatchParametersCard(
       value: formatWatchOptionalNumber(trainingLoadDay),
     },
   ];
+  const visibleRows = rows.filter((row) =>
+    row.kind === "pulse" ||
+    row.kind === "sleep" ||
+    row.kind === "oxygen" ||
+    row.kind === "stress"
+  );
 
   return `
-    <section class="watch-parameters-card">
-      <div class="watch-health-head">
+    <section class="watch-parameters-card watch-clean-panel">
+      <div class="watch-clean-head">
         <div>
           <h3>Часы</h3>
           <p>${escapeHtml(sourceLabel)}</p>
         </div>
-        <span class="watch-health-status">${escapeHtml(statusLabel)}</span>
+        <span>${escapeHtml(formatDate(date))}</span>
       </div>
-      ${renderWatchQuickSyncAction(state, date)}
-      <div class="watch-parameter-list">
-        ${rows.map((row) => {
+      <article class="watch-clean-hero is-${escapeHtml(directWatchStatusKind)}">
+        <div class="watch-clean-hero-head">
+          <div>
+            <span>${escapeHtml(deviceLabel)}</span>
+            <strong>${escapeHtml(directWatchStatusLabel)}</strong>
+            <small>${escapeHtml(lastSyncLabel)}</small>
+          </div>
+          ${directWatchConfig
+            ? canDirectSync
+              ? `
+                <button
+                  class="watch-clean-sync-button"
+                  data-direct-watch-full-sync="${escapeHtml(directWatchConfig.deviceId || "")}"
+                  data-direct-watch-full-sync-date="${escapeHtml(date)}"
+                  type="button"
+                  ${state.isBusy ? "disabled" : ""}
+                >
+                  ${state.isBusy ? "Обновление" : "Обновить"}
+                </button>
+              `
+              : `
+                <button class="watch-clean-sync-button" data-watch-settings-open type="button" ${state.isBusy ? "disabled" : ""}>
+                  Настроить
+                </button>
+              `
+            : ""}
+        </div>
+        <div class="watch-clean-hero-body">
+          <div
+            class="watch-clean-rings"
+            style="--pulse-progress: ${pulseProgress}; --oxygen-progress: ${oxygenProgress}; --sleep-progress: ${sleepProgress};"
+            aria-hidden="true"
+          >
+            <i class="is-pulse"></i>
+            <i class="is-sleep"></i>
+            <i class="is-oxygen"></i>
+            <span></span>
+          </div>
+          <div class="watch-clean-hero-stats">
+            ${heroStats.map((item) => `
+              <article>
+                <span>${escapeHtml(item.label)}</span>
+                <strong>${escapeHtml(item.value)}</strong>
+                <small>${escapeHtml(item.detail)}</small>
+              </article>
+            `).join("")}
+          </div>
+        </div>
+      </article>
+      <div class="watch-clean-metric-grid">
+        ${visibleRows.map((row) => {
           const content = `
-            <span class="watch-parameter-icon">${escapeHtml(row.icon)}</span>
+            <span class="watch-clean-metric-icon">${escapeHtml(row.icon)}</span>
+            <span class="watch-clean-metric-label">${escapeHtml(row.label)}</span>
             <strong>${escapeHtml(row.value)}</strong>
-            <span class="watch-parameter-label">${escapeHtml(row.label)}</span>
             <small>${escapeHtml(row.detail)}</small>
-            ${row.preview}
+            <div class="watch-clean-metric-preview">${row.preview}</div>
           `;
 
           return `
-            <button class="watch-parameter-tile is-${escapeHtml(row.kind)} is-clickable" data-watch-detail="${escapeHtml(row.kind)}" type="button">
+            <button class="watch-clean-metric is-${escapeHtml(row.kind)}" data-watch-detail="${escapeHtml(row.kind)}" type="button">
               ${content}
             </button>
           `;
@@ -5951,22 +6033,18 @@ function renderWatchWorkoutSummaryCard(todayWorkouts: DeviceWorkout[], recentWor
   ];
 
   return `
-    <section class="watch-workouts-card is-summary">
-      <div class="watch-card-head">
+    <section class="watch-workouts-card is-summary watch-clean-workout-card">
+      <div class="watch-clean-workout-head">
         <div>
           <span>Тренировки</span>
-          <h3>Активность с часов</h3>
+          <h3>${escapeHtml(todayWorkouts.length ? `${todayWorkouts.length} ${formatWorkoutCountLabel(todayWorkouts.length, "тренировка", "тренировки", "тренировок")}` : "Сегодня нет тренировок")}</h3>
           <p>${escapeHtml(formatWatchWorkoutSummaryHint(todayWorkouts, latestWorkout, date))}</p>
         </div>
+        <button class="secondary-action" data-watch-workouts-open type="button">
+          Открыть
+        </button>
       </div>
       <div class="watch-workouts-summary-body">
-        <div class="watch-workouts-summary-main">
-          <span aria-hidden="true"></span>
-          <div>
-            <strong>${todayWorkouts.length}</strong>
-            <small>${escapeHtml(formatWorkoutCountLabel(todayWorkouts.length, "тренировка", "тренировки", "тренировок"))} сегодня</small>
-          </div>
-        </div>
         <div class="watch-workouts-summary-grid">
           ${summaryStats.map((item) => `
             <article>
@@ -5975,9 +6053,6 @@ function renderWatchWorkoutSummaryCard(todayWorkouts: DeviceWorkout[], recentWor
             </article>
           `).join("")}
         </div>
-        <button class="primary-action" data-watch-workouts-open type="button">
-          Открыть все тренировки
-        </button>
       </div>
     </section>
   `;

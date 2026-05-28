@@ -3876,6 +3876,335 @@ button {
   background: rgba(255, 255, 255, 0.94);
 }
 
+.watch-clean-panel {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.watch-clean-head,
+.watch-clean-hero-head,
+.watch-clean-workout-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+  min-width: 0;
+}
+
+.watch-clean-head h3,
+.watch-clean-workout-head h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: 1.55rem;
+  font-weight: 950;
+  line-height: 1.02;
+}
+
+.watch-clean-head p,
+.watch-clean-workout-head p,
+.watch-clean-hero-head small {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 760;
+  line-height: 1.25;
+}
+
+.watch-clean-head > span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid rgba(15, 118, 110, 0.12);
+  border-radius: 999px;
+  background: rgba(240, 253, 250, 0.92);
+  color: var(--accent-dark);
+  font-size: 0.72rem;
+  font-weight: 900;
+  line-height: 1.1;
+  text-align: center;
+}
+
+.watch-clean-hero {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+  padding: 16px;
+  overflow: hidden;
+  border: 1px solid rgba(15, 118, 110, 0.12);
+  border-radius: 22px;
+  background:
+    linear-gradient(135deg, rgba(237, 253, 249, 0.94), rgba(255, 255, 255, 0.98)),
+    #ffffff;
+  box-shadow: 0 16px 34px rgba(13, 44, 39, 0.08);
+}
+
+.watch-clean-hero.is-stopped,
+.watch-clean-hero.is-setup {
+  background:
+    linear-gradient(135deg, rgba(248, 250, 252, 0.96), rgba(255, 255, 255, 0.98)),
+    #ffffff;
+}
+
+.watch-clean-hero.is-error {
+  border-color: rgba(180, 35, 24, 0.18);
+  background:
+    linear-gradient(135deg, rgba(254, 242, 242, 0.94), rgba(255, 255, 255, 0.98)),
+    #ffffff;
+}
+
+.watch-clean-hero-head span,
+.watch-clean-workout-head span {
+  display: block;
+  color: var(--accent-dark);
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+
+.watch-clean-hero-head strong {
+  display: block;
+  margin-top: 5px;
+  color: var(--text);
+  font-size: 1.42rem;
+  font-weight: 950;
+  line-height: 1.04;
+}
+
+.watch-clean-sync-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 104px;
+  min-height: 42px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #ffffff;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 920;
+  line-height: 1.1;
+  cursor: pointer;
+}
+
+.watch-clean-sync-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.watch-clean-hero-body {
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr);
+  gap: 16px;
+  align-items: center;
+  min-width: 0;
+}
+
+.watch-clean-rings {
+  position: relative;
+  width: 132px;
+  height: 132px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.watch-clean-rings i,
+.watch-clean-rings span {
+  position: absolute;
+  border-radius: 999px;
+}
+
+.watch-clean-rings i {
+  inset: 0;
+  background: conic-gradient(var(--accent) calc(var(--pulse-progress) * 1%), rgba(15, 118, 110, 0.08) 0);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 13px), #000 calc(100% - 12px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 13px), #000 calc(100% - 12px));
+}
+
+.watch-clean-rings i.is-sleep {
+  inset: 18px;
+  background: conic-gradient(#426f9d calc(var(--sleep-progress) * 1%), rgba(66, 111, 157, 0.1) 0);
+}
+
+.watch-clean-rings i.is-oxygen {
+  inset: 36px;
+  background: conic-gradient(#5ab6aa calc(var(--oxygen-progress) * 1%), rgba(90, 182, 170, 0.1) 0);
+}
+
+.watch-clean-rings span {
+  inset: 54px;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px rgba(15, 118, 110, 0.08);
+}
+
+.watch-clean-hero-stats {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.watch-clean-hero-stats article {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 10px;
+  align-items: baseline;
+  min-width: 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(15, 118, 110, 0.08);
+}
+
+.watch-clean-hero-stats article:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.watch-clean-hero-stats span,
+.watch-clean-hero-stats small {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 840;
+  line-height: 1.1;
+}
+
+.watch-clean-hero-stats strong {
+  color: var(--text);
+  font-size: 1.12rem;
+  font-weight: 950;
+  line-height: 1;
+}
+
+.watch-clean-hero-stats small {
+  grid-column: 1 / -1;
+}
+
+.watch-clean-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  min-width: 0;
+}
+
+.watch-clean-metric {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto auto auto auto minmax(48px, 1fr);
+  gap: 5px;
+  min-width: 0;
+  min-height: 184px;
+  padding: 13px 12px 10px;
+  overflow: hidden;
+  border: 1px solid rgba(15, 118, 110, 0.1);
+  border-radius: 19px;
+  background: rgba(255, 255, 255, 0.96);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  box-shadow: 0 12px 26px rgba(13, 44, 39, 0.06);
+  cursor: pointer;
+}
+
+.watch-clean-metric::after {
+  content: "›";
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: rgba(15, 118, 110, 0.08);
+  color: var(--accent-dark);
+  font-size: 1.32rem;
+  font-weight: 850;
+  line-height: 1;
+}
+
+.watch-clean-metric:focus-visible {
+  outline: 3px solid rgba(15, 118, 110, 0.24);
+  outline-offset: 3px;
+}
+
+.watch-clean-metric-icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #ffffff;
+  font-size: 0.95rem;
+  font-weight: 950;
+  line-height: 1;
+}
+
+.watch-clean-metric.is-pulse .watch-clean-metric-icon {
+  background: #c95f54;
+}
+
+.watch-clean-metric.is-sleep .watch-clean-metric-icon {
+  background: #426f9d;
+}
+
+.watch-clean-metric.is-oxygen .watch-clean-metric-icon {
+  background: #5ab6aa;
+}
+
+.watch-clean-metric.is-stress .watch-clean-metric-icon {
+  background: #60736d;
+}
+
+.watch-clean-metric-label {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 930;
+  line-height: 1.12;
+}
+
+.watch-clean-metric strong {
+  color: var(--text);
+  font-size: 1.5rem;
+  font-weight: 950;
+  line-height: 1.02;
+}
+
+.watch-clean-metric small {
+  min-height: 2.1em;
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 760;
+  line-height: 1.18;
+  hyphens: none;
+  overflow-wrap: normal;
+}
+
+.watch-clean-metric-preview {
+  align-self: end;
+  display: block;
+  min-width: 0;
+}
+
+.watch-clean-metric .watch-parameter-preview {
+  min-height: 48px;
+}
+
+.watch-clean-metric.is-pulse .watch-parameter-preview polyline {
+  stroke: #0f766e;
+  stroke-width: 2.5;
+}
+
+.watch-clean-metric.is-oxygen .watch-parameter-preview path {
+  stroke: #5ab6aa;
+}
+
 .watch-parameters-card .watch-card-head > div > span {
   color: var(--accent-dark);
 }
@@ -4558,6 +4887,21 @@ button.watch-settings-entry-card {
 button.watch-settings-entry-card:focus-visible {
   outline: 3px solid rgba(15, 118, 110, 0.24);
   outline-offset: 3px;
+}
+
+.watch-clean-settings-entry {
+  min-height: 70px;
+  border-color: rgba(15, 118, 110, 0.1);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 12px 26px rgba(13, 44, 39, 0.06);
+}
+
+.watch-clean-settings-entry strong {
+  font-size: 1.02rem;
+}
+
+.watch-clean-settings-entry > span {
+  background: rgba(15, 118, 110, 0.1);
 }
 
 .watch-sync-panel.is-error {
@@ -5856,6 +6200,24 @@ svg.watch-parameter-preview {
   gap: 14px;
 }
 
+.watch-clean-workout-card {
+  border-color: rgba(15, 118, 110, 0.1);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.97), rgba(240, 253, 250, 0.9)),
+    #ffffff;
+}
+
+.watch-clean-workout-head {
+  align-items: center;
+}
+
+.watch-clean-workout-head .secondary-action {
+  min-width: 86px;
+  min-height: 38px;
+  padding: 0 12px;
+  border-radius: 999px;
+}
+
 .watch-workouts-summary-body {
   display: grid;
   gap: 12px;
@@ -7079,25 +7441,36 @@ button.timeline-card:active {
   }
 
   .readiness-metrics,
-  .readiness-indicators-grid,
-  .readiness-flags-inline,
-  .readiness-flags,
-  .athlete-today-main,
-  .readiness-factor-row,
-  .coach-readiness-analytics .readiness-factor-row,
-  .athlete-home-actions,
-  .watch-sync-grid,
-  .device-health-compact-grid,
-  .device-health-compact-actions,
-  .watch-sync-actions,
-  .watch-sync-setup-actions,
-  .watch-sync-setup-grid,
+    .readiness-indicators-grid,
+    .readiness-flags-inline,
+    .readiness-flags,
+    .athlete-today-main,
+    .watch-clean-head,
+    .watch-clean-hero-head,
+    .watch-clean-hero-body,
+    .watch-clean-workout-head,
+    .readiness-factor-row,
+    .coach-readiness-analytics .readiness-factor-row,
+    .athlete-home-actions,
+    .watch-sync-grid,
+    .device-health-compact-grid,
+    .device-health-compact-actions,
+    .watch-clean-hero-stats,
+    .watch-sync-actions,
+    .watch-sync-setup-actions,
+    .watch-sync-setup-grid,
   .watch-actions,
   .watch-heart-rate-approved-zones,
   .watch-settings-actions,
   .choice-group,
-  .coach-day-status-brief-grid {
+    .coach-day-status-brief-grid {
     grid-template-columns: 1fr;
+  }
+
+  .watch-clean-rings,
+  .watch-clean-sync-button,
+  .watch-clean-workout-head .secondary-action {
+    justify-self: start;
   }
 
   .mobile-plan-day-card-head {
