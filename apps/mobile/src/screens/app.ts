@@ -5423,6 +5423,22 @@ function getLatestDirectWatchConfigSyncAt(config: DirectWatchLocalConfig) {
   ]);
 }
 
+function getLatestDirectWatchSyncAt(
+  config: DirectWatchLocalConfig,
+  serviceStatus: MobileAppState["directWatchDiagnostic"]["serviceStatus"],
+  coordinatorStatus: MobileAppState["directWatchDiagnostic"]["syncCoordinatorStatus"],
+) {
+  return getLatestIsoTimestamp([
+    serviceStatus?.backgroundSync?.updatedAt,
+    coordinatorStatus?.lastSuccessfulAt,
+    coordinatorStatus?.lastCompletedAt,
+    config.lastServiceSyncedAt,
+    config.lastActivitySyncAt,
+    serviceStatus?.updatedAt,
+    config.lastServiceUpdatedAt,
+  ]);
+}
+
 function getWatchDisplaySyncedAt(
   summary: DeviceHealthDailySummary | null,
   config?: DirectWatchLocalConfig | null,
@@ -5548,52 +5564,104 @@ function getDirectWatchUserDiagnostics(
 ) {
   const backgroundSync = serviceStatus?.backgroundSync;
   const isRunning = isDirectWatchServiceRunning(config, serviceStatus);
-  const lastSyncAt = getLatestDirectWatchConfigSyncAt(config);
+  const hasDevice = Boolean(config.deviceId);
+  const hasAuthKey = Boolean(config.authKeyHex);
+  const canSync = hasDevice && hasAuthKey;
+  const lastSyncAt = getLatestDirectWatchSyncAt(config, serviceStatus, coordinatorStatus);
+  const lastWeatherAt = getLatestIsoTimestamp([
+    config.lastServiceSyncedAt,
+    coordinatorStatus?.lastSuccessfulAt,
+    serviceStatus?.updatedAt,
+  ]);
+  const lastActivityAt = getLatestIsoTimestamp([
+    backgroundSync?.updatedAt,
+    config.lastActivitySyncAt,
+  ]);
   const retryAfterMs = coordinatorStatus?.retryAfterMs ?? null;
-  const hasPending = Boolean(coordinatorStatus?.pendingRequestId || backgroundSync?.available);
-  const userError = formatDirectWatchUserError(config.lastServiceError);
-  const connectionLabel = !config.deviceId
+  const hasPending = Boolean(coordinatorStatus?.pendingRequestId);
+  const userError = formatDirectWatchUserError(
+    config.lastServiceError || (config.lastActivitySyncStatus === "error" ? config.lastActivitySyncDiagnostic : null),
+  );
+  const connectionLabel = !hasDevice
     ? "часы не выбраны"
-    : !config.authKeyHex
+    : !hasAuthKey
       ? "нужен Auth Key"
       : userError
         ? "Bluetooth занят"
         : isRunning
           ? "подключено"
           : "не подключено";
-  const dataLabel = backgroundSync?.available
-    ? "есть пакет, обрабатываем"
-    : config.lastActivitySyncStatus === "ok"
-      ? "часы отдали данные"
-      : config.lastActivitySyncStatus === "error"
-        ? "данные не считались"
-        : config.lastActivitySyncDiagnostic
-          ? "данные проверены"
-          : "данных пока нет";
+  const weatherLabel = lastWeatherAt
+    ? "отправлена на часы"
+    : canSync
+      ? "ждёт первой синхронизации"
+      : "не настроена";
+  const dataLabel = backgroundSync?.available || config.lastActivitySyncStatus === "ok"
+    ? "сохранены"
+    : config.lastActivitySyncStatus === "error"
+      ? "ошибка чтения"
+      : config.lastActivitySyncDiagnostic
+        ? "проверены"
+        : "пока нет";
+  const workoutLabel = config.lastActivitySyncWorkoutCount !== null
+    ? config.lastActivitySyncWorkoutCount > 0
+      ? `${config.lastActivitySyncWorkoutCount} ${formatRussianCount(config.lastActivitySyncWorkoutCount, "тренировка", "тренировки", "тренировок")}`
+      : "новых нет"
+    : "проверим при синхронизации";
+  const vitalsLabel = backgroundSync?.available || config.lastActivitySyncStatus === "ok"
+    ? "сон, пульс и день проверены"
+    : "ожидают синхронизацию";
   const autoLabel = hasPending
     ? "синхронизация в очереди"
     : retryAfterMs && retryAfterMs > 0
-      ? `ожидание ${formatDeviceWorkoutDuration(retryAfterMs / 60000)}`
-      : coordinatorStatus?.lastBlockedReason
-        ? formatDirectWatchCoordinatorReason(coordinatorStatus.lastBlockedReason)
-        : "ожидание следующей синхронизации";
+      ? `через ${formatDeviceWorkoutDuration(retryAfterMs / 60000)}`
+      : coordinatorStatus?.nextAllowedAt
+        ? formatDateTime(coordinatorStatus.nextAllowedAt)
+        : coordinatorStatus?.lastBlockedReason
+          ? formatDirectWatchCoordinatorReason(coordinatorStatus.lastBlockedReason)
+          : isRunning
+            ? "по таймеру или событию Bluetooth"
+            : "после запуска службы";
   const headline = userError
     ? userError
     : isRunning
-      ? "Служба часов активна: время, погода и данные обновляются через PERFORM Sync."
-      : config.deviceId && config.authKeyHex
+      ? "Фоновая служба активна: PERFORM Sync обновляет часы без открытия приложения."
+      : canSync
         ? "Служба часов готова к запуску."
         : "Для прямой синхронизации выберите часы и сохраните Auth Key.";
+  const lastSyncLabel = lastSyncAt ? formatDateTime(lastSyncAt) : "ещё не было";
 
   return {
     autoLabel,
-    cards: [
-      { label: "Подключение", value: connectionLabel },
-      { label: "Последняя синхронизация", value: lastSyncAt ? formatDateTime(lastSyncAt) : "ещё не было" },
-      { label: "Данные часов", value: dataLabel },
-      { label: "Автообновление", value: autoLabel },
-    ],
+    connectionLabel,
     headline,
+    lastSyncLabel,
+    updates: [
+      {
+        label: "Погода",
+        meta: lastWeatherAt ? formatDateTime(lastWeatherAt) : null,
+        tone: lastWeatherAt ? "ok" : canSync ? "warning" : "muted",
+        value: weatherLabel,
+      },
+      {
+        label: "Активность",
+        meta: lastActivityAt ? formatDateTime(lastActivityAt) : null,
+        tone: config.lastActivitySyncStatus === "error" ? "error" : lastActivityAt ? "ok" : "muted",
+        value: dataLabel,
+      },
+      {
+        label: "Сон и пульс",
+        meta: backgroundSync?.entryDate ? formatDate(backgroundSync.entryDate) : null,
+        tone: backgroundSync?.available || config.lastActivitySyncStatus === "ok" ? "ok" : "muted",
+        value: vitalsLabel,
+      },
+      {
+        label: "Тренировки",
+        meta: config.lastActivitySyncAt ? formatDateTime(config.lastActivitySyncAt) : null,
+        tone: config.lastActivitySyncStatus === "error" ? "error" : config.lastActivitySyncWorkoutCount !== null ? "ok" : "muted",
+        value: workoutLabel,
+      },
+    ],
     userError,
   };
 }
@@ -5624,37 +5692,34 @@ function renderWatchSyncPanel(state: MobileAppState, date: string) {
 
   return `
     <section class="watch-sync-panel is-${escapeHtml(statusKind)}">
-      <div class="watch-sync-head">
-        <div>
-          <span>Состояние часов</span>
-          <h3>${escapeHtml(deviceLabel)}</h3>
-          <p>${escapeHtml(userDiagnostics.headline)}</p>
+      <article class="watch-background-status">
+        <div class="watch-background-head">
+          <div>
+            <span>Фоновая синхронизация</span>
+            <h3>${escapeHtml(deviceLabel)}</h3>
+            <p>${escapeHtml(userDiagnostics.headline)}</p>
+          </div>
+          <strong class="watch-sync-status">${escapeHtml(statusLabel)}</strong>
         </div>
-        <strong class="watch-sync-status">${escapeHtml(statusLabel)}</strong>
-      </div>
-      ${userDiagnostics.userError ? `<p class="watch-sync-error">${escapeHtml(userDiagnostics.userError)}</p>` : ""}
-      ${renderWatchActivitySyncDiagnostic(config)}
-      ${renderWatchCoordinatorStatus(state.directWatchDiagnostic.syncCoordinatorStatus)}
-      <div class="watch-sync-grid">
-        ${userDiagnostics.cards.map((card) => `
-          <article>
-            <span>${escapeHtml(card.label)}</span>
-            <strong>${escapeHtml(card.value)}</strong>
-          </article>
-        `).join("")}
-        <article>
-          <span>Погода</span>
-          <strong>${escapeHtml(weatherSourceLabel)}</strong>
-        </article>
-        <article>
-          <span>Служба</span>
-          <strong>${escapeHtml(bridgeLabel)}</strong>
-        </article>
-        <article>
-          <span>Погода на часы</span>
-          <strong>влажность · ветер · UV/AQI · солнце</strong>
-        </article>
-      </div>
+        <div class="watch-background-meta">
+          <span>${escapeHtml(userDiagnostics.connectionLabel)}</span>
+          <strong>Последняя синхронизация: ${escapeHtml(userDiagnostics.lastSyncLabel)}</strong>
+        </div>
+        ${userDiagnostics.userError ? `<p class="watch-sync-error">${escapeHtml(userDiagnostics.userError)}</p>` : ""}
+        <div class="watch-background-updates">
+          ${userDiagnostics.updates.map((update) => `
+            <article class="watch-background-row is-${escapeHtml(update.tone)}">
+              <span aria-hidden="true"></span>
+              <div>
+                <strong>${escapeHtml(update.label)}</strong>
+                <p>${escapeHtml(update.value)}</p>
+              </div>
+              ${update.meta ? `<em>${escapeHtml(update.meta)}</em>` : ""}
+            </article>
+          `).join("")}
+        </div>
+        <p class="watch-background-next">Следующее автообновление: ${escapeHtml(userDiagnostics.autoLabel)}</p>
+      </article>
       <div class="watch-sync-actions">
         <button
           class="primary-action"
@@ -5663,7 +5728,7 @@ function renderWatchSyncPanel(state: MobileAppState, date: string) {
           type="button"
           ${state.isBusy || !canServiceSync ? "disabled" : ""}
         >
-          Обновить часы
+          Синхронизировать сейчас
         </button>
         <button
           class="secondary-action"
@@ -5683,6 +5748,25 @@ function renderWatchSyncPanel(state: MobileAppState, date: string) {
           Время и погода
         </button>
       </div>
+      <details class="watch-technical-status">
+        <summary>Служебная информация</summary>
+        ${renderWatchActivitySyncDiagnostic(config)}
+        ${renderWatchCoordinatorStatus(state.directWatchDiagnostic.syncCoordinatorStatus)}
+        <div class="watch-sync-grid">
+          <article>
+            <span>Источник погоды</span>
+            <strong>${escapeHtml(weatherSourceLabel)}</strong>
+          </article>
+          <article>
+            <span>Служба</span>
+            <strong>${escapeHtml(bridgeLabel)}</strong>
+          </article>
+          <article>
+            <span>Пакет погоды</span>
+            <strong>влажность · ветер · UV/AQI · солнце</strong>
+          </article>
+        </div>
+      </details>
       <section class="watch-history-sync-card is-${escapeHtml(historyProgress.statusKind)}">
         <div class="watch-history-sync-head">
           <div>

@@ -5034,6 +5034,177 @@ button.watch-settings-entry-card:focus-visible {
   color: #92400e;
 }
 
+.watch-background-status {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid rgba(15, 118, 110, 0.14);
+  border-radius: 16px;
+  background:
+    linear-gradient(135deg, rgba(240, 253, 250, 0.84), rgba(255, 255, 255, 0.94)),
+    #ffffff;
+}
+
+.watch-sync-panel.is-error .watch-background-status {
+  border-color: rgba(185, 28, 28, 0.18);
+  background:
+    linear-gradient(135deg, rgba(254, 242, 242, 0.9), rgba(255, 255, 255, 0.94)),
+    #ffffff;
+}
+
+.watch-sync-panel.is-setup .watch-background-status {
+  border-color: rgba(180, 83, 9, 0.18);
+  background:
+    linear-gradient(135deg, rgba(255, 251, 235, 0.9), rgba(255, 255, 255, 0.94)),
+    #ffffff;
+}
+
+.watch-background-head,
+.watch-background-meta {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+}
+
+.watch-background-head span,
+.watch-background-meta span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 900;
+  line-height: 1.15;
+  text-transform: uppercase;
+}
+
+.watch-background-head h3 {
+  margin: 3px 0 0;
+  color: var(--text);
+  font-size: 1.06rem;
+  font-weight: 950;
+  line-height: 1.12;
+}
+
+.watch-background-head p,
+.watch-background-next {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 760;
+  line-height: 1.3;
+}
+
+.watch-background-meta {
+  align-items: center;
+  min-height: 38px;
+  padding: 8px 10px;
+  border-radius: 13px;
+  background: rgba(15, 118, 110, 0.06);
+}
+
+.watch-background-meta strong {
+  color: var(--text);
+  font-size: 0.78rem;
+  font-weight: 900;
+  line-height: 1.2;
+  text-align: right;
+}
+
+.watch-background-updates {
+  display: grid;
+  gap: 7px;
+}
+
+.watch-background-row {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  gap: 9px;
+  align-items: center;
+  min-height: 54px;
+  padding: 8px 10px;
+  border: 1px solid rgba(15, 118, 110, 0.11);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.watch-background-row > span {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: rgba(100, 116, 139, 0.16);
+}
+
+.watch-background-row.is-ok > span {
+  background: #0f766e;
+}
+
+.watch-background-row.is-warning > span {
+  background: #d97706;
+}
+
+.watch-background-row.is-error > span {
+  background: #b91c1c;
+}
+
+.watch-background-row strong {
+  display: block;
+  color: var(--text);
+  font-size: 0.9rem;
+  font-weight: 950;
+  line-height: 1.15;
+}
+
+.watch-background-row p {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 760;
+  line-height: 1.25;
+}
+
+.watch-background-row em {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-style: normal;
+  font-weight: 820;
+  line-height: 1.2;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.watch-background-next {
+  min-height: 34px;
+  padding: 8px 10px;
+  border-radius: 13px;
+  background: rgba(15, 118, 110, 0.06);
+  color: var(--accent-dark);
+  font-weight: 870;
+}
+
+.watch-technical-status {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid rgba(15, 118, 110, 0.11);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.76);
+}
+
+.watch-technical-status summary {
+  cursor: pointer;
+  color: var(--text);
+  font-size: 0.86rem;
+  font-weight: 920;
+  line-height: 1.2;
+}
+
+.watch-technical-status[open] {
+  gap: 10px;
+}
+
+.watch-technical-status[open] summary {
+  margin-bottom: 2px;
+}
+
 .watch-sync-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -7321,6 +7492,8 @@ button.timeline-card:active {
   .device-health-head,
   .watch-detail-head,
   .watch-sync-head,
+  .watch-background-head,
+  .watch-background-meta,
   .watch-history-sync-head,
   .watch-card-head,
   .today-indicators-head,
@@ -7392,8 +7565,14 @@ button.timeline-card:active {
   .watch-recovery-layout,
   .watch-heart-rate-approved-layout,
   .watch-sync-device-list article,
+  .watch-background-row,
   .watch-parameter-row {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .watch-background-meta strong,
+  .watch-background-row em {
+    text-align: left;
   }
 
   .watch-heart-rate-approved-zones {
