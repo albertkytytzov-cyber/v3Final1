@@ -8,6 +8,48 @@ const rootDir = join(__dirname, "..");
 const apiServicePath = join(rootDir, "apps", "api", "src", "services", "device-health.service.ts");
 const mobileAppPath = join(rootDir, "apps", "mobile", "src", "screens", "app.ts");
 const directWatchPath = join(rootDir, "apps", "mobile", "src", "integrations", "direct-watch.ts");
+const androidDirectWatchPluginPath = join(
+  rootDir,
+  "apps",
+  "mobile",
+  "android",
+  "app",
+  "src",
+  "main",
+  "java",
+  "com",
+  "perform",
+  "training",
+  "DirectWatchPlugin.kt",
+);
+const androidForegroundServicePath = join(
+  rootDir,
+  "apps",
+  "mobile",
+  "android",
+  "app",
+  "src",
+  "main",
+  "java",
+  "com",
+  "perform",
+  "training",
+  "DirectWatchForegroundService.kt",
+);
+const androidBluetoothSyncLockPath = join(
+  rootDir,
+  "apps",
+  "mobile",
+  "android",
+  "app",
+  "src",
+  "main",
+  "java",
+  "com",
+  "perform",
+  "training",
+  "DirectWatchBluetoothSyncLock.kt",
+);
 const deviceHealthService = await import("../apps/api/src/services/device-health.service.ts");
 const {
   mergeDeviceHealthRawPayload,
@@ -17,6 +59,9 @@ const {
 const apiService = readFileSync(apiServicePath, "utf8");
 const mobileApp = readFileSync(mobileAppPath, "utf8");
 const directWatch = readFileSync(directWatchPath, "utf8");
+const androidDirectWatchPlugin = readFileSync(androidDirectWatchPluginPath, "utf8");
+const androidForegroundService = readFileSync(androidForegroundServicePath, "utf8");
+const androidBluetoothSyncLock = readFileSync(androidBluetoothSyncLockPath, "utf8");
 
 function fail(message) {
   console.error(`Device health data protection check failed: ${message}`);
@@ -158,6 +203,20 @@ check("DirectWatch raw files are ACKed only after a real server submit or queued
   assert.match(mobileApp, /entry\.status === "queued" && Boolean\(entry\.queuedAt\)/u);
   assert.match(directWatch, /queuedAt\?: string \| null;/u);
   assert.match(directWatch, /queuedAt: new Date\(\)\.toISOString\(\)/u);
+});
+
+check("DirectWatch service sync serializes Bluetooth access", () => {
+  assert.match(mobileApp, /let directWatchServiceSyncInFlight = false;/u);
+  assert.match(mobileApp, /directWatchNativeSyncInFlight \|\|\s+directWatchServiceSyncInFlight/u);
+  assert.match(mobileApp, /if \(directWatchServiceSyncInFlight\) \{\s+if \(!options\.silent\)/u);
+  assert.match(mobileApp, /directWatchServiceSyncInFlight = true;/u);
+  assert.match(mobileApp, /finally \{\s+directWatchServiceSyncInFlight = false;/u);
+  assert.match(androidBluetoothSyncLock, /object DirectWatchBluetoothSyncLock/u);
+  assert.match(androidBluetoothSyncLock, /fun tryAcquire\(nextOwner: String\): Boolean/u);
+  assert.match(androidDirectWatchPlugin, /DirectWatchBluetoothSyncLock\.tryAcquire\(bluetoothSyncOwner\)/u);
+  assert.match(androidDirectWatchPlugin, /DirectWatchBluetoothSyncLock\.release\(bluetoothSyncOwner\)/u);
+  assert.match(androidForegroundService, /if \(DirectWatchBluetoothSyncLock\.isBusy\(\)\)/u);
+  assert.match(androidForegroundService, /Фоновая синхронизация часов ждёт текущий Bluetooth-обмен PERFORM Sync/u);
 });
 
 if (!process.exitCode) {

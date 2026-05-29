@@ -116,6 +116,20 @@ class DirectWatchForegroundService : Service() {
         }
 
         val appContext = applicationContext
+        if (DirectWatchBluetoothSyncLock.isBusy()) {
+            val config = DirectWatchSyncCoordinator.nativeSyncConfig(appContext)
+            DirectWatchBackgroundSyncStore.recordMessage(
+                context = appContext,
+                deviceId = config?.deviceId,
+                entryDate = java.time.LocalDate.now().toString(),
+                reason = reason,
+                message = "Фоновая синхронизация часов ждёт текущий Bluetooth-обмен PERFORM Sync.",
+            )
+            DirectWatchSyncCoordinator.markCompleted(appContext, "service-synced")
+            handler.post { scheduleNativeSyncTimer() }
+            return
+        }
+
         val worker = Thread {
             var nextReason: String? = reason
             while (!Thread.currentThread().isInterrupted && nextReason != null) {

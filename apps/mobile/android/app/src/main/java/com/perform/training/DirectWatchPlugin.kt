@@ -1274,6 +1274,8 @@ class DirectWatchPlugin : Plugin() {
             val combined = java.io.ByteArrayOutputStream()
             val classicV2DataAckedSequences = mutableSetOf<Int>()
             val resolvedWeatherPayload = resolveClassicWeatherPayload(weatherPayload)
+            val bluetoothSyncOwner = "service-sync"
+            var bluetoothSyncLocked = false
 
             fun resolveNow() {
                 if (resolved) {
@@ -1309,6 +1311,13 @@ class DirectWatchPlugin : Plugin() {
                     call.resolve(response)
                 }
             }
+
+            if (!DirectWatchBluetoothSyncLock.tryAcquire(bluetoothSyncOwner)) {
+                errorMessage = "Синхронизация часов уже выполняется другим процессом PERFORM Sync."
+                resolveNow()
+                return@Thread
+            }
+            bluetoothSyncLocked = true
 
             try {
                 try {
@@ -1539,6 +1548,9 @@ class DirectWatchPlugin : Plugin() {
                     activeClassicThread = null
                 }
                 activeClassicForegroundBridge = false
+                if (bluetoothSyncLocked) {
+                    DirectWatchBluetoothSyncLock.release(bluetoothSyncOwner)
+                }
             }
 
             resolveNow()
@@ -1597,6 +1609,8 @@ class DirectWatchPlugin : Plugin() {
         var activityFileProbeFailedCount = 0
         var nativeActivityPayloadSaved = false
         val activityFileProbeRequests = mutableListOf<JSObject>()
+        val bluetoothSyncOwner = "native-foreground-sync"
+        var bluetoothSyncLocked = false
 
         fun response(): JSObject {
             val built = buildServiceSyncResponse(
@@ -1674,6 +1688,15 @@ class DirectWatchPlugin : Plugin() {
                 )
             }
         }
+
+        if (!DirectWatchBluetoothSyncLock.tryAcquire(bluetoothSyncOwner)) {
+            return buildNativeServiceError(
+                config,
+                reason,
+                "Синхронизация часов уже выполняется другим процессом PERFORM Sync.",
+            )
+        }
+        bluetoothSyncLocked = true
 
         try {
             try {
@@ -1842,6 +1865,9 @@ class DirectWatchPlugin : Plugin() {
             }
             if (activeClassicSocket == socket) {
                 activeClassicSocket = null
+            }
+            if (bluetoothSyncLocked) {
+                DirectWatchBluetoothSyncLock.release(bluetoothSyncOwner)
             }
         }
 

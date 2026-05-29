@@ -602,6 +602,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
   let directWatchBridgeEnsureInFlight = false;
   let directWatchHistorySyncInFlight = false;
   let directWatchNativeSyncInFlight = false;
+  let directWatchServiceSyncInFlight = false;
 
   const syncDirectWatchNativeCoordinatorConfig = async (
     config: DirectWatchLocalConfig = loadDirectWatchConfig(),
@@ -635,7 +636,12 @@ export function bootstrapMobileApp(root: HTMLElement) {
       return;
     }
 
-    if (directWatchNativeSyncInFlight || state.isBusy || directWatchHistorySyncInFlight) {
+    if (
+      directWatchNativeSyncInFlight ||
+      directWatchServiceSyncInFlight ||
+      state.isBusy ||
+      directWatchHistorySyncInFlight
+    ) {
       scheduleDirectWatchNativeSyncRetry(request);
       return;
     }
@@ -1702,6 +1708,17 @@ export function bootstrapMobileApp(root: HTMLElement) {
       return false;
     }
 
+    if (directWatchServiceSyncInFlight) {
+      if (!options.silent) {
+        update({
+          error: null,
+          isBusy: false,
+          message: "Синхронизация часов уже выполняется. Дождитесь завершения текущего цикла.",
+        });
+      }
+      return false;
+    }
+
     const targetDevice = state.directWatchDiagnostic.devices.find((device) => device.id === targetDeviceId);
     saveDirectWatchConfig({
       ...config,
@@ -1709,6 +1726,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
       deviceName: targetDevice?.name ?? config.deviceName,
     });
 
+    directWatchServiceSyncInFlight = true;
     if (!options.silent) {
       update({
         error: null,
@@ -1809,6 +1827,8 @@ export function bootstrapMobileApp(root: HTMLElement) {
         });
       }
       return false;
+    } finally {
+      directWatchServiceSyncInFlight = false;
     }
   };
 
@@ -1818,7 +1838,8 @@ export function bootstrapMobileApp(root: HTMLElement) {
       state.session.user?.role !== "athlete" ||
       state.isBusy ||
       directWatchBridgeEnsureInFlight ||
-      directWatchHistorySyncInFlight
+      directWatchHistorySyncInFlight ||
+      directWatchServiceSyncInFlight
     ) {
       return;
     }
@@ -5582,6 +5603,8 @@ function getDirectWatchUserDiagnostics(
     backgroundSync?.updatedAt,
     config.lastActivitySyncAt,
   ]);
+  const activityChecked = Boolean(lastActivityAt) && config.lastActivitySyncStatus !== "error";
+  const activityHasFiles = (config.lastActivitySyncFileCount ?? 0) > 0;
   const retryAfterMs = coordinatorStatus?.retryAfterMs ?? null;
   const hasPending = Boolean(coordinatorStatus?.pendingRequestId);
   const userError = formatDirectWatchUserError(
@@ -5601,7 +5624,7 @@ function getDirectWatchUserDiagnostics(
     : canSync
       ? "ждёт первой синхронизации"
       : "не настроена";
-  const dataLabel = backgroundSync?.available || config.lastActivitySyncStatus === "ok"
+  const dataLabel = backgroundSync?.available || config.lastActivitySyncStatus === "ok" || activityChecked
     ? "сохранены"
     : config.lastActivitySyncStatus === "error"
       ? "ошибка чтения"
@@ -5613,8 +5636,10 @@ function getDirectWatchUserDiagnostics(
       ? `${config.lastActivitySyncWorkoutCount} ${formatRussianCount(config.lastActivitySyncWorkoutCount, "тренировка", "тренировки", "тренировок")}`
       : "новых нет"
     : "проверим при синхронизации";
-  const vitalsLabel = backgroundSync?.available || config.lastActivitySyncStatus === "ok"
-    ? "сон, пульс и день проверены"
+  const vitalsLabel = backgroundSync?.available || config.lastActivitySyncStatus === "ok" || activityHasFiles
+    ? "сон, пульс и SpO2 получены"
+    : activityChecked
+      ? "дневные данные проверены"
     : "ожидают синхронизацию";
   const autoLabel = hasPending
     ? "синхронизация в очереди"
@@ -5656,8 +5681,8 @@ function getDirectWatchUserDiagnostics(
       },
       {
         label: "Сон и пульс",
-        meta: backgroundSync?.entryDate ? formatDate(backgroundSync.entryDate) : null,
-        tone: backgroundSync?.available || config.lastActivitySyncStatus === "ok" ? "ok" : "muted",
+        meta: lastActivityAt ? formatDateTime(lastActivityAt) : backgroundSync?.entryDate ? formatDate(backgroundSync.entryDate) : null,
+        tone: backgroundSync?.available || config.lastActivitySyncStatus === "ok" || activityChecked ? "ok" : "muted",
         value: vitalsLabel,
       },
       {
