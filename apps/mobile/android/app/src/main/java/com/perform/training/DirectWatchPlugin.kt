@@ -648,6 +648,7 @@ class DirectWatchPlugin : Plugin() {
         val deviceId = call.getString("deviceId")
         val deviceName = call.getString("deviceName")
         val authKeyHex = call.getString("authKeyHex")
+        val weatherPayload = call.data.optJSONObject("weather")
         val enabled = call.getBoolean("enabled") ?: true
         call.resolve(
             DirectWatchSyncCoordinator.configure(
@@ -655,6 +656,7 @@ class DirectWatchPlugin : Plugin() {
                 deviceId = deviceId,
                 deviceName = deviceName,
                 authKeyHex = authKeyHex,
+                weatherPayloadJson = weatherPayload?.toString(),
                 enabled = enabled,
             ),
         )
@@ -662,10 +664,11 @@ class DirectWatchPlugin : Plugin() {
 
     @PluginMethod
     fun notifyAppVisible(call: PluginCall) {
-        DirectWatchSyncCoordinator.requestSync(
+        val request = DirectWatchSyncCoordinator.requestSync(
             context.applicationContext,
             DirectWatchSyncCoordinator.REASON_APP_VISIBLE,
         )
+        startNativeSyncIfServiceIdle(request.optString("reason", DirectWatchSyncCoordinator.REASON_APP_VISIBLE))
         call.resolve(DirectWatchSyncCoordinator.status(context.applicationContext))
     }
 
@@ -673,13 +676,15 @@ class DirectWatchPlugin : Plugin() {
     fun requestCoordinatorSync(call: PluginCall) {
         val reason = call.getString("reason") ?: "manual"
         val force = call.getBoolean("force") ?: false
-        call.resolve(
-            DirectWatchSyncCoordinator.requestSync(
-                context = context.applicationContext,
-                reason = reason,
-                force = force,
-            ),
+        val request = DirectWatchSyncCoordinator.requestSync(
+            context = context.applicationContext,
+            reason = reason,
+            force = force,
         )
+        if (request.optBoolean("requested", false)) {
+            startNativeSyncIfServiceIdle(reason)
+        }
+        call.resolve(request)
     }
 
     @PluginMethod
@@ -691,6 +696,14 @@ class DirectWatchPlugin : Plugin() {
                 outcome = call.getString("outcome"),
             ),
         )
+    }
+
+    private fun startNativeSyncIfServiceIdle(reason: String) {
+        val appContext = context.applicationContext
+        val serviceRunning = DirectWatchForegroundService.status(appContext).optBoolean("running", false)
+        if (!serviceRunning && DirectWatchSyncCoordinator.nativeSyncConfig(appContext) != null) {
+            DirectWatchForegroundService.startNativeSync(appContext, reason)
+        }
     }
 
     @PluginMethod
@@ -1230,6 +1243,7 @@ class DirectWatchPlugin : Plugin() {
             deviceId = address,
             deviceName = devicesByAddress[address]?.name ?: scanResultNameFallback(device),
             authKeyHex = authKeyHex,
+            weatherPayloadJson = weatherPayload?.toString(),
             enabled = true,
         )
         DirectWatchSyncCoordinator.noteSyncStarted(context.applicationContext, "sync-service")
@@ -1531,6 +1545,346 @@ class DirectWatchPlugin : Plugin() {
         }
         activeClassicThread = worker
         worker.start()
+    }
+
+    private fun runNativeForegroundSyncInternal(
+        context: Context,
+        config: DirectWatchSyncCoordinator.NativeSyncConfig,
+        reason: String,
+        entryDate: String = LocalDate.now().toString(),
+        includeSleep: Boolean = true,
+    ): JSObject {
+        val adapter = nativeBluetoothAdapter(context)
+        if (adapter == null || !adapter.isEnabled) {
+            return buildNativeServiceError(config, reason, "Включите Bluetooth на телефоне для фоновой синхронизации часов.")
+        }
+        if (!hasNativeBluetoothConnectPermission(context)) {
+            return buildNativeServiceError(config, reason, "Нет разрешения Bluetooth для фоновой синхронизации часов.")
+        }
+
+        val device = try {
+            adapter.getRemoteDevice(config.deviceId)
+        } catch (error: IllegalArgumentException) {
+            return buildNativeServiceError(config, reason, "Некорректный идентификатор Bluetooth-устройства.")
+        }
+
+        if (safeBondState(device) != BluetoothDevice.BOND_BONDED) {
+            return buildNativeServiceError(config, reason, "Для фоновой синхронизации часы должны быть в системном сопряжении.")
+        }
+
+        val weatherSeed = parseNativeWeatherPayload(config.weatherPayloadJson)
+        val resolvedWeatherPayload = resolveClassicWeatherPayload(weatherSeed, context)
+        resolvedWeatherPayload?.let {
+            DirectWatchSyncCoordinator.updateWeatherPayload(context, it.toString())
+        }
+        val packets = mutableListOf<JSObject>()
+        val serviceCommands = mutableListOf<String>()
+        val combined = java.io.ByteArrayOutputStream()
+        val classicV2DataAckedSequences = mutableSetOf<Int>()
+        var socket: BluetoothSocket? = null
+        var connected = false
+        var sentVersionRequest = false
+        var sentSessionConfig = false
+        var sentAuthStep1 = false
+        var sentAuthStep2 = false
+        var phoneNonce: ByteArray? = null
+        var postAuthDecryptionKey: ByteArray? = null
+        var errorMessage: String? = null
+        var nextServiceSequence = 2
+        var sentActivityFileProbe = false
+        var activityFileProbeCount = 0
+        var activityFileProbeCompletedCount = 0
+        var activityFileProbeFailedCount = 0
+        var nativeActivityPayloadSaved = false
+        val activityFileProbeRequests = mutableListOf<JSObject>()
+
+        fun response(): JSObject {
+            val built = buildServiceSyncResponse(
+                device = device,
+                connected = connected,
+                sentVersionRequest = sentVersionRequest,
+                sentSessionConfig = sentSessionConfig,
+                sentAuthStep1 = sentAuthStep1,
+                sentAuthStep2 = sentAuthStep2,
+                sentServiceCommands = serviceCommands,
+                keepAliveMs = CLASSIC_SERVICE_BRIDGE_MAX_MS,
+                phoneNonce = phoneNonce,
+                authKeyHex = config.authKeyHex,
+                postAuthDecryptionKey = postAuthDecryptionKey,
+                packets = packets,
+                combinedBytes = combined.toByteArray(),
+                error = errorMessage,
+                sentActivityFileProbe = sentActivityFileProbe,
+                activityFileProbeCount = activityFileProbeCount,
+                activityFileProbeCompletedCount = activityFileProbeCompletedCount,
+                activityFileProbeFailedCount = activityFileProbeFailedCount,
+                activityFileProbeRequests = activityFileProbeRequests,
+            )
+            built.put("backgroundSync", true)
+            built.put("backgroundEntryDate", entryDate)
+            built.put("backgroundReason", reason)
+            built.put("backgroundSavedBy", "native-foreground-service")
+            if (errorMessage == null && sentAuthStep2) {
+                built.put("authKeyStatus", "valid")
+                built.put("authStage", "authenticated")
+            }
+            return built
+        }
+
+        fun persist(result: JSObject) {
+            if (result.optString("error", "").isNotBlank()) {
+                DirectWatchBackgroundSyncStore.recordMessage(
+                    context = context,
+                    deviceId = device.address,
+                    entryDate = entryDate,
+                    reason = reason,
+                    message = result.optString("error"),
+                    available = nativeActivityPayloadSaved,
+                )
+                return
+            }
+
+            val shouldSaveActivityPayload =
+                result.optString("backgroundSavedBy") == "classic-bridge" &&
+                    result.optBoolean("sentActivityFileProbe", false) &&
+                    result.optInt("activityFileProbeCompletedCount", 0) > 0
+
+            if (shouldSaveActivityPayload) {
+                DirectWatchBackgroundSyncStore.saveLatest(
+                    context = context,
+                    result = result,
+                    deviceId = device.address,
+                    entryDate = entryDate,
+                    reason = reason,
+                )
+                nativeActivityPayloadSaved = true
+            } else {
+                val message = if (nativeActivityPayloadSaved) {
+                    "Фоновая синхронизация часов обновила время/погоду и сохранила данные активности."
+                } else {
+                    "Фоновая синхронизация часов обновила время/погоду, новых файлов активности нет."
+                }
+                DirectWatchBackgroundSyncStore.recordMessage(
+                    context = context,
+                    deviceId = device.address,
+                    entryDate = entryDate,
+                    reason = reason,
+                    message = message,
+                    available = nativeActivityPayloadSaved,
+                )
+            }
+        }
+
+        try {
+            try {
+                adapter.cancelDiscovery()
+            } catch (_: SecurityException) {
+                // Discovery cancellation is best-effort.
+            }
+
+            socket = openClassicSocketWithRetry(device, "native-foreground-sync")
+            connected = true
+
+            socket.outputStream.write(CLASSIC_SPP_V1_VERSION_REQUEST)
+            socket.outputStream.flush()
+            sentVersionRequest = true
+            readClassicPackets(socket, packets, combined, CLASSIC_VERSION_READ_MS)
+
+            val versionProbe = parseClassicProbeBytes(combined.toByteArray())
+            val useSppV2 = shouldUseClassicSppV2(versionProbe.versionHex)
+            if (useSppV2) {
+                socket.outputStream.write(buildClassicV2SessionConfigPacket(0))
+                socket.outputStream.flush()
+                sentSessionConfig = true
+                readClassicPackets(socket, packets, combined, CLASSIC_SESSION_CONFIG_READ_MS)
+            }
+
+            phoneNonce = ByteArray(16)
+            SecureRandom().nextBytes(phoneNonce)
+            socket.outputStream.write(
+                if (useSppV2) {
+                    buildClassicV2AuthStep1Packet(phoneNonce, 0)
+                } else {
+                    buildClassicAuthStep1Packet(phoneNonce)
+                },
+            )
+            socket.outputStream.flush()
+            sentAuthStep1 = true
+            errorMessage = readClassicPacketsUntilAuthStage(
+                socket,
+                packets,
+                combined,
+                "watch-nonce",
+                CLASSIC_PROBE_READ_MS,
+            ) ?: errorMessage
+
+            val parsedAuthStep1 = parseClassicProbeBytes(combined.toByteArray())
+            val authStep2 = buildClassicAuthStep2Material(config.authKeyHex, phoneNonce, parsedAuthStep1)
+            if (authStep2.status != "valid" || authStep2.authStep3Command == null) {
+                errorMessage = authStep2.error ?: "PERFORM Sync не смог авторизоваться для фоновой синхронизации."
+            } else {
+                if (useSppV2 && parsedAuthStep1.authPacketSequenceNumber != null) {
+                    socket.outputStream.write(buildClassicV2AckPacket(parsedAuthStep1.authPacketSequenceNumber))
+                    socket.outputStream.flush()
+                }
+                socket.outputStream.write(
+                    if (useSppV2) {
+                        buildClassicV2AuthStep2Packet(authStep2.authStep3Command, 1)
+                    } else {
+                        buildClassicAuthStep2Packet(authStep2.authStep3Command)
+                    },
+                )
+                socket.outputStream.flush()
+                sentAuthStep2 = true
+                postAuthDecryptionKey = authStep2.decryptionKey
+                errorMessage = readClassicPacketsUntilAuthStage(
+                    socket,
+                    packets,
+                    combined,
+                    "authenticated",
+                    CLASSIC_PROBE_READ_MS,
+                ) ?: errorMessage
+
+                val parsedAuthStep2 = parseClassicProbeBytes(combined.toByteArray())
+                if (!useSppV2 || parsedAuthStep2.authStage != "authenticated" || authStep2.encryptionKey == null) {
+                    errorMessage = "Часы авторизовались не полностью: фоновые команды доступны только в SPP v2 после auth."
+                } else {
+                    if (parsedAuthStep2.authPacketSequenceNumber != null) {
+                        socket.outputStream.write(buildClassicV2AckPacket(parsedAuthStep2.authPacketSequenceNumber))
+                        socket.outputStream.flush()
+                    }
+
+                    val serviceSyncCommands = buildClassicServiceSyncCommands(resolvedWeatherPayload, 0, context)
+                    serviceSyncCommands.forEach { command ->
+                        socket.outputStream.write(
+                            buildClassicV2EncryptedCommandPacket(
+                                command = command.payload,
+                                sequenceNumber = nextServiceSequence++,
+                                encryptionKey = authStep2.encryptionKey,
+                            ),
+                        )
+                        serviceCommands.add(command.label)
+                        Thread.sleep(CLASSIC_POST_AUTH_COMMAND_DELAY_MS)
+                    }
+                    socket.outputStream.flush()
+                    errorMessage = readClassicPackets(
+                        socket = socket,
+                        packets = packets,
+                        combined = combined,
+                        durationMs = CLASSIC_SERVICE_SYNC_READ_MS,
+                        ackedClassicV2DataSequences = classicV2DataAckedSequences,
+                    ) ?: errorMessage
+
+                    val fetchResult = fetchClassicBridgeActivitySnapshot(
+                        context = context,
+                        device = device,
+                        socket = socket,
+                        encryptionKey = authStep2.encryptionKey,
+                        decryptionKey = authStep2.decryptionKey,
+                        authKeyHex = config.authKeyHex,
+                        phoneNonce = phoneNonce,
+                        entryDate = entryDate,
+                        includeSleep = includeSleep,
+                        initialSequenceNumber = nextServiceSequence,
+                    )
+                    nextServiceSequence = fetchResult.nextSequenceNumber
+                    if (fetchResult.response != null) {
+                        persist(fetchResult.response)
+                        sentActivityFileProbe = fetchResult.response.optBoolean("sentActivityFileProbe", false)
+                        activityFileProbeCount = fetchResult.response.optInt("activityFileProbeCount", 0)
+                        activityFileProbeCompletedCount = fetchResult.response.optInt("activityFileProbeCompletedCount", 0)
+                        activityFileProbeFailedCount = fetchResult.response.optInt("activityFileProbeFailedCount", 0)
+                        val requests = fetchResult.response.optJSONArray("activityFileProbeRequests")
+                        if (requests != null) {
+                            for (index in 0 until requests.length()) {
+                                requests.optJSONObject(index)?.let { activityFileProbeRequests.add(JSObject(it.toString())) }
+                            }
+                        }
+                    } else if (fetchResult.message != null) {
+                        Log.i(TAG, "native foreground activity refresh: ${fetchResult.message}")
+                    }
+
+                    if (errorMessage == null) {
+                        serviceCommands.add("bluetooth-bridge")
+                        val firstResponse = response()
+                        persist(firstResponse)
+                        keepAliveClassicServiceBridge(
+                            context = context,
+                            device = device,
+                            socket = socket,
+                            packets = packets,
+                            combined = combined,
+                            authKeyHex = config.authKeyHex,
+                            phoneNonce = phoneNonce,
+                            encryptionKey = authStep2.encryptionKey,
+                            decryptionKey = authStep2.decryptionKey,
+                            entryDate = entryDate,
+                            includeSleep = includeSleep,
+                            weatherPayload = resolvedWeatherPayload,
+                            initialSequenceNumber = nextServiceSequence,
+                            durationMs = CLASSIC_SERVICE_BRIDGE_MAX_MS.toLong(),
+                        )
+                    }
+                }
+            }
+        } catch (error: IOException) {
+            errorMessage = classicSocketUserMessage(error)
+        } catch (error: SecurityException) {
+            errorMessage = "Нет разрешения Bluetooth для фоновой Classic/SPP-синхронизации."
+        } catch (error: InterruptedException) {
+            Thread.currentThread().interrupt()
+            errorMessage = "Фоновая синхронизация часов была остановлена."
+        } finally {
+            try {
+                socket?.close()
+            } catch (_: IOException) {
+                // Socket is already closed.
+            }
+            if (activeClassicSocket == socket) {
+                activeClassicSocket = null
+            }
+        }
+
+        val finalResponse = response()
+        persist(finalResponse)
+        return finalResponse
+    }
+
+    private fun buildNativeServiceError(
+        config: DirectWatchSyncCoordinator.NativeSyncConfig,
+        reason: String,
+        message: String,
+    ): JSObject {
+        val response = JSObject()
+        response.put("backgroundSync", true)
+        response.put("backgroundDeviceId", config.deviceId)
+        response.put("backgroundReason", reason)
+        response.put("backgroundSavedBy", "native-foreground-service")
+        response.put("connected", false)
+        response.put("error", message)
+        response.put("syncedAt", java.time.Instant.now().toString())
+        return response
+    }
+
+    private fun parseNativeWeatherPayload(raw: String?): JSONObject? {
+        if (raw.isNullOrBlank()) {
+            return null
+        }
+        return try {
+            JSONObject(raw)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun nativeBluetoothAdapter(context: Context): BluetoothAdapter? {
+        val manager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
+        return manager?.adapter
+    }
+
+    private fun hasNativeBluetoothConnectPermission(context: Context): Boolean {
+        return Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
+            ActivityCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
     }
 
     @PluginMethod
@@ -3105,9 +3459,10 @@ class DirectWatchPlugin : Plugin() {
     private fun buildClassicServiceSyncCommands(
         weatherPayload: JSONObject?,
         timeOffsetMinutes: Int = 0,
+        appContext: Context = context,
     ): List<ClassicPostAuthProbeCommand> {
         val commands = mutableListOf(
-            ClassicPostAuthProbeCommand("time", buildSetCurrentTimeCommand(timeOffsetMinutes)),
+            ClassicPostAuthProbeCommand("time", buildSetCurrentTimeCommand(timeOffsetMinutes, appContext)),
         )
 
         if (weatherPayload != null) {
@@ -3202,12 +3557,12 @@ class DirectWatchPlugin : Plugin() {
             "hourly=$hourlyCount next=${firstHourly?.optString("temperatureC", "-") ?: "-"}"
     }
 
-    private fun resolveClassicWeatherPayload(seed: JSONObject?): JSONObject? {
+    private fun resolveClassicWeatherPayload(seed: JSONObject?, appContext: Context = context): JSONObject? {
         if (seed == null) {
             return null
         }
 
-        val locationResolution = resolveWeatherPayloadPhoneLocation(seed)
+        val locationResolution = resolveWeatherPayloadPhoneLocation(seed, appContext)
         val locatedPayload = locationResolution.payload
         val hasForecast = locatedPayload.optJSONObject("current") != null &&
             (locatedPayload.optJSONArray("daily")?.length() ?: 0) > 0 &&
@@ -3228,9 +3583,9 @@ class DirectWatchPlugin : Plugin() {
         return if (seedHasForecast) seed else null
     }
 
-    private fun resolveWeatherPayloadPhoneLocation(seed: JSONObject): WeatherLocationResolution {
+    private fun resolveWeatherPayloadPhoneLocation(seed: JSONObject, appContext: Context): WeatherLocationResolution {
         val payload = JSONObject(seed.toString())
-        val location = bestPhoneWeatherLocation()
+        val location = bestPhoneWeatherLocation(appContext)
             ?: return WeatherLocationResolution(payload, changed = false)
 
         val latitude = location.latitude
@@ -3246,7 +3601,7 @@ class DirectWatchPlugin : Plugin() {
             return WeatherLocationResolution(payload, changed = false)
         }
 
-        val locationName = resolveWeatherLocationName(latitude, longitude)
+        val locationName = resolveWeatherLocationName(appContext, latitude, longitude)
         payload.put("cityName", locationName)
         payload.put("locationName", locationName)
         payload.put("locationKey", buildPhoneWeatherLocationKey(latitude, longitude, locationName))
@@ -3268,13 +3623,13 @@ class DirectWatchPlugin : Plugin() {
         return WeatherLocationResolution(payload, changed = true)
     }
 
-    private fun bestPhoneWeatherLocation(): android.location.Location? {
+    private fun bestPhoneWeatherLocation(appContext: Context): android.location.Location? {
         val hasFine = ActivityCompat.checkSelfPermission(
-            context,
+            appContext,
             Manifest.permission.ACCESS_FINE_LOCATION,
         ) == PackageManager.PERMISSION_GRANTED
         val hasCoarse = ActivityCompat.checkSelfPermission(
-            context,
+            appContext,
             Manifest.permission.ACCESS_COARSE_LOCATION,
         ) == PackageManager.PERMISSION_GRANTED
         if (!hasFine && !hasCoarse) {
@@ -3282,7 +3637,7 @@ class DirectWatchPlugin : Plugin() {
             return null
         }
 
-        val manager = context.getSystemService(Context.LOCATION_SERVICE) as? android.location.LocationManager
+        val manager = appContext.getSystemService(Context.LOCATION_SERVICE) as? android.location.LocationManager
             ?: return null
         val providers = listOf(
             android.location.LocationManager.GPS_PROVIDER,
@@ -3300,12 +3655,13 @@ class DirectWatchPlugin : Plugin() {
             }
         }.maxWithOrNull(compareBy<android.location.Location> { it.time }.thenBy { it.accuracy * -1 })
 
-        val fresh = requestFreshPhoneWeatherLocation(manager, providers)
+        val fresh = requestFreshPhoneWeatherLocation(appContext, manager, providers)
         return listOfNotNull(fresh, lastKnown)
             .maxWithOrNull(compareBy<android.location.Location> { it.time }.thenBy { it.accuracy * -1 })
     }
 
     private fun requestFreshPhoneWeatherLocation(
+        appContext: Context,
         manager: android.location.LocationManager,
         providers: List<String>,
     ): android.location.Location? {
@@ -3323,7 +3679,7 @@ class DirectWatchPlugin : Plugin() {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 val cancellation = android.os.CancellationSignal()
-                manager.getCurrentLocation(provider, cancellation, context.mainExecutor) { location ->
+                manager.getCurrentLocation(provider, cancellation, appContext.mainExecutor) { location ->
                     result.set(location)
                     latch.countDown()
                 }
@@ -3374,10 +3730,10 @@ class DirectWatchPlugin : Plugin() {
         return result.get()
     }
 
-    private fun resolveWeatherLocationName(latitude: Double, longitude: Double): String {
+    private fun resolveWeatherLocationName(appContext: Context, latitude: Double, longitude: Double): String {
         return try {
             @Suppress("DEPRECATION")
-            val address = android.location.Geocoder(context, Locale("ru"))
+            val address = android.location.Geocoder(appContext, Locale("ru"))
                 .getFromLocation(latitude, longitude, 1)
                 ?.firstOrNull()
             listOfNotNull(
@@ -3707,7 +4063,7 @@ class DirectWatchPlugin : Plugin() {
         }
     }
 
-    private fun buildSetCurrentTimeCommand(timeOffsetMinutes: Int = 0): ByteArray {
+    private fun buildSetCurrentTimeCommand(timeOffsetMinutes: Int = 0, appContext: Context = context): ByteArray {
         val now = GregorianCalendar.getInstance().apply {
             if (timeOffsetMinutes != 0) {
                 add(Calendar.MINUTE, timeOffsetMinutes)
@@ -3739,14 +4095,14 @@ class DirectWatchPlugin : Plugin() {
                 "local=${now.get(Calendar.YEAR)}-${(now.get(Calendar.MONTH) + 1).toString().padStart(2, '0')}-${now.get(Calendar.DATE).toString().padStart(2, '0')} " +
                 "${now.get(Calendar.HOUR_OF_DAY).toString().padStart(2, '0')}:${now.get(Calendar.MINUTE).toString().padStart(2, '0')}:${now.get(Calendar.SECOND).toString().padStart(2, '0')} " +
                 "zone=${timezone.id} zoneBlocks=$zoneOffsetBlocks dstBlocks=$dstOffsetBlocks " +
-                "is24h=${android.text.format.DateFormat.is24HourFormat(context)}",
+                "is24h=${android.text.format.DateFormat.is24HourFormat(appContext)}",
         )
 
         val clock = java.io.ByteArrayOutputStream()
         writeProtoBytesField(clock, 1, date.toByteArray())
         writeProtoBytesField(clock, 2, time.toByteArray())
         writeProtoBytesField(clock, 3, timeZone.toByteArray())
-        writeProtoVarintField(clock, 4, if (android.text.format.DateFormat.is24HourFormat(context)) 0 else 1)
+        writeProtoVarintField(clock, 4, if (android.text.format.DateFormat.is24HourFormat(appContext)) 0 else 1)
 
         val system = java.io.ByteArrayOutputStream()
         writeProtoBytesField(system, 4, clock.toByteArray())
@@ -7905,6 +8261,7 @@ class DirectWatchPlugin : Plugin() {
             combined.toByteArray(),
             decryptionKey,
         ).size
+        var latestWeatherPayload = weatherPayload
 
         while (
             !Thread.currentThread().isInterrupted &&
@@ -7946,8 +8303,9 @@ class DirectWatchPlugin : Plugin() {
                 processedDecryptedPacketCount = decryptedPackets.size
             }
 
-            if (weatherPayload != null && hasLocationRequest) {
-                buildPostLocationCommand(weatherPayload)?.let { payload ->
+            val locationPayload = latestWeatherPayload
+            if (locationPayload != null && hasLocationRequest) {
+                buildPostLocationCommand(locationPayload)?.let { payload ->
                     Log.i(TAG, "classic bridge send phone-location-watch-request")
                     socket.outputStream.write(
                         buildClassicV2EncryptedCommandPacket(
@@ -7961,14 +8319,24 @@ class DirectWatchPlugin : Plugin() {
                 }
             }
 
-            if (weatherPayload != null && (hasWeatherRequest || hasLocationRequest || now >= nextWeatherRefreshAt)) {
+            if (latestWeatherPayload != null && (hasWeatherRequest || hasLocationRequest || now >= nextWeatherRefreshAt)) {
                 val refreshReason = when {
                     hasWeatherRequest -> "watch-request"
                     hasLocationRequest -> "location-request"
                     else -> "timer"
                 }
                 Log.i(TAG, "classic bridge weather refresh reason=$refreshReason")
-                buildClassicWeatherRefreshCommands(weatherPayload).forEach { command ->
+                val refreshedWeatherPayload = try {
+                    resolveClassicWeatherPayload(latestWeatherPayload, context) ?: latestWeatherPayload
+                } catch (error: Exception) {
+                    Log.w(TAG, "classic bridge weather refresh kept previous payload: ${error.message}")
+                    latestWeatherPayload
+                }
+                latestWeatherPayload = refreshedWeatherPayload
+                refreshedWeatherPayload?.let {
+                    DirectWatchSyncCoordinator.updateWeatherPayload(context, it.toString())
+                }
+                buildClassicWeatherRefreshCommands(refreshedWeatherPayload).forEach { command ->
                     Log.i(TAG, "classic bridge send ${command.label}")
                     socket.outputStream.write(
                         buildClassicV2EncryptedCommandPacket(
@@ -8792,6 +9160,18 @@ class DirectWatchPlugin : Plugin() {
     }
 
     companion object {
+        fun runNativeForegroundSync(
+            context: Context,
+            config: DirectWatchSyncCoordinator.NativeSyncConfig,
+            reason: String,
+        ): JSObject {
+            return DirectWatchPlugin().runNativeForegroundSyncInternal(
+                context = context.applicationContext,
+                config = config,
+                reason = reason,
+            )
+        }
+
         private const val TAG = "DirectWatch"
         private const val DEFAULT_SCAN_DURATION_MS = 6_000
         private const val INSPECT_TIMEOUT_MS = 10_000

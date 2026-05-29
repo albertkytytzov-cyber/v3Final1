@@ -45,6 +45,7 @@ import {
   readDirectWatchActivityInventory,
   readDirectWatchDailySync,
   notifyDirectWatchAppVisible,
+  requestDirectWatchCoordinatorSync,
   scanDirectWatchDevices,
   startDirectWatchSession,
   stopDirectWatchSession,
@@ -614,6 +615,9 @@ export function bootstrapMobileApp(root: HTMLElement) {
       deviceId: config.deviceId,
       deviceName: config.deviceName,
       enabled: Boolean(config.deviceId && config.authKeyHex),
+      weather: config.deviceId && config.authKeyHex
+        ? buildDirectWatchWeatherLocationPayload(config)
+        : null,
     }).catch(() => undefined);
 
     if (syncCoordinatorStatus) {
@@ -638,7 +642,6 @@ export function bootstrapMobileApp(root: HTMLElement) {
 
     directWatchNativeSyncInFlight = true;
     try {
-      await ensureDirectWatchServiceBridge();
       const completed = await processDirectWatchBackgroundSyncResult({ allowNativeInFlight: true });
       const syncCoordinatorStatus = await markDirectWatchSyncRequestHandled(
         request.id,
@@ -1832,12 +1835,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
         return;
       }
 
-      await syncDirectWatchServiceSettings(config.deviceId, {
-        fetchActivity: false,
-        includeHistory: false,
-        includeSleep: false,
-        silent: true,
-      }).catch(() => undefined);
+      await requestDirectWatchCoordinatorSync("app-visible", true).catch(() => undefined);
     } finally {
       directWatchBridgeEnsureInFlight = false;
     }

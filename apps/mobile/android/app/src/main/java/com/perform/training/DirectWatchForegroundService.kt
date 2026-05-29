@@ -27,6 +27,11 @@ class DirectWatchForegroundService : Service() {
     private val handler = Handler(Looper.getMainLooper())
     private val syncReceiver: BroadcastReceiver = DirectWatchSyncReceiver()
     private var bridgeStopRunnable: Runnable? = null
+    private var nativeSyncTimerRunnable: Runnable? = null
+    @Volatile
+    private var nativeSyncThread: Thread? = null
+    @Volatile
+    private var pendingNativeSyncReason: String? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -81,6 +86,10 @@ class DirectWatchForegroundService : Service() {
                 )
                 startForegroundCompat(buildNotification(deviceName, bridgeUntil))
                 scheduleBridgeStop(bridgeUntil)
+                scheduleNativeSyncTimer()
+                if (intent?.getBooleanExtra(EXTRA_NATIVE_SYNC_REQUEST, false) == true) {
+                    requestNativeSync(intent.getStringExtra(EXTRA_SYNC_REASON) ?: DirectWatchSyncCoordinator.REASON_SERVICE_START)
+                }
                 return START_STICKY
             }
         }
@@ -91,8 +100,66 @@ class DirectWatchForegroundService : Service() {
     override fun onDestroy() {
         serviceInstanceActive = false
         cancelBridgeStop()
+        cancelNativeSyncTimer()
+        nativeSyncThread?.interrupt()
+        nativeSyncThread = null
+        pendingNativeSyncReason = null
         unregisterSyncReceiver()
         super.onDestroy()
+    }
+
+    private fun requestNativeSync(reason: String) {
+        val existingThread = nativeSyncThread
+        if (existingThread != null && existingThread.isAlive) {
+            pendingNativeSyncReason = reason
+            return
+        }
+
+        val appContext = applicationContext
+        val worker = Thread {
+            var nextReason: String? = reason
+            while (!Thread.currentThread().isInterrupted && nextReason != null) {
+                val currentReason = nextReason ?: DirectWatchSyncCoordinator.REASON_SERVICE_START
+                nextReason = null
+                val config = DirectWatchSyncCoordinator.nativeSyncConfig(appContext)
+                if (config == null) {
+                    DirectWatchBackgroundSyncStore.recordMessage(
+                        context = appContext,
+                        deviceId = null,
+                        entryDate = java.time.LocalDate.now().toString(),
+                        reason = currentReason,
+                        message = "Фоновая синхронизация часов не настроена: выберите часы и сохраните Auth Key.",
+                    )
+                    DirectWatchSyncCoordinator.markCompleted(appContext, "service-error")
+                    break
+                }
+
+                DirectWatchSyncCoordinator.noteSyncStarted(appContext, currentReason)
+                val result = DirectWatchPlugin.runNativeForegroundSync(
+                    context = appContext,
+                    config = config,
+                    reason = currentReason,
+                )
+                val hasError = result.optString("error", "").isNotBlank()
+                DirectWatchSyncCoordinator.markCompleted(
+                    appContext,
+                    if (hasError) "service-error" else "service-synced",
+                )
+
+                val queuedReason = pendingNativeSyncReason
+                pendingNativeSyncReason = null
+                nextReason = queuedReason
+            }
+            if (nativeSyncThread == Thread.currentThread()) {
+                nativeSyncThread = null
+            }
+            handler.post { scheduleNativeSyncTimer() }
+        }.apply {
+            name = "DirectWatchNativeSync"
+            isDaemon = true
+        }
+        nativeSyncThread = worker
+        worker.start()
     }
 
     private fun ensureNotificationChannel() {
@@ -218,6 +285,59 @@ class DirectWatchForegroundService : Service() {
         handler.postDelayed(runnable, delayMs)
     }
 
+    private fun scheduleNativeSyncTimer() {
+        cancelNativeSyncTimer()
+        if (!serviceInstanceActive) {
+            return
+        }
+        if (DirectWatchSyncCoordinator.nativeSyncConfig(applicationContext) == null) {
+            return
+        }
+
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val bridgeUntil = prefs.getString(KEY_BRIDGE_UNTIL, null)
+        if (isExpired(bridgeUntil)) {
+            return
+        }
+
+        val status = DirectWatchSyncCoordinator.status(applicationContext)
+        val retryAfterMs = status.optLong("retryAfterMs", SERVICE_TIMER_FALLBACK_MS)
+        val remainingMs = parseInstantMs(bridgeUntil)
+            ?.let { it - System.currentTimeMillis() }
+            ?.coerceAtLeast(0L)
+            ?: SERVICE_TIMER_FALLBACK_MS
+        if (remainingMs <= 0L) {
+            return
+        }
+
+        val delayMs = retryAfterMs
+            .coerceAtLeast(SERVICE_TIMER_MIN_DELAY_MS)
+            .coerceAtMost(SERVICE_TIMER_FALLBACK_MS)
+            .coerceAtMost(remainingMs)
+        val runnable = Runnable {
+            nativeSyncTimerRunnable = null
+            val request = DirectWatchSyncCoordinator.requestSync(
+                context = applicationContext,
+                reason = DirectWatchSyncCoordinator.REASON_SERVICE_TIMER,
+            )
+            if (request.optBoolean("requested", false)) {
+                Log.i(TAG, "native timer requested watch sync reason=${request.optString("reason")}")
+                requestNativeSync(request.optString("reason", DirectWatchSyncCoordinator.REASON_SERVICE_TIMER))
+            } else {
+                Log.i(TAG, "native timer skipped watch sync blocked=${request.optString("blockedReason")}")
+                scheduleNativeSyncTimer()
+            }
+        }
+        nativeSyncTimerRunnable = runnable
+        handler.postDelayed(runnable, delayMs)
+        Log.i(TAG, "native timer scheduled in ${delayMs}ms")
+    }
+
+    private fun cancelNativeSyncTimer() {
+        nativeSyncTimerRunnable?.let { handler.removeCallbacks(it) }
+        nativeSyncTimerRunnable = null
+    }
+
     private fun cancelBridgeStop() {
         bridgeStopRunnable?.let { handler.removeCallbacks(it) }
         bridgeStopRunnable = null
@@ -250,6 +370,8 @@ class DirectWatchForegroundService : Service() {
         private const val EXTRA_DEVICE_ID = "deviceId"
         private const val EXTRA_DEVICE_NAME = "deviceName"
         private const val EXTRA_BRIDGE_UNTIL = "bridgeUntil"
+        private const val EXTRA_NATIVE_SYNC_REQUEST = "nativeSyncRequest"
+        private const val EXTRA_SYNC_REASON = "syncReason"
         private const val KEY_RUNNING = "running"
         private const val KEY_DEVICE_ID = "deviceId"
         private const val KEY_DEVICE_NAME = "deviceName"
@@ -257,6 +379,8 @@ class DirectWatchForegroundService : Service() {
         private const val KEY_MESSAGE = "message"
         private const val KEY_UPDATED_AT = "updatedAt"
         private const val TAG = "DirectWatchService"
+        private const val SERVICE_TIMER_MIN_DELAY_MS = 30 * 1000L
+        private const val SERVICE_TIMER_FALLBACK_MS = 30 * 60 * 1000L
         @Volatile
         private var serviceInstanceActive = false
 
@@ -286,6 +410,56 @@ class DirectWatchForegroundService : Service() {
                     .putString(KEY_MESSAGE, "Android запретил фоновый запуск сервиса часов. Откройте PERFORM и запустите синхронизацию ещё раз.")
                     .putString(KEY_UPDATED_AT, Instant.now().toString())
                     .apply()
+                false
+            }
+        }
+
+        fun startNativeSync(
+            context: Context,
+            reason: String,
+            durationMs: Long = 12 * 60 * 60 * 1000L,
+        ): Boolean {
+            val config = DirectWatchSyncCoordinator.nativeSyncConfig(context.applicationContext)
+            if (config == null) {
+                DirectWatchBackgroundSyncStore.recordMessage(
+                    context = context.applicationContext,
+                    deviceId = null,
+                    entryDate = java.time.LocalDate.now().toString(),
+                    reason = reason,
+                    message = "Фоновая синхронизация часов не настроена: выберите часы и сохраните Auth Key.",
+                )
+                return false
+            }
+
+            val bridgeUntil = Instant.now().plusMillis(durationMs).toString()
+            val intent = Intent(context, DirectWatchForegroundService::class.java)
+                .setAction(ACTION_START)
+                .putExtra(EXTRA_DEVICE_ID, config.deviceId)
+                .putExtra(EXTRA_DEVICE_NAME, config.deviceName)
+                .putExtra(EXTRA_BRIDGE_UNTIL, bridgeUntil)
+                .putExtra(EXTRA_NATIVE_SYNC_REQUEST, true)
+                .putExtra(EXTRA_SYNC_REASON, reason)
+            return try {
+                ContextCompat.startForegroundService(context, intent)
+                true
+            } catch (error: RuntimeException) {
+                Log.w(TAG, "Android blocked native foreground watch sync start: ${error.message}")
+                context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                    .edit()
+                    .putBoolean(KEY_RUNNING, false)
+                    .putString(KEY_DEVICE_ID, config.deviceId)
+                    .putString(KEY_DEVICE_NAME, config.deviceName)
+                    .putString(KEY_BRIDGE_UNTIL, null)
+                    .putString(KEY_MESSAGE, "Android запретил фоновый запуск сервиса часов. Откройте PERFORM и запустите синхронизацию ещё раз.")
+                    .putString(KEY_UPDATED_AT, Instant.now().toString())
+                    .apply()
+                DirectWatchBackgroundSyncStore.recordMessage(
+                    context = context.applicationContext,
+                    deviceId = config.deviceId,
+                    entryDate = java.time.LocalDate.now().toString(),
+                    reason = reason,
+                    message = "Android запретил фоновый запуск сервиса часов. Откройте PERFORM и запустите синхронизацию ещё раз.",
+                )
                 false
             }
         }

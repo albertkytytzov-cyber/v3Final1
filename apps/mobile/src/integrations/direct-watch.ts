@@ -450,6 +450,7 @@ export interface DirectWatchSyncCoordinatorStatus {
   enabled?: boolean;
   failureBackoffMs?: number | null;
   hasAuthKey?: boolean;
+  hasWeatherPayload?: boolean;
   intervalMs?: number | null;
   lastBlockedReason?: string | null;
   lastCompletedAt?: string | null;
@@ -492,6 +493,7 @@ interface DirectWatchPlugin {
     deviceId?: string | null;
     deviceName?: string | null;
     enabled?: boolean;
+    weather?: DirectWatchWeatherPayload | null;
   }) => Promise<DirectWatchSyncCoordinatorStatus>;
   getSessionStatus?: () => Promise<DirectWatchSessionStatus>;
   getSyncCoordinatorStatus?: () => Promise<DirectWatchSyncCoordinatorStatus>;
@@ -737,6 +739,7 @@ export async function configureDirectWatchSyncCoordinator(input: {
   deviceId?: string | null;
   deviceName?: string | null;
   enabled?: boolean;
+  weather?: DirectWatchWeatherPayload | null;
 }): Promise<DirectWatchSyncCoordinatorStatus> {
   const plugin = getDirectWatchPlugin();
 
@@ -1684,6 +1687,7 @@ function normalizeDirectWatchSyncCoordinatorStatus(value: unknown): DirectWatchS
     enabled: normalizeBoolean(value.enabled),
     failureBackoffMs: normalizeNumber(value.failureBackoffMs),
     hasAuthKey: normalizeBoolean(value.hasAuthKey),
+    hasWeatherPayload: normalizeBoolean(value.hasWeatherPayload),
     intervalMs: normalizeNumber(value.intervalMs),
     lastBlockedReason: normalizeString(value.lastBlockedReason),
     lastCompletedAt: normalizeString(value.lastCompletedAt),

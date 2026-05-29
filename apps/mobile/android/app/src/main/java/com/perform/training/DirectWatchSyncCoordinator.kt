@@ -19,6 +19,7 @@ object DirectWatchSyncCoordinator {
         val deviceId: String,
         val deviceName: String?,
         val authKeyHex: String,
+        val weatherPayloadJson: String?,
         val enabled: Boolean,
     )
 
@@ -27,6 +28,7 @@ object DirectWatchSyncCoordinator {
     private const val KEY_DEVICE_ID = "deviceId"
     private const val KEY_DEVICE_NAME = "deviceName"
     private const val KEY_AUTH_KEY_HEX = "authKeyHex"
+    private const val KEY_WEATHER_PAYLOAD_JSON = "weatherPayloadJson"
     private const val KEY_PENDING_REQUEST_ID = "pendingRequestId"
     private const val KEY_PENDING_REASON = "pendingReason"
     private const val KEY_PENDING_ENTRY_DATE = "pendingEntryDate"
@@ -76,17 +78,26 @@ object DirectWatchSyncCoordinator {
         deviceId: String?,
         deviceName: String?,
         authKeyHex: String?,
+        weatherPayloadJson: String? = null,
         enabled: Boolean = true,
     ): JSObject {
         val normalizedDeviceId = deviceId?.trim()?.takeIf { it.isNotBlank() }
         val normalizedAuthKey = authKeyHex?.trim()?.lowercase()?.takeIf { it.matches(Regex("^[0-9a-f]{32}$")) }
-        prefs(context).edit()
+        val editor = prefs(context).edit()
             .putBoolean(KEY_ENABLED, enabled)
             .putString(KEY_DEVICE_ID, normalizedDeviceId)
             .putString(KEY_DEVICE_NAME, deviceName?.trim()?.takeIf { it.isNotBlank() })
             .putString(KEY_AUTH_KEY_HEX, normalizedAuthKey)
             .putString(KEY_LAST_EVENT_AT, Instant.now().toString())
-            .apply()
+
+        val normalizedWeatherPayload = weatherPayloadJson?.trim()?.takeIf { it.isNotBlank() }
+        if (normalizedWeatherPayload != null) {
+            editor.putString(KEY_WEATHER_PAYLOAD_JSON, normalizedWeatherPayload)
+        }
+        if (!enabled || normalizedDeviceId == null || normalizedAuthKey == null) {
+            editor.putString(KEY_WEATHER_PAYLOAD_JSON, null)
+        }
+        editor.apply()
 
         return status(context)
     }
@@ -102,6 +113,7 @@ object DirectWatchSyncCoordinator {
         response.put("deviceId", prefs.getString(KEY_DEVICE_ID, null))
         response.put("deviceName", prefs.getString(KEY_DEVICE_NAME, null))
         response.put("hasAuthKey", !prefs.getString(KEY_AUTH_KEY_HEX, null).isNullOrBlank())
+        response.put("hasWeatherPayload", !prefs.getString(KEY_WEATHER_PAYLOAD_JSON, null).isNullOrBlank())
         response.put("pendingRequestId", prefs.getString(KEY_PENDING_REQUEST_ID, null))
         response.put("pendingReason", prefs.getString(KEY_PENDING_REASON, null))
         response.put("pendingEntryDate", prefs.getString(KEY_PENDING_ENTRY_DATE, null))
@@ -137,8 +149,19 @@ object DirectWatchSyncCoordinator {
             deviceId = deviceId,
             deviceName = prefs.getString(KEY_DEVICE_NAME, null),
             authKeyHex = authKeyHex,
+            weatherPayloadJson = prefs.getString(KEY_WEATHER_PAYLOAD_JSON, null),
             enabled = true,
         )
+    }
+
+    fun updateWeatherPayload(context: Context, weatherPayloadJson: String?): JSObject {
+        val normalizedWeatherPayload = weatherPayloadJson?.trim()?.takeIf { it.isNotBlank() }
+            ?: return status(context)
+        prefs(context).edit()
+            .putString(KEY_WEATHER_PAYLOAD_JSON, normalizedWeatherPayload)
+            .putString(KEY_LAST_EVENT_AT, Instant.now().toString())
+            .apply()
+        return status(context)
     }
 
     fun markHandled(context: Context, requestId: String?, outcome: String?): JSObject {
