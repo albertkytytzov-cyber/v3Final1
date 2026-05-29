@@ -2413,7 +2413,8 @@ export function bootstrapMobileApp(root: HTMLElement) {
     const didSubmitToServer = healthResult === "submitted" && workoutsResult === "submitted";
     const ackFileIds = collectDirectWatchAckFileIdsForSubmit(payload);
     if (!didSubmitToServer) {
-      if (ackFileIds.length > 0) {
+      const didQueueForServer = healthResult === "queued" || workoutsResult === "queued";
+      if (didQueueForServer && ackFileIds.length > 0) {
         markDirectWatchRawCacheQueued(payload.rawCacheId);
       }
       return false;
@@ -2465,7 +2466,11 @@ export function bootstrapMobileApp(root: HTMLElement) {
     const candidates = loadDirectWatchRawCacheEntries().filter((entry) =>
       entry.deviceId === config.deviceId &&
       entry.ackFileIds.length > 0 &&
-      (entry.status === "queued" || entry.status === "submitted" || entry.status === "ack-error") &&
+      (
+        entry.status === "submitted" ||
+        entry.status === "ack-error" ||
+        (entry.status === "queued" && Boolean(entry.queuedAt))
+      ) &&
       !queue.some((action) => pendingActionReferencesDirectWatchRawCache(action, entry.id))
     );
 

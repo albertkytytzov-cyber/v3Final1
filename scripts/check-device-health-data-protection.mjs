@@ -152,6 +152,14 @@ check("mobile service status trusts native status over bridge hint", () => {
   assert.doesNotMatch(mobileApp, /lastServiceStatus: completedServiceResult\.keptBluetoothBridge \? "running" : "synced"/u);
 });
 
+check("DirectWatch raw files are ACKed only after a real server submit or queued flush", () => {
+  assert.match(mobileApp, /const didQueueForServer = healthResult === "queued" \|\| workoutsResult === "queued";/u);
+  assert.match(mobileApp, /if \(didQueueForServer && ackFileIds\.length > 0\) \{\s+markDirectWatchRawCacheQueued/u);
+  assert.match(mobileApp, /entry\.status === "queued" && Boolean\(entry\.queuedAt\)/u);
+  assert.match(directWatch, /queuedAt\?: string \| null;/u);
+  assert.match(directWatch, /queuedAt: new Date\(\)\.toISOString\(\)/u);
+});
+
 if (!process.exitCode) {
   console.log("Device health data protection check passed: partial watch packets cannot downgrade steps, sleep, samples, SpO2, pulse or workout totals.");
 }

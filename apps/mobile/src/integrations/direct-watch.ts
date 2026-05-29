@@ -371,6 +371,7 @@ export interface DirectWatchRawCacheEntry {
   entryDate: string;
   files: DirectWatchRawCacheFile[];
   id: string;
+  queuedAt?: string | null;
   status: DirectWatchRawCacheStatus;
   submittedAt?: string | null;
   summary: {
@@ -1250,6 +1251,7 @@ export function loadDirectWatchRawCacheEntries(): DirectWatchRawCacheEntry[] {
 
 export function markDirectWatchRawCacheQueued(cacheId: string | null | undefined) {
   updateDirectWatchRawCacheEntry(cacheId, {
+    queuedAt: new Date().toISOString(),
     status: "queued",
   });
 }
@@ -1292,6 +1294,7 @@ function upsertDirectWatchRawCacheEntry(entry: DirectWatchRawCacheEntry) {
         ackedAt: previous.ackedAt,
         ackError: previous.ackError,
         capturedAt: previous.capturedAt,
+        queuedAt: previous.queuedAt,
         status: previous.status === "acked" ||
           previous.status === "submitted" ||
           previous.status === "queued" ||
