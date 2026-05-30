@@ -3593,9 +3593,13 @@ class DirectWatchPlugin : Plugin() {
         val hasForecast = locatedPayload.optJSONObject("current") != null &&
             (locatedPayload.optJSONArray("daily")?.length() ?: 0) > 0 &&
             (locatedPayload.optJSONArray("hourly")?.length() ?: 0) > 0
+        val hasFreshForecast = hasForecast && isClassicWeatherPayloadFresh(locatedPayload)
 
-        if (hasForecast && !locationResolution.changed) {
+        if (hasFreshForecast && !locationResolution.changed) {
             return locatedPayload
+        }
+        if (hasForecast && !hasFreshForecast) {
+            Log.i(TAG, "classic weather payload is stale; fetching fresh forecast")
         }
 
         val fetchedPayload = fetchOpenMeteoWeatherPayload(locatedPayload)
@@ -3607,6 +3611,37 @@ class DirectWatchPlugin : Plugin() {
             (seed.optJSONArray("daily")?.length() ?: 0) > 0 &&
             (seed.optJSONArray("hourly")?.length() ?: 0) > 0
         return if (seedHasForecast) seed else null
+    }
+
+    private fun isClassicWeatherPayloadFresh(weatherPayload: JSONObject): Boolean {
+        val publishedAtMs = parseWeatherPublicationTimestampMs(
+            weatherPayload.optString("publicationTimestamp").takeIf { it.isNotBlank() },
+        ) ?: return false
+        val ageMs = System.currentTimeMillis() - publishedAtMs
+        return ageMs in -CLASSIC_WEATHER_PAYLOAD_FUTURE_TOLERANCE_MS..CLASSIC_WEATHER_PAYLOAD_MAX_AGE_MS
+    }
+
+    private fun parseWeatherPublicationTimestampMs(value: String?): Long? {
+        if (value.isNullOrBlank()) {
+            return null
+        }
+
+        return try {
+            java.time.OffsetDateTime.parse(value).toInstant().toEpochMilli()
+        } catch (_: Exception) {
+            try {
+                java.time.Instant.parse(value).toEpochMilli()
+            } catch (_: Exception) {
+                try {
+                    java.time.LocalDateTime.parse(value)
+                        .atZone(java.time.ZoneId.systemDefault())
+                        .toInstant()
+                        .toEpochMilli()
+                } catch (_: Exception) {
+                    null
+                }
+            }
+        }
     }
 
     private fun resolveWeatherPayloadPhoneLocation(seed: JSONObject, appContext: Context): WeatherLocationResolution {
@@ -9243,6 +9278,8 @@ class DirectWatchPlugin : Plugin() {
         private const val CLASSIC_SERVICE_BRIDGE_REFRESH_MS = 15 * 60 * 1000L
         private const val CLASSIC_SERVICE_BRIDGE_ACTIVITY_INITIAL_DELAY_MS = 60 * 1000L
         private const val CLASSIC_SERVICE_BRIDGE_ACTIVITY_REFRESH_MS = 10 * 60 * 1000L
+        private const val CLASSIC_WEATHER_PAYLOAD_MAX_AGE_MS = 30 * 60 * 1000L
+        private const val CLASSIC_WEATHER_PAYLOAD_FUTURE_TOLERANCE_MS = 5 * 60 * 1000L
         private const val XIAOMI_WEATHER_CLEAR_SKY = 0
         private val PAIRING_TIMEOUT_TOKEN = Any()
         private val SESSION_TIMEOUT_TOKEN = Any()

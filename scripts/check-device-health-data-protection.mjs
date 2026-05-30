@@ -219,6 +219,17 @@ check("DirectWatch service sync serializes Bluetooth access", () => {
   assert.match(androidForegroundService, /Фоновая синхронизация часов ждёт текущий Bluetooth-обмен PERFORM Sync/u);
 });
 
+check("DirectWatch weather refresh does not reuse stale overnight forecast", () => {
+  assert.match(androidDirectWatchPlugin, /CLASSIC_WEATHER_PAYLOAD_MAX_AGE_MS = 30 \* 60 \* 1000L/u);
+  assert.match(androidDirectWatchPlugin, /isClassicWeatherPayloadFresh\(locatedPayload\)/u);
+  assert.match(androidDirectWatchPlugin, /classic weather payload is stale; fetching fresh forecast/u);
+  assert.match(androidDirectWatchPlugin, /parseWeatherPublicationTimestampMs/u);
+  assert.doesNotMatch(
+    androidDirectWatchPlugin,
+    /if \(hasForecast && !locationResolution\.changed\) \{\s+return locatedPayload/u,
+  );
+});
+
 if (!process.exitCode) {
   console.log("Device health data protection check passed: partial watch packets cannot downgrade steps, sleep, samples, SpO2, pulse or workout totals.");
 }
