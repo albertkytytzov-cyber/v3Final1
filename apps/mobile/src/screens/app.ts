@@ -4624,9 +4624,9 @@ function renderCoachAthleteReadinessOverview(state: MobileAppState, athleteId: s
       <section class="readiness-trend-card coach-athlete-readiness-card is-empty">
         <div class="readiness-trend-head">
           <div>
-            <span>История готовности</span>
+            <span>Готовность</span>
             <h3>Пока нет записей</h3>
-            <p>Когда спортсмен сохранит готовность, тренер увидит динамику и последние показатели здесь.</p>
+            <p>Когда спортсмен сохранит готовность, тренер увидит динамику и ключевые показатели здесь.</p>
           </div>
           <strong>—</strong>
         </div>
@@ -4639,38 +4639,29 @@ function renderCoachAthleteReadinessOverview(state: MobileAppState, athleteId: s
   const canRenderTrendChart = entries.length >= 2;
 
   return `
-    <section class="coach-athlete-readiness-stack" aria-label="Готовность спортсмена">
-      <article class="readiness-trend-card coach-athlete-readiness-card readiness-${escapeHtml(latestEntry.status)}">
-        <div class="readiness-trend-head">
-          <div>
-            <span>Готовность за 10 дней</span>
-            <h3>Динамика спортсмена</h3>
-            <p>последние заполнения и общий тренд</p>
-          </div>
-          <strong>${latestEntry.score}</strong>
-        </div>
-        <div class="readiness-trend-chart">
-          <div class="readiness-trend-chart-meta">
-            <span>${formatDate(latestEntry.entryDate)} · ${escapeHtml(formatReadinessStatus(latestEntry.status))}</span>
-            <em class="readiness-trend-chip is-${trendClass}">${escapeHtml(formatReadinessTrendDelta(trend))}</em>
-          </div>
-          ${canRenderTrendChart ? renderReadinessTrendSvg(entries, "readiness-trend-svg is-coach") : renderCoachAthleteSingleReadinessPoint(latestEntry)}
-          ${canRenderTrendChart ? renderReadinessTrendDots(entries) : ""}
-        </div>
-      </article>
-      <article class="coach-athlete-latest-readiness-card">
-        <div class="section-title">
-          <h3>Последняя готовность</h3>
+    <section class="readiness-trend-card coach-athlete-readiness-card readiness-${escapeHtml(latestEntry.status)}" aria-label="Готовность спортсмена">
+      <div class="readiness-trend-head">
+        <div>
+          <span>Готовность</span>
+          <h3>Динамика за 10 дней</h3>
           <p>${formatDate(latestEntry.entryDate)} · ${escapeHtml(formatReadinessFlags(latestEntry))}</p>
         </div>
-        <div class="coach-athlete-readiness-facts">
-          ${renderCoachAthleteReadinessFact("Пульс покоя", `${latestEntry.restingHr}`, "уд/мин")}
-          ${renderCoachAthleteReadinessFact("Сон", `${formatReadinessNumber(latestEntry.sleepHours)} ч`, "за ночь")}
-          ${renderCoachAthleteReadinessFact("Усталость", `${latestEntry.fatigueLevel}/5`, "самооценка")}
-          ${renderCoachAthleteReadinessFact("Боль", latestEntry.painLevel > 0 ? `${latestEntry.painLevel}/10` : "нет", "самооценка")}
+        <strong>${latestEntry.score}</strong>
+      </div>
+      <div class="readiness-trend-chart">
+        <div class="readiness-trend-chart-meta">
+          <span>${escapeHtml(formatReadinessStatus(latestEntry.status))}</span>
+          <em class="readiness-trend-chip is-${trendClass}">${escapeHtml(formatReadinessTrendDelta(trend))}</em>
         </div>
-      </article>
-      ${renderCoachAthleteReadinessHistory(history)}
+        ${canRenderTrendChart ? renderReadinessTrendSvg(entries, "readiness-trend-svg is-coach") : renderCoachAthleteSingleReadinessPoint(latestEntry)}
+        ${canRenderTrendChart ? renderReadinessTrendDots(entries) : ""}
+      </div>
+      <div class="coach-athlete-readiness-facts">
+        ${renderCoachAthleteReadinessFact("Пульс покоя", `${latestEntry.restingHr}`, "уд/мин")}
+        ${renderCoachAthleteReadinessFact("Сон", `${formatReadinessNumber(latestEntry.sleepHours)} ч`, "за ночь")}
+        ${renderCoachAthleteReadinessFact("Усталость", `${latestEntry.fatigueLevel}/5`, "самооценка")}
+        ${renderCoachAthleteReadinessFact("Боль", latestEntry.painLevel > 0 ? `${latestEntry.painLevel}/10` : "нет", "самооценка")}
+      </div>
     </section>
   `;
 }
@@ -4695,50 +4686,22 @@ function renderCoachAthleteReadinessFact(label: string, value: string, detail: s
   `;
 }
 
-function renderCoachAthleteReadinessHistory(entries: ReadinessEntry[]) {
-  if (entries.length === 0) {
-    return "";
-  }
-
-  return `
-    <section class="coach-athlete-readiness-history" aria-label="История готовности">
-      <div class="section-title">
-        <h3>История готовности</h3>
-        <p>последние записи спортсмена</p>
-      </div>
-      <div class="coach-athlete-readiness-history-list">
-        ${entries.map((entry) => `
-          <article class="coach-athlete-readiness-history-row readiness-${escapeHtml(entry.status)}">
-            <time>${formatDate(entry.entryDate)}</time>
-            <strong>${entry.score}</strong>
-            <span>${escapeHtml(formatReadinessStatus(entry.status))}</span>
-            <small>${escapeHtml(formatReadinessHistoryDetails(entry))}</small>
-          </article>
-        `).join("")}
-      </div>
-    </section>
-  `;
-}
-
 function renderCoachAthleteDayBrief(state: MobileAppState, athleteId: string) {
   const selectedDayDate = state.selectedDayDate;
   const dayData = getCoachDayCleanSummary(state, athleteId, selectedDayDate);
-  const entry = dayData.readinessEntry;
   const daySummary = dayData.summary;
-  const cardStateClass = entry ? `readiness-${escapeHtml(entry.status)}` : "is-missing-readiness";
 
   return `
-    <section class="athlete-day-brief-card ${cardStateClass}">
+    <section class="athlete-day-brief-card">
       <div class="athlete-day-brief-head">
         <div>
-          <span>Краткий статус дня</span>
+          <span>День спортсмена</span>
           <h3>${escapeHtml(formatDayRelativeLabel(selectedDayDate))} · ${formatShortDate(selectedDayDate)}</h3>
-          <p>${escapeHtml(entry ? formatReadinessFlags(entry) : "готовность не отправлена")} · ${escapeHtml(daySummary.statusLabel.toLowerCase())}</p>
+          <p>${escapeHtml(daySummary.statusLabel.toLowerCase())}</p>
         </div>
-        <strong>${entry ? entry.score : "-"}</strong>
+        <strong>${daySummary.completedExerciseCount}/${daySummary.exerciseCount || 0}</strong>
       </div>
       <div class="athlete-day-brief-grid">
-        ${renderCoachAthleteBriefMetric("Готовность", entry ? String(entry.score) : "-", entry ? formatReadinessStatus(entry.status) : "нет записи")}
         ${renderCoachAthleteBriefMetric("План на день", formatCoachTodayPlanCount(daySummary), formatCoachTodayPlanNames(daySummary))}
         ${renderCoachAthleteBriefMetric("Выполнение", `${daySummary.completedExerciseCount}/${daySummary.exerciseCount || 0}`, formatCoachTodayExerciseBreakdown(daySummary))}
         ${renderCoachAthleteBriefMetric("Нагрузка", `${formatLoadValue(daySummary.actualLoad)} / ${formatLoadValue(daySummary.plannedLoad)}`, formatCoachTodayLoadDelta(daySummary))}
@@ -15772,20 +15735,6 @@ function formatReadinessStatus(status: string) {
   }
 
   return status;
-}
-
-function formatReadinessHistoryDetails(entry: ReadinessEntry) {
-  const flags = [
-    entry.fatigueLevel >= 4 ? "усталость" : "",
-    entry.muscleSoreness >= 4 ? "мышцы" : "",
-    entry.painLevel >= 5 ? "боль" : "",
-    entry.illnessFlag ? "болезнь" : "",
-    entry.feverFlag ? "температура" : "",
-  ].filter(Boolean);
-
-  return flags.length
-    ? flags.join(" · ")
-    : `сон ${entry.sleepHours} ч · пульс ${entry.restingHr}`;
 }
 
 function formatReadinessFlags(entry: ReadinessEntry) {

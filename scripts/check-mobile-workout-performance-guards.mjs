@@ -105,6 +105,34 @@ if (coachWorkoutPanelStart === -1 || coachWorkoutPanelEnd === -1) {
   fail("coach execution overview must not render linked workout graphs inline");
 }
 
+const coachAthleteReadinessStart = mobileApp.indexOf("function renderCoachAthleteReadinessOverview");
+const coachAthleteReadinessEnd = mobileApp.indexOf("function renderCoachAthleteSingleReadinessPoint", coachAthleteReadinessStart);
+if (coachAthleteReadinessStart === -1 || coachAthleteReadinessEnd === -1) {
+  fail("missing coach athlete readiness overview");
+} else {
+  const coachAthleteReadinessBlock = mobileApp.slice(coachAthleteReadinessStart, coachAthleteReadinessEnd);
+  for (const duplicateLabel of ["Последняя готовность", "История готовности", "coach-athlete-latest-readiness-card", "coach-athlete-readiness-history"]) {
+    if (coachAthleteReadinessBlock.includes(duplicateLabel)) {
+      fail(`coach athlete readiness overview must not render duplicate block "${duplicateLabel}"`);
+    }
+  }
+}
+
+const coachAthleteDayBriefStart = mobileApp.indexOf("function renderCoachAthleteDayBrief");
+const coachAthleteDayBriefEnd = mobileApp.indexOf("function renderCoachAthleteBriefMetric", coachAthleteDayBriefStart);
+if (coachAthleteDayBriefStart === -1 || coachAthleteDayBriefEnd === -1) {
+  fail("missing coach athlete day brief");
+} else {
+  const coachAthleteDayBriefBlock = mobileApp.slice(coachAthleteDayBriefStart, coachAthleteDayBriefEnd);
+  if (coachAthleteDayBriefBlock.includes("Краткий статус дня")) {
+    fail("coach athlete day brief must not duplicate readiness as a short status block");
+  }
+
+  if (/renderCoachAthleteBriefMetric\("Готовность"/u.test(coachAthleteDayBriefBlock)) {
+    fail("coach athlete day brief must not repeat readiness metric already shown above");
+  }
+}
+
 for (const fragment of requiredDocFragments) {
   if (!backgroundPlan.includes(fragment)) {
     fail(`background sync plan missing "${fragment}"`);
