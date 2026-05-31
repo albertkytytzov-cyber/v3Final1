@@ -415,11 +415,16 @@ export interface DirectWatchSyncServiceStatus {
 
 export interface DirectWatchBackgroundSyncStatus {
   available?: boolean;
+  dataUpdatedAt?: string | null;
   deviceId?: string | null;
   entryDate?: string | null;
   message?: string | null;
   reason?: string | null;
+  serviceMessage?: string | null;
+  serviceUpdatedAt?: string | null;
+  timeUpdatedAt?: string | null;
   updatedAt?: string | null;
+  weatherUpdatedAt?: string | null;
 }
 
 export interface DirectWatchBackgroundSyncResult extends DirectWatchServiceSyncResult {
@@ -1635,11 +1640,16 @@ function normalizeDirectWatchBackgroundSyncStatus(value: unknown): DirectWatchBa
 
   return {
     available: normalizeBoolean(value.available),
+    dataUpdatedAt: normalizeString(value.dataUpdatedAt),
     deviceId: normalizeString(value.deviceId),
     entryDate: normalizeString(value.entryDate),
     message: normalizeString(value.message),
     reason: normalizeString(value.reason),
+    serviceMessage: normalizeString(value.serviceMessage),
+    serviceUpdatedAt: normalizeString(value.serviceUpdatedAt),
+    timeUpdatedAt: normalizeString(value.timeUpdatedAt),
     updatedAt: normalizeString(value.updatedAt),
+    weatherUpdatedAt: normalizeString(value.weatherUpdatedAt),
   };
 }
 

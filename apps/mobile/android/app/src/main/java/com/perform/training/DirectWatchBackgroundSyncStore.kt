@@ -17,6 +17,11 @@ object DirectWatchBackgroundSyncStore {
     private const val KEY_REASON = "reason"
     private const val KEY_UPDATED_AT = "updatedAt"
     private const val KEY_MESSAGE = "message"
+    private const val KEY_DATA_UPDATED_AT = "dataUpdatedAt"
+    private const val KEY_SERVICE_UPDATED_AT = "serviceUpdatedAt"
+    private const val KEY_TIME_UPDATED_AT = "timeUpdatedAt"
+    private const val KEY_WEATHER_UPDATED_AT = "weatherUpdatedAt"
+    private const val KEY_SERVICE_MESSAGE = "serviceMessage"
 
     fun saveLatest(
         context: Context,
@@ -36,14 +41,16 @@ object DirectWatchBackgroundSyncStore {
 
         return try {
             latestFile(appContext).writeText(copy.toString())
-            prefs(appContext).edit()
+            val editor = prefs(appContext).edit()
                 .putBoolean(KEY_AVAILABLE, true)
                 .putString(KEY_DEVICE_ID, deviceId)
                 .putString(KEY_ENTRY_DATE, entryDate)
                 .putString(KEY_REASON, reason)
                 .putString(KEY_UPDATED_AT, savedAt)
+                .putString(KEY_DATA_UPDATED_AT, savedAt)
                 .putString(KEY_MESSAGE, "Фоновая синхронизация часов сохранена.")
-                .apply()
+            putServiceSyncState(editor, result, savedAt)
+            editor.apply()
             status(appContext)
         } catch (error: Exception) {
             Log.w(TAG, "failed to save background watch sync: ${error.message}")
@@ -109,6 +116,28 @@ object DirectWatchBackgroundSyncStore {
         return status(context.applicationContext)
     }
 
+    fun recordServiceSync(
+        context: Context,
+        result: JSObject,
+        deviceId: String?,
+        entryDate: String?,
+        reason: String,
+        message: String = "Время и погода отправлены на часы.",
+    ): JSObject {
+        val appContext = context.applicationContext
+        val savedAt = Instant.now().toString()
+        val editor = prefs(appContext).edit()
+            .putString(KEY_DEVICE_ID, deviceId)
+            .putString(KEY_ENTRY_DATE, entryDate)
+            .putString(KEY_REASON, reason)
+            .putString(KEY_UPDATED_AT, savedAt)
+            .putString(KEY_SERVICE_UPDATED_AT, savedAt)
+            .putString(KEY_SERVICE_MESSAGE, message)
+        putServiceSyncState(editor, result, savedAt)
+        editor.apply()
+        return status(appContext)
+    }
+
     fun status(context: Context): JSObject {
         val appContext = context.applicationContext
         val prefs = prefs(appContext)
@@ -118,8 +147,57 @@ object DirectWatchBackgroundSyncStore {
         response.put("entryDate", prefs.getString(KEY_ENTRY_DATE, null))
         response.put("reason", prefs.getString(KEY_REASON, null))
         response.put("updatedAt", prefs.getString(KEY_UPDATED_AT, null))
+        response.put("dataUpdatedAt", prefs.getString(KEY_DATA_UPDATED_AT, null))
+        response.put("serviceUpdatedAt", prefs.getString(KEY_SERVICE_UPDATED_AT, null))
+        response.put("timeUpdatedAt", prefs.getString(KEY_TIME_UPDATED_AT, null))
+        response.put("weatherUpdatedAt", prefs.getString(KEY_WEATHER_UPDATED_AT, null))
         response.put("message", prefs.getString(KEY_MESSAGE, null))
+        response.put("serviceMessage", prefs.getString(KEY_SERVICE_MESSAGE, null))
         return response
+    }
+
+    private fun putServiceSyncState(
+        editor: android.content.SharedPreferences.Editor,
+        result: JSObject,
+        savedAt: String,
+    ) {
+        if (sentTime(result)) {
+            editor.putString(KEY_TIME_UPDATED_AT, savedAt)
+        }
+        if (sentWeather(result)) {
+            editor.putString(KEY_WEATHER_UPDATED_AT, savedAt)
+        }
+        if (sentService(result)) {
+            editor.putString(KEY_SERVICE_UPDATED_AT, savedAt)
+            editor.putString(KEY_SERVICE_MESSAGE, "Время и погода отправлены на часы.")
+        }
+    }
+
+    private fun sentService(result: JSObject): Boolean {
+        return sentTime(result) || sentWeather(result) || result.optBoolean("sentPhoneLocation", false)
+    }
+
+    private fun sentTime(result: JSObject): Boolean {
+        return result.optBoolean("sentTime", false) || serviceCommands(result).any { it == "time" || it == "time-refresh" }
+    }
+
+    private fun sentWeather(result: JSObject): Boolean {
+        return result.optBoolean("sentWeatherCurrent", false) ||
+            result.optBoolean("sentWeatherDaily", false) ||
+            result.optBoolean("sentWeatherHourly", false) ||
+            result.optBoolean("sentWeatherLocation", false) ||
+            result.optBoolean("sentWeatherLocationsRead", false) ||
+            result.optBoolean("sentWeatherLocationsOrder", false) ||
+            result.optBoolean("sentWeatherPrefs", false) ||
+            result.optBoolean("sentWeatherPrefsRead", false) ||
+            serviceCommands(result).any { it.startsWith("weather-") || it.startsWith("phone-location") }
+    }
+
+    private fun serviceCommands(result: JSObject): List<String> {
+        val commands = result.optJSONArray("serviceCommands") ?: return emptyList()
+        return (0 until commands.length()).mapNotNull { index ->
+            commands.optString(index, "").takeIf { it.isNotBlank() }
+        }
     }
 
     private fun latestFile(context: Context): File {

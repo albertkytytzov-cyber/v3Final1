@@ -1649,6 +1649,16 @@ class DirectWatchPlugin : Plugin() {
         }
 
         fun persist(result: JSObject) {
+            if (hasClassicServiceSyncSignal(result)) {
+                DirectWatchBackgroundSyncStore.recordServiceSync(
+                    context = context,
+                    result = result,
+                    deviceId = device.address,
+                    entryDate = entryDate,
+                    reason = reason,
+                )
+            }
+
             if (result.optString("error", "").isNotBlank()) {
                 DirectWatchBackgroundSyncStore.recordMessage(
                     context = context,
@@ -1893,6 +1903,19 @@ class DirectWatchPlugin : Plugin() {
         response.put("error", message)
         response.put("syncedAt", java.time.Instant.now().toString())
         return response
+    }
+
+    private fun hasClassicServiceSyncSignal(result: JSObject): Boolean {
+        return result.optBoolean("sentTime", false) ||
+            result.optBoolean("sentPhoneLocation", false) ||
+            result.optBoolean("sentWeatherCurrent", false) ||
+            result.optBoolean("sentWeatherDaily", false) ||
+            result.optBoolean("sentWeatherHourly", false) ||
+            result.optBoolean("sentWeatherLocation", false) ||
+            result.optBoolean("sentWeatherLocationsRead", false) ||
+            result.optBoolean("sentWeatherLocationsOrder", false) ||
+            result.optBoolean("sentWeatherPrefs", false) ||
+            result.optBoolean("sentWeatherPrefsRead", false)
     }
 
     private fun parseNativeWeatherPayload(raw: String?): JSONObject? {
@@ -8319,7 +8342,7 @@ class DirectWatchPlugin : Plugin() {
     ) {
         val startedAt = android.os.SystemClock.uptimeMillis()
         var nextSequenceNumber = initialSequenceNumber
-        var nextWeatherRefreshAt = startedAt + CLASSIC_SERVICE_BRIDGE_REFRESH_MS
+        var nextWeatherRefreshAt = startedAt
         var nextActivityRefreshAt = startedAt + CLASSIC_SERVICE_BRIDGE_ACTIVITY_INITIAL_DELAY_MS
         var processedDecryptedPacketCount = collectClassicDecryptedPackets(
             combined.toByteArray(),
@@ -8400,7 +8423,8 @@ class DirectWatchPlugin : Plugin() {
                 refreshedWeatherPayload?.let {
                     DirectWatchSyncCoordinator.updateWeatherPayload(context, it.toString())
                 }
-                buildClassicWeatherRefreshCommands(refreshedWeatherPayload).forEach { command ->
+                val refreshCommands = buildClassicServiceSyncCommands(refreshedWeatherPayload, 0, context)
+                refreshCommands.forEach { command ->
                     Log.i(TAG, "classic bridge send ${command.label}")
                     socket.outputStream.write(
                         buildClassicV2EncryptedCommandPacket(
@@ -8412,6 +8436,36 @@ class DirectWatchPlugin : Plugin() {
                     Thread.sleep(CLASSIC_POST_AUTH_COMMAND_DELAY_MS)
                 }
                 socket.outputStream.flush()
+                val serviceResult = JSObject()
+                serviceResult.put("sentServiceSync", refreshCommands.isNotEmpty())
+                serviceResult.put("sentTime", refreshCommands.any { it.label == "time" })
+                serviceResult.put("sentPhoneLocation", refreshCommands.any { it.label == "phone-location" })
+                serviceResult.put(
+                    "sentWeatherLocationsRead",
+                    refreshCommands.any { it.label == "weather-locations-read" || it.label == "weather-locations-read-confirm" },
+                )
+                serviceResult.put("sentWeatherLocation", refreshCommands.any { it.label == "weather-location" || it.label == "weather-location-add" })
+                serviceResult.put("sentWeatherLocationsOrder", refreshCommands.any { it.label == "weather-locations-order" })
+                serviceResult.put(
+                    "sentWeatherPrefs",
+                    refreshCommands.any {
+                        it.label == "weather-prefs" ||
+                            it.label == "weather-enable" ||
+                            it.label == "weather-temp-unit" ||
+                            it.label == "weather-alerts"
+                    },
+                )
+                serviceResult.put("sentWeatherCurrent", refreshCommands.any { it.label == "weather-current" })
+                serviceResult.put("sentWeatherDaily", refreshCommands.any { it.label == "weather-daily" })
+                serviceResult.put("sentWeatherHourly", refreshCommands.any { it.label == "weather-hourly" })
+                serviceResult.put("serviceCommands", JSArray(refreshCommands.map { it.label }))
+                DirectWatchBackgroundSyncStore.recordServiceSync(
+                    context = context,
+                    result = serviceResult,
+                    deviceId = device.address,
+                    entryDate = entryDate,
+                    reason = "service-bridge",
+                )
                 nextWeatherRefreshAt = now + CLASSIC_SERVICE_BRIDGE_REFRESH_MS
             }
 

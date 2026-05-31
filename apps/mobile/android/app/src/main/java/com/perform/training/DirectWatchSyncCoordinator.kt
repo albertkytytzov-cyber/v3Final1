@@ -205,6 +205,10 @@ object DirectWatchSyncCoordinator {
             .putString(KEY_LAST_COMPLETED_AT, now)
             .putString(KEY_LAST_OUTCOME, normalizedOutcome)
             .putString(KEY_LAST_BLOCKED_REASON, null)
+            .putString(KEY_PENDING_REQUEST_ID, null)
+            .putString(KEY_PENDING_REASON, null)
+            .putString(KEY_PENDING_ENTRY_DATE, null)
+            .putString(KEY_PENDING_CREATED_AT, null)
 
         if (isSuccessfulOutcome(normalizedOutcome)) {
             editor.putString(KEY_LAST_SUCCESSFUL_AT, now)

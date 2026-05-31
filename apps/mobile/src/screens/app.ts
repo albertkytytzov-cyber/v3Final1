@@ -6263,6 +6263,7 @@ function getLatestDirectWatchSyncAt(
   coordinatorStatus: MobileAppState["directWatchDiagnostic"]["syncCoordinatorStatus"],
 ) {
   return getLatestIsoTimestamp([
+    serviceStatus?.backgroundSync?.serviceUpdatedAt,
     serviceStatus?.backgroundSync?.updatedAt,
     coordinatorStatus?.lastSuccessfulAt,
     coordinatorStatus?.lastCompletedAt,
@@ -6403,11 +6404,14 @@ function getDirectWatchUserDiagnostics(
   const canSync = hasDevice && hasAuthKey;
   const lastSyncAt = getLatestDirectWatchSyncAt(config, serviceStatus, coordinatorStatus);
   const lastWeatherAt = getLatestIsoTimestamp([
+    backgroundSync?.weatherUpdatedAt,
+    backgroundSync?.serviceUpdatedAt,
     config.lastServiceSyncedAt,
     coordinatorStatus?.lastSuccessfulAt,
     serviceStatus?.updatedAt,
   ]);
   const lastActivityAt = getLatestIsoTimestamp([
+    backgroundSync?.dataUpdatedAt,
     backgroundSync?.updatedAt,
     config.lastActivitySyncAt,
   ]);
