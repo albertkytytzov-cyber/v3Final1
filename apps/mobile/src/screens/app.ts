@@ -12707,7 +12707,6 @@ function renderAthleteReadinessTrendCard(entries: ReadinessEntry[], todayEntry: 
           <em class="readiness-trend-chip is-${trendClass}">${escapeHtml(formatReadinessTrendDelta(trend))}</em>
         </div>
         ${renderReadinessTrendSvg(entries, "readiness-trend-svg")}
-        ${renderReadinessTrendDots(entries)}
       </div>
       <div class="readiness-factor-list">
         ${reasonRows.map(renderReadinessFactorRow).join("")}
