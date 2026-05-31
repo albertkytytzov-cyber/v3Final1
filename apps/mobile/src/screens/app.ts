@@ -11870,7 +11870,6 @@ function renderReadinessScreen(state: MobileAppState) {
   const today = todayValue();
   const athleteId = state.session.user.athleteId ?? null;
   const readiness = getReadinessEntryForDate(state, athleteId, today);
-  const readinessHistory = getReadinessHistory(state, athleteId);
   const readinessTrendEntries = getRecentReadinessEntriesForAthlete(state, athleteId, 10);
   const entryDate = readiness?.entryDate ?? today;
   const deviceHealth = athleteId ? getDeviceHealthSummaryForDate(state, athleteId, entryDate) : null;
@@ -11928,7 +11927,6 @@ function renderReadinessScreen(state: MobileAppState) {
         : `<button class="primary-action" type="submit">${readiness ? "Сохранить изменения" : "Сохранить готовность"}</button>`}
     </form>
     ${renderReadinessSyncMenu(state)}
-    ${renderReadinessHistory(readinessHistory)}
   `;
 }
 
@@ -12463,30 +12461,6 @@ function renderReadinessSelectField(
         `).join("")}
       </select>
     </label>
-  `;
-}
-
-function renderReadinessHistory(entries: ReadinessEntry[]) {
-  if (entries.length === 0) {
-    return "";
-  }
-
-  return `
-    <section class="readiness-history">
-      <div class="section-title">
-        <h3>Предыдущие дни</h3>
-      </div>
-      <div class="readiness-history-list">
-        ${entries.map((entry) => `
-          <article class="readiness-history-card readiness-${escapeHtml(entry.status)}">
-            <time>${formatDate(entry.entryDate)}</time>
-            <strong>${entry.score}</strong>
-            <span>${formatReadinessStatus(entry.status)}</span>
-            <small>${formatReadinessHistoryDetails(entry)}</small>
-          </article>
-        `).join("")}
-      </div>
-    </section>
   `;
 }
 
