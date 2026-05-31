@@ -173,6 +173,7 @@ export interface MobileAppState {
   queue: PendingSyncAction[];
   coachAiDiagnostic: CoachAiReviewDiagnosticResponse | null;
   coachAiStatus: CoachAiReviewStatus | null;
+  coachDeviceWorkoutDetailId: string | null;
   directWatchDiagnostic: {
     classicProbe: DirectWatchClassicProbe | null;
     devices: DirectWatchDevice[];

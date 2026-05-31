@@ -35,12 +35,19 @@ const requiredMobilePatterns = [
   ["uPlot payload store", /const mobileUPlotPayloads = new Map<string, MobileUPlotPayload>\(\);/u],
   ["uPlot mount", /function mountMobileUPlotCharts\(root: HTMLElement\): UPlotInstance\[\]/u],
   ["uPlot destroy on rerender", /mountedUPlotCharts\.forEach\(\(chart\) => chart\.destroy\(\)\);/u],
+  ["coach workout detail state", /coachDeviceWorkoutDetailId: null/u],
+  ["coach workout detail button", /data-coach-device-workout-detail="\$\{escapeHtml\(linkedWorkout\.id\)\}"/u],
+  ["coach workout detail renderer", /function renderCoachDeviceWorkoutDetailScreen\(/u],
+  ["coach linked workout runtime compaction", /function compactDeviceWorkoutLinkForRuntime\(/u],
+  ["workout heart-rate outlier filter", /function isPlausibleWorkoutHeartRateBpm\(value: number\)/u],
+  ["workout heart-rate summary bounds", /function isWorkoutHeartRateGraphValue\(workout: DeviceWorkout, value: number\)/u],
 ];
 
 const requiredClientPatterns = [
   ["coach athlete-scoped data load", /function resolveCoachDataAthleteIds\(/u],
   ["coach selected athlete parameter", /selectedCoachAthleteId\?: string \| null/u],
   ["coach workout summaries without samples", /device-workouts\?includeSamples=false/u],
+  ["coach workout detail samples endpoint", /listCoachDeviceWorkouts\(athleteId: string, entryDate: string, includeSamples = true\)/u],
   ["coach screens skip raw health samples", /deviceHealthSamples: userRole === "coach" \|\| userRole === "admin"[\s\S]*\? \[\][\s\S]*: deviceHealthSamples\.samples/u],
 ];
 

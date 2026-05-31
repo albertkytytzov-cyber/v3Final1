@@ -228,6 +228,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
     queue: loadQueue(),
     coachAiDiagnostic: null,
     coachAiStatus: null,
+    coachDeviceWorkoutDetailId: null,
     directWatchDiagnostic: {
       classicProbe: null,
       devices: [],
@@ -757,6 +758,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
       );
 
     update({
+      coachDeviceWorkoutDetailId: null,
       executionDateFilter: selectedDayDate,
       planDateFilter: selectedDayDate,
       ...(selectedScreen ? { selectedScreen } : {}),
@@ -2467,14 +2469,17 @@ export function bootstrapMobileApp(root: HTMLElement) {
   };
 
   const hydrateDeviceWorkoutSamples = async (workoutId: string) => {
-    const athleteId = state.session.user?.athleteId ?? null;
+    const isCoachContext = isCoachRole(state.session.user?.role);
+    const athleteId = isCoachContext ? null : state.session.user?.athleteId ?? null;
     const workout = getDeviceWorkoutById(state, athleteId, workoutId);
     if (!workout || workout.sampleCount <= workout.samples.length) {
       return;
     }
 
     try {
-      const result = await client().listDeviceWorkouts(workout.entryDate, true);
+      const result = isCoachContext
+        ? await client().listCoachDeviceWorkouts(workout.athleteId, workout.entryDate, true)
+        : await client().listDeviceWorkouts(workout.entryDate, true);
       const snapshot = {
         ...state.data,
         deviceWorkoutLinks: upsertDeviceWorkoutLinks(
@@ -3079,6 +3084,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
 
         if (!getScreensForRole(state.session.user?.role).some((screen) => screen.id === selectedScreen)) {
           update({
+            coachDeviceWorkoutDetailId: null,
             selectedScreen: "dashboard",
             watchDetailMetric: null,
             watchExpandedWorkoutId: null,
@@ -3092,6 +3098,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
         }
 
         update({
+          coachDeviceWorkoutDetailId: null,
           selectedScreen,
           watchDetailMetric: null,
           watchExpandedWorkoutId: null,
@@ -3274,6 +3281,34 @@ export function bootstrapMobileApp(root: HTMLElement) {
     root.querySelectorAll<HTMLSelectElement>("[data-device-workout-link]").forEach((select) => {
       select.addEventListener("change", () => {
         void linkDeviceWorkoutToBlock(select);
+      });
+    });
+
+    root.querySelectorAll<HTMLButtonElement>("[data-coach-device-workout-detail]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const workoutId = button.dataset.coachDeviceWorkoutDetail;
+        if (!workoutId) {
+          return;
+        }
+
+        update({
+          coachDeviceWorkoutDetailId: workoutId,
+          watchDetailMetric: null,
+          watchExpandedWorkoutId: null,
+          watchExpandedWorkoutGraphId: null,
+          watchWorkoutHistoryOpen: false,
+          watchWorkoutDetailId: null,
+          watchSettingsOpen: false,
+        });
+        scrollToScreenTop();
+        void hydrateDeviceWorkoutSamples(workoutId);
+      });
+    });
+
+    root.querySelectorAll<HTMLButtonElement>("[data-coach-device-workout-detail-back]").forEach((button) => {
+      button.addEventListener("click", () => {
+        update({ coachDeviceWorkoutDetailId: null });
+        scrollToScreenTop();
       });
     });
 
@@ -3635,7 +3670,7 @@ function renderAppShell(state: MobileAppState) {
     : { ...state, selectedScreen: activeScreen };
   const selectedAthlete = getSelectedAthlete(state);
   const activeAthleteId = getActiveAthleteId(state);
-  const isWatchDetailScreen = isWatchSubscreenActive(displayState);
+  const isWatchDetailScreen = isWatchSubscreenActive(displayState) || Boolean(displayState.coachDeviceWorkoutDetailId);
   const isCoachView = isCoachRole(user?.role);
 
   return `
@@ -3798,6 +3833,10 @@ function renderAthleteSelectOptions(state: MobileAppState, selectedAthleteId: st
 }
 
 function renderScreen(state: MobileAppState, athleteId: string | null) {
+  if (isCoachRole(state.session.user?.role) && state.coachDeviceWorkoutDetailId) {
+    return renderCoachDeviceWorkoutDetailScreen(state, athleteId, state.coachDeviceWorkoutDetailId);
+  }
+
   if (state.selectedScreen === "athletes") {
     return renderAthletesScreen(state);
   }
@@ -4329,6 +4368,13 @@ function renderCoachDeviceWorkoutPanel(dayData: CoachDayCleanSummary, isBusy: bo
                   <strong>${escapeHtml(formatDeviceWorkoutTitle(linkedWorkout))}</strong>
                   ${renderDeviceWorkoutMetrics(linkedWorkout)}
                   <small>устройство · ${escapeHtml(formatTimeRange(linkedWorkout.startTime, linkedWorkout.endTime))}</small>
+                  <button
+                    class="secondary-action device-workout-detail-action"
+                    data-coach-device-workout-detail="${escapeHtml(linkedWorkout.id)}"
+                    type="button"
+                  >
+                    Детали тренировки
+                  </button>
                 </div>
               ` : ""}
             </article>
@@ -5109,6 +5155,61 @@ function renderWatchWorkoutDetailScreen(state: MobileAppState, athleteId: string
       <p class="watch-detail-date">${escapeHtml(detailSubtitle)}</p>
       ${renderWatchWorkoutParameterPanel(workout, context, graphSeries)}
       <section class="watch-detail-card">
+        ${primarySeries
+          ? renderDeviceWorkoutSeriesDetailGraph(primarySeries, workout)
+          : renderDeviceWorkoutGraph(workout, context, graphSeries)}
+        ${secondarySeries.length > 0 ? `
+          <div class="device-workout-secondary-series">
+            ${secondarySeries.map((item) => `<span>${escapeHtml(item.label)}</span>`).join("")}
+          </div>
+        ` : ""}
+      </section>
+    </section>
+  `;
+}
+
+function renderCoachDeviceWorkoutDetailScreen(
+  state: MobileAppState,
+  athleteId: string | null,
+  workoutId: string,
+) {
+  const workout = getDeviceWorkoutById(state, athleteId, workoutId);
+  if (!workout) {
+    return `
+      <section class="watch-detail-screen">
+        <div class="watch-detail-title-row">
+          <button aria-label="Назад" class="watch-detail-back-button" data-coach-device-workout-detail-back type="button">‹</button>
+          <h3>Тренировка</h3>
+        </div>
+        ${renderEmpty("Тренировка не найдена", "Обновите данные спортсмена и откройте тренировку ещё раз.")}
+      </section>
+    `;
+  }
+
+  const workoutAthleteId = workout.athleteId;
+  const context = getWatchWorkoutDetailContext(state, workoutAthleteId, workout);
+  const graphSeries = buildDeviceWorkoutGraphSeries(workout, context);
+  const primarySeries = graphSeries.find((series) => series.key === "heartRate") ?? graphSeries[0] ?? null;
+  const secondarySeries = graphSeries.filter((series) => series !== primarySeries);
+  const title = formatDeviceWorkoutTypeLabel(workout);
+  const subtitle = `${formatDate(workout.entryDate)} · ${formatDeviceWorkoutTimeLabel(workout)}`;
+  const isLoadingSamples = workout.sampleCount > workout.samples.length;
+
+  return `
+    <section class="watch-detail-screen coach-workout-detail-screen">
+      <div class="watch-detail-title-row">
+        <button aria-label="Назад" class="watch-detail-back-button" data-coach-device-workout-detail-back type="button">‹</button>
+        <h3>${escapeHtml(title)}</h3>
+      </div>
+      <p class="watch-detail-date">${escapeHtml(subtitle)}</p>
+      ${renderWatchWorkoutParameterPanel(workout, context, graphSeries)}
+      <section class="watch-detail-card">
+        ${isLoadingSamples ? `
+          <section class="watch-workout-data-note">
+            <strong>Загружаю точки тренировки</strong>
+            <span>Краткие данные уже показаны. График пульса появится после загрузки ${workout.sampleCount.toLocaleString("ru-RU")} точек с сервера.</span>
+          </section>
+        ` : ""}
         ${primarySeries
           ? renderDeviceWorkoutSeriesDetailGraph(primarySeries, workout)
           : renderDeviceWorkoutGraph(workout, context, graphSeries)}
@@ -9917,9 +10018,9 @@ function getDeviceWorkoutSummaryHeartRateStats(workout: DeviceWorkout) {
   const maxFromRaw = rawSamples[2] ?? null;
 
   return {
-    avg: workout.averageHeartRateBpm ?? averageFromRaw,
-    max: workout.maxHeartRateBpm ?? maxFromRaw,
-    min: workout.minHeartRateBpm ?? minFromRaw,
+    avg: normalizeWorkoutHeartRateBpm(workout.averageHeartRateBpm) ?? averageFromRaw,
+    max: normalizeWorkoutHeartRateBpm(workout.maxHeartRateBpm) ?? maxFromRaw,
+    min: normalizeWorkoutHeartRateBpm(workout.minHeartRateBpm) ?? minFromRaw,
   };
 }
 
@@ -9931,7 +10032,7 @@ function readDeviceWorkoutSummaryHeartRateSamples(workout: DeviceWorkout) {
 
   return value
     .map((item) => typeof item === "number" && Number.isFinite(item) ? item : null)
-    .filter((item): item is number => item !== null && item >= 25 && item <= 240);
+    .filter((item): item is number => item !== null && isPlausibleWorkoutHeartRateBpm(item));
 }
 
 function buildDeviceWorkoutSummaryHeartRateSamples(workout: DeviceWorkout): { sampleTime: string; value: number }[] {
@@ -10407,6 +10508,41 @@ const DEVICE_WORKOUT_ZONE_COLORS: Record<number, string> = {
   4: "#facc15",
   5: "#e11d48",
 };
+const WORKOUT_HEART_RATE_MIN_BPM = 35;
+const WORKOUT_HEART_RATE_MAX_BPM = 220;
+
+function isPlausibleWorkoutHeartRateBpm(value: number) {
+  return Number.isFinite(value) &&
+    value >= WORKOUT_HEART_RATE_MIN_BPM &&
+    value <= WORKOUT_HEART_RATE_MAX_BPM;
+}
+
+function normalizeWorkoutHeartRateBpm(value: number | null | undefined) {
+  return typeof value === "number" && isPlausibleWorkoutHeartRateBpm(value) ? value : null;
+}
+
+function getWorkoutHeartRateGraphBounds(workout: DeviceWorkout) {
+  const summaryMin = normalizeWorkoutHeartRateBpm(workout.minHeartRateBpm);
+  const summaryMax = normalizeWorkoutHeartRateBpm(workout.maxHeartRateBpm);
+
+  return {
+    lower: summaryMin !== null
+      ? Math.max(WORKOUT_HEART_RATE_MIN_BPM, summaryMin - 8)
+      : Math.max(WORKOUT_HEART_RATE_MIN_BPM, 40),
+    upper: summaryMax !== null
+      ? Math.min(WORKOUT_HEART_RATE_MAX_BPM, summaryMax + 8)
+      : WORKOUT_HEART_RATE_MAX_BPM,
+  };
+}
+
+function isWorkoutHeartRateGraphValue(workout: DeviceWorkout, value: number) {
+  if (!isPlausibleWorkoutHeartRateBpm(value)) {
+    return false;
+  }
+
+  const bounds = getWorkoutHeartRateGraphBounds(workout);
+  return value >= bounds.lower && value <= bounds.upper;
+}
 
 function formatPaceSeconds(value: number) {
   const rounded = Math.max(0, Math.round(value));
@@ -10517,7 +10653,7 @@ function buildDeviceWorkoutGraphSeriesUncached(
   const rawSpo2Samples: { sampleTime: string; value: number }[] = [];
 
   for (const sample of workout.samples) {
-    if (sample.heartRateBpm !== null) {
+    if (sample.heartRateBpm !== null && isWorkoutHeartRateGraphValue(workout, sample.heartRateBpm)) {
       rawHeartRateSamples.push({ sampleTime: sample.sampleTime, value: sample.heartRateBpm });
     }
 
@@ -10546,7 +10682,7 @@ function buildDeviceWorkoutGraphSeriesUncached(
     ? []
     : summaryHeartRateSamples.length > 1
       ? []
-    : getWatchWorkoutWindowSamples(workout, context?.heartRateSamples ?? []);
+    : filterWorkoutHeartRateGraphSamples(workout, getWatchWorkoutWindowSamples(workout, context?.heartRateSamples ?? []));
   const fallbackOxygenSamples = spo2Samples.length > 1
     ? []
     : getWatchWorkoutWindowSamples(workout, context?.oxygenSamples ?? []);
@@ -10625,6 +10761,10 @@ function compactDeviceWorkoutGraphSamples<T extends { sampleTime: string; value:
   samples: T[],
 ) {
   return limitDeviceWorkoutSamples(samples, DEVICE_WORKOUT_SERIES_RENDER_LIMIT);
+}
+
+function filterWorkoutHeartRateGraphSamples<T extends { value: number }>(workout: DeviceWorkout, samples: T[]) {
+  return samples.filter((sample) => isWorkoutHeartRateGraphValue(workout, sample.value));
 }
 
 function getWatchWorkoutWindowSamples(
@@ -11268,7 +11408,7 @@ function buildDeviceWorkoutHeartRateDetailChart(
   const points = series.samples
     .map((sample) => {
       const sampledAt = getDeviceWorkoutGraphTime(sample.sampleTime);
-      if (sampledAt === null || sample.value < 25 || sample.value > 240) {
+      if (sampledAt === null || !isWorkoutHeartRateGraphValue(workout, sample.value)) {
         return null;
       }
 
@@ -16379,6 +16519,7 @@ function getDeviceHealthSampleStorageKey(sample: DeviceHealthSample) {
 function normalizeMobileDataSnapshot(snapshot: MobileDataSnapshot): MobileDataSnapshot {
   return {
     ...snapshot,
+    deviceWorkoutLinks: snapshot.deviceWorkoutLinks.map(compactDeviceWorkoutLinkForRuntime),
     deviceWorkouts: dedupeDeviceWorkoutsForDisplay(snapshot.deviceWorkouts)
       .sort((left, right) =>
         right.entryDate.localeCompare(left.entryDate) || right.startTime.localeCompare(left.startTime),
@@ -16413,14 +16554,26 @@ function upsertDeviceWorkouts(items: DeviceWorkout[], workouts: DeviceWorkout[])
 }
 
 function upsertDeviceWorkoutLinks(items: DeviceWorkoutLink[], links: DeviceWorkoutLink[]) {
+  const compactLinks = links.map(compactDeviceWorkoutLinkForRuntime);
   const nextItems = items.filter((item) => !links.some((link) =>
     link.id === item.id ||
     (link.athleteId === item.athleteId &&
       link.assignedBlockId === item.assignedBlockId &&
       link.deviceWorkoutId === item.deviceWorkoutId)
   ));
-  nextItems.unshift(...links);
+  nextItems.unshift(...compactLinks);
   return nextItems.slice(0, 200);
+}
+
+function compactDeviceWorkoutLinkForRuntime(link: DeviceWorkoutLink): DeviceWorkoutLink {
+  return {
+    ...link,
+    workout: {
+      ...link.workout,
+      rawPayload: null,
+      samples: [],
+    },
+  };
 }
 
 function upsertExecutionResult(items: ExecutionResult[], result: ExecutionResult) {

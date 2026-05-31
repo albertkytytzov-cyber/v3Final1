@@ -451,6 +451,12 @@ export class MobileApiClient {
     );
   }
 
+  listCoachDeviceWorkouts(athleteId: string, entryDate: string, includeSamples = true) {
+    return this.request<DeviceWorkoutsResponse>(
+      `/coach/athletes/${encodeURIComponent(athleteId)}/device-workouts?entryDate=${encodeURIComponent(entryDate)}&includeSamples=${includeSamples ? "true" : "false"}`,
+    );
+  }
+
   submitDeviceWorkouts(payload: DeviceWorkoutsSyncPayload, idempotencyKey: string) {
     return this.request<DeviceWorkoutsResponse>("/device-health/workouts", {
       body: JSON.stringify(payload),
