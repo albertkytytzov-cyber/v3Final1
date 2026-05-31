@@ -130,6 +130,8 @@ const DIRECT_WATCH_NATIVE_SYNC_RETRY_DELAY_MS = 15 * 1000;
 const DIRECT_WATCH_SERVICE_STATUS_SETTLE_MS = 8_000;
 const DIRECT_WATCH_HISTORY_SYNC_DAYS = 30;
 const DIRECT_WATCH_HISTORY_SYNC_DAY_DELAY_MS = 350;
+const DIRECT_WATCH_SYNC_ALREADY_RUNNING_MESSAGE =
+  "PERFORM Sync уже синхронизирует часы. Данные обновятся автоматически.";
 const DEVICE_WORKOUT_SERIES_RENDER_LIMIT = 1_600;
 const WATCH_SLEEP_MIN_MEANINGFUL_MINUTES = 120;
 const WATCH_SLEEP_SHORTER_TOLERANCE_MINUTES = 30;
@@ -1145,12 +1147,20 @@ export function bootstrapMobileApp(root: HTMLElement) {
     if (isDirectWatchRuntime() && directWatchConfig.deviceId && directWatchConfig.authKeyHex) {
       try {
         update({ error: null, isBusy: true, message: "PERFORM Sync читает день напрямую с часов..." });
-        const { payload, payloadError, serviceResult } = await readDirectWatchDailyWithServiceSession(
+        const { payload, payloadError, serviceBusy, serviceResult } = await readDirectWatchDailyWithServiceSession(
           entryDate,
           directWatchConfig.deviceId,
           directWatchConfig,
         );
         if (!payload) {
+          if (serviceBusy) {
+            update({
+              error: null,
+              isBusy: false,
+              message: DIRECT_WATCH_SYNC_ALREADY_RUNNING_MESSAGE,
+            });
+            return;
+          }
           throw payloadError instanceof Error
             ? payloadError
             : new Error("PERFORM Sync не смог считать день с часов.");
@@ -1209,6 +1219,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
     let payload: DirectWatchDailySyncPayload | null = null;
     let payloadError: unknown = null;
     let serviceResult: DirectWatchServiceSyncResult | null = null;
+    let serviceBusy = false;
     const serviceOk = await syncDirectWatchServiceSettings(targetDeviceId, {
       entryDate,
       fetchActivity: true,
@@ -1220,16 +1231,33 @@ export function bootstrapMobileApp(root: HTMLElement) {
     });
 
     if (serviceResult) {
-      try {
-        payload = buildDirectWatchDailySyncPayloadFromProbe(entryDate, targetDeviceId, serviceResult);
-      } catch (error) {
-        payloadError = error;
+      serviceBusy = isDirectWatchSyncAlreadyRunningResult(serviceResult);
+      if (serviceBusy) {
+        payloadError = new Error(DIRECT_WATCH_SYNC_ALREADY_RUNNING_MESSAGE);
+      } else {
+        try {
+          payload = buildDirectWatchDailySyncPayloadFromProbe(entryDate, targetDeviceId, serviceResult);
+        } catch (error) {
+          payloadError = error;
+        }
       }
     } else if (!serviceOk) {
-      payloadError = new Error(loadDirectWatchConfig().lastServiceError || "PERFORM Sync не смог открыть прямую сессию часов.");
+      const serviceError = loadDirectWatchConfig().lastServiceError || "PERFORM Sync не смог открыть прямую сессию часов.";
+      serviceBusy = isDirectWatchSyncAlreadyRunningMessage(serviceError);
+      payloadError = new Error(serviceBusy ? DIRECT_WATCH_SYNC_ALREADY_RUNNING_MESSAGE : serviceError);
     }
 
     const completedServiceResult = serviceResult as DirectWatchServiceSyncResult | null;
+    if (serviceBusy) {
+      return {
+        payload,
+        payloadError,
+        serviceBusy,
+        serviceOk,
+        serviceResult,
+      };
+    }
+
     const activityDiagnostic = buildDirectWatchActivitySyncDiagnostic(payload, completedServiceResult, payloadError);
     const serviceSyncedAt = completedServiceResult?.syncedAt ?? activityDiagnostic.syncedAt;
     const serviceSyncOk = isDirectWatchServiceSyncSuccessful(completedServiceResult);
@@ -1255,6 +1283,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
     return {
       payload,
       payloadError,
+      serviceBusy,
       serviceOk,
       serviceResult,
     };
@@ -1367,8 +1396,18 @@ export function bootstrapMobileApp(root: HTMLElement) {
     }
 
     try {
-      const { payload, payloadError, serviceResult } = await readDirectWatchDailyWithServiceSession(entryDate, targetDeviceId, config);
+      const { payload, payloadError, serviceBusy, serviceResult } = await readDirectWatchDailyWithServiceSession(entryDate, targetDeviceId, config);
       if (!payload) {
+        if (serviceBusy) {
+          if (!options.silent) {
+            update({
+              error: null,
+              isBusy: false,
+              message: DIRECT_WATCH_SYNC_ALREADY_RUNNING_MESSAGE,
+            });
+          }
+          return false;
+        }
         throw payloadError instanceof Error
           ? payloadError
           : new Error("PERFORM Sync не смог считать день с часов.");
@@ -1430,6 +1469,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
     payload = serviceResult.payload;
     payloadError = serviceResult.payloadError;
     const serviceOk = serviceResult.serviceOk;
+    const serviceBusy = serviceResult.serviceBusy;
 
     if (payload) {
       await submitDirectWatchSyncPayload(payload, { silent: true });
@@ -1438,9 +1478,18 @@ export function bootstrapMobileApp(root: HTMLElement) {
     if (payload) {
       await refreshData(true).catch(() => undefined);
       update({
-        error: serviceOk ? null : loadDirectWatchConfig().lastServiceError,
+        error: serviceOk || serviceBusy ? null : loadDirectWatchConfig().lastServiceError,
         isBusy: false,
         message: formatDirectWatchDailySyncResultMessage(payload, serviceResult.serviceResult),
+      });
+      return;
+    }
+
+    if (serviceBusy) {
+      update({
+        error: null,
+        isBusy: false,
+        message: DIRECT_WATCH_SYNC_ALREADY_RUNNING_MESSAGE,
       });
       return;
     }
@@ -1713,7 +1762,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
         update({
           error: null,
           isBusy: false,
-          message: "Синхронизация часов уже выполняется. Дождитесь завершения текущего цикла.",
+          message: DIRECT_WATCH_SYNC_ALREADY_RUNNING_MESSAGE,
         });
       }
       return false;
@@ -1761,6 +1810,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
       options.onResult?.(result);
       const serviceStatus = await getSettledDirectWatchSyncServiceStatus();
       const ok = isDirectWatchServiceSyncSuccessful(result);
+      const serviceBusy = isDirectWatchSyncAlreadyRunningResult(result);
       const syncedAt = result.syncedAt ?? new Date().toISOString();
       const serviceIsRunning = serviceStatus
         ? serviceStatus.running === true
@@ -1768,17 +1818,21 @@ export function bootstrapMobileApp(root: HTMLElement) {
       const serviceBridgeUntil = serviceIsRunning
         ? serviceStatus?.bridgeUntil ?? result.bridgeUntil ?? null
         : null;
-      const serviceError = result.error || result.authKeyError || "Служебная синхронизация часов не подтвердилась.";
+      const serviceError = serviceBusy
+        ? DIRECT_WATCH_SYNC_ALREADY_RUNNING_MESSAGE
+        : result.error || result.authKeyError || "Служебная синхронизация часов не подтвердилась.";
       rememberDirectWatchConfig({
         deviceId: targetDeviceId,
         deviceName: serviceStatus?.deviceName ?? targetDevice?.name ?? config.deviceName,
         lastServiceBridgeUntil: serviceBridgeUntil,
-        lastServiceError: ok ? null : serviceError,
+        lastServiceError: ok || serviceBusy ? null : serviceError,
         lastServiceStatus: ok
           ? serviceIsRunning
             ? "running"
             : "synced"
-          : "error",
+          : serviceBusy
+            ? "running"
+            : "error",
         lastServiceSyncedAt: ok ? syncedAt : config.lastServiceSyncedAt,
         lastServiceUpdatedAt: serviceStatus?.updatedAt ?? syncedAt,
       });
@@ -1805,25 +1859,28 @@ export function bootstrapMobileApp(root: HTMLElement) {
           },
           serviceStatus,
         },
-        error: ok ? null : serviceError,
+        error: ok || serviceBusy ? null : serviceError,
         isBusy: false,
         message: ok
           ? formatDirectWatchServiceSyncMessage(result, weatherSourceLabel, weatherError)
-          : null,
+          : serviceBusy
+            ? DIRECT_WATCH_SYNC_ALREADY_RUNNING_MESSAGE
+            : null,
       });
       return ok;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Не удалось выполнить служебную синхронизацию часов.";
+      const serviceBusy = isDirectWatchSyncAlreadyRunningMessage(errorMessage);
       rememberDirectWatchConfig({
-        lastServiceError: errorMessage,
-        lastServiceStatus: "error",
+        lastServiceError: serviceBusy ? null : errorMessage,
+        lastServiceStatus: serviceBusy ? "running" : "error",
         lastServiceUpdatedAt: new Date().toISOString(),
       });
       if (!options.silent) {
         update({
-          error: errorMessage,
+          error: serviceBusy ? null : errorMessage,
           isBusy: false,
-          message: null,
+          message: serviceBusy ? DIRECT_WATCH_SYNC_ALREADY_RUNNING_MESSAGE : null,
         });
       }
       return false;
@@ -3546,18 +3603,13 @@ function renderAppShell(state: MobileAppState) {
   const selectedAthlete = getSelectedAthlete(state);
   const activeAthleteId = getActiveAthleteId(state);
   const isWatchDetailScreen = isWatchSubscreenActive(displayState);
+  const isCoachView = isCoachRole(user?.role);
 
   return `
     <main class="mobile-shell ${isWatchDetailScreen ? "is-watch-detail" : ""}">
-      ${renderAppTopBar(state, selectedAthlete)}
+      ${isCoachView ? renderCoachUtilityMenu(state) : renderAppTopBar(state, selectedAthlete)}
 
       ${renderStatus(state)}
-
-      ${
-        isCoachRole(user?.role) && displayState.selectedScreen !== "athletes"
-          ? renderAthletePicker(state)
-          : ""
-      }
 
       <section class="screen-panel">
         ${renderScreen(displayState, activeAthleteId)}
@@ -3572,6 +3624,55 @@ function renderAppShell(state: MobileAppState) {
         `).join("")}
       </nav>
     </main>
+  `;
+}
+
+function renderCoachUtilityMenu(state: MobileAppState) {
+  const pendingQueue = getPendingQueueItems(state.queue);
+  const invalidQueue = getInvalidQueueItems(state.queue);
+  const savedLabel = state.data.savedAt
+    ? `сохранено ${formatDateTime(state.data.savedAt)}`
+    : "данные ещё не сохранены";
+  const queueLabel = pendingQueue.length
+    ? `очередь ${pendingQueue.length}`
+    : invalidQueue.length
+      ? `ошибка ${invalidQueue.length}`
+      : "очередь пустая";
+  const syncLabel = pendingQueue.length ? `Синхр. (${pendingQueue.length})` : "Синхр.";
+
+  return `
+    <details class="coach-utility-menu">
+      <summary aria-label="Открыть меню тренера" title="Открыть меню тренера">
+        <span>${state.isOnline ? "онлайн" : "офлайн"} · тренер</span>
+        <strong>PERFORM Coach</strong>
+        <em>${escapeHtml(savedLabel)}</em>
+        <b aria-hidden="true">⋯</b>
+      </summary>
+      <div class="coach-utility-panel" aria-label="Служебные действия тренера">
+        <p>${escapeHtml(state.session.user?.fullName ?? "Тренер")} · ${escapeHtml(queueLabel)}</p>
+        <div class="coach-utility-actions">
+          <button
+            class="topbar-action-button"
+            data-refresh
+            type="button"
+            ${state.isBusy ? "disabled" : ""}
+          >↻ Обновить</button>
+          <button
+            aria-label="${escapeHtml(syncLabel)}"
+            class="topbar-action-button"
+            data-sync
+            title="${escapeHtml(syncLabel)}"
+            type="button"
+            ${state.isSyncing || pendingQueue.length === 0 ? "disabled" : ""}
+          >⇄ ${escapeHtml(syncLabel)}</button>
+          <button
+            class="topbar-logout-button"
+            data-logout
+            type="button"
+          >Выйти</button>
+        </div>
+      </div>
+    </details>
   `;
 }
 
@@ -3649,14 +3750,18 @@ function renderAthleteSelectControl(state: MobileAppState, className: string) {
     <label class="${escapeHtml(className)}">
       <span>Спортсмен</span>
       <select data-athlete-select>
-        ${state.data.athletes.map((athlete) => `
-          <option value="${escapeHtml(athlete.athleteId)}" ${state.selectedAthleteId === athlete.athleteId ? "selected" : ""}>
-            ${escapeHtml(athlete.fullName)}
-          </option>
-        `).join("")}
+        ${renderAthleteSelectOptions(state, state.selectedAthleteId)}
       </select>
     </label>
   `;
+}
+
+function renderAthleteSelectOptions(state: MobileAppState, selectedAthleteId: string | null) {
+  return state.data.athletes.map((athlete) => `
+    <option value="${escapeHtml(athlete.athleteId)}" ${selectedAthleteId === athlete.athleteId ? "selected" : ""}>
+      ${escapeHtml(athlete.fullName)}
+    </option>
+  `).join("");
 }
 
 function renderScreen(state: MobileAppState, athleteId: string | null) {
@@ -3694,7 +3799,7 @@ function renderDashboardScreen(state: MobileAppState, athleteId: string | null) 
   const selectedDayDate = isCoachView ? state.selectedDayDate : todayValue();
 
   if (isCoachView) {
-    return renderCoachDayStatusScreen(state, athleteId, selectedDayDate);
+    return renderCoachTeamDashboardScreen(state, selectedDayDate);
   }
 
   return `
@@ -3704,6 +3809,26 @@ function renderDashboardScreen(state: MobileAppState, athleteId: string | null) 
     </div>
     ${athleteId ? renderAthleteHomeCard(state, athleteId, selectedDayDate) : ""}
     ${nextStart ? renderAthleteNextStartCard(nextStart) : ""}
+  `;
+}
+
+function renderCoachTeamDashboardScreen(state: MobileAppState, selectedDayDate: string) {
+  const athletesWithReadiness = state.data.athletes
+    .filter((athlete) => Boolean(getReadinessEntryForDate(state, athlete.athleteId, selectedDayDate)))
+    .length;
+  const athletesWithPlans = state.data.athletes
+    .filter((athlete) => getPlansForAthlete(state, athlete.athleteId)
+      .some((plan) => plan.day.dayDate === selectedDayDate))
+    .length;
+
+  return `
+    <div class="screen-head coach-team-screen-head">
+      <span>Команда</span>
+      <h2>Сегодня у спортсменов</h2>
+      <p>${formatDate(selectedDayDate)} · готовность ${athletesWithReadiness}/${state.data.athletes.length} · планы ${athletesWithPlans}/${state.data.athletes.length}</p>
+    </div>
+    ${renderCoachDayControl(state, null)}
+    ${renderCoachTeamDayPanel(state, selectedDayDate)}
   `;
 }
 
@@ -4289,10 +4414,10 @@ function renderCoachTeamDayPanel(state: MobileAppState, selectedDayDate: string)
             <button
               data-coach-open-athlete="${escapeHtml(athlete.athleteId)}"
               data-coach-open-day="${escapeHtml(selectedDayDate)}"
-              data-coach-open-screen="dashboard"
+              data-coach-open-screen="athletes"
               type="button"
             >
-              Открыть день
+              Открыть спортсмена
             </button>
           </article>
         `).join("")}
@@ -4319,13 +4444,32 @@ function renderAthletesScreen(state: MobileAppState) {
   const selectedAthlete = getSelectedAthlete(state) ?? state.data.athletes[0] ?? null;
 
   return `
-    <div class="screen-head">
-      <h2>Спортсмены</h2>
-      <p>${state.data.athletes.length} в списке</p>
-    </div>
-    ${renderAthleteSelectControl(state, "athlete-picker athlete-screen-picker")}
-    ${selectedAthlete ? renderCoachAthleteCard(selectedAthlete) : ""}
+    ${selectedAthlete ? renderCoachAthleteSwitchHeader(state, selectedAthlete) : ""}
+    ${selectedAthlete ? renderCoachAthleteReadinessOverview(state, selectedAthlete.athleteId) : ""}
     ${selectedAthlete ? renderCoachAthleteDayBrief(state, selectedAthlete.athleteId) : ""}
+  `;
+}
+
+function renderCoachAthleteSwitchHeader(state: MobileAppState, athlete: CoachAthleteSummary) {
+  const savedLabel = state.data.savedAt
+    ? `обновлено ${formatDateTime(state.data.savedAt)}`
+    : "данные ещё не обновлялись";
+
+  return `
+    <section class="coach-athlete-switch-header" aria-label="Выбор спортсмена">
+      <label class="coach-athlete-switch-control">
+        <span class="coach-athlete-switch-copy">
+          <em>Спортсмен</em>
+          <strong>${escapeHtml(athlete.fullName)}</strong>
+          <small>${escapeHtml(savedLabel)}</small>
+        </span>
+        <span class="coach-athlete-switch-action" aria-hidden="true">Сменить</span>
+        <select data-athlete-select aria-label="Выбрать спортсмена">
+          ${renderAthleteSelectOptions(state, athlete.athleteId)}
+        </select>
+        <span class="coach-athlete-switch-chevron" aria-hidden="true">⌄</span>
+      </label>
+    </section>
   `;
 }
 
@@ -4380,8 +4524,8 @@ function renderCoachAthleteCard(athlete: CoachAthleteSummary) {
   return `
     <article class="coach-athlete-card">
       <div>
-        <span>Выбранный спортсмен</span>
-        <h3>${escapeHtml(athlete.fullName)}</h3>
+        <span>Профиль</span>
+        <h3>Данные спортсмена</h3>
         <p>${escapeHtml(athlete.email)}</p>
       </div>
       <div class="coach-athlete-card-grid">
@@ -4389,6 +4533,112 @@ function renderCoachAthleteCard(athlete: CoachAthleteSummary) {
         <span>${escapeHtml(baselineParts.join(" · ") || "Базовые показатели не заданы")}</span>
       </div>
     </article>
+  `;
+}
+
+function renderCoachAthleteReadinessOverview(state: MobileAppState, athleteId: string) {
+  const entries = getRecentReadinessEntriesForAthlete(state, athleteId, 10);
+  const history = getReadinessHistory(state, athleteId);
+  const latestEntry = history[0] ?? entries[entries.length - 1] ?? null;
+
+  if (!latestEntry) {
+    return `
+      <section class="readiness-trend-card coach-athlete-readiness-card is-empty">
+        <div class="readiness-trend-head">
+          <div>
+            <span>История готовности</span>
+            <h3>Пока нет записей</h3>
+            <p>Когда спортсмен сохранит готовность, тренер увидит динамику и последние показатели здесь.</p>
+          </div>
+          <strong>—</strong>
+        </div>
+      </section>
+    `;
+  }
+
+  const trend = getReadinessTrendDelta(entries);
+  const trendClass = getReadinessTrendClass(trend);
+  const canRenderTrendChart = entries.length >= 2;
+
+  return `
+    <section class="coach-athlete-readiness-stack" aria-label="Готовность спортсмена">
+      <article class="readiness-trend-card coach-athlete-readiness-card readiness-${escapeHtml(latestEntry.status)}">
+        <div class="readiness-trend-head">
+          <div>
+            <span>Готовность за 10 дней</span>
+            <h3>Динамика спортсмена</h3>
+            <p>последние заполнения и общий тренд</p>
+          </div>
+          <strong>${latestEntry.score}</strong>
+        </div>
+        <div class="readiness-trend-chart">
+          <div class="readiness-trend-chart-meta">
+            <span>${formatDate(latestEntry.entryDate)} · ${escapeHtml(formatReadinessStatus(latestEntry.status))}</span>
+            <em class="readiness-trend-chip is-${trendClass}">${escapeHtml(formatReadinessTrendDelta(trend))}</em>
+          </div>
+          ${canRenderTrendChart ? renderReadinessTrendSvg(entries, "readiness-trend-svg is-coach") : renderCoachAthleteSingleReadinessPoint(latestEntry)}
+          ${canRenderTrendChart ? renderReadinessTrendDots(entries) : ""}
+        </div>
+      </article>
+      <article class="coach-athlete-latest-readiness-card">
+        <div class="section-title">
+          <h3>Последняя готовность</h3>
+          <p>${formatDate(latestEntry.entryDate)} · ${escapeHtml(formatReadinessFlags(latestEntry))}</p>
+        </div>
+        <div class="coach-athlete-readiness-facts">
+          ${renderCoachAthleteReadinessFact("Пульс покоя", `${latestEntry.restingHr}`, "уд/мин")}
+          ${renderCoachAthleteReadinessFact("Сон", `${formatReadinessNumber(latestEntry.sleepHours)} ч`, "за ночь")}
+          ${renderCoachAthleteReadinessFact("Усталость", `${latestEntry.fatigueLevel}/5`, "самооценка")}
+          ${renderCoachAthleteReadinessFact("Боль", latestEntry.painLevel > 0 ? `${latestEntry.painLevel}/10` : "нет", "самооценка")}
+        </div>
+      </article>
+      ${renderCoachAthleteReadinessHistory(history)}
+    </section>
+  `;
+}
+
+function renderCoachAthleteSingleReadinessPoint(entry: ReadinessEntry) {
+  return `
+    <div class="coach-athlete-readiness-one-point">
+      <strong>${entry.score}</strong>
+      <span>${formatShortDate(entry.entryDate)}</span>
+      <small>нужны ещё замеры для графика</small>
+    </div>
+  `;
+}
+
+function renderCoachAthleteReadinessFact(label: string, value: string, detail: string) {
+  return `
+    <article>
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value)}</strong>
+      <small>${escapeHtml(detail)}</small>
+    </article>
+  `;
+}
+
+function renderCoachAthleteReadinessHistory(entries: ReadinessEntry[]) {
+  if (entries.length === 0) {
+    return "";
+  }
+
+  return `
+    <section class="coach-athlete-readiness-history" aria-label="История готовности">
+      <div class="section-title">
+        <h3>История готовности</h3>
+        <p>последние записи спортсмена</p>
+      </div>
+      <div class="coach-athlete-readiness-history-list">
+        ${entries.map((entry) => `
+          <article class="coach-athlete-readiness-history-row readiness-${escapeHtml(entry.status)}">
+            <time>${formatDate(entry.entryDate)}</time>
+            <strong>${entry.score}</strong>
+            <span>${escapeHtml(formatReadinessStatus(entry.status))}</span>
+            <small>${escapeHtml(formatReadinessHistoryDetails(entry))}</small>
+          </article>
+        `).join("")}
+      </div>
+    </section>
   `;
 }
 
@@ -4417,9 +4667,9 @@ function renderCoachAthleteDayBrief(state: MobileAppState, athleteId: string) {
       </div>
       <p class="athlete-day-brief-note">Комментарий: ${escapeHtml(dayData.coachNote)}</p>
       <div class="athlete-day-brief-actions" aria-label="Быстрые действия по спортсмену">
-        <button class="primary-action" data-screen="dashboard" type="button">Открыть день</button>
+        <button class="primary-action" data-screen="results" type="button">Выполнение</button>
         <button class="secondary-action" data-screen="plans" type="button">Планы</button>
-        <button class="secondary-action" data-screen="results" type="button">Разбор</button>
+        <button class="secondary-action" data-screen="calendar" type="button">Календарь</button>
       </div>
     </section>
   `;
@@ -5624,23 +5874,6 @@ function getDirectWatchUserDiagnostics(
     : canSync
       ? "ждёт первой синхронизации"
       : "не настроена";
-  const dataLabel = backgroundSync?.available || config.lastActivitySyncStatus === "ok" || activityChecked
-    ? "сохранены"
-    : config.lastActivitySyncStatus === "error"
-      ? "ошибка чтения"
-      : config.lastActivitySyncDiagnostic
-        ? "проверены"
-        : "пока нет";
-  const workoutLabel = config.lastActivitySyncWorkoutCount !== null
-    ? config.lastActivitySyncWorkoutCount > 0
-      ? `${config.lastActivitySyncWorkoutCount} ${formatRussianCount(config.lastActivitySyncWorkoutCount, "тренировка", "тренировки", "тренировок")}`
-      : "новых нет"
-    : "проверим при синхронизации";
-  const vitalsLabel = backgroundSync?.available || config.lastActivitySyncStatus === "ok" || activityHasFiles
-    ? "сон, пульс и SpO2 получены"
-    : activityChecked
-      ? "дневные данные проверены"
-    : "ожидают синхронизацию";
   const autoLabel = hasPending
     ? "синхронизация в очереди"
     : retryAfterMs && retryAfterMs > 0
@@ -5660,36 +5893,60 @@ function getDirectWatchUserDiagnostics(
         ? "Служба часов готова к запуску."
         : "Для прямой синхронизации выберите часы и сохраните Auth Key.";
   const lastSyncLabel = lastSyncAt ? formatDateTime(lastSyncAt) : "ещё не было";
+  const lastWeatherLabel = lastWeatherAt ? formatDateTime(lastWeatherAt) : "ещё не отправлялась";
+  const dataDayLabel = backgroundSync?.available || config.lastActivitySyncStatus === "ok" || activityHasFiles
+    ? "Шаги, активность, сон и файлы часов получены"
+    : activityChecked
+      ? "Дневные данные проверены, новых файлов нет"
+      : config.lastActivitySyncStatus === "error"
+        ? "Ошибка чтения дневных данных"
+        : "Ожидает первой синхронизации";
+  const bluetoothTone = userError ? "error" : canSync ? "ok" : "warning";
+  const bluetoothValue = userError
+    ? userError
+    : canSync
+      ? "Канал готов, часы отвечают при синхронизации"
+      : "Нужно выбрать часы и сохранить Auth Key";
+  const batteryValue = isRunning
+    ? "Разрешена работа в фоне"
+    : userError
+      ? "Проверьте Bluetooth и ограничения Android"
+      : canSync
+        ? "Служба готова к запуску"
+        : "Настройка ещё не завершена";
 
   return {
     autoLabel,
     connectionLabel,
     headline,
+    lastWeatherLabel,
     lastSyncLabel,
     updates: [
       {
         label: "Погода",
         meta: lastWeatherAt ? formatDateTime(lastWeatherAt) : null,
         tone: lastWeatherAt ? "ok" : canSync ? "warning" : "muted",
-        value: weatherLabel,
+        value: lastWeatherAt
+          ? "Температура, ветер, влажность, UV/AQI, прогноз отправлены"
+          : weatherLabel,
       },
       {
-        label: "Активность",
+        label: "Данные дня",
         meta: lastActivityAt ? formatDateTime(lastActivityAt) : null,
         tone: config.lastActivitySyncStatus === "error" ? "error" : lastActivityAt ? "ok" : "muted",
-        value: dataLabel,
+        value: dataDayLabel,
       },
       {
-        label: "Сон и пульс",
-        meta: lastActivityAt ? formatDateTime(lastActivityAt) : backgroundSync?.entryDate ? formatDate(backgroundSync.entryDate) : null,
-        tone: backgroundSync?.available || config.lastActivitySyncStatus === "ok" || activityChecked ? "ok" : "muted",
-        value: vitalsLabel,
+        label: "Bluetooth",
+        meta: connectionLabel,
+        tone: bluetoothTone,
+        value: bluetoothValue,
       },
       {
-        label: "Тренировки",
-        meta: config.lastActivitySyncAt ? formatDateTime(config.lastActivitySyncAt) : null,
-        tone: config.lastActivitySyncStatus === "error" ? "error" : config.lastActivitySyncWorkoutCount !== null ? "ok" : "muted",
-        value: workoutLabel,
+        label: "Энергосбережение",
+        meta: isRunning ? "активно" : null,
+        tone: isRunning ? "ok" : canSync ? "warning" : "muted",
+        value: batteryValue,
       },
     ],
     userError,
@@ -5725,17 +5982,32 @@ function renderWatchSyncPanel(state: MobileAppState, date: string) {
       <article class="watch-background-status">
         <div class="watch-background-head">
           <div>
-            <span>Фоновая синхронизация</span>
+            <span>PERFORM Sync</span>
             <h3>${escapeHtml(deviceLabel)}</h3>
             <p>${escapeHtml(userDiagnostics.headline)}</p>
           </div>
           <strong class="watch-sync-status">${escapeHtml(statusLabel)}</strong>
         </div>
-        <div class="watch-background-meta">
-          <span>${escapeHtml(userDiagnostics.connectionLabel)}</span>
-          <strong>Последняя синхронизация: ${escapeHtml(userDiagnostics.lastSyncLabel)}</strong>
+        <div class="watch-status-metrics">
+          <article>
+            <span>Последняя синхронизация</span>
+            <strong>${escapeHtml(userDiagnostics.lastSyncLabel)}</strong>
+          </article>
+          <article>
+            <span>Погода отправлена</span>
+            <strong>${escapeHtml(userDiagnostics.lastWeatherLabel)}</strong>
+          </article>
         </div>
-        ${userDiagnostics.userError ? `<p class="watch-sync-error">${escapeHtml(userDiagnostics.userError)}</p>` : ""}
+      </article>
+      ${userDiagnostics.userError ? `<p class="watch-sync-error">${escapeHtml(userDiagnostics.userError)}</p>` : ""}
+      <article class="watch-background-card">
+        <div class="watch-background-card-head">
+          <div>
+            <span>Что обновилось</span>
+            <strong>Фоновый пакет часов</strong>
+          </div>
+          <em>${escapeHtml(userDiagnostics.connectionLabel)}</em>
+        </div>
         <div class="watch-background-updates">
           ${userDiagnostics.updates.map((update) => `
             <article class="watch-background-row is-${escapeHtml(update.tone)}">
@@ -5750,7 +6022,7 @@ function renderWatchSyncPanel(state: MobileAppState, date: string) {
         </div>
         <p class="watch-background-next">Следующее автообновление: ${escapeHtml(userDiagnostics.autoLabel)}</p>
       </article>
-      <div class="watch-sync-actions">
+      <div class="watch-sync-main-actions">
         <button
           class="primary-action"
           data-direct-watch-full-sync="${escapeHtml(config.deviceId || "")}"
@@ -5760,101 +6032,105 @@ function renderWatchSyncPanel(state: MobileAppState, date: string) {
         >
           Синхронизировать сейчас
         </button>
-        <button
-          class="secondary-action"
-          data-direct-watch-sync="${escapeHtml(config.deviceId || "")}"
-          data-direct-watch-sync-date="${escapeHtml(date)}"
-          type="button"
-          ${state.isBusy || !canServiceSync ? "disabled" : ""}
-        >
-          Считать данные
-        </button>
-        <button
-          class="secondary-action"
-          data-direct-watch-service-sync="${escapeHtml(config.deviceId || "")}"
-          type="button"
-          ${state.isBusy || !canServiceSync ? "disabled" : ""}
-        >
-          Время и погода
-        </button>
-      </div>
-      <details class="watch-technical-status">
-        <summary>Служебная информация</summary>
-        ${renderWatchActivitySyncDiagnostic(config)}
-        ${renderWatchCoordinatorStatus(state.directWatchDiagnostic.syncCoordinatorStatus)}
-        <div class="watch-sync-grid">
-          <article>
-            <span>Источник погоды</span>
-            <strong>${escapeHtml(weatherSourceLabel)}</strong>
-          </article>
-          <article>
-            <span>Служба</span>
-            <strong>${escapeHtml(bridgeLabel)}</strong>
-          </article>
-          <article>
-            <span>Пакет погоды</span>
-            <strong>влажность · ветер · UV/AQI · солнце</strong>
-          </article>
-        </div>
-      </details>
-      <section class="watch-history-sync-card is-${escapeHtml(historyProgress.statusKind)}">
-        <div class="watch-history-sync-head">
-          <div>
-            <span>История данных</span>
-            <h4>Первичная синхронизация</h4>
-            <p>${escapeHtml(historyProgress.detail)}</p>
+        <details class="watch-technical-status watch-technical-drawer">
+          <summary aria-label="Служебные действия">⋯</summary>
+          <div class="watch-technical-body">
+            <div class="watch-sync-actions">
+              <button
+                class="secondary-action"
+                data-direct-watch-sync="${escapeHtml(config.deviceId || "")}"
+                data-direct-watch-sync-date="${escapeHtml(date)}"
+                type="button"
+                ${state.isBusy || !canServiceSync ? "disabled" : ""}
+              >
+                Считать данные
+              </button>
+              <button
+                class="secondary-action"
+                data-direct-watch-service-sync="${escapeHtml(config.deviceId || "")}"
+                type="button"
+                ${state.isBusy || !canServiceSync ? "disabled" : ""}
+              >
+                Время и погода
+              </button>
+            </div>
+            <section class="watch-history-sync-card is-${escapeHtml(historyProgress.statusKind)}">
+              <div class="watch-history-sync-head">
+                <div>
+                  <span>История данных</span>
+                  <h4>Первичная синхронизация</h4>
+                  <p>${escapeHtml(historyProgress.detail)}</p>
+                </div>
+                <strong>${escapeHtml(historyProgress.label)}</strong>
+              </div>
+              <div class="watch-history-progress" aria-hidden="true">
+                <i style="width: ${escapeHtml(historyProgress.percent)}%"></i>
+              </div>
+              <button
+                class="secondary-action"
+                data-direct-watch-history-sync="${escapeHtml(config.deviceId || "")}"
+                type="button"
+                ${state.isBusy || !canServiceSync ? "disabled" : ""}
+              >
+                ${escapeHtml(historyProgress.buttonLabel)}
+              </button>
+            </section>
+            ${renderWatchActivitySyncDiagnostic(config)}
+            ${renderWatchCoordinatorStatus(state.directWatchDiagnostic.syncCoordinatorStatus)}
+            <div class="watch-sync-grid">
+              <article>
+                <span>Источник погоды</span>
+                <strong>${escapeHtml(weatherSourceLabel)}</strong>
+              </article>
+              <article>
+                <span>Служба</span>
+                <strong>${escapeHtml(bridgeLabel)}</strong>
+              </article>
+              <article>
+                <span>Пакет погоды</span>
+                <strong>влажность · ветер · UV/AQI · солнце</strong>
+              </article>
+            </div>
+            <div class="watch-sync-setup-grid">
+              <label class="wide-field">
+                <span>Запасной город погоды</span>
+                <input data-direct-watch-weather-city inputmode="text" placeholder="если геолокация недоступна" type="text" value="${escapeHtml(weatherFallbackCity)}">
+              </label>
+              <label class="wide-field">
+                <span>Auth Key часов</span>
+                <input data-direct-watch-auth-key inputmode="text" placeholder="${escapeHtml(hasAuthKey ? "ключ сохранён" : "32 hex-символа")}" type="password" autocomplete="off">
+              </label>
+            </div>
+            <div class="watch-sync-setup-actions">
+              <button class="secondary-action" data-direct-watch-weather-save type="button" ${state.isBusy ? "disabled" : ""}>
+                Сохранить запасной город
+              </button>
+              <button class="secondary-action" data-direct-watch-auth-key-save type="button" ${state.isBusy ? "disabled" : ""}>
+                Сохранить ключ
+              </button>
+              <button class="secondary-action" data-direct-watch-scan type="button" ${state.isBusy ? "disabled" : ""}>
+                Найти часы
+              </button>
+              <button class="secondary-action" data-direct-watch-service-status type="button" ${state.isBusy ? "disabled" : ""}>
+                Обновить статус
+              </button>
+              <button
+                class="secondary-action"
+                data-direct-watch-service-stop
+                type="button"
+                ${state.isBusy || !isRunning ? "disabled" : ""}
+              >
+                Остановить службу
+              </button>
+            </div>
+            ${renderWatchSyncDevicePicker(state, config)}
+            <article class="watch-source-note">
+              <strong>Прямое подключение</strong>
+              <span>Здесь собраны служебные действия: выбор часов, ключ, погода, статус и остановка фоновой службы.</span>
+            </article>
           </div>
-          <strong>${escapeHtml(historyProgress.label)}</strong>
-        </div>
-        <div class="watch-history-progress" aria-hidden="true">
-          <i style="width: ${escapeHtml(historyProgress.percent)}%"></i>
-        </div>
-        <button
-          class="secondary-action"
-          data-direct-watch-history-sync="${escapeHtml(config.deviceId || "")}"
-          type="button"
-          ${state.isBusy || !canServiceSync ? "disabled" : ""}
-        >
-          ${escapeHtml(historyProgress.buttonLabel)}
-        </button>
-      </section>
-      <div class="watch-sync-setup-grid">
-        <label class="wide-field">
-          <span>Запасной город погоды</span>
-          <input data-direct-watch-weather-city inputmode="text" placeholder="если геолокация недоступна" type="text" value="${escapeHtml(weatherFallbackCity)}">
-        </label>
-        <label class="wide-field">
-          <span>Auth Key часов</span>
-          <input data-direct-watch-auth-key inputmode="text" placeholder="${escapeHtml(hasAuthKey ? "ключ сохранён" : "32 hex-символа")}" type="password" autocomplete="off">
-        </label>
+        </details>
       </div>
-      <div class="watch-sync-setup-actions">
-        <button class="secondary-action" data-direct-watch-weather-save type="button" ${state.isBusy ? "disabled" : ""}>
-          Сохранить запасной город
-        </button>
-        <button class="secondary-action" data-direct-watch-auth-key-save type="button" ${state.isBusy ? "disabled" : ""}>
-          Сохранить ключ
-        </button>
-        <button class="secondary-action" data-direct-watch-scan type="button" ${state.isBusy ? "disabled" : ""}>
-          Найти часы
-        </button>
-        <button class="secondary-action" data-direct-watch-service-status type="button" ${state.isBusy ? "disabled" : ""}>
-          Обновить статус
-        </button>
-        <button
-          class="secondary-action"
-          data-direct-watch-service-stop
-          type="button"
-          ${state.isBusy || !isRunning ? "disabled" : ""}
-        >
-          Остановить службу
-        </button>
-      </div>
-      ${renderWatchSyncDevicePicker(state, config)}
-      <article class="watch-source-note">
-        <strong>Прямое подключение</strong>
-        <span>Здесь собраны служебные действия: выбор часов, ключ, погода, статус и остановка фоновой службы.</span>
-      </article>
     </section>
   `;
 }
@@ -8047,6 +8323,29 @@ function hasDirectWatchServiceSyncSignal(result: DirectWatchServiceSyncResult | 
     result.sentWeatherHourly ||
     result.sentActivityFileProbe
   ));
+}
+
+function isDirectWatchSyncAlreadyRunningMessage(value: unknown) {
+  const message = value instanceof Error
+    ? value.message
+    : typeof value === "string"
+      ? value
+      : null;
+
+  if (!message) {
+    return false;
+  }
+
+  const normalized = message.toLocaleLowerCase("ru-RU");
+  return normalized.includes("уже синхронизирует") ||
+    normalized.includes("уже выполняется") ||
+    normalized.includes("текущий bluetooth") ||
+    normalized.includes("bluetooth-обмен") ||
+    normalized.includes("sync-in-progress");
+}
+
+function isDirectWatchSyncAlreadyRunningResult(result: DirectWatchServiceSyncResult | null | undefined) {
+  return isDirectWatchSyncAlreadyRunningMessage(result?.error);
 }
 
 function isDirectWatchServiceSyncSuccessful(result: DirectWatchServiceSyncResult | null | undefined) {
@@ -11144,10 +11443,47 @@ function renderTodayIndicator(label: string, value: string, detail: string) {
   `;
 }
 
+function getCoachContextAthlete(state: MobileAppState, athleteId: string | null) {
+  return state.data.athletes.find((athlete) => athlete.athleteId === athleteId) ??
+    getSelectedAthlete(state) ??
+    state.data.athletes[0] ??
+    null;
+}
+
+function renderCoachContextScreenHead(
+  isCoachView: boolean,
+  title: string,
+  athlete: CoachAthleteSummary | null,
+  detail: string,
+) {
+  if (!isCoachView) {
+    return `
+      <div class="screen-head">
+        <h2>${escapeHtml(title)}</h2>
+        <p>${escapeHtml(detail)}</p>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="screen-head coach-context-screen-head">
+      <span>Спортсмен</span>
+      <h2>${escapeHtml(title)}</h2>
+      <p>${escapeHtml(athlete?.fullName ?? "Спортсмен не выбран")} · ${escapeHtml(detail)}</p>
+    </div>
+  `;
+}
+
 function renderPlansScreen(state: MobileAppState, athleteId: string | null) {
+  const isCoachView = isCoachRole(state.session.user?.role);
+  const selectedAthlete = isCoachView ? getCoachContextAthlete(state, athleteId) : null;
+
+  if (isCoachView && !selectedAthlete) {
+    return renderEmpty("Выберите спортсмена", "После выбора спортсмена здесь появятся его назначенные планы.");
+  }
+
   const allPlans = sortPlansForExecution(getPlansForAthlete(state, athleteId));
   const dateOptions = getPlanDateOptions(allPlans);
-  const isCoachView = isCoachRole(state.session.user?.role);
   const selectedDate = isCoachView
     ? state.selectedDayDate
     : state.planDateFilter && dateOptions.some((option) => option.date === state.planDateFilter)
@@ -11162,12 +11498,14 @@ function renderPlansScreen(state: MobileAppState, athleteId: string | null) {
   }
 
   return `
-    <div class="screen-head">
-      <h2>Планы</h2>
-      <p>${selectedDate
+    ${renderCoachContextScreenHead(
+      isCoachView,
+      "Планы",
+      selectedAthlete,
+      selectedDate
         ? `${plans.length} ${formatAssignedDayCountLabel(plans.length)} · ${formatDate(selectedDate)}`
-        : `${allPlans.length} ${formatAssignedDayCountLabel(allPlans.length)}`}</p>
-    </div>
+        : `${allPlans.length} ${formatAssignedDayCountLabel(allPlans.length)}`,
+    )}
     ${renderPlanDateFilter(dateOptions, selectedDate, isCoachView)}
     <div class="list-stack">
       ${plans.length > 0
@@ -11190,7 +11528,7 @@ function renderPlanDateFilter(
 
   return `
     <label class="plan-date-filter">
-      <span>${isCoachView ? "Единый день" : "День плана"}</span>
+      <span>${isCoachView ? "Дата" : "День плана"}</span>
       <select data-plan-date-filter>
         ${isCoachView
           ? selectedOption ? "" : `<option value="${escapeHtml(selectedDate)}" selected>${formatDate(selectedDate)} · выбранный день</option>`
@@ -11206,17 +11544,28 @@ function renderPlanDateFilter(
 }
 
 function renderCalendarScreen(state: MobileAppState, athleteId: string | null) {
+  const isCoachView = isCoachRole(state.session.user?.role);
+  const selectedAthlete = isCoachView ? getCoachContextAthlete(state, athleteId) : null;
+
+  if (isCoachView && !selectedAthlete) {
+    return renderEmpty("Выберите спортсмена", "После выбора спортсмена здесь появятся его старты и календарные планы.");
+  }
+
   const plans = getCompetitionPlansForAthlete(state, athleteId);
+  const athleteCompetitionIds = new Set(plans.map((plan) => plan.competitionId).filter(Boolean));
   const competitions = state.data.competitions
+    .filter((competition) => !isCoachView || athleteCompetitionIds.has(competition.id))
     .slice()
     .sort((a, b) => a.startDate.localeCompare(b.startDate));
-  const canSubmitCompetitionResult = isCoachRole(state.session.user?.role);
+  const canSubmitCompetitionResult = isCoachView;
 
   return `
-    <div class="screen-head">
-      <h2>Календарь</h2>
-      <p>${competitions.length} соревнований · ${plans.length} планов старта</p>
-    </div>
+    ${renderCoachContextScreenHead(
+      isCoachView,
+      "Календарь",
+      selectedAthlete,
+      `${competitions.length} соревнований · ${plans.length} планов старта`,
+    )}
     <div class="timeline-list">
       ${competitions.slice(0, 30).map((competition) => {
         const linkedPlan = plans.find((plan) => plan.competitionId === competition.id);
@@ -11231,7 +11580,7 @@ function renderCalendarScreen(state: MobileAppState, athleteId: string | null) {
 
         return canSubmitCompetitionResult
           ? `
-            <button class="timeline-card ${linkedPlan ? "is-linked" : ""}" data-coach-open-day="${escapeHtml(competition.startDate)}" data-coach-open-screen="dashboard" type="button">
+            <button class="timeline-card ${linkedPlan ? "is-linked" : ""}" data-coach-open-day="${escapeHtml(competition.startDate)}" data-coach-open-screen="athletes" type="button">
               ${content}
             </button>
           `
@@ -11247,18 +11596,25 @@ function renderResultsScreen(state: MobileAppState, athleteId: string | null) {
   const canSubmitExecution = state.session.user?.role === "athlete";
   const isCoachReview = isCoachRole(state.session.user?.role);
   const selectedDayDate = isCoachReview ? state.selectedDayDate : null;
+  const selectedAthlete = isCoachReview ? getCoachContextAthlete(state, athleteId) : null;
 
   if (canSubmitExecution) {
     return renderAthleteExecutionScreen(state, plans);
   }
 
+  if (isCoachReview && !selectedAthlete) {
+    return renderEmpty("Выберите спортсмена", "После выбора спортсмена здесь появится выполнение и дневник.");
+  }
+
   return `
-    <div class="screen-head">
-      <h2>Разбор выполнения</h2>
-      <p>${isCoachReview
-          ? "Назначенные дни, план/факт, отметки спортсмена и дневник тренера."
-          : getSyncActionRestrictionMessage(state.session.user?.role ?? null, "execution")}</p>
-    </div>
+    ${renderCoachContextScreenHead(
+      isCoachReview,
+      "Выполнение",
+      selectedAthlete,
+      isCoachReview
+        ? `${formatDate(state.selectedDayDate)} · план/факт, отметки спортсмена и дневник`
+        : getSyncActionRestrictionMessage(state.session.user?.role ?? null, "execution"),
+    )}
     ${isCoachReview ? renderCoachExecutionReviewSummary(state, athleteId, state.selectedDayDate) : ""}
     ${renderExecutionForm(state, plans)}
     ${renderCoachDiaryHistory(state, athleteId, selectedDayDate)}
@@ -13096,7 +13452,7 @@ function renderPlanCard(plan: AssignedPlanSummary, isCoachView = false) {
           <span>${escapeHtml(plan.templateName)} · ${formatPlanUnitCount(displayUnitCount)} · ${exerciseCount} упражнений</span>
         </div>
         ${isCoachView
-          ? `<button class="mobile-plan-open-day" data-coach-open-day="${escapeHtml(plan.day.dayDate)}" data-coach-open-screen="dashboard" type="button">Открыть день</button>`
+          ? `<button class="mobile-plan-open-day" data-coach-open-day="${escapeHtml(plan.day.dayDate)}" data-coach-open-screen="athletes" type="button">Открыть спортсмена</button>`
           : `<em>${escapeHtml(dayFocus)}</em>`}
       </header>
       <div class="mobile-plan-day-card-body">
@@ -13204,7 +13560,11 @@ function renderEmpty(title: string, text: string) {
 }
 
 function getScreensForRole(role: string | undefined): Array<{ id: MobileScreen; label: string; icon: string }> {
-  const dashboard: { id: MobileScreen; label: string; icon: string } = { id: "dashboard", label: "Главная", icon: "⌂" };
+  const dashboard: { id: MobileScreen; label: string; icon: string } = {
+    id: "dashboard",
+    label: role === "coach" || role === "admin" ? "Команда" : "Главная",
+    icon: "⌂",
+  };
   const plans: { id: MobileScreen; label: string; icon: string } = { id: "plans", label: "Планы", icon: "▦" };
   const calendar: { id: MobileScreen; label: string; icon: string } = { id: "calendar", label: "Календарь", icon: "□" };
   const results: { id: MobileScreen; label: string; icon: string } = { id: "results", label: "Выполнение", icon: "✓" };
@@ -13212,7 +13572,7 @@ function getScreensForRole(role: string | undefined): Array<{ id: MobileScreen; 
   if (role === "coach" || role === "admin") {
     return [
       dashboard,
-      { id: "athletes", label: "Спортсмены", icon: "◎" },
+      { id: "athletes", label: "Спортсмен", icon: "◎" },
       plans,
       calendar,
       results,

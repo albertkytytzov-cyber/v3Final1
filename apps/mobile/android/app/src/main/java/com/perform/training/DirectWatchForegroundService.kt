@@ -163,7 +163,9 @@ class DirectWatchForegroundService : Service() {
                     config = config,
                     reason = currentReason,
                 )
-                val hasError = result.optString("error", "").isNotBlank()
+                val errorMessage = result.optString("error", "")
+                val hasError = errorMessage.isNotBlank() &&
+                    errorMessage != DirectWatchPlugin.BLUETOOTH_SYNC_ALREADY_RUNNING_MESSAGE
                 DirectWatchSyncCoordinator.markCompleted(
                     appContext,
                     if (hasError) "service-error" else "service-synced",

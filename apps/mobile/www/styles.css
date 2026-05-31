@@ -61,7 +61,7 @@ button {
   width: min(100%, 520px);
   min-height: 100dvh;
   margin: 0 auto;
-  padding: calc(14px + env(safe-area-inset-top)) 12px calc(168px + env(safe-area-inset-bottom));
+  padding: calc(14px + env(safe-area-inset-top)) 12px calc(224px + env(safe-area-inset-bottom));
 }
 
 .mobile-shell-auth {
@@ -2083,6 +2083,101 @@ button {
   gap: 8px;
 }
 
+.coach-utility-menu {
+  position: relative;
+  display: grid;
+  gap: 0;
+  margin-bottom: 10px;
+}
+
+.coach-utility-menu > summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 12px;
+  align-items: center;
+  min-height: 54px;
+  padding: 10px 12px;
+  border: 1px solid rgba(15, 118, 110, 0.16);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 12px 28px rgba(13, 44, 39, 0.08);
+  cursor: pointer;
+  list-style: none;
+}
+
+.coach-utility-menu > summary::-webkit-details-marker {
+  display: none;
+}
+
+.coach-utility-menu > summary span {
+  min-width: 0;
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+
+.coach-utility-menu > summary strong {
+  grid-column: 1;
+  min-width: 0;
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 950;
+  line-height: 1.08;
+}
+
+.coach-utility-menu > summary em {
+  grid-column: 1;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-style: normal;
+  font-weight: 740;
+  line-height: 1.2;
+}
+
+.coach-utility-menu > summary b {
+  grid-column: 2;
+  grid-row: 1 / 4;
+  display: grid;
+  width: 38px;
+  min-width: 38px;
+  height: 38px;
+  place-items: center;
+  border-radius: 14px;
+  background: var(--surface-muted);
+  color: var(--accent-dark);
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.coach-utility-panel {
+  display: grid;
+  gap: 10px;
+  margin-top: 8px;
+  padding: 10px;
+  border: 1px solid rgba(15, 118, 110, 0.14);
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 12px 24px rgba(13, 44, 39, 0.08);
+}
+
+.coach-utility-panel p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 760;
+  line-height: 1.25;
+}
+
+.coach-utility-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
 .topbar-action-button,
 .topbar-logout-button {
   width: 100%;
@@ -2209,6 +2304,103 @@ button {
   margin-bottom: 0;
 }
 
+.coach-athlete-switch-header {
+  display: grid;
+  gap: 0;
+}
+
+.coach-athlete-switch-control {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 12px;
+  align-items: center;
+  min-width: 0;
+  min-height: 74px;
+  padding: 12px 12px 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 12px 28px rgba(13, 44, 39, 0.08);
+  cursor: pointer;
+}
+
+.coach-athlete-switch-back,
+.coach-athlete-switch-chevron {
+  display: grid;
+  width: 42px;
+  min-width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 15px;
+  background: var(--surface-muted);
+  color: var(--accent-dark);
+  font-size: 1.18rem;
+  font-weight: 950;
+  line-height: 1;
+}
+
+.coach-athlete-switch-chevron {
+  font-size: 1.3rem;
+}
+
+.coach-athlete-switch-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.coach-athlete-switch-copy em {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-style: normal;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  line-height: 1.12;
+  text-transform: uppercase;
+}
+
+.coach-athlete-switch-copy strong {
+  color: var(--text);
+  font-size: 1.18rem;
+  font-weight: 950;
+  line-height: 1.08;
+}
+
+.coach-athlete-switch-copy small {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 760;
+  line-height: 1.25;
+}
+
+.coach-athlete-switch-action {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 12px;
+  border: 1px solid rgba(15, 118, 110, 0.18);
+  border-radius: 999px;
+  background: #eef8f5;
+  color: var(--accent-dark);
+  font-size: 0.76rem;
+  font-weight: 920;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.coach-athlete-switch-control select {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
 .screen-panel {
   min-height: calc(100dvh - 250px);
 }
@@ -2218,8 +2410,22 @@ button {
   gap: 4px;
 }
 
+.screen-head > span {
+  color: var(--accent-dark);
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+
 .screen-head h2 {
   font-size: 1.55rem;
+}
+
+.coach-team-screen-head,
+.coach-context-screen-head {
+  padding-bottom: 2px;
 }
 
 .metric-grid {
@@ -2322,6 +2528,166 @@ button {
   border: 1px solid rgba(148, 163, 184, 0.2);
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.78);
+}
+
+.coach-athlete-readiness-card {
+  margin-bottom: 0;
+  background: var(--surface);
+}
+
+.coach-athlete-readiness-stack,
+.coach-athlete-latest-readiness-card,
+.coach-athlete-readiness-history,
+.coach-athlete-readiness-history-list {
+  display: grid;
+  gap: 10px;
+}
+
+.coach-athlete-latest-readiness-card,
+.coach-athlete-readiness-history {
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--surface);
+}
+
+.coach-athlete-readiness-history-row {
+  display: grid;
+  grid-template-columns: 76px 44px minmax(0, 1fr);
+  gap: 4px 10px;
+  align-items: center;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(15, 118, 110, 0.12);
+  border-radius: 15px;
+  background: #f6fbfa;
+}
+
+.coach-athlete-readiness-history-row time {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 850;
+  line-height: 1.1;
+}
+
+.coach-athlete-readiness-history-row strong {
+  color: var(--accent-dark);
+  font-size: 1.18rem;
+  font-weight: 950;
+  line-height: 1;
+}
+
+.coach-athlete-readiness-history-row span {
+  min-width: 0;
+  color: var(--text);
+  font-size: 0.86rem;
+  font-weight: 900;
+  line-height: 1.15;
+}
+
+.coach-athlete-readiness-history-row small {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 0.77rem;
+  font-weight: 760;
+  line-height: 1.25;
+}
+
+.coach-athlete-readiness-history-row.readiness-yellow {
+  border-color: rgba(201, 121, 43, 0.2);
+  background: #fff7ed;
+}
+
+.coach-athlete-readiness-history-row.readiness-red {
+  border-color: rgba(185, 28, 28, 0.18);
+  background: #fef2f2;
+}
+
+.coach-athlete-readiness-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.coach-athlete-readiness-one-point {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px 10px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid rgba(15, 118, 110, 0.14);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.coach-athlete-readiness-one-point strong {
+  grid-row: span 2;
+  min-width: 56px;
+  padding: 10px;
+  border-radius: 16px;
+  background: #dff2ef;
+  color: var(--accent-dark);
+  font-size: 1.7rem;
+  font-weight: 950;
+  line-height: 1;
+  text-align: center;
+}
+
+.coach-athlete-readiness-one-point span {
+  color: var(--text);
+  font-size: 0.88rem;
+  font-weight: 900;
+  line-height: 1.1;
+}
+
+.coach-athlete-readiness-one-point small {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 760;
+  line-height: 1.25;
+}
+
+.coach-athlete-readiness-facts article {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.coach-athlete-latest-readiness-card .coach-athlete-readiness-facts article {
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 8px;
+  align-items: end;
+  padding: 8px 10px;
+}
+
+.coach-athlete-latest-readiness-card .coach-athlete-readiness-facts small {
+  grid-column: 1 / -1;
+}
+
+.coach-athlete-readiness-facts span {
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 850;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.coach-athlete-readiness-facts strong {
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 950;
+  line-height: 1.1;
+}
+
+.coach-athlete-readiness-facts small {
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 750;
+  line-height: 1.25;
 }
 
 .coach-execution-review-head {
@@ -5037,7 +5403,7 @@ button.watch-settings-entry-card:focus-visible {
 .watch-background-status {
   display: grid;
   gap: 12px;
-  padding: 12px;
+  padding: 14px;
   border: 1px solid rgba(15, 118, 110, 0.14);
   border-radius: 16px;
   background:
@@ -5093,6 +5459,39 @@ button.watch-settings-entry-card:focus-visible {
   line-height: 1.3;
 }
 
+.watch-status-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.watch-status-metrics article {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid rgba(15, 118, 110, 0.1);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.74);
+}
+
+.watch-status-metrics span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 900;
+  line-height: 1.15;
+  text-transform: uppercase;
+}
+
+.watch-status-metrics strong {
+  display: block;
+  margin-top: 5px;
+  overflow-wrap: anywhere;
+  color: var(--text);
+  font-size: 0.9rem;
+  font-weight: 950;
+  line-height: 1.18;
+}
+
 .watch-background-meta {
   align-items: center;
   min-height: 38px;
@@ -5112,6 +5511,53 @@ button.watch-settings-entry-card:focus-visible {
 .watch-background-updates {
   display: grid;
   gap: 7px;
+}
+
+.watch-background-card {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(15, 118, 110, 0.11);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.84);
+}
+
+.watch-background-card-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+}
+
+.watch-background-card-head span {
+  display: block;
+  color: var(--accent-dark);
+  font-size: 0.7rem;
+  font-weight: 950;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+
+.watch-background-card-head strong {
+  display: block;
+  margin-top: 3px;
+  color: var(--text);
+  font-size: 0.98rem;
+  font-weight: 950;
+  line-height: 1.16;
+}
+
+.watch-background-card-head em {
+  padding: 6px 9px;
+  border-radius: 999px;
+  background: rgba(204, 251, 241, 0.82);
+  color: var(--accent-dark);
+  font-size: 0.7rem;
+  font-style: normal;
+  font-weight: 950;
+  line-height: 1.1;
+  text-align: center;
+  white-space: nowrap;
 }
 
 .watch-background-row {
@@ -5203,6 +5649,11 @@ button.watch-settings-entry-card:focus-visible {
 
 .watch-technical-status[open] summary {
   margin-bottom: 2px;
+}
+
+.watch-technical-body {
+  display: grid;
+  gap: 10px;
 }
 
 .watch-sync-grid {
@@ -5298,6 +5749,65 @@ button.watch-settings-entry-card:focus-visible {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
+}
+
+.watch-sync-main-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 52px;
+  gap: 8px;
+  align-items: start;
+}
+
+.watch-sync-main-actions > .primary-action {
+  min-height: 48px;
+  padding: 0 14px;
+  border-radius: 16px;
+  font-size: 1rem;
+  line-height: 1.12;
+}
+
+.watch-technical-drawer {
+  display: block;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.watch-technical-drawer summary {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  min-height: 48px;
+  padding: 0;
+  border: 1px solid rgba(15, 118, 110, 0.16);
+  border-radius: 16px;
+  background: #ffffff;
+  color: var(--accent-dark);
+  font-size: 1.35rem;
+  font-weight: 950;
+  line-height: 1;
+  list-style: none;
+}
+
+.watch-technical-drawer summary::-webkit-details-marker {
+  display: none;
+}
+
+.watch-technical-drawer[open] {
+  grid-column: 1 / -1;
+  padding: 10px;
+  border: 1px solid rgba(15, 118, 110, 0.11);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.watch-technical-drawer[open] summary {
+  width: 100%;
+  min-height: 42px;
+  margin-bottom: 10px;
+  font-size: 1.1rem;
 }
 
 .watch-sync-actions .primary-action {
@@ -7441,7 +7951,7 @@ button.timeline-card:active {
   margin: 0 auto;
   padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
   border-top: 1px solid rgba(255, 255, 255, 0.28);
-  background: rgba(17, 34, 31, 0.96);
+  background: #11221f;
   box-shadow: 0 -16px 34px rgba(13, 44, 39, 0.2);
   transform: translateX(-50%);
 }
@@ -7494,11 +8004,13 @@ button.timeline-card:active {
   .watch-sync-head,
   .watch-background-head,
   .watch-background-meta,
+  .watch-background-card-head,
   .watch-history-sync-head,
   .watch-card-head,
   .today-indicators-head,
   .readiness-trend-head,
   .readiness-trend-chart-meta,
+  .coach-athlete-switch-header,
   .coach-readiness-analytics-head,
   .athlete-day-brief-head,
   .coach-execution-review-head,
@@ -7524,6 +8036,7 @@ button.timeline-card:active {
   }
 
   .readiness-metrics,
+  .watch-status-metrics,
   .watch-sync-grid,
   .device-health-compact-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -7638,10 +8151,11 @@ button.timeline-card:active {
     .watch-sync-actions,
     .watch-sync-setup-actions,
     .watch-sync-setup-grid,
-  .watch-actions,
-  .watch-heart-rate-approved-zones,
-  .watch-settings-actions,
-  .choice-group,
+    .watch-actions,
+    .watch-heart-rate-approved-zones,
+    .watch-settings-actions,
+    .choice-group,
+    .coach-athlete-readiness-facts,
     .coach-day-status-brief-grid {
     grid-template-columns: 1fr;
   }
@@ -7667,6 +8181,7 @@ button.timeline-card:active {
 
   .execution-block-head,
   .readiness-history-card,
+  .coach-athlete-readiness-history-row,
   .plan-exercise-row {
     grid-template-columns: 1fr;
   }

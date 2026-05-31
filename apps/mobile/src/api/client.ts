@@ -264,18 +264,34 @@ export class MobileApiClient {
       ...assignedPlans.map((plan) => plan.athleteId),
       ...athletes.map((athlete) => athlete.athleteId),
     ].filter(Boolean)));
-    const responses = await Promise.all(
+    const recentResponses = await Promise.all(
       athleteIds.map((athleteId) =>
         this.request<{ entries: ReadinessEntry[] }>(
-          withEntryDate(
-            `/coach/athletes/${encodeURIComponent(athleteId)}/readiness`,
-            selectedEntryDate,
-          ),
+          `/coach/athletes/${encodeURIComponent(athleteId)}/readiness`,
         ).catch(() => ({ entries: [] })),
       ),
     );
+    const selectedDayResponses = selectedEntryDate
+      ? await Promise.all(
+          athleteIds.map((athleteId) =>
+            this.request<{ entries: ReadinessEntry[] }>(
+              withEntryDate(
+                `/coach/athletes/${encodeURIComponent(athleteId)}/readiness`,
+                selectedEntryDate,
+              ),
+            ).catch(() => ({ entries: [] })),
+          ),
+        )
+      : [];
+    const entriesByDay = new Map<string, ReadinessEntry>();
 
-    return responses.flatMap((response) => response.entries);
+    [...recentResponses, ...selectedDayResponses]
+      .flatMap((response) => response.entries)
+      .forEach((entry) => {
+        entriesByDay.set(`${entry.athleteId}:${entry.entryDate}`, entry);
+      });
+
+    return Array.from(entriesByDay.values());
   }
 
   private async loadCoachDeviceHealthSummaries(

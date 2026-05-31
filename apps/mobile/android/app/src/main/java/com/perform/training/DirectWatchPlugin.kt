@@ -1304,7 +1304,11 @@ class DirectWatchPlugin : Plugin() {
                 )
                 DirectWatchSyncCoordinator.markCompleted(
                     context.applicationContext,
-                    if (errorMessage == null) "service-synced" else "service-error",
+                    if (errorMessage == null || errorMessage == BLUETOOTH_SYNC_ALREADY_RUNNING_MESSAGE) {
+                        "service-synced"
+                    } else {
+                        "service-error"
+                    },
                 )
                 mainHandler.post {
                     call.resolve(response)
@@ -1312,7 +1316,7 @@ class DirectWatchPlugin : Plugin() {
             }
 
             if (!DirectWatchBluetoothSyncLock.tryAcquire(bluetoothSyncOwner)) {
-                errorMessage = "Синхронизация часов уже выполняется другим процессом PERFORM Sync."
+                errorMessage = BLUETOOTH_SYNC_ALREADY_RUNNING_MESSAGE
                 resolveNow()
                 return@Thread
             }
@@ -1692,7 +1696,7 @@ class DirectWatchPlugin : Plugin() {
             return buildNativeServiceError(
                 config,
                 reason,
-                "Синхронизация часов уже выполняется другим процессом PERFORM Sync.",
+                BLUETOOTH_SYNC_ALREADY_RUNNING_MESSAGE,
             )
         }
         bluetoothSyncLocked = true
@@ -9234,6 +9238,8 @@ class DirectWatchPlugin : Plugin() {
             )
         }
 
+        const val BLUETOOTH_SYNC_ALREADY_RUNNING_MESSAGE =
+            "PERFORM Sync уже синхронизирует часы. Данные обновятся автоматически."
         private const val TAG = "DirectWatch"
         private const val DEFAULT_SCAN_DURATION_MS = 6_000
         private const val INSPECT_TIMEOUT_MS = 10_000
@@ -9279,7 +9285,7 @@ class DirectWatchPlugin : Plugin() {
         private const val CLASSIC_SERVICE_BRIDGE_REFRESH_MS = 10 * 60 * 1000L
         private const val CLASSIC_SERVICE_BRIDGE_ACTIVITY_INITIAL_DELAY_MS = 60 * 1000L
         private const val CLASSIC_SERVICE_BRIDGE_ACTIVITY_REFRESH_MS = 10 * 60 * 1000L
-        private const val CLASSIC_WEATHER_PAYLOAD_MAX_AGE_MS = 10 * 60 * 1000L
+        private const val CLASSIC_WEATHER_PAYLOAD_MAX_AGE_MS = 30 * 60 * 1000L
         private const val CLASSIC_WEATHER_PAYLOAD_FUTURE_TOLERANCE_MS = 5 * 60 * 1000L
         private const val XIAOMI_WEATHER_CLEAR_SKY = 0
         private val PAIRING_TIMEOUT_TOKEN = Any()
