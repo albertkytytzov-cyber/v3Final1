@@ -102,6 +102,7 @@ import type {
   DeviceHealthSampleMetric,
   DeviceWorkout,
   DeviceWorkoutLink,
+  DeviceWorkoutLinkPayload,
   DeviceWorkoutsSyncPayload,
   ExecutionExerciseResult,
   ExecutionResult,
@@ -2564,16 +2565,21 @@ export function bootstrapMobileApp(root: HTMLElement) {
   };
 
   const linkDeviceWorkoutToBlock = async (select: HTMLSelectElement) => {
-    if (!isCoachRole(state.session.user?.role)) {
+    const role = state.session.user?.role ?? null;
+    const isCoachContext = isCoachRole(role);
+    const isAthleteContext = role === "athlete";
+
+    if (!isCoachContext && !isAthleteContext) {
       return;
     }
 
-    const athleteId = state.selectedAthleteId;
+    const athleteId = isCoachContext ? state.selectedAthleteId : state.session.user?.athleteId ?? null;
     const assignedPlanId = select.dataset.deviceWorkoutPlanId ?? "";
     const assignedBlockIds = (select.dataset.deviceWorkoutBlockIds ?? select.dataset.deviceWorkoutBlockId ?? "")
       .split(",")
       .map((id) => id.trim())
       .filter(Boolean);
+    const assignedExerciseId = select.dataset.deviceWorkoutExerciseId?.trim() || null;
     const linkIds = (select.dataset.deviceWorkoutLinkIds ?? select.dataset.deviceWorkoutLinkId ?? "")
       .split(",")
       .map((id) => id.trim())
@@ -2593,9 +2599,29 @@ export function bootstrapMobileApp(root: HTMLElement) {
     update({ error: null, isBusy: true, message: null });
 
     try {
+      const unlink = (linkId: string) =>
+        isCoachContext
+          ? client().unlinkDeviceWorkout(athleteId, linkId)
+          : client().unlinkOwnDeviceWorkout(linkId);
+      const link = (assignedBlockId: string) => {
+        const payload: DeviceWorkoutLinkPayload = {
+          assignedBlockId,
+          assignedPlanId,
+          deviceWorkoutId,
+        };
+
+        if (assignedBlockIds.length === 1 && assignedExerciseId) {
+          payload.assignedExerciseId = assignedExerciseId;
+        }
+
+        return isCoachContext
+          ? client().linkDeviceWorkout(athleteId, payload)
+          : client().linkOwnDeviceWorkout(payload);
+      };
+
       if (!deviceWorkoutId) {
         if (linkIds.length > 0) {
-          await Promise.all(linkIds.map((linkId) => client().unlinkDeviceWorkout(athleteId, linkId)));
+          await Promise.all(linkIds.map(unlink));
           const removedLinkIds = new Set(linkIds);
           const snapshot = {
             ...state.data,
@@ -2611,13 +2637,9 @@ export function bootstrapMobileApp(root: HTMLElement) {
         return;
       }
 
-      await Promise.all(linkIds.map((linkId) => client().unlinkDeviceWorkout(athleteId, linkId)));
+      await Promise.all(linkIds.map(unlink));
       const responses = await Promise.all(assignedBlockIds.map((assignedBlockId) =>
-        client().linkDeviceWorkout(athleteId, {
-          assignedBlockId,
-          assignedPlanId,
-          deviceWorkoutId,
-        })
+        link(assignedBlockId)
       ));
       const removedLinkIds = new Set(linkIds);
       const snapshot = {
@@ -2633,7 +2655,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
         savedAt: new Date().toISOString(),
       };
       saveSnapshot(snapshot);
-      update({ data: snapshot, isBusy: false, message: "Тренировка устройства связана со сессией плана." });
+      update({ data: snapshot, isBusy: false, message: "Тренировка часов связана с планом." });
     } catch (error) {
       update({
         error: error instanceof Error ? error.message : "Не удалось сохранить связь с тренировкой устройства.",
@@ -11626,8 +11648,15 @@ function renderAthleteExecutionScreen(state: MobileAppState, plans: AssignedPlan
   const allPlanGroups = getExecutionPlanGroups(plans);
   const dateOptions = getExecutionDateOptions(allPlanGroups);
   const selectedDate = getAthleteExecutionSelectedDate(state, dateOptions);
+  const athleteId = state.session.user?.athleteId ?? null;
   const planGroups = selectedDate
     ? allPlanGroups.filter((group) => group.plan.day.dayDate === selectedDate)
+    : [];
+  const deviceWorkoutsForDay = athleteId && selectedDate
+    ? getDeviceWorkoutsForDate(state, athleteId, selectedDate)
+    : [];
+  const deviceWorkoutLinksForDay = athleteId && selectedDate
+    ? getDeviceWorkoutLinksForDate(state, athleteId, selectedDate)
     : [];
   const exerciseCount = planGroups.reduce(
     (total, group) =>
@@ -11665,6 +11694,8 @@ function renderAthleteExecutionScreen(state: MobileAppState, plans: AssignedPlan
               .map((group, index) =>
                 renderExecutionPlanGroup(state, group, index === 0, true, {
                   compactAthlete: true,
+                  deviceWorkoutLinks: deviceWorkoutLinksForDay,
+                  deviceWorkouts: deviceWorkoutsForDay,
                   hasSavedExecution,
                   isLocked: executionLocked,
                 })
@@ -11672,6 +11703,9 @@ function renderAthleteExecutionScreen(state: MobileAppState, plans: AssignedPlan
               .join("")
           : renderEmpty("На выбранную дату нет тренировки", "Выберите другой день из назначенного плана.")}
       </div>
+      ${athleteId && selectedDate
+        ? renderAthleteUnlinkedDeviceWorkouts(deviceWorkoutsForDay, deviceWorkoutLinksForDay)
+        : ""}
     </section>
   `;
 }
@@ -12500,6 +12534,8 @@ interface ExecutionDisplayCompletion {
 
 interface ExecutionPlanGroupRenderOptions {
   compactAthlete?: boolean;
+  deviceWorkoutLinks?: DeviceWorkoutLink[];
+  deviceWorkouts?: DeviceWorkout[];
   hasSavedExecution?: boolean;
   isLocked?: boolean;
 }
@@ -12828,6 +12864,22 @@ function renderExecutionPlanGroup(
   const diaryEntries = getCoachDiaryEntriesForPlan(state, group.plan.id);
   const daySummary = getExecutionDaySummary(state, group, diaryEntries);
   const displayCompletion = getExecutionDisplayCompletion(state, group.plan, compactAthlete);
+  const canLinkDeviceWorkouts = compactAthlete &&
+    canSubmitExecution &&
+    state.session.user?.role === "athlete";
+  const renderOptions: ExecutionPlanGroupRenderOptions = {
+    ...options,
+    deviceWorkoutLinks: options.deviceWorkoutLinks ?? (
+      canLinkDeviceWorkouts
+        ? getDeviceWorkoutLinksForDate(state, group.plan.athleteId, group.plan.day.dayDate)
+        : []
+    ),
+    deviceWorkouts: options.deviceWorkouts ?? (
+      canLinkDeviceWorkouts
+        ? getDeviceWorkoutsForDate(state, group.plan.athleteId, group.plan.day.dayDate)
+        : []
+    ),
+  };
   const exerciseCount = group.blockItems.reduce(
     (total, item) => total + (item.block.exercises?.length ?? 0),
     0,
@@ -12881,7 +12933,7 @@ function renderExecutionPlanGroup(
                               sessionName: session.name,
                             },
                             getExecutionResultForBlock(state, group.plan.id, block.id),
-                            options,
+                            renderOptions,
                           )
                         : renderExecutionBlockReadonly(
                             {
@@ -12895,6 +12947,9 @@ function renderExecutionPlanGroup(
                     .join("")}
                 </div>
               `}
+            ${canLinkDeviceWorkouts
+              ? renderAthleteSessionDeviceWorkoutLinkSelect(group.plan, session, renderOptions)
+              : ""}
             ${canSubmitExecution || getExecutionSessionNote(state, group.plan.id, session)
               ? renderExecutionSessionNoteField(
                   state,
@@ -12960,6 +13015,174 @@ function renderExecutionSessionNoteField(
       <textarea data-execution-session-notes rows="3" placeholder="${placeholder}" ${disabled ? "disabled" : ""}>${escapeHtml(getExecutionSessionNote(state, plan.id, session))}</textarea>
     </label>
   `;
+}
+
+function renderAthleteSessionDeviceWorkoutLinkSelect(
+  plan: AssignedPlanSummary,
+  session: MobileAssignedPlanSession,
+  options: ExecutionPlanGroupRenderOptions,
+) {
+  const targetBlocks = getAthleteSessionDeviceWorkoutTargetBlocks(session);
+
+  if (targetBlocks.length <= 1) {
+    return "";
+  }
+
+  return renderAthleteDeviceWorkoutLinkSelect({
+    assignedBlockIds: targetBlocks.map((block) => block.id),
+    assignedExerciseId: null,
+    assignedPlanId: plan.id,
+    disabled: options.isLocked === true,
+    hint: `${targetBlocks.length} строк плана, если тренировка покрывает всю ${formatExecutionSessionDiaryName(session.name).toLowerCase()}`,
+    links: options.deviceWorkoutLinks ?? [],
+    targetLabel: `Вся ${formatExecutionSessionDiaryName(session.name).toLowerCase()}`,
+    targetType: "session",
+    workouts: options.deviceWorkouts ?? [],
+  });
+}
+
+function renderAthleteDeviceWorkoutLinkForBlock(
+  plan: AssignedPlanSummary,
+  block: AssignedPlanBlock,
+  options: ExecutionPlanGroupRenderOptions,
+) {
+  const target = getAthleteBlockDeviceWorkoutTarget(block);
+
+  return renderAthleteDeviceWorkoutLinkSelect({
+    assignedBlockIds: [block.id],
+    assignedExerciseId: target.exercise?.id ?? null,
+    assignedPlanId: plan.id,
+    disabled: options.isLocked === true,
+    hint: target.hint,
+    links: options.deviceWorkoutLinks ?? [],
+    targetLabel: target.label,
+    targetType: target.exercise ? "exercise" : "block",
+    workouts: options.deviceWorkouts ?? [],
+  });
+}
+
+function renderAthleteDeviceWorkoutLinkSelect(input: {
+  assignedBlockIds: string[];
+  assignedExerciseId: string | null;
+  assignedPlanId: string;
+  disabled: boolean;
+  hint: string;
+  links: DeviceWorkoutLink[];
+  targetLabel: string;
+  targetType: "exercise" | "block" | "session";
+  workouts: DeviceWorkout[];
+}) {
+  if (input.workouts.length === 0 || input.assignedBlockIds.length === 0) {
+    return "";
+  }
+
+  const linkGroup = getDeviceWorkoutLinkGroupForTarget(
+    input.links,
+    input.assignedBlockIds,
+    input.assignedExerciseId,
+  );
+  const linkedWorkout = linkGroup.linkedWorkout;
+  const statusLabel = linkedWorkout && linkGroup.isFullyLinked
+    ? "привязано"
+    : linkGroup.isPartiallyLinked || linkGroup.hasMixedWorkouts
+      ? "частично"
+      : "не привязано";
+
+  return `
+    <div class="athlete-device-workout-link is-${escapeHtml(input.targetType)} ${linkedWorkout ? "is-linked" : ""}">
+      <div class="athlete-device-workout-link-head">
+        <span>Тренировка часов</span>
+        <strong>${escapeHtml(input.targetLabel)}</strong>
+        <small>${escapeHtml(input.hint)}</small>
+      </div>
+      <div class="athlete-device-workout-control">
+        <span>${escapeHtml(statusLabel)}</span>
+        <select
+          data-device-workout-link
+          data-device-workout-plan-id="${escapeHtml(input.assignedPlanId)}"
+          data-device-workout-block-ids="${escapeHtml(input.assignedBlockIds.join(","))}"
+          data-device-workout-link-ids="${escapeHtml(linkGroup.links.map((link) => link.id).join(","))}"
+          ${input.assignedExerciseId ? `data-device-workout-exercise-id="${escapeHtml(input.assignedExerciseId)}"` : ""}
+          ${input.disabled ? "disabled" : ""}
+        >
+          <option value="">Не привязано</option>
+          ${input.workouts.map((workout) => `
+            <option value="${escapeHtml(workout.id)}" ${!linkGroup.hasMixedWorkouts && linkedWorkout?.id === workout.id ? "selected" : ""}>
+              ${escapeHtml(formatDeviceWorkoutOptionLabel(workout))}
+            </option>
+          `).join("")}
+        </select>
+      </div>
+      ${linkedWorkout ? `<small class="athlete-device-workout-linked-summary">${escapeHtml(formatDeviceWorkoutSummary(linkedWorkout) || formatDeviceWorkoutTypeLabel(linkedWorkout))}</small>` : ""}
+    </div>
+  `;
+}
+
+function renderAthleteUnlinkedDeviceWorkouts(
+  workouts: DeviceWorkout[],
+  links: DeviceWorkoutLink[],
+) {
+  if (workouts.length === 0) {
+    return "";
+  }
+
+  const linkedWorkoutIds = new Set(links.map((link) => link.deviceWorkoutId));
+  const unlinkedWorkouts = workouts.filter((workout) => !linkedWorkoutIds.has(workout.id));
+
+  return `
+    <aside class="athlete-device-workout-unlinked">
+      <div class="athlete-device-workout-unlinked-head">
+        <span>Внеплановые тренировки часов</span>
+        <strong>${unlinkedWorkouts.length ? `${unlinkedWorkouts.length} без привязки` : "всё связано с планом"}</strong>
+      </div>
+      ${unlinkedWorkouts.length
+        ? `<div class="athlete-device-workout-unlinked-list">
+            ${unlinkedWorkouts.map((workout) => `
+              <article>
+                <strong>${escapeHtml(formatDeviceWorkoutTitle(workout))}</strong>
+                <small>${escapeHtml(formatDeviceWorkoutSummary(workout) || "Можно оставить вне плана или привязать выше.")}</small>
+              </article>
+            `).join("")}
+          </div>`
+        : `<p>Все тренировки часов за день уже подтверждены в плане.</p>`}
+    </aside>
+  `;
+}
+
+function getAthleteBlockDeviceWorkoutTarget(block: AssignedPlanBlock) {
+  const exercises = getSortedBlockExercises(block);
+  const singleExercise = exercises.length === 1 ? exercises[0] : getRepeatedSingleExerciseBlock(block);
+
+  if (singleExercise) {
+    return {
+      exercise: singleExercise,
+      hint: formatAssignedPlanExerciseVolume(singleExercise) || formatAssignedPlanDisplayVolume(block),
+      label: `К упражнению: ${singleExercise.name}`,
+    };
+  }
+
+  return {
+    exercise: null,
+    hint: formatAssignedPlanDisplayVolume(block),
+    label: `К блоку: ${block.name}`,
+  };
+}
+
+function getAthleteSessionDeviceWorkoutTargetBlocks(session: MobileAssignedPlanSession) {
+  if (session.deviceLinkMode === "none") {
+    return [];
+  }
+
+  if (session.deviceLinkMode === "block") {
+    return [];
+  }
+
+  const linkableBlocks = session.blocks.filter((block) => isDeviceWorkoutLinkablePlanBlock(block));
+  const fallbackBlocks = session.blocks.filter((block) =>
+    !["instruction", "control", "note", "recovery"].includes(block.rowKind ?? "exercise")
+  );
+
+  return linkableBlocks.length ? linkableBlocks : fallbackBlocks;
 }
 
 function renderExecutionUnifiedSession(
@@ -13226,6 +13449,9 @@ function renderExecutionBlockForm(
             .map((exercise) => renderExecutionExerciseRow(exercise, getExerciseResult(result, exercise.id), result, options))
             .join("")
         : renderExecutionBlockFallbackRow(item.block, result, options)}
+      ${options.compactAthlete
+        ? renderAthleteDeviceWorkoutLinkForBlock(item.plan, item.block, options)
+        : ""}
     </form>
   `;
 }
@@ -14662,6 +14888,39 @@ function getDeviceWorkoutLinkGroupForBlocks(
 ) {
   const assignedBlockIdSet = new Set(assignedBlockIds);
   const groupLinks = links.filter((link) => assignedBlockIdSet.has(link.assignedBlockId));
+  const workoutIds = Array.from(new Set(groupLinks.map((link) => link.deviceWorkoutId)));
+  const commonWorkoutId = workoutIds.length === 1 ? workoutIds[0] : null;
+  const linkedWorkout = commonWorkoutId
+    ? groupLinks.find((link) => link.deviceWorkoutId === commonWorkoutId)?.workout ?? null
+    : null;
+  const linkedBlockIds = new Set(
+    groupLinks
+      .filter((link) => !commonWorkoutId || link.deviceWorkoutId === commonWorkoutId)
+      .map((link) => link.assignedBlockId),
+  );
+
+  return {
+    hasMixedWorkouts: workoutIds.length > 1,
+    isFullyLinked: Boolean(commonWorkoutId) &&
+      assignedBlockIds.length > 0 &&
+      linkedBlockIds.size === assignedBlockIdSet.size,
+    isPartiallyLinked: groupLinks.length > 0 &&
+      (!commonWorkoutId || linkedBlockIds.size < assignedBlockIdSet.size),
+    linkedWorkout,
+    links: groupLinks,
+  };
+}
+
+function getDeviceWorkoutLinkGroupForTarget(
+  links: DeviceWorkoutLink[],
+  assignedBlockIds: string[],
+  assignedExerciseId: string | null,
+) {
+  const assignedBlockIdSet = new Set(assignedBlockIds);
+  const groupLinks = links.filter((link) =>
+    assignedBlockIdSet.has(link.assignedBlockId) &&
+    (assignedExerciseId ? link.assignedExerciseId === assignedExerciseId : !link.assignedExerciseId)
+  );
   const workoutIds = Array.from(new Set(groupLinks.map((link) => link.deviceWorkoutId)));
   const commonWorkoutId = workoutIds.length === 1 ? workoutIds[0] : null;
   const linkedWorkout = commonWorkoutId

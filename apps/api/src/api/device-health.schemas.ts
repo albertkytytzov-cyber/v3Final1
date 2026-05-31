@@ -45,6 +45,18 @@ export function parseDeviceWorkoutLinkParams(params: unknown): {
   return { athleteId, linkId };
 }
 
+export function parseOwnDeviceWorkoutLinkParams(params: unknown): {
+  linkId: string;
+} {
+  const linkId = (params as { linkId?: unknown } | null)?.linkId;
+
+  if (typeof linkId !== "string" || !linkId) {
+    throw new Error("linkId is required");
+  }
+
+  return { linkId };
+}
+
 export function parseDeviceHealthSummaryBody(body: unknown): DeviceHealthDailySummaryPayload {
   const payload = readRecord(body, "payload");
 

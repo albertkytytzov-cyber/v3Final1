@@ -162,7 +162,7 @@ export class MobileApiClient {
         : Promise.resolve({ samples: [] }),
       userRole === "athlete"
         ? this.loadAthleteDeviceWorkouts(selectedEntryDate ?? localDateValue())
-        : Promise.resolve({ workouts: [] }),
+        : Promise.resolve({ links: [], workouts: [] }),
       userRole === "athlete"
         ? this.request<{ entry: ReadinessEntry | null }>("/readiness/today")
             .catch(() => ({ entry: null }))
@@ -207,7 +207,7 @@ export class MobileApiClient {
             athletes.athletes,
             selectedEntryDate,
           )
-        : { links: [], workouts: deviceWorkouts.workouts };
+        : deviceWorkouts;
 
     return {
       assignedPlans: assignedPlans.assignedPlans,
@@ -224,7 +224,7 @@ export class MobileApiClient {
             selectedEntryDate,
           )
         : deviceHealthSamples.samples,
-      deviceWorkoutLinks: deviceWorkoutData.links,
+      deviceWorkoutLinks: deviceWorkoutData.links ?? [],
       deviceWorkouts: deviceWorkoutData.workouts,
       executionResults,
       readinessEntry: readiness.entry,
@@ -346,11 +346,12 @@ export class MobileApiClient {
       `/device-health/workouts?entryDate=${encodeURIComponent(selectedEntryDate)}&includeSamples=false`;
     const [recentResponse, dayResponse] = await Promise.all([
       this.request<DeviceWorkoutsResponse>("/device-health/workouts?includeSamples=false")
-        .catch(() => ({ workouts: [] })),
+        .catch(() => ({ links: [], workouts: [] })),
       this.request<DeviceWorkoutsResponse>(dayPath)
-        .catch(() => ({ workouts: [] })),
+        .catch(() => ({ links: [], workouts: [] })),
     ]);
 
+    const linksById = new Map<string, DeviceWorkoutLink>();
     const workoutsById = new Map<string, DeviceWorkout>();
     recentResponse.workouts.forEach((workout) => {
       workoutsById.set(workout.id, workout);
@@ -358,8 +359,15 @@ export class MobileApiClient {
     dayResponse.workouts.forEach((workout) => {
       workoutsById.set(workout.id, workout);
     });
+    (recentResponse.links ?? []).forEach((link) => {
+      linksById.set(link.id, link);
+    });
+    (dayResponse.links ?? []).forEach((link) => {
+      linksById.set(link.id, link);
+    });
 
     return {
+      links: Array.from(linksById.values()),
       workouts: Array.from(workoutsById.values()),
     };
   }
@@ -470,9 +478,26 @@ export class MobileApiClient {
     );
   }
 
+  linkOwnDeviceWorkout(payload: DeviceWorkoutLinkPayload) {
+    return this.request<DeviceWorkoutLinkResponse>(
+      "/device-health/workout-links",
+      {
+        body: JSON.stringify(payload),
+        method: "POST",
+      },
+    );
+  }
+
   unlinkDeviceWorkout(athleteId: string, linkId: string) {
     return this.request<{ ok: boolean }>(
       `/coach/athletes/${encodeURIComponent(athleteId)}/device-workout-links/${encodeURIComponent(linkId)}`,
+      { method: "DELETE" },
+    );
+  }
+
+  unlinkOwnDeviceWorkout(linkId: string) {
+    return this.request<{ ok: boolean }>(
+      `/device-health/workout-links/${encodeURIComponent(linkId)}`,
       { method: "DELETE" },
     );
   }

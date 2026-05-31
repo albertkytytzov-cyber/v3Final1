@@ -19,6 +19,7 @@ import {
   parseDeviceWorkoutLinkParams,
   parseDeviceWorkoutsQuery,
   parseDeviceWorkoutsSyncBody,
+  parseOwnDeviceWorkoutLinkParams,
 } from "./device-health.schemas";
 
 interface DeviceHealthRouteDependencies {
@@ -104,6 +105,9 @@ export function registerDeviceHealthRoutes(
     const includeSamples = query.includeSamples ?? Boolean(query.entryDate);
 
     return {
+      links: await listDeviceWorkoutLinksForAthlete(user.athlete_id, query.entryDate, {
+        includeSamples,
+      }),
       workouts: await listDeviceWorkoutsForAthlete(user.athlete_id, query.entryDate, {
         includeSamples,
       }),
@@ -130,6 +134,55 @@ export function registerDeviceHealthRoutes(
         payload,
       }),
     };
+  });
+
+  app.post("/api/v1/device-health/workout-links", async (request) => {
+    const user = await dependencies.guards.requireUser(request);
+
+    if (!user.athlete_id) {
+      throw dependencies.httpError(403, "Only athlete accounts can link device workouts");
+    }
+
+    let payload;
+    try {
+      payload = parseDeviceWorkoutLinkBody(request.body);
+    } catch (error) {
+      throw dependencies.httpError(400, (error as Error).message);
+    }
+
+    try {
+      return {
+        link: await linkDeviceWorkoutToPlanBlock({
+          athleteId: user.athlete_id,
+          linkedByUserId: user.id,
+          payload,
+        }),
+      };
+    } catch (error) {
+      throw dependencies.httpError(400, (error as Error).message);
+    }
+  });
+
+  app.delete("/api/v1/device-health/workout-links/:linkId", async (request) => {
+    const user = await dependencies.guards.requireUser(request);
+
+    if (!user.athlete_id) {
+      throw dependencies.httpError(403, "Only athlete accounts can unlink device workouts");
+    }
+
+    let linkId: string;
+    try {
+      ({ linkId } = parseOwnDeviceWorkoutLinkParams(request.params));
+    } catch (error) {
+      throw dependencies.httpError(400, (error as Error).message);
+    }
+
+    const deleted = await deleteDeviceWorkoutLink({ athleteId: user.athlete_id, linkId });
+    if (!deleted) {
+      throw dependencies.httpError(404, "Device workout link was not found");
+    }
+
+    return { ok: true };
   });
 
   app.get("/api/v1/coach/athletes/:athleteId/device-health", async (request) => {
