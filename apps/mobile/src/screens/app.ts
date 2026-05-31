@@ -3939,8 +3939,7 @@ function renderCoachTeamDashboardScreen(state: MobileAppState, selectedDayDate: 
 
   return `
     <div class="screen-head coach-team-screen-head">
-      <span>Команда</span>
-      <h2>Сегодня у спортсменов</h2>
+      <h2>Команда</h2>
       <p>${formatDate(selectedDayDate)} · готовность ${athletesWithReadiness}/${state.data.athletes.length} · планы ${athletesWithPlans}/${state.data.athletes.length}</p>
     </div>
     ${renderCoachDayControl(state, null)}
@@ -3964,7 +3963,7 @@ function renderCoachDayStatusScreen(
   return `
     <div class="screen-head">
       <h2>Главная тренера</h2>
-      <p>${formatDate(selectedDayDate)} · коротко по выбранному спортсмену и команде</p>
+      <p>${formatDate(selectedDayDate)} · коротко по выбранному спортсмену</p>
     </div>
     ${renderCoachDayControl(state, athleteId)}
     ${dayData
@@ -3975,7 +3974,6 @@ function renderCoachDayStatusScreen(
         </div>
       `
       : renderEmpty("Выберите спортсмена", "После выбора спортсмена экран покажет статус выбранного дня.")}
-    ${renderCoachTeamDayPanel(state, selectedDayDate)}
   `;
 }
 
@@ -4500,9 +4498,12 @@ function renderCoachTeamDayPanel(state: MobileAppState, selectedDayDate: string)
     const readinessValue = dayData.readinessEntry ? String(dayData.readinessEntry.score) : "-";
     const planValue = formatCoachTodayPlanCount(dayData.summary);
 
+    const teamAttentionLabel = dataQuality.actions
+      .find((action) => action !== "Добавьте короткий комментарий тренера по дню.") ?? "";
+
     return {
       athlete,
-      attentionLabel: dataQuality.actions[0] ?? dayData.summary.statusLabel,
+      attentionLabel: teamAttentionLabel,
       dataQuality,
       dayData,
       executionValue,
@@ -4532,7 +4533,7 @@ function renderCoachTeamDayPanel(state: MobileAppState, selectedDayDate: string)
               <span>План ${escapeHtml(planValue)}</span>
               <span>Вып. ${escapeHtml(executionValue)}</span>
             </div>
-            <p>${escapeHtml(attentionLabel)}</p>
+            ${attentionLabel ? `<p>${escapeHtml(attentionLabel)}</p>` : ""}
             <button
               data-coach-open-athlete="${escapeHtml(athlete.athleteId)}"
               data-coach-open-day="${escapeHtml(selectedDayDate)}"
@@ -4597,14 +4598,10 @@ function renderCoachDayControl(state: MobileAppState, athleteId: string | null) 
 
   return `
     <section class="coach-day-control" aria-label="Выбор дня спортсмена">
-      <div class="coach-day-control-head">
-        <div>
-          <span>Выбранный день</span>
-          <strong>${escapeHtml(formatDayRelativeLabel(selectedDayDate))}</strong>
-          <small>${formatDate(selectedDayDate)}</small>
-        </div>
+      <label class="coach-day-date-field">
+        <span>День</span>
         <input data-coach-day-date type="date" value="${escapeHtml(selectedDayDate)}" />
-      </div>
+      </label>
       <div class="coach-day-control-actions">
         <button data-coach-day-shift="-1" type="button">Вчера</button>
         <button data-coach-day-shift="today" type="button">Сегодня</button>
@@ -4612,7 +4609,7 @@ function renderCoachDayControl(state: MobileAppState, athleteId: string | null) 
       </div>
       ${options.length ? `
         <label class="coach-day-plan-select">
-          <span>Даты из плана, дневника и календаря</span>
+          <span>Быстрый выбор</span>
           <select data-coach-day-plan-date>
             ${selectedOption ? "" : `<option value="${escapeHtml(selectedDayDate)}" selected>${formatDate(selectedDayDate)} · выбранный день</option>`}
             ${options.map((option) => `
