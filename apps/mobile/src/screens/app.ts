@@ -5883,14 +5883,14 @@ function getDirectWatchUserDiagnostics(
         : coordinatorStatus?.lastBlockedReason
           ? formatDirectWatchCoordinatorReason(coordinatorStatus.lastBlockedReason)
           : isRunning
-            ? "по таймеру или событию Bluetooth"
-            : "после запуска службы";
+            ? "автоматически каждые 10 минут и при подключении часов"
+            : "после запуска синхронизации";
   const headline = userError
     ? userError
     : isRunning
-      ? "Фоновая служба активна: PERFORM Sync обновляет часы без открытия приложения."
+      ? "Часы подключены. Погода и данные обновляются без открытия приложения."
       : canSync
-        ? "Служба часов готова к запуску."
+        ? "Часы готовы к синхронизации."
         : "Для прямой синхронизации выберите часы и сохраните Auth Key.";
   const lastSyncLabel = lastSyncAt ? formatDateTime(lastSyncAt) : "ещё не было";
   const lastWeatherLabel = lastWeatherAt ? formatDateTime(lastWeatherAt) : "ещё не отправлялась";
@@ -5927,23 +5927,23 @@ function getDirectWatchUserDiagnostics(
         meta: lastWeatherAt ? formatDateTime(lastWeatherAt) : null,
         tone: lastWeatherAt ? "ok" : canSync ? "warning" : "muted",
         value: lastWeatherAt
-          ? "Температура, ветер, влажность, UV/AQI, прогноз отправлены"
+          ? "Температура, ветер, влажность и прогноз отправлены"
           : weatherLabel,
       },
       {
-        label: "Данные дня",
+        label: "Показатели дня",
         meta: lastActivityAt ? formatDateTime(lastActivityAt) : null,
         tone: config.lastActivitySyncStatus === "error" ? "error" : lastActivityAt ? "ok" : "muted",
         value: dataDayLabel,
       },
       {
-        label: "Bluetooth",
+        label: "Подключение",
         meta: connectionLabel,
         tone: bluetoothTone,
         value: bluetoothValue,
       },
       {
-        label: "Энергосбережение",
+        label: "Работа в фоне",
         meta: isRunning ? "активно" : null,
         tone: isRunning ? "ok" : canSync ? "warning" : "muted",
         value: batteryValue,
@@ -5982,7 +5982,7 @@ function renderWatchSyncPanel(state: MobileAppState, date: string) {
       <article class="watch-background-status">
         <div class="watch-background-head">
           <div>
-            <span>PERFORM Sync</span>
+            <span>Статус часов</span>
             <h3>${escapeHtml(deviceLabel)}</h3>
             <p>${escapeHtml(userDiagnostics.headline)}</p>
           </div>
@@ -6004,7 +6004,7 @@ function renderWatchSyncPanel(state: MobileAppState, date: string) {
         <div class="watch-background-card-head">
           <div>
             <span>Что обновилось</span>
-            <strong>Фоновый пакет часов</strong>
+            <strong>Последняя синхронизация</strong>
           </div>
           <em>${escapeHtml(userDiagnostics.connectionLabel)}</em>
         </div>
@@ -6033,7 +6033,7 @@ function renderWatchSyncPanel(state: MobileAppState, date: string) {
           Синхронизировать сейчас
         </button>
         <details class="watch-technical-status watch-technical-drawer">
-          <summary aria-label="Служебные действия">⋯</summary>
+          <summary aria-label="Дополнительные настройки часов">Настройки</summary>
           <div class="watch-technical-body">
             <div class="watch-sync-actions">
               <button
@@ -6087,7 +6087,7 @@ function renderWatchSyncPanel(state: MobileAppState, date: string) {
                 <strong>${escapeHtml(bridgeLabel)}</strong>
               </article>
               <article>
-                <span>Пакет погоды</span>
+                <span>Погода на часы</span>
                 <strong>влажность · ветер · UV/AQI · солнце</strong>
               </article>
             </div>
@@ -6126,7 +6126,7 @@ function renderWatchSyncPanel(state: MobileAppState, date: string) {
             ${renderWatchSyncDevicePicker(state, config)}
             <article class="watch-source-note">
               <strong>Прямое подключение</strong>
-              <span>Здесь собраны служебные действия: выбор часов, ключ, погода, статус и остановка фоновой службы.</span>
+              <span>Здесь можно заменить часы, обновить город, проверить статус и остановить фоновую синхронизацию.</span>
             </article>
           </div>
         </details>

@@ -5753,7 +5753,7 @@ button.watch-settings-entry-card:focus-visible {
 
 .watch-sync-main-actions {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 52px;
+  grid-template-columns: minmax(0, 1fr) minmax(104px, auto);
   gap: 8px;
   align-items: start;
 }
@@ -5778,16 +5778,16 @@ button.watch-settings-entry-card:focus-visible {
 .watch-technical-drawer summary {
   display: grid;
   place-items: center;
-  width: 52px;
+  width: 100%;
   min-height: 48px;
-  padding: 0;
+  padding: 0 12px;
   border: 1px solid rgba(15, 118, 110, 0.16);
   border-radius: 16px;
   background: #ffffff;
   color: var(--accent-dark);
-  font-size: 1.35rem;
+  font-size: 0.84rem;
   font-weight: 950;
-  line-height: 1;
+  line-height: 1.08;
   list-style: none;
 }
 
