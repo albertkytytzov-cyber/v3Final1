@@ -3643,13 +3643,13 @@ function renderCoachUtilityMenu(state: MobileAppState) {
   return `
     <details class="coach-utility-menu">
       <summary aria-label="Открыть меню тренера" title="Открыть меню тренера">
-        <span>${state.isOnline ? "онлайн" : "офлайн"} · тренер</span>
+        <span>Меню тренера</span>
         <strong>PERFORM Coach</strong>
         <em>${escapeHtml(savedLabel)}</em>
         <b aria-hidden="true">⋯</b>
       </summary>
-      <div class="coach-utility-panel" aria-label="Служебные действия тренера">
-        <p>${escapeHtml(state.session.user?.fullName ?? "Тренер")} · ${escapeHtml(queueLabel)}</p>
+      <div class="coach-utility-panel" aria-label="Действия тренера">
+        <p>${escapeHtml(state.session.user?.fullName ?? "Тренер")} · ${state.isOnline ? "онлайн" : "офлайн"} · ${escapeHtml(queueLabel)}</p>
         <div class="coach-utility-actions">
           <button
             class="topbar-action-button"
