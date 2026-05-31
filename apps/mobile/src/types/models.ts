@@ -145,6 +145,18 @@ export type SyncActionKind =
   | "competition-result"
   | "coach-diary";
 
+export type CoachReadinessChartMetric =
+  | "readiness"
+  | "restingHr"
+  | "bodyWeight"
+  | "sleepHours"
+  | "fatigueLevel"
+  | "muscleSoreness"
+  | "motivationLevel"
+  | "painLevel";
+
+export type CoachReadinessChartPeriod = 15 | 20 | 30;
+
 export interface PendingSyncAction {
   id: string;
   kind: SyncActionKind;
@@ -189,6 +201,8 @@ export interface MobileAppState {
   selectedScreen: MobileScreen;
   selectedAthleteId: string | null;
   selectedDayDate: string;
+  coachReadinessChartMetrics: CoachReadinessChartMetric[];
+  coachReadinessChartPeriod: CoachReadinessChartPeriod;
   executionDateFilter: string | null;
   executionEditDate: string | null;
   planDateFilter: string | null;

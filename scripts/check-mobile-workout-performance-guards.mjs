@@ -41,6 +41,9 @@ const requiredMobilePatterns = [
   ["coach linked workout runtime compaction", /function compactDeviceWorkoutLinkForRuntime\(/u],
   ["workout heart-rate outlier filter", /function isPlausibleWorkoutHeartRateBpm\(value: number\)/u],
   ["workout heart-rate summary bounds", /function isWorkoutHeartRateGraphValue\(workout: DeviceWorkout, value: number\)/u],
+  ["coach configurable readiness charts", /function renderCoachReadinessChartSettings\(/u],
+  ["coach adaptive readiness metric scale", /function getCoachReadinessChartScale\(/u],
+  ["coach adaptive weight chart step", /definition\.metric === "bodyWeight"[\s\S]*return 0\.2;/u],
 ];
 
 const requiredClientPatterns = [
@@ -55,6 +58,8 @@ const requiredLocalStorePatterns = [
   ["snapshot storage compacts before first write", /const compactSnapshot = compactSnapshotForStorage\(snapshot\);[\s\S]*writeJson\(SNAPSHOT_KEY, compactSnapshot\);/u],
   ["linked workout storage compaction", /deviceWorkoutLinks: snapshot\.deviceWorkoutLinks\.map\(compactDeviceWorkoutLinkForStorage\)/u],
   ["linked workout raw payload stripping", /function compactDeviceWorkoutLinkForStorage[\s\S]*rawPayload: null,[\s\S]*samples: \[\],/u],
+  ["coach chart metric storage", /function loadCoachReadinessChartMetrics\(\): CoachReadinessChartMetric\[\]/u],
+  ["coach chart period storage", /function loadCoachReadinessChartPeriod\(\): CoachReadinessChartPeriod/u],
 ];
 
 const requiredDocFragments = [

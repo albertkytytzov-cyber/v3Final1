@@ -2591,6 +2591,252 @@ button {
   background: var(--surface);
 }
 
+.coach-athlete-chart-settings {
+  border: 1px solid rgba(15, 118, 110, 0.14);
+  border-radius: 17px;
+  background: rgba(255, 255, 255, 0.66);
+}
+
+.coach-athlete-chart-settings summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 11px 12px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.coach-athlete-chart-settings summary::-webkit-details-marker {
+  display: none;
+}
+
+.coach-athlete-chart-settings summary span {
+  color: var(--text);
+  font-size: 0.9rem;
+  font-weight: 950;
+}
+
+.coach-athlete-chart-settings summary small {
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: #dff2ef;
+  color: var(--accent-dark);
+  font-size: 0.72rem;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.coach-athlete-chart-settings > section {
+  display: grid;
+  gap: 10px;
+  padding: 0 12px 12px;
+}
+
+.coach-athlete-chart-periods {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.coach-athlete-chart-periods button {
+  min-width: 0;
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 900;
+}
+
+.coach-athlete-chart-periods button.is-active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.coach-athlete-chart-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.coach-athlete-chart-options label {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 1px 7px;
+  min-width: 0;
+  padding: 8px 9px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 13px;
+  background: #fff;
+}
+
+.coach-athlete-chart-options label.is-selected {
+  border-color: rgba(15, 118, 110, 0.28);
+  background: #e9f6f4;
+}
+
+.coach-athlete-chart-options label.is-disabled {
+  opacity: 0.55;
+}
+
+.coach-athlete-chart-options input {
+  grid-row: span 2;
+  align-self: center;
+}
+
+.coach-athlete-chart-options span {
+  min-width: 0;
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 900;
+  line-height: 1.1;
+}
+
+.coach-athlete-chart-options small {
+  min-width: 0;
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 740;
+  line-height: 1.15;
+}
+
+.coach-athlete-chart-list {
+  display: grid;
+  gap: 10px;
+}
+
+.coach-athlete-metric-card {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 17px;
+  background: rgba(255, 255, 255, 0.74);
+}
+
+.coach-athlete-metric-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 760;
+  line-height: 1.3;
+}
+
+.coach-athlete-metric-card .readiness-trend-chart-meta strong {
+  display: block;
+  margin-top: 2px;
+  color: var(--text);
+  font-size: 1.08rem;
+  font-weight: 950;
+  line-height: 1.1;
+}
+
+.coach-athlete-metric-card .readiness-trend-chart-meta small {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 760;
+  line-height: 1.18;
+}
+
+.coach-athlete-metric-svg {
+  height: 126px;
+}
+
+.coach-athlete-metric-axis,
+.coach-athlete-metric-date {
+  fill: var(--muted);
+  font-size: 0.62rem;
+  font-weight: 850;
+}
+
+.coach-athlete-metric-reference {
+  stroke: var(--accent);
+  stroke-dasharray: 5 7;
+  stroke-width: 2;
+}
+
+.readiness-trend-svg .coach-athlete-metric-area {
+  opacity: 0.14;
+}
+
+.readiness-trend-svg .coach-athlete-metric-area.is-readiness {
+  fill: var(--accent);
+}
+
+.readiness-trend-svg .coach-athlete-metric-area.is-pulse {
+  fill: #287bb5;
+}
+
+.readiness-trend-svg .coach-athlete-metric-area.is-weight {
+  fill: #9a5f18;
+}
+
+.readiness-trend-svg .coach-athlete-metric-area.is-sleep {
+  fill: #6d5bd0;
+}
+
+.readiness-trend-svg .coach-athlete-metric-area.is-fatigue,
+.readiness-trend-svg .coach-athlete-metric-area.is-muscles,
+.readiness-trend-svg .coach-athlete-metric-area.is-pain {
+  fill: var(--warning);
+}
+
+.readiness-trend-svg .coach-athlete-metric-area.is-motivation {
+  fill: #16a34a;
+}
+
+.readiness-trend-svg .coach-athlete-metric-line {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 4;
+}
+
+.readiness-trend-svg .coach-athlete-metric-line.is-readiness,
+.readiness-trend-svg .coach-athlete-metric-dot.is-readiness {
+  stroke: var(--accent);
+}
+
+.readiness-trend-svg .coach-athlete-metric-line.is-pulse,
+.readiness-trend-svg .coach-athlete-metric-dot.is-pulse {
+  stroke: #287bb5;
+}
+
+.readiness-trend-svg .coach-athlete-metric-line.is-weight,
+.readiness-trend-svg .coach-athlete-metric-dot.is-weight {
+  stroke: #9a5f18;
+}
+
+.readiness-trend-svg .coach-athlete-metric-line.is-sleep,
+.readiness-trend-svg .coach-athlete-metric-dot.is-sleep {
+  stroke: #6d5bd0;
+}
+
+.readiness-trend-svg .coach-athlete-metric-line.is-fatigue,
+.readiness-trend-svg .coach-athlete-metric-line.is-muscles,
+.readiness-trend-svg .coach-athlete-metric-line.is-pain,
+.readiness-trend-svg .coach-athlete-metric-dot.is-fatigue,
+.readiness-trend-svg .coach-athlete-metric-dot.is-muscles,
+.readiness-trend-svg .coach-athlete-metric-dot.is-pain {
+  stroke: var(--warning);
+}
+
+.readiness-trend-svg .coach-athlete-metric-line.is-motivation,
+.readiness-trend-svg .coach-athlete-metric-dot.is-motivation {
+  stroke: #16a34a;
+}
+
+.readiness-trend-svg .coach-athlete-metric-dot {
+  fill: #fff;
+  stroke-width: 3;
+}
+
 .coach-athlete-readiness-facts {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -7999,7 +8245,8 @@ button.timeline-card:active {
   .readiness-metrics,
   .watch-status-metrics,
   .watch-sync-grid,
-  .device-health-compact-grid {
+  .device-health-compact-grid,
+  .coach-athlete-chart-options {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 

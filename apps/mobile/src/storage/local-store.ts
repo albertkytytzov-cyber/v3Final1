@@ -1,6 +1,8 @@
 import { normalizeApiBaseUrl } from "../config.js";
 import {
   createEmptySnapshot,
+  type CoachReadinessChartMetric,
+  type CoachReadinessChartPeriod,
   type MobileDataSnapshot,
   type MobileSessionState,
   type PendingSyncAction,
@@ -11,6 +13,24 @@ const SNAPSHOT_KEY = "perform.mobile.snapshot";
 const QUEUE_KEY = "perform.mobile.syncQueue";
 const SELECTED_ATHLETE_KEY = "perform.mobile.selectedAthleteId";
 const DIRECT_WATCH_CONFIG_KEY = "perform.mobile.directWatchConfig";
+const COACH_READINESS_CHART_METRICS_KEY = "perform.mobile.coachReadinessChartMetrics";
+const COACH_READINESS_CHART_PERIOD_KEY = "perform.mobile.coachReadinessChartPeriod";
+const DEFAULT_COACH_READINESS_CHART_METRICS: CoachReadinessChartMetric[] = [
+  "readiness",
+  "restingHr",
+  "bodyWeight",
+];
+const COACH_READINESS_CHART_METRIC_SET = new Set<CoachReadinessChartMetric>([
+  "readiness",
+  "restingHr",
+  "bodyWeight",
+  "sleepHours",
+  "fatigueLevel",
+  "muscleSoreness",
+  "motivationLevel",
+  "painLevel",
+]);
+const COACH_READINESS_CHART_LIMIT = 4;
 
 export interface DirectWatchLocalConfig {
   authKeyHex: string | null;
@@ -180,6 +200,24 @@ export function saveSelectedAthleteId(athleteId: string | null) {
   window.localStorage.removeItem(SELECTED_ATHLETE_KEY);
 }
 
+export function loadCoachReadinessChartMetrics(): CoachReadinessChartMetric[] {
+  return normalizeCoachReadinessChartMetrics(
+    readJson<unknown>(COACH_READINESS_CHART_METRICS_KEY, DEFAULT_COACH_READINESS_CHART_METRICS),
+  );
+}
+
+export function saveCoachReadinessChartMetrics(metrics: CoachReadinessChartMetric[]) {
+  writeJson(COACH_READINESS_CHART_METRICS_KEY, normalizeCoachReadinessChartMetrics(metrics));
+}
+
+export function loadCoachReadinessChartPeriod(): CoachReadinessChartPeriod {
+  return normalizeCoachReadinessChartPeriod(readJson<unknown>(COACH_READINESS_CHART_PERIOD_KEY, 30));
+}
+
+export function saveCoachReadinessChartPeriod(period: CoachReadinessChartPeriod) {
+  writeJson(COACH_READINESS_CHART_PERIOD_KEY, normalizeCoachReadinessChartPeriod(period));
+}
+
 export function loadDirectWatchConfig(): DirectWatchLocalConfig {
   const config = readJson<Partial<DirectWatchLocalConfig>>(DIRECT_WATCH_CONFIG_KEY, {});
 
@@ -244,6 +282,27 @@ export function saveDirectWatchConfig(config: DirectWatchLocalConfig) {
     weatherLatitude: normalizeNumber(config.weatherLatitude),
     weatherLongitude: normalizeNumber(config.weatherLongitude),
   });
+}
+
+function normalizeCoachReadinessChartMetrics(value: unknown): CoachReadinessChartMetric[] {
+  if (!Array.isArray(value)) {
+    return DEFAULT_COACH_READINESS_CHART_METRICS;
+  }
+
+  const metrics = value
+    .filter((metric): metric is CoachReadinessChartMetric =>
+      typeof metric === "string" && COACH_READINESS_CHART_METRIC_SET.has(metric as CoachReadinessChartMetric),
+    )
+    .filter((metric, index, items) => items.indexOf(metric) === index)
+    .slice(0, COACH_READINESS_CHART_LIMIT);
+
+  return metrics.length ? metrics : DEFAULT_COACH_READINESS_CHART_METRICS;
+}
+
+function normalizeCoachReadinessChartPeriod(value: unknown): CoachReadinessChartPeriod {
+  const period = Number(value);
+
+  return period === 15 || period === 20 || period === 30 ? period : 30;
 }
 
 function normalizeAuthKey(value: unknown) {

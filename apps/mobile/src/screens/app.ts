@@ -68,12 +68,16 @@ import {
 } from "../integrations/watch-weather.js";
 import {
   clearSession,
+  loadCoachReadinessChartMetrics,
+  loadCoachReadinessChartPeriod,
   loadDirectWatchConfig,
   loadQueue,
   loadSelectedAthleteId,
   loadSession,
   loadSnapshot,
   saveDirectWatchConfig,
+  saveCoachReadinessChartMetrics,
+  saveCoachReadinessChartPeriod,
   saveSelectedAthleteId,
   saveSession,
   saveSnapshot,
@@ -89,6 +93,8 @@ import type {
   AssignedBlockExercise,
   AssignedPlanBlock,
   AssignedPlanSummary,
+  CoachReadinessChartMetric,
+  CoachReadinessChartPeriod,
   CoachAthleteSummary,
   CoachDayAiPayload,
   CoachDayAiReview,
@@ -131,6 +137,7 @@ const DIRECT_WATCH_NATIVE_SYNC_RETRY_DELAY_MS = 15 * 1000;
 const DIRECT_WATCH_SERVICE_STATUS_SETTLE_MS = 8_000;
 const DIRECT_WATCH_HISTORY_SYNC_DAYS = 30;
 const DIRECT_WATCH_HISTORY_SYNC_DAY_DELAY_MS = 350;
+const COACH_READINESS_CHART_LIMIT = 4;
 const DIRECT_WATCH_SYNC_ALREADY_RUNNING_MESSAGE =
   "PERFORM Sync уже синхронизирует часы. Данные обновятся автоматически.";
 const DEVICE_WORKOUT_SERIES_RENDER_LIMIT = 1_600;
@@ -244,6 +251,8 @@ export function bootstrapMobileApp(root: HTMLElement) {
     selectedScreen: "dashboard",
     selectedAthleteId: loadSelectedAthleteId(),
     selectedDayDate: todayValue(),
+    coachReadinessChartMetrics: loadCoachReadinessChartMetrics(),
+    coachReadinessChartPeriod: loadCoachReadinessChartPeriod(),
     executionDateFilter: null,
     executionEditDate: null,
     planDateFilter: null,
@@ -3402,6 +3411,40 @@ export function bootstrapMobileApp(root: HTMLElement) {
       });
     });
 
+    root.querySelectorAll<HTMLInputElement>("[data-coach-readiness-chart-metric]").forEach((input) => {
+      input.addEventListener("change", () => {
+        const metric = parseCoachReadinessChartMetric(input.value);
+        if (!metric) {
+          return;
+        }
+
+        const currentMetrics = normalizeCoachReadinessChartMetrics(state.coachReadinessChartMetrics);
+        const nextMetrics = input.checked
+          ? currentMetrics.includes(metric)
+            ? currentMetrics
+            : currentMetrics.length >= COACH_READINESS_CHART_LIMIT
+              ? currentMetrics
+              : [...currentMetrics, metric]
+          : currentMetrics.filter((currentMetric) => currentMetric !== metric);
+        const normalizedMetrics = normalizeCoachReadinessChartMetrics(nextMetrics);
+        saveCoachReadinessChartMetrics(normalizedMetrics);
+        update({
+          coachReadinessChartMetrics: normalizedMetrics,
+          message: input.checked && currentMetrics.length >= COACH_READINESS_CHART_LIMIT && !currentMetrics.includes(metric)
+            ? `Можно выбрать до ${COACH_READINESS_CHART_LIMIT} графиков.`
+            : null,
+        });
+      });
+    });
+
+    root.querySelectorAll<HTMLButtonElement>("[data-coach-readiness-chart-period]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const period = parseCoachReadinessChartPeriod(button.dataset.coachReadinessChartPeriod);
+        saveCoachReadinessChartPeriod(period);
+        update({ coachReadinessChartPeriod: period });
+      });
+    });
+
     root.querySelector<HTMLFormElement>("[data-readiness-form]")?.addEventListener("submit", (event) => {
       event.preventDefault();
       void submitReadiness(event.currentTarget as HTMLFormElement);
@@ -4614,10 +4657,156 @@ function renderCoachAthleteCard(athlete: CoachAthleteSummary) {
   `;
 }
 
+interface CoachReadinessChartDefinition {
+  axisDecimals: number;
+  detail: string;
+  fixedMax?: number;
+  fixedMin?: number;
+  label: string;
+  lineClass: string;
+  lowerIsBetter?: boolean;
+  metric: CoachReadinessChartMetric;
+  minWindow: number;
+  shortLabel: string;
+  unit: string;
+  valueDecimals: number;
+}
+
+interface CoachReadinessChartScale {
+  max: number;
+  min: number;
+  ticks: number[];
+}
+
+const COACH_READINESS_CHART_DEFINITIONS: Record<CoachReadinessChartMetric, CoachReadinessChartDefinition> = {
+  bodyWeight: {
+    axisDecimals: 1,
+    detail: "изменение веса",
+    label: "Вес",
+    lineClass: "is-weight",
+    metric: "bodyWeight",
+    minWindow: 1,
+    shortLabel: "Вес",
+    unit: "кг",
+    valueDecimals: 1,
+  },
+  fatigueLevel: {
+    axisDecimals: 0,
+    detail: "ниже лучше",
+    fixedMax: 5,
+    fixedMin: 1,
+    label: "Усталость",
+    lineClass: "is-fatigue",
+    lowerIsBetter: true,
+    metric: "fatigueLevel",
+    minWindow: 4,
+    shortLabel: "Усталость",
+    unit: "/5",
+    valueDecimals: 0,
+  },
+  motivationLevel: {
+    axisDecimals: 0,
+    detail: "выше лучше",
+    fixedMax: 5,
+    fixedMin: 1,
+    label: "Мотивация",
+    lineClass: "is-motivation",
+    metric: "motivationLevel",
+    minWindow: 4,
+    shortLabel: "Мотивация",
+    unit: "/5",
+    valueDecimals: 0,
+  },
+  muscleSoreness: {
+    axisDecimals: 0,
+    detail: "ниже лучше",
+    fixedMax: 5,
+    fixedMin: 1,
+    label: "Мышцы",
+    lineClass: "is-muscles",
+    lowerIsBetter: true,
+    metric: "muscleSoreness",
+    minWindow: 4,
+    shortLabel: "Мышцы",
+    unit: "/5",
+    valueDecimals: 0,
+  },
+  painLevel: {
+    axisDecimals: 0,
+    detail: "ниже лучше",
+    fixedMax: 10,
+    fixedMin: 0,
+    label: "Боль",
+    lineClass: "is-pain",
+    lowerIsBetter: true,
+    metric: "painLevel",
+    minWindow: 10,
+    shortLabel: "Боль",
+    unit: "/10",
+    valueDecimals: 0,
+  },
+  readiness: {
+    axisDecimals: 0,
+    detail: "общая оценка",
+    fixedMax: 100,
+    fixedMin: 0,
+    label: "Готовность",
+    lineClass: "is-readiness",
+    metric: "readiness",
+    minWindow: 100,
+    shortLabel: "Готовность",
+    unit: "",
+    valueDecimals: 0,
+  },
+  restingHr: {
+    axisDecimals: 0,
+    detail: "пульс покоя",
+    label: "Пульс покоя",
+    lineClass: "is-pulse",
+    lowerIsBetter: true,
+    metric: "restingHr",
+    minWindow: 18,
+    shortLabel: "Пульс",
+    unit: "уд/мин",
+    valueDecimals: 0,
+  },
+  sleepHours: {
+    axisDecimals: 1,
+    detail: "часы сна",
+    label: "Сон",
+    lineClass: "is-sleep",
+    metric: "sleepHours",
+    minWindow: 2,
+    shortLabel: "Сон",
+    unit: "ч",
+    valueDecimals: 1,
+  },
+};
+
+const COACH_READINESS_CHART_OPTION_ORDER: CoachReadinessChartMetric[] = [
+  "readiness",
+  "restingHr",
+  "bodyWeight",
+  "sleepHours",
+  "fatigueLevel",
+  "muscleSoreness",
+  "motivationLevel",
+  "painLevel",
+];
+
+const DEFAULT_COACH_READINESS_CHART_METRICS: CoachReadinessChartMetric[] = [
+  "readiness",
+  "restingHr",
+  "bodyWeight",
+];
+
 function renderCoachAthleteReadinessOverview(state: MobileAppState, athleteId: string) {
-  const entries = getRecentReadinessEntriesForAthlete(state, athleteId, 10);
+  const period = normalizeCoachReadinessChartPeriod(state.coachReadinessChartPeriod);
+  const entries = getRecentReadinessEntriesForAthlete(state, athleteId, period);
   const history = getReadinessHistory(state, athleteId);
   const latestEntry = history[0] ?? entries[entries.length - 1] ?? null;
+  const selectedMetrics = normalizeCoachReadinessChartMetrics(state.coachReadinessChartMetrics);
+  const selectedAthlete = getCoachContextAthlete(state, athleteId);
 
   if (!latestEntry) {
     return `
@@ -4634,36 +4823,318 @@ function renderCoachAthleteReadinessOverview(state: MobileAppState, athleteId: s
     `;
   }
 
-  const trend = getReadinessTrendDelta(entries);
-  const trendClass = getReadinessTrendClass(trend);
-  const canRenderTrendChart = entries.length >= 2;
-
   return `
     <section class="readiness-trend-card coach-athlete-readiness-card readiness-${escapeHtml(latestEntry.status)}" aria-label="Готовность спортсмена">
       <div class="readiness-trend-head">
         <div>
           <span>Готовность</span>
-          <h3>Динамика за 10 дней</h3>
+          <h3>Панель показателей</h3>
           <p>${formatDate(latestEntry.entryDate)} · ${escapeHtml(formatReadinessFlags(latestEntry))}</p>
         </div>
         <strong>${latestEntry.score}</strong>
       </div>
-      <div class="readiness-trend-chart">
-        <div class="readiness-trend-chart-meta">
-          <span>${escapeHtml(formatReadinessStatus(latestEntry.status))}</span>
-          <em class="readiness-trend-chip is-${trendClass}">${escapeHtml(formatReadinessTrendDelta(trend))}</em>
-        </div>
-        ${canRenderTrendChart ? renderReadinessTrendSvg(entries, "readiness-trend-svg is-coach") : renderCoachAthleteSingleReadinessPoint(latestEntry)}
-        ${canRenderTrendChart ? renderReadinessTrendDots(entries) : ""}
+      ${renderCoachReadinessChartSettings(selectedMetrics, period)}
+      <div class="coach-athlete-chart-list">
+        ${selectedMetrics.map((metric) => renderCoachReadinessMetricChart(entries, metric, selectedAthlete)).join("")}
       </div>
       <div class="coach-athlete-readiness-facts">
         ${renderCoachAthleteReadinessFact("Пульс покоя", `${latestEntry.restingHr}`, "уд/мин")}
+        ${renderCoachAthleteReadinessFact("Вес", `${formatReadinessNumber(latestEntry.bodyWeight)} кг`, "последний")}
         ${renderCoachAthleteReadinessFact("Сон", `${formatReadinessNumber(latestEntry.sleepHours)} ч`, "за ночь")}
-        ${renderCoachAthleteReadinessFact("Усталость", `${latestEntry.fatigueLevel}/5`, "самооценка")}
         ${renderCoachAthleteReadinessFact("Боль", latestEntry.painLevel > 0 ? `${latestEntry.painLevel}/10` : "нет", "самооценка")}
       </div>
     </section>
   `;
+}
+
+function renderCoachReadinessChartSettings(
+  selectedMetrics: CoachReadinessChartMetric[],
+  period: CoachReadinessChartPeriod,
+) {
+  return `
+    <details class="coach-athlete-chart-settings">
+      <summary>
+        <span>Настроить графики</span>
+        <small>${selectedMetrics.length}/${COACH_READINESS_CHART_LIMIT} · ${period} дней</small>
+      </summary>
+      <section>
+        <div class="coach-athlete-chart-periods" aria-label="Период графиков">
+          ${([15, 20, 30] as CoachReadinessChartPeriod[]).map((option) => `
+            <button class="${period === option ? "is-active" : ""}" data-coach-readiness-chart-period="${option}" type="button">${option} дней</button>
+          `).join("")}
+        </div>
+        <div class="coach-athlete-chart-options">
+          ${COACH_READINESS_CHART_OPTION_ORDER.map((metric) => {
+            const definition = COACH_READINESS_CHART_DEFINITIONS[metric];
+            const isSelected = selectedMetrics.includes(metric);
+            const isDisabled = !isSelected && selectedMetrics.length >= COACH_READINESS_CHART_LIMIT;
+
+            return `
+              <label class="${isSelected ? "is-selected" : ""} ${isDisabled ? "is-disabled" : ""}">
+                <input data-coach-readiness-chart-metric type="checkbox" value="${definition.metric}" ${isSelected ? "checked" : ""} ${isDisabled ? "disabled" : ""} />
+                <span>${escapeHtml(definition.label)}</span>
+                <small>${escapeHtml(definition.detail)}</small>
+              </label>
+            `;
+          }).join("")}
+        </div>
+      </section>
+    </details>
+  `;
+}
+
+function renderCoachReadinessMetricChart(
+  entries: ReadinessEntry[],
+  metric: CoachReadinessChartMetric,
+  athlete: CoachAthleteSummary | null,
+) {
+  const definition = COACH_READINESS_CHART_DEFINITIONS[metric];
+  const points = entries
+    .map((entry) => ({
+      entry,
+      value: getCoachReadinessMetricValue(entry, metric),
+    }))
+    .filter((point) => Number.isFinite(point.value));
+  const latestPoint = points[points.length - 1] ?? null;
+
+  if (!latestPoint) {
+    return `
+      <article class="coach-athlete-metric-card is-empty">
+        <div class="readiness-trend-chart-meta">
+          <span>${escapeHtml(definition.label)}</span>
+          <em class="readiness-trend-chip is-watch">нет данных</em>
+        </div>
+        <p>Спортсмен ещё не отправлял этот показатель.</p>
+      </article>
+    `;
+  }
+
+  const values = points.map((point) => point.value);
+  const referenceValue = getCoachReadinessMetricReferenceValue(metric, athlete);
+  const scale = getCoachReadinessChartScale(values, definition, referenceValue);
+  const trendDelta = latestPoint.value - points[0].value;
+
+  return `
+    <article class="coach-athlete-metric-card ${definition.lineClass}">
+      <div class="readiness-trend-chart-meta">
+        <div>
+          <span>${escapeHtml(definition.label)}</span>
+          <strong>${escapeHtml(formatCoachReadinessMetricValue(latestPoint.value, definition))}</strong>
+          <small>${formatDate(latestPoint.entry.entryDate)} · ${points.length} замеров</small>
+        </div>
+        <em class="readiness-trend-chip ${getCoachReadinessMetricTrendClass(trendDelta, definition)}">${escapeHtml(formatCoachReadinessMetricTrend(trendDelta, definition))}</em>
+      </div>
+      ${renderCoachReadinessMetricSvg(points, definition, scale, referenceValue)}
+    </article>
+  `;
+}
+
+function renderCoachReadinessMetricSvg(
+  points: { entry: ReadinessEntry; value: number }[],
+  definition: CoachReadinessChartDefinition,
+  scale: CoachReadinessChartScale,
+  referenceValue: number | null,
+) {
+  const width = 300;
+  const height = 116;
+  const leftPadding = 34;
+  const rightPadding = 10;
+  const topPadding = 14;
+  const bottomPadding = 18;
+  const chartWidth = width - leftPadding - rightPadding;
+  const chartHeight = height - topPadding - bottomPadding;
+  const denominator = Math.max(points.length - 1, 1);
+  const valueRange = Math.max(scale.max - scale.min, 1);
+  const chartPoints = points.map((point, index) => {
+    const x = leftPadding + (chartWidth * index) / denominator;
+    const normalized = (point.value - scale.min) / valueRange;
+    const y = topPadding + chartHeight * (1 - Math.max(0, Math.min(1, normalized)));
+    return { ...point, x, y };
+  });
+  const polyline = chartPoints.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ");
+  const areaPoints = [
+    polyline,
+    `${chartPoints[chartPoints.length - 1]?.x.toFixed(1) ?? leftPadding},${height - bottomPadding}`,
+    `${leftPadding},${height - bottomPadding}`,
+  ].join(" ");
+  const tickLines = scale.ticks.map((tick) => {
+    const y = topPadding + chartHeight * (1 - (tick - scale.min) / valueRange);
+    return `
+      <line x1="${leftPadding}" y1="${y.toFixed(1)}" x2="${width - rightPadding}" y2="${y.toFixed(1)}"></line>
+      <text class="coach-athlete-metric-axis" x="0" y="${(y + 3).toFixed(1)}">${escapeHtml(formatCoachReadinessAxisValue(tick, definition))}</text>
+    `;
+  }).join("");
+  const referenceY = referenceValue !== null
+    ? topPadding + chartHeight * (1 - (referenceValue - scale.min) / valueRange)
+    : null;
+
+  return `
+    <svg class="readiness-trend-svg coach-athlete-metric-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="График ${escapeHtml(definition.label.toLowerCase())}">
+      ${tickLines}
+      ${referenceY !== null && referenceY >= topPadding && referenceY <= height - bottomPadding
+        ? `<line class="coach-athlete-metric-reference" x1="${leftPadding}" y1="${referenceY.toFixed(1)}" x2="${width - rightPadding}" y2="${referenceY.toFixed(1)}"></line>`
+        : ""}
+      <polygon class="coach-athlete-metric-area ${definition.lineClass}" points="${areaPoints}"></polygon>
+      <polyline class="coach-athlete-metric-line ${definition.lineClass}" points="${polyline}"></polyline>
+      ${chartPoints.map((point) => `
+        <circle class="coach-athlete-metric-dot ${definition.lineClass}" cx="${point.x.toFixed(1)}" cy="${point.y.toFixed(1)}" r="3.7"></circle>
+      `).join("")}
+      <text class="coach-athlete-metric-date" x="${leftPadding}" y="${height - 2}">${formatShortDate(points[0].entry.entryDate)}</text>
+      <text class="coach-athlete-metric-date" x="${width - 52}" y="${height - 2}">${formatShortDate(points[points.length - 1].entry.entryDate)}</text>
+    </svg>
+  `;
+}
+
+function getCoachReadinessMetricValue(entry: ReadinessEntry, metric: CoachReadinessChartMetric) {
+  switch (metric) {
+    case "bodyWeight":
+      return entry.bodyWeight;
+    case "fatigueLevel":
+      return entry.fatigueLevel;
+    case "motivationLevel":
+      return entry.motivationLevel;
+    case "muscleSoreness":
+      return entry.muscleSoreness;
+    case "painLevel":
+      return entry.painLevel;
+    case "readiness":
+      return entry.score;
+    case "restingHr":
+      return entry.restingHr;
+    case "sleepHours":
+      return entry.sleepHours;
+  }
+}
+
+function getCoachReadinessMetricReferenceValue(
+  metric: CoachReadinessChartMetric,
+  athlete: CoachAthleteSummary | null,
+) {
+  if (metric === "bodyWeight") {
+    return athlete?.baselineWeightKg ?? null;
+  }
+
+  if (metric === "restingHr") {
+    return athlete?.baselineRestingHr ?? null;
+  }
+
+  return null;
+}
+
+function getCoachReadinessChartScale(
+  values: number[],
+  definition: CoachReadinessChartDefinition,
+  referenceValue: number | null,
+): CoachReadinessChartScale {
+  if (definition.fixedMin !== undefined && definition.fixedMax !== undefined) {
+    return {
+      max: definition.fixedMax,
+      min: definition.fixedMin,
+      ticks: [definition.fixedMax, (definition.fixedMax + definition.fixedMin) / 2, definition.fixedMin],
+    };
+  }
+
+  const scaleValues = values;
+  const minValue = Math.min(...scaleValues);
+  const maxValue = Math.max(...scaleValues);
+  const rawWindow = maxValue - minValue;
+  const windowSize = Math.max(rawWindow * 1.35, definition.minWindow);
+  const center = (minValue + maxValue) / 2;
+  const step = getCoachReadinessChartStep(windowSize, definition);
+  const min = Math.floor((center - windowSize / 2) / step) * step;
+  const max = Math.ceil((center + windowSize / 2) / step) * step;
+  const mid = (min + max) / 2;
+
+  return {
+    max,
+    min,
+    ticks: [max, mid, min],
+  };
+}
+
+function getCoachReadinessChartStep(windowSize: number, definition: CoachReadinessChartDefinition) {
+  if (definition.metric === "bodyWeight") {
+    if (windowSize <= 1.2) {
+      return 0.2;
+    }
+
+    if (windowSize <= 3) {
+      return 0.5;
+    }
+
+    return 1;
+  }
+
+  if (definition.metric === "sleepHours") {
+    return windowSize <= 3 ? 0.5 : 1;
+  }
+
+  if (definition.metric === "restingHr") {
+    return windowSize <= 20 ? 5 : 10;
+  }
+
+  return 1;
+}
+
+function formatCoachReadinessMetricValue(value: number, definition: CoachReadinessChartDefinition) {
+  const normalizedValue = definition.valueDecimals === 0
+    ? String(Math.round(value))
+    : value.toFixed(definition.valueDecimals);
+
+  return definition.unit ? `${normalizedValue} ${definition.unit}` : normalizedValue;
+}
+
+function formatCoachReadinessAxisValue(value: number, definition: CoachReadinessChartDefinition) {
+  return definition.axisDecimals === 0 ? String(Math.round(value)) : value.toFixed(definition.axisDecimals);
+}
+
+function formatCoachReadinessMetricTrend(delta: number, definition: CoachReadinessChartDefinition) {
+  if (Math.abs(delta) < 0.0001) {
+    return "без изменений";
+  }
+
+  const sign = delta > 0 ? "+" : "";
+  const formattedDelta = definition.valueDecimals === 0
+    ? `${sign}${Math.round(delta)}`
+    : `${sign}${delta.toFixed(definition.valueDecimals)}`;
+
+  return `${formattedDelta}${definition.unit ? ` ${definition.unit}` : ""}`;
+}
+
+function getCoachReadinessMetricTrendClass(delta: number, definition: CoachReadinessChartDefinition) {
+  if (Math.abs(delta) < 0.0001) {
+    return "is-good";
+  }
+
+  const isPositive = delta > 0;
+  const isBetter = definition.lowerIsBetter ? !isPositive : isPositive;
+
+  return isBetter ? "is-good" : "is-watch";
+}
+
+function normalizeCoachReadinessChartMetrics(metrics: CoachReadinessChartMetric[]) {
+  const normalized = metrics
+    .filter((metric) => COACH_READINESS_CHART_OPTION_ORDER.includes(metric))
+    .filter((metric, index, items) => items.indexOf(metric) === index)
+    .slice(0, COACH_READINESS_CHART_LIMIT);
+
+  return normalized.length ? normalized : DEFAULT_COACH_READINESS_CHART_METRICS;
+}
+
+function parseCoachReadinessChartMetric(value: string | undefined): CoachReadinessChartMetric | null {
+  return COACH_READINESS_CHART_OPTION_ORDER.includes(value as CoachReadinessChartMetric)
+    ? value as CoachReadinessChartMetric
+    : null;
+}
+
+function parseCoachReadinessChartPeriod(value: string | undefined): CoachReadinessChartPeriod {
+  const period = Number(value);
+
+  return period === 15 || period === 20 || period === 30 ? period : 30;
+}
+
+function normalizeCoachReadinessChartPeriod(period: CoachReadinessChartPeriod) {
+  return period === 15 || period === 20 || period === 30 ? period : 30;
 }
 
 function renderCoachAthleteSingleReadinessPoint(entry: ReadinessEntry) {
