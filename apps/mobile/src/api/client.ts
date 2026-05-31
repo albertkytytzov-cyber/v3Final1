@@ -118,7 +118,11 @@ export class MobileApiClient {
     });
   }
 
-  async loadAppData(userRole: string, selectedEntryDate?: string) {
+  async loadAppData(
+    userRole: string,
+    selectedEntryDate?: string,
+    selectedCoachAthleteId?: string | null,
+  ) {
     const [
       assignedPlans,
       competitions,
@@ -182,6 +186,7 @@ export class MobileApiClient {
             assignedPlans.assignedPlans,
             athletes.athletes,
             selectedEntryDate,
+            selectedCoachAthleteId,
           )
         : athleteExecution.results;
     const coachReadinessHistory =
@@ -190,6 +195,7 @@ export class MobileApiClient {
             assignedPlans.assignedPlans,
             athletes.athletes,
             selectedEntryDate,
+            selectedCoachAthleteId,
           )
         : readinessHistory.entries;
     const deviceHealthSummaries =
@@ -198,6 +204,7 @@ export class MobileApiClient {
             assignedPlans.assignedPlans,
             athletes.athletes,
             selectedEntryDate,
+            selectedCoachAthleteId,
           )
         : deviceHealth.summaries;
     const deviceWorkoutData =
@@ -206,6 +213,7 @@ export class MobileApiClient {
             assignedPlans.assignedPlans,
             athletes.athletes,
             selectedEntryDate,
+            selectedCoachAthleteId,
           )
         : deviceWorkouts;
 
@@ -222,6 +230,7 @@ export class MobileApiClient {
             assignedPlans.assignedPlans,
             athletes.athletes,
             selectedEntryDate,
+            selectedCoachAthleteId,
           )
         : deviceHealthSamples.samples,
       deviceWorkoutLinks: deviceWorkoutData.links ?? [],
@@ -236,11 +245,9 @@ export class MobileApiClient {
     assignedPlans: AssignedPlanSummary[],
     athletes: CoachAthleteSummary[],
     selectedEntryDate?: string,
+    selectedCoachAthleteId?: string | null,
   ) {
-    const athleteIds = Array.from(new Set([
-      ...assignedPlans.map((plan) => plan.athleteId),
-      ...athletes.map((athlete) => athlete.athleteId),
-    ].filter(Boolean)));
+    const athleteIds = resolveCoachDataAthleteIds(assignedPlans, athletes, selectedCoachAthleteId);
     const responses = await Promise.all(
       athleteIds.map((athleteId) =>
         this.request<{ results: ExecutionResult[] }>(
@@ -259,11 +266,9 @@ export class MobileApiClient {
     assignedPlans: AssignedPlanSummary[],
     athletes: CoachAthleteSummary[],
     selectedEntryDate?: string,
+    selectedCoachAthleteId?: string | null,
   ) {
-    const athleteIds = Array.from(new Set([
-      ...assignedPlans.map((plan) => plan.athleteId),
-      ...athletes.map((athlete) => athlete.athleteId),
-    ].filter(Boolean)));
+    const athleteIds = resolveCoachDataAthleteIds(assignedPlans, athletes, selectedCoachAthleteId);
     const recentResponses = await Promise.all(
       athleteIds.map((athleteId) =>
         this.request<{ entries: ReadinessEntry[] }>(
@@ -298,11 +303,9 @@ export class MobileApiClient {
     assignedPlans: AssignedPlanSummary[],
     athletes: CoachAthleteSummary[],
     selectedEntryDate?: string,
+    selectedCoachAthleteId?: string | null,
   ) {
-    const athleteIds = Array.from(new Set([
-      ...assignedPlans.map((plan) => plan.athleteId),
-      ...athletes.map((athlete) => athlete.athleteId),
-    ].filter(Boolean)));
+    const athleteIds = resolveCoachDataAthleteIds(assignedPlans, athletes, selectedCoachAthleteId);
     const responses = await Promise.all(
       athleteIds.map((athleteId) =>
         this.request<DeviceHealthDailySummariesResponse>(
@@ -321,15 +324,13 @@ export class MobileApiClient {
     assignedPlans: AssignedPlanSummary[],
     athletes: CoachAthleteSummary[],
     selectedEntryDate?: string,
+    selectedCoachAthleteId?: string | null,
   ) {
     if (!selectedEntryDate) {
       return [];
     }
 
-    const athleteIds = Array.from(new Set([
-      ...assignedPlans.map((plan) => plan.athleteId),
-      ...athletes.map((athlete) => athlete.athleteId),
-    ].filter(Boolean)));
+    const athleteIds = resolveCoachDataAthleteIds(assignedPlans, athletes, selectedCoachAthleteId);
     const responses = await Promise.all(
       athleteIds.map((athleteId) =>
         this.request<DeviceHealthSamplesResponse>(
@@ -376,14 +377,12 @@ export class MobileApiClient {
     assignedPlans: AssignedPlanSummary[],
     athletes: CoachAthleteSummary[],
     selectedEntryDate?: string,
+    selectedCoachAthleteId?: string | null,
   ) {
-    const athleteIds = Array.from(new Set([
-      ...assignedPlans.map((plan) => plan.athleteId),
-      ...athletes.map((athlete) => athlete.athleteId),
-    ].filter(Boolean)));
+    const athleteIds = resolveCoachDataAthleteIds(assignedPlans, athletes, selectedCoachAthleteId);
     const responses = await Promise.all(
       athleteIds.map((athleteId) => {
-        const basePath = `/coach/athletes/${encodeURIComponent(athleteId)}/device-workouts`;
+        const basePath = `/coach/athletes/${encodeURIComponent(athleteId)}/device-workouts?includeSamples=false`;
         return this.request<DeviceWorkoutsResponse>(withEntryDate(basePath, selectedEntryDate))
           .catch(() => ({ links: [], workouts: [] }));
       }),
@@ -541,6 +540,21 @@ export class MobileApiClient {
       },
     );
   }
+}
+
+function resolveCoachDataAthleteIds(
+  assignedPlans: AssignedPlanSummary[],
+  athletes: CoachAthleteSummary[],
+  selectedCoachAthleteId?: string | null,
+) {
+  const athleteIds = Array.from(new Set([
+    ...assignedPlans.map((plan) => plan.athleteId),
+    ...athletes.map((athlete) => athlete.athleteId),
+  ].filter(Boolean)));
+
+  return selectedCoachAthleteId && athleteIds.includes(selectedCoachAthleteId)
+    ? [selectedCoachAthleteId]
+    : athleteIds;
 }
 
 function withEntryDate(path: string, entryDate?: string) {

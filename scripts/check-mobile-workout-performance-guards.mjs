@@ -4,9 +4,11 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = join(__dirname, "..");
+const mobileApiClientPath = join(rootDir, "apps", "mobile", "src", "api", "client.ts");
 const mobileAppPath = join(rootDir, "apps", "mobile", "src", "screens", "app.ts");
 const backgroundPlanPath = join(rootDir, "docs", "perform-sync-background-sync-plan.md");
 
+const mobileApiClient = readFileSync(mobileApiClientPath, "utf8");
 const mobileApp = readFileSync(mobileAppPath, "utf8");
 const backgroundPlan = readFileSync(backgroundPlanPath, "utf8");
 
@@ -33,6 +35,12 @@ const requiredMobilePatterns = [
   ["uPlot destroy on rerender", /mountedUPlotCharts\.forEach\(\(chart\) => chart\.destroy\(\)\);/u],
 ];
 
+const requiredClientPatterns = [
+  ["coach athlete-scoped data load", /function resolveCoachDataAthleteIds\(/u],
+  ["coach selected athlete parameter", /selectedCoachAthleteId\?: string \| null/u],
+  ["coach workout summaries without samples", /device-workouts\?includeSamples=false/u],
+];
+
 const requiredDocFragments = [
   "Performance guard audit, 27.05.2026",
   "history groups are cached",
@@ -50,6 +58,12 @@ function fail(message) {
 for (const [label, pattern] of requiredMobilePatterns) {
   if (!pattern.test(mobileApp)) {
     fail(`missing ${label} in mobile workout rendering`);
+  }
+}
+
+for (const [label, pattern] of requiredClientPatterns) {
+  if (!pattern.test(mobileApiClient)) {
+    fail(`missing ${label} in mobile API client`);
   }
 }
 

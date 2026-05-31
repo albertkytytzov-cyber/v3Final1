@@ -747,8 +747,14 @@ export function bootstrapMobileApp(root: HTMLElement) {
     selectedAthleteId?: string | null,
   ) => {
     const selectedDayDate = normalizeDateValue(date) ?? todayValue();
+    const nextSelectedAthleteId = selectedAthleteId !== undefined
+      ? selectedAthleteId
+      : state.selectedAthleteId;
     const shouldReloadDayData = isCoachRole(state.session.user?.role) &&
-      selectedDayDate !== state.selectedDayDate;
+      (
+        selectedDayDate !== state.selectedDayDate ||
+        nextSelectedAthleteId !== state.selectedAthleteId
+      );
 
     update({
       executionDateFilter: selectedDayDate,
@@ -885,7 +891,13 @@ export function bootstrapMobileApp(root: HTMLElement) {
         loadedData,
         coachAiStatus,
       ] = await Promise.all([
-        api.loadAppData(auth.user.role, requestedDayDate),
+        api.loadAppData(
+          auth.user.role,
+          requestedDayDate,
+          isCoachRole(auth.user.role) && state.selectedScreen !== "dashboard"
+            ? state.selectedAthleteId
+            : null,
+        ),
         isCoachRole(auth.user.role)
           ? api.getCoachAiReviewStatus().catch(() => ({ status: null }))
           : Promise.resolve({ status: null }),
@@ -3088,6 +3100,9 @@ export function bootstrapMobileApp(root: HTMLElement) {
           watchWorkoutDetailId: null,
           watchSettingsOpen: false,
         });
+        if (isCoachRole(state.session.user?.role)) {
+          void refreshData(true);
+        }
         scrollToScreenTop();
       });
     });
@@ -3335,11 +3350,11 @@ export function bootstrapMobileApp(root: HTMLElement) {
       select.addEventListener("change", (event) => {
         const selectedAthleteId = (event.currentTarget as HTMLSelectElement).value || null;
         saveSelectedAthleteId(selectedAthleteId);
-        update({
-          executionDateFilter: isCoachRole(state.session.user?.role) ? state.selectedDayDate : null,
-          planDateFilter: isCoachRole(state.session.user?.role) ? state.selectedDayDate : null,
-          selectedAthleteId,
-        });
+        if (isCoachRole(state.session.user?.role)) {
+          updateSelectedDayDate(state.selectedDayDate, undefined, selectedAthleteId);
+        } else {
+          update({ selectedAthleteId });
+        }
       });
     });
 
@@ -3347,12 +3362,11 @@ export function bootstrapMobileApp(root: HTMLElement) {
       button.addEventListener("click", () => {
         const selectedAthleteId = button.dataset.athleteCard ?? null;
         saveSelectedAthleteId(selectedAthleteId);
-        update({
-          executionDateFilter: isCoachRole(state.session.user?.role) ? state.selectedDayDate : null,
-          planDateFilter: isCoachRole(state.session.user?.role) ? state.selectedDayDate : null,
-          selectedAthleteId,
-          selectedScreen: "dashboard",
-        });
+        if (isCoachRole(state.session.user?.role)) {
+          updateSelectedDayDate(state.selectedDayDate, "athletes", selectedAthleteId);
+        } else {
+          update({ selectedAthleteId, selectedScreen: "dashboard" });
+        }
       });
     });
 
