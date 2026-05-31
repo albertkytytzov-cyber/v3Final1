@@ -4707,11 +4707,6 @@ function renderCoachAthleteDayBrief(state: MobileAppState, athleteId: string) {
         ${renderCoachAthleteBriefMetric("Нагрузка", `${formatLoadValue(daySummary.actualLoad)} / ${formatLoadValue(daySummary.plannedLoad)}`, formatCoachTodayLoadDelta(daySummary))}
       </div>
       <p class="athlete-day-brief-note">Комментарий: ${escapeHtml(dayData.coachNote)}</p>
-      <div class="athlete-day-brief-actions" aria-label="Быстрые действия по спортсмену">
-        <button class="primary-action" data-screen="results" type="button">Выполнение</button>
-        <button class="secondary-action" data-screen="plans" type="button">Планы</button>
-        <button class="secondary-action" data-screen="calendar" type="button">Календарь</button>
-      </div>
     </section>
   `;
 }

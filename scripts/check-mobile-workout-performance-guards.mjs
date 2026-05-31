@@ -131,6 +131,10 @@ if (coachAthleteDayBriefStart === -1 || coachAthleteDayBriefEnd === -1) {
   if (/renderCoachAthleteBriefMetric\("Готовность"/u.test(coachAthleteDayBriefBlock)) {
     fail("coach athlete day brief must not repeat readiness metric already shown above");
   }
+
+  if (coachAthleteDayBriefBlock.includes("athlete-day-brief-actions") || coachAthleteDayBriefBlock.includes("Быстрые действия по спортсмену")) {
+    fail("coach athlete day brief must not duplicate bottom navigation actions");
+  }
 }
 
 for (const fragment of requiredDocFragments) {
