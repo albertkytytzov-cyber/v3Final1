@@ -44,7 +44,7 @@ object DirectWatchSyncCoordinator {
 
     private const val QUICK_THROTTLE_MS = 2_500L
     private const val FAILURE_BACKOFF_MS = 5 * 60 * 1000L
-    private const val AUTO_SYNC_INTERVAL_MS = 30 * 60 * 1000L
+    private const val AUTO_SYNC_INTERVAL_MS = 10 * 60 * 1000L
     private const val PENDING_REQUEST_TTL_MS = 10 * 60 * 1000L
 
     const val REASON_APP_VISIBLE = "app-visible"
@@ -98,6 +98,12 @@ object DirectWatchSyncCoordinator {
             editor.putString(KEY_WEATHER_PAYLOAD_JSON, null)
         }
         editor.apply()
+
+        if (enabled && normalizedDeviceId != null && normalizedAuthKey != null) {
+            DirectWatchSyncAlarmScheduler.schedule(context, 30_000L)
+        } else {
+            DirectWatchSyncAlarmScheduler.cancel(context)
+        }
 
         return status(context)
     }

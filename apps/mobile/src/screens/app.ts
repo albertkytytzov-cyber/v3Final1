@@ -5926,7 +5926,7 @@ function formatDirectWatchCoordinatorReason(reason: string) {
     boot: "запуск телефона",
     disabled: "координатор выключен",
     "failure-backoff": "пауза после ошибки",
-    interval: "интервал 30 мин",
+    interval: "интервал 10 мин",
     "missing-config": "нет настройки часов",
     "other-device": "другое устройство",
     "package-replaced": "обновление приложения",

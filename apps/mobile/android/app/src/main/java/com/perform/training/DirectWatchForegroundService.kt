@@ -51,6 +51,7 @@ class DirectWatchForegroundService : Service() {
                     bridgeUntil = null,
                     message = "Сервис часов остановлен.",
                 )
+                DirectWatchSyncAlarmScheduler.cancel(applicationContext)
                 stopForegroundCompat()
                 stopSelf()
                 return START_NOT_STICKY
@@ -61,8 +62,15 @@ class DirectWatchForegroundService : Service() {
                     ?: savedPrefs.getString(KEY_DEVICE_ID, null)
                 val deviceName = intent?.getStringExtra(EXTRA_DEVICE_NAME)
                     ?: savedPrefs.getString(KEY_DEVICE_NAME, null)
-                val bridgeUntil = intent?.getStringExtra(EXTRA_BRIDGE_UNTIL)
-                    ?: savedPrefs.getString(KEY_BRIDGE_UNTIL, null)
+                val bridgeUntil = if (intent?.action == ACTION_START) {
+                    if (intent.hasExtra(EXTRA_BRIDGE_UNTIL)) {
+                        intent.getStringExtra(EXTRA_BRIDGE_UNTIL)
+                    } else {
+                        null
+                    }
+                } else {
+                    savedPrefs.getString(KEY_BRIDGE_UNTIL, null)
+                }
                 if (isExpired(bridgeUntil)) {
                     cancelBridgeStop()
                     saveState(
@@ -72,6 +80,7 @@ class DirectWatchForegroundService : Service() {
                         bridgeUntil = null,
                         message = "Сервис часов остановлен: окно синхронизации завершилось.",
                     )
+                    DirectWatchSyncAlarmScheduler.cancel(applicationContext)
                     stopForegroundCompat()
                     stopSelf()
                     return START_NOT_STICKY
@@ -209,7 +218,7 @@ class DirectWatchForegroundService : Service() {
         val title = "PERFORM Sync"
         val text = listOfNotNull(
             deviceName?.takeIf { it.isNotBlank() } ?: "Часы подключены",
-            bridgeUntil?.let { "активно до ${formatBridgeUntil(it)}" },
+            bridgeUntil?.let { "активно до ${formatBridgeUntil(it)}" } ?: "фон включён",
         ).joinToString(" · ")
 
         val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -292,6 +301,7 @@ class DirectWatchForegroundService : Service() {
                 bridgeUntil = null,
                 message = "Сервис часов остановлен: окно синхронизации завершилось.",
             )
+            DirectWatchSyncAlarmScheduler.cancel(applicationContext)
             stopForegroundCompat()
             stopSelf()
         }
@@ -305,6 +315,7 @@ class DirectWatchForegroundService : Service() {
             return
         }
         if (DirectWatchSyncCoordinator.nativeSyncConfig(applicationContext) == null) {
+            DirectWatchSyncAlarmScheduler.cancel(applicationContext)
             return
         }
 
@@ -328,6 +339,7 @@ class DirectWatchForegroundService : Service() {
             .coerceAtLeast(SERVICE_TIMER_MIN_DELAY_MS)
             .coerceAtMost(SERVICE_TIMER_FALLBACK_MS)
             .coerceAtMost(remainingMs)
+        DirectWatchSyncAlarmScheduler.schedule(applicationContext, delayMs)
         val runnable = Runnable {
             nativeSyncTimerRunnable = null
             val request = DirectWatchSyncCoordinator.requestSync(
@@ -394,7 +406,7 @@ class DirectWatchForegroundService : Service() {
         private const val KEY_UPDATED_AT = "updatedAt"
         private const val TAG = "DirectWatchService"
         private const val SERVICE_TIMER_MIN_DELAY_MS = 30 * 1000L
-        private const val SERVICE_TIMER_FALLBACK_MS = 30 * 60 * 1000L
+        private const val SERVICE_TIMER_FALLBACK_MS = 10 * 60 * 1000L
         @Volatile
         private var serviceInstanceActive = false
 
@@ -404,12 +416,11 @@ class DirectWatchForegroundService : Service() {
             deviceName: String?,
             durationMs: Long,
         ): Boolean {
-            val bridgeUntil = Instant.now().plusMillis(durationMs).toString()
+            val bridgeUntil: String? = null
             val intent = Intent(context, DirectWatchForegroundService::class.java)
                 .setAction(ACTION_START)
                 .putExtra(EXTRA_DEVICE_ID, deviceId)
                 .putExtra(EXTRA_DEVICE_NAME, deviceName)
-                .putExtra(EXTRA_BRIDGE_UNTIL, bridgeUntil)
             return try {
                 ContextCompat.startForegroundService(context, intent)
                 true
@@ -445,12 +456,11 @@ class DirectWatchForegroundService : Service() {
                 return false
             }
 
-            val bridgeUntil = Instant.now().plusMillis(durationMs).toString()
+            val bridgeUntil: String? = null
             val intent = Intent(context, DirectWatchForegroundService::class.java)
                 .setAction(ACTION_START)
                 .putExtra(EXTRA_DEVICE_ID, config.deviceId)
                 .putExtra(EXTRA_DEVICE_NAME, config.deviceName)
-                .putExtra(EXTRA_BRIDGE_UNTIL, bridgeUntil)
                 .putExtra(EXTRA_NATIVE_SYNC_REQUEST, true)
                 .putExtra(EXTRA_SYNC_REASON, reason)
             return try {
@@ -486,6 +496,7 @@ class DirectWatchForegroundService : Service() {
                 .putString(KEY_UPDATED_AT, Instant.now().toString())
                 .apply()
 
+            DirectWatchSyncAlarmScheduler.cancel(context.applicationContext)
             val intent = Intent(context, DirectWatchForegroundService::class.java)
             try {
                 context.stopService(intent)

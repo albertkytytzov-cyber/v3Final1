@@ -708,8 +708,7 @@ class DirectWatchPlugin : Plugin() {
 
     @PluginMethod
     fun stopSyncService(call: PluginCall) {
-        stopActiveClassicSocket()
-        DirectWatchForegroundService.stop(context.applicationContext)
+        stopActiveClassicSocket(stopForegroundService = true)
         call.resolve(DirectWatchForegroundService.status(context))
     }
 
@@ -8682,7 +8681,7 @@ class DirectWatchPlugin : Plugin() {
         activeSession = null
     }
 
-    private fun stopActiveClassicSocket() {
+    private fun stopActiveClassicSocket(stopForegroundService: Boolean = false) {
         activeClassicForegroundBridge = false
         val thread = activeClassicThread
         activeClassicThread = null
@@ -8699,7 +8698,9 @@ class DirectWatchPlugin : Plugin() {
                 // Socket is already closed.
             }
         }
-        DirectWatchForegroundService.stop(context.applicationContext)
+        if (stopForegroundService) {
+            DirectWatchForegroundService.stop(context.applicationContext)
+        }
     }
 
     private fun stopActiveBondReceiver() {
@@ -9275,10 +9276,10 @@ class DirectWatchPlugin : Plugin() {
         private const val CLASSIC_SPP_RFCOMM_CHANNEL = 5
         private const val CLASSIC_SERVICE_BRIDGE_MAX_MS = 12 * 60 * 60 * 1000
         private const val CLASSIC_SERVICE_BRIDGE_POLL_MS = 1_000L
-        private const val CLASSIC_SERVICE_BRIDGE_REFRESH_MS = 15 * 60 * 1000L
+        private const val CLASSIC_SERVICE_BRIDGE_REFRESH_MS = 10 * 60 * 1000L
         private const val CLASSIC_SERVICE_BRIDGE_ACTIVITY_INITIAL_DELAY_MS = 60 * 1000L
         private const val CLASSIC_SERVICE_BRIDGE_ACTIVITY_REFRESH_MS = 10 * 60 * 1000L
-        private const val CLASSIC_WEATHER_PAYLOAD_MAX_AGE_MS = 30 * 60 * 1000L
+        private const val CLASSIC_WEATHER_PAYLOAD_MAX_AGE_MS = 10 * 60 * 1000L
         private const val CLASSIC_WEATHER_PAYLOAD_FUTURE_TOLERANCE_MS = 5 * 60 * 1000L
         private const val XIAOMI_WEATHER_CLEAR_SKY = 0
         private val PAIRING_TIMEOUT_TOKEN = Any()
