@@ -97,17 +97,19 @@ export function loadSnapshot(): MobileDataSnapshot {
 }
 
 export function saveSnapshot(snapshot: MobileDataSnapshot) {
+  const compactSnapshot = compactSnapshotForStorage(snapshot);
+
   try {
-    writeJson(SNAPSHOT_KEY, snapshot);
+    writeJson(SNAPSHOT_KEY, compactSnapshot);
   } catch {
     try {
       window.localStorage.removeItem(SNAPSHOT_KEY);
-      writeJson(SNAPSHOT_KEY, compactSnapshotForStorage(snapshot));
+      writeJson(SNAPSHOT_KEY, compactSnapshot);
     } catch {
       try {
         window.localStorage.removeItem(SNAPSHOT_KEY);
         writeJson(SNAPSHOT_KEY, {
-          ...compactSnapshotForStorage(snapshot),
+          ...compactSnapshot,
           deviceWorkouts: [],
           deviceWorkoutLinks: [],
         });
@@ -142,6 +144,18 @@ function compactSnapshotForStorage(snapshot: MobileDataSnapshot): MobileDataSnap
       rawPayload: null,
       samples: [],
     })),
+    deviceWorkoutLinks: snapshot.deviceWorkoutLinks.map(compactDeviceWorkoutLinkForStorage),
+  };
+}
+
+function compactDeviceWorkoutLinkForStorage(link: MobileDataSnapshot["deviceWorkoutLinks"][number]) {
+  return {
+    ...link,
+    workout: {
+      ...link.workout,
+      rawPayload: null,
+      samples: [],
+    },
   };
 }
 

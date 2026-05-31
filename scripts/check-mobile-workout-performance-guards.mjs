@@ -6,10 +6,12 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = join(__dirname, "..");
 const mobileApiClientPath = join(rootDir, "apps", "mobile", "src", "api", "client.ts");
 const mobileAppPath = join(rootDir, "apps", "mobile", "src", "screens", "app.ts");
+const mobileLocalStorePath = join(rootDir, "apps", "mobile", "src", "storage", "local-store.ts");
 const backgroundPlanPath = join(rootDir, "docs", "perform-sync-background-sync-plan.md");
 
 const mobileApiClient = readFileSync(mobileApiClientPath, "utf8");
 const mobileApp = readFileSync(mobileAppPath, "utf8");
+const mobileLocalStore = readFileSync(mobileLocalStorePath, "utf8");
 const backgroundPlan = readFileSync(backgroundPlanPath, "utf8");
 
 const requiredMobilePatterns = [
@@ -39,6 +41,13 @@ const requiredClientPatterns = [
   ["coach athlete-scoped data load", /function resolveCoachDataAthleteIds\(/u],
   ["coach selected athlete parameter", /selectedCoachAthleteId\?: string \| null/u],
   ["coach workout summaries without samples", /device-workouts\?includeSamples=false/u],
+  ["coach screens skip raw health samples", /deviceHealthSamples: userRole === "coach" \|\| userRole === "admin"[\s\S]*\? \[\][\s\S]*: deviceHealthSamples\.samples/u],
+];
+
+const requiredLocalStorePatterns = [
+  ["snapshot storage compacts before first write", /const compactSnapshot = compactSnapshotForStorage\(snapshot\);[\s\S]*writeJson\(SNAPSHOT_KEY, compactSnapshot\);/u],
+  ["linked workout storage compaction", /deviceWorkoutLinks: snapshot\.deviceWorkoutLinks\.map\(compactDeviceWorkoutLinkForStorage\)/u],
+  ["linked workout raw payload stripping", /function compactDeviceWorkoutLinkForStorage[\s\S]*rawPayload: null,[\s\S]*samples: \[\],/u],
 ];
 
 const requiredDocFragments = [
@@ -65,6 +74,28 @@ for (const [label, pattern] of requiredClientPatterns) {
   if (!pattern.test(mobileApiClient)) {
     fail(`missing ${label} in mobile API client`);
   }
+}
+
+for (const [label, pattern] of requiredLocalStorePatterns) {
+  if (!pattern.test(mobileLocalStore)) {
+    fail(`missing ${label} in mobile local storage`);
+  }
+}
+
+const dataScreenHandlerStart = mobileApp.indexOf('root.querySelectorAll<HTMLButtonElement>("[data-screen]")');
+const dataScreenHandlerEnd = mobileApp.indexOf('root.querySelectorAll<HTMLButtonElement>("[data-watch-detail]")', dataScreenHandlerStart);
+if (dataScreenHandlerStart === -1 || dataScreenHandlerEnd === -1) {
+  fail("missing mobile data-screen navigation handler");
+} else if (mobileApp.slice(dataScreenHandlerStart, dataScreenHandlerEnd).includes("refreshData(true)")) {
+  fail("mobile data-screen navigation must not trigger a data refresh");
+}
+
+const coachWorkoutPanelStart = mobileApp.indexOf("function renderCoachDeviceWorkoutPanel");
+const coachWorkoutPanelEnd = mobileApp.indexOf("function renderCoachDeviceHealthSummaryCard", coachWorkoutPanelStart);
+if (coachWorkoutPanelStart === -1 || coachWorkoutPanelEnd === -1) {
+  fail("missing coach device workout panel");
+} else if (mobileApp.slice(coachWorkoutPanelStart, coachWorkoutPanelEnd).includes("renderDeviceWorkoutGraph(linkedWorkout)")) {
+  fail("coach execution overview must not render linked workout graphs inline");
 }
 
 for (const fragment of requiredDocFragments) {

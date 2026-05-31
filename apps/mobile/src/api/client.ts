@@ -226,12 +226,7 @@ export class MobileApiClient {
       competitions: competitions.competitions,
       deviceHealthSummaries,
       deviceHealthSamples: userRole === "coach" || userRole === "admin"
-        ? await this.loadCoachDeviceHealthSamples(
-            assignedPlans.assignedPlans,
-            athletes.athletes,
-            selectedEntryDate,
-            selectedCoachAthleteId,
-          )
+        ? []
         : deviceHealthSamples.samples,
       deviceWorkoutLinks: deviceWorkoutData.links ?? [],
       deviceWorkouts: deviceWorkoutData.workouts,

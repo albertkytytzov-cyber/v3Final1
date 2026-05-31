@@ -3100,9 +3100,6 @@ export function bootstrapMobileApp(root: HTMLElement) {
           watchWorkoutDetailId: null,
           watchSettingsOpen: false,
         });
-        if (isCoachRole(state.session.user?.role)) {
-          void refreshData(true);
-        }
         scrollToScreenTop();
       });
     });
@@ -4332,7 +4329,6 @@ function renderCoachDeviceWorkoutPanel(dayData: CoachDayCleanSummary, isBusy: bo
                   <strong>${escapeHtml(formatDeviceWorkoutTitle(linkedWorkout))}</strong>
                   ${renderDeviceWorkoutMetrics(linkedWorkout)}
                   <small>устройство · ${escapeHtml(formatTimeRange(linkedWorkout.startTime, linkedWorkout.endTime))}</small>
-                  ${renderDeviceWorkoutGraph(linkedWorkout)}
                 </div>
               ` : ""}
             </article>

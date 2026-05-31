@@ -7999,6 +7999,7 @@ button.timeline-card:active {
   right: auto;
   bottom: 0;
   left: 50%;
+  z-index: 80;
   display: grid;
   grid-template-columns: repeat(var(--bottom-nav-count, 5), minmax(0, 1fr));
   gap: 6px;
