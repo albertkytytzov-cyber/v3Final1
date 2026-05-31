@@ -3750,17 +3750,18 @@ function renderCoachUtilityMenu(state: MobileAppState) {
       ? `ошибка ${invalidQueue.length}`
       : "очередь пустая";
   const syncLabel = pendingQueue.length ? `Синхр. (${pendingQueue.length})` : "Синхр.";
+  const coachName = state.session.user?.fullName ?? "Тренер";
 
   return `
     <details class="coach-utility-menu">
       <summary aria-label="Открыть меню тренера" title="Открыть меню тренера">
-        <span>Меню тренера</span>
-        <strong>PERFORM Coach</strong>
-        <em>${escapeHtml(savedLabel)}</em>
+        <span>Тренер</span>
+        <strong>${escapeHtml(coachName)}</strong>
+        <em>${state.isOnline ? "онлайн" : "офлайн"}</em>
         <b aria-hidden="true">⋯</b>
       </summary>
       <div class="coach-utility-panel" aria-label="Действия тренера">
-        <p>${escapeHtml(state.session.user?.fullName ?? "Тренер")} · ${state.isOnline ? "онлайн" : "офлайн"} · ${escapeHtml(queueLabel)}</p>
+        <p>${escapeHtml(savedLabel)} · ${escapeHtml(queueLabel)}</p>
         <div class="coach-utility-actions">
           <button
             class="topbar-action-button"
@@ -4572,17 +4573,12 @@ function renderAthletesScreen(state: MobileAppState) {
 }
 
 function renderCoachAthleteSwitchHeader(state: MobileAppState, athlete: CoachAthleteSummary) {
-  const savedLabel = state.data.savedAt
-    ? `обновлено ${formatDateTime(state.data.savedAt)}`
-    : "данные ещё не обновлялись";
-
   return `
     <section class="coach-athlete-switch-header" aria-label="Выбор спортсмена">
       <label class="coach-athlete-switch-control">
         <span class="coach-athlete-switch-copy">
           <em>Спортсмен</em>
           <strong>${escapeHtml(athlete.fullName)}</strong>
-          <small>${escapeHtml(savedLabel)}</small>
         </span>
         <span class="coach-athlete-switch-action" aria-hidden="true">Сменить</span>
         <select data-athlete-select aria-label="Выбрать спортсмена">
@@ -12068,9 +12064,9 @@ function renderCoachContextScreenHead(
 
   return `
     <div class="screen-head coach-context-screen-head">
-      <span>Спортсмен</span>
+      <span>Раздел спортсмена</span>
       <h2>${escapeHtml(title)}</h2>
-      <p>${escapeHtml(athlete?.fullName ?? "Спортсмен не выбран")} · ${escapeHtml(detail)}</p>
+      <p>${escapeHtml(athlete ? detail : "Спортсмен не выбран")}</p>
     </div>
   `;
 }
@@ -12099,6 +12095,7 @@ function renderPlansScreen(state: MobileAppState, athleteId: string | null) {
   }
 
   return `
+    ${selectedAthlete ? renderCoachAthleteSwitchHeader(state, selectedAthlete) : ""}
     ${renderCoachContextScreenHead(
       isCoachView,
       "Планы",
@@ -12161,6 +12158,7 @@ function renderCalendarScreen(state: MobileAppState, athleteId: string | null) {
   const canSubmitCompetitionResult = isCoachView;
 
   return `
+    ${selectedAthlete ? renderCoachAthleteSwitchHeader(state, selectedAthlete) : ""}
     ${renderCoachContextScreenHead(
       isCoachView,
       "Календарь",
@@ -12208,6 +12206,7 @@ function renderResultsScreen(state: MobileAppState, athleteId: string | null) {
   }
 
   return `
+    ${selectedAthlete ? renderCoachAthleteSwitchHeader(state, selectedAthlete) : ""}
     ${renderCoachContextScreenHead(
       isCoachReview,
       "Выполнение",
