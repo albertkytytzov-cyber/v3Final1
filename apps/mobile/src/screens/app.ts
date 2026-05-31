@@ -12080,7 +12080,6 @@ function renderCoachContextScreenHead(
 
   return `
     <div class="screen-head coach-context-screen-head">
-      <span>Раздел спортсмена</span>
       <h2>${escapeHtml(title)}</h2>
       <p>${escapeHtml(athlete ? detail : "Спортсмен не выбран")}</p>
     </div>
@@ -14262,9 +14261,7 @@ function renderPlanCard(plan: AssignedPlanSummary, isCoachView = false) {
           <strong>${formatDate(plan.day.dayDate)} · ${escapeHtml(plan.day.label)}</strong>
           <span>${escapeHtml(plan.templateName)} · ${formatPlanUnitCount(displayUnitCount)} · ${exerciseCount} упражнений</span>
         </div>
-        ${isCoachView
-          ? `<button class="mobile-plan-open-day" data-coach-open-day="${escapeHtml(plan.day.dayDate)}" data-coach-open-screen="athletes" type="button">Открыть спортсмена</button>`
-          : `<em>${escapeHtml(dayFocus)}</em>`}
+        <em>${escapeHtml(dayFocus)}</em>
       </header>
       <div class="mobile-plan-day-card-body">
         ${plan.day.sessions.map((session) => `
