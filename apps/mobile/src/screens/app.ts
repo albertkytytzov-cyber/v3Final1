@@ -13046,6 +13046,10 @@ function renderAthleteDeviceWorkoutLinkForBlock(
   block: AssignedPlanBlock,
   options: ExecutionPlanGroupRenderOptions,
 ) {
+  if (!canRenderAthleteDeviceWorkoutLinkForBlock(block)) {
+    return "";
+  }
+
   const target = getAthleteBlockDeviceWorkoutTarget(block);
 
   return renderAthleteDeviceWorkoutLinkSelect({
@@ -13059,6 +13063,20 @@ function renderAthleteDeviceWorkoutLinkForBlock(
     targetType: target.exercise ? "exercise" : "block",
     workouts: options.deviceWorkouts ?? [],
   });
+}
+
+function canRenderAthleteDeviceWorkoutLinkForBlock(block: AssignedPlanBlock) {
+  const rowKind = block.rowKind ?? "exercise";
+
+  if (rowKind === "exercise" || rowKind === "workout") {
+    return true;
+  }
+
+  if (rowKind === "instruction") {
+    return isDeviceWorkoutLinkablePlanBlock(block);
+  }
+
+  return false;
 }
 
 function renderAthleteDeviceWorkoutLinkSelect(input: {
