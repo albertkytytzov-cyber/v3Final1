@@ -6456,6 +6456,7 @@ function getDirectWatchUserDiagnostics(
         : "Для прямой синхронизации выберите часы и сохраните Auth Key.";
   const lastSyncLabel = lastSyncAt ? formatDateTime(lastSyncAt) : "ещё не было";
   const lastWeatherLabel = lastWeatherAt ? formatDateTime(lastWeatherAt) : "ещё не отправлялась";
+  const lastActivityLabel = lastActivityAt ? formatDateTime(lastActivityAt) : "ещё не получались";
   const dataDayLabel = backgroundSync?.available || config.lastActivitySyncStatus === "ok" || activityHasFiles
     ? "Шаги, активность, сон и файлы часов получены"
     : activityChecked
@@ -6470,22 +6471,30 @@ function getDirectWatchUserDiagnostics(
       ? "Канал готов, часы отвечают при синхронизации"
       : "Нужно выбрать часы и сохранить Auth Key";
   const batteryValue = isRunning
-    ? "Разрешена работа в фоне"
+    ? "Фоновая служба активна"
     : userError
       ? "Проверьте Bluetooth и ограничения Android"
       : canSync
         ? "Служба готова к запуску"
         : "Настройка ещё не завершена";
+  const backgroundTone = userError ? "error" : isRunning ? "ok" : canSync ? "warning" : "muted";
 
   return {
     autoLabel,
     connectionLabel,
     headline,
+    lastActivityLabel,
     lastWeatherLabel,
     lastSyncLabel,
     updates: [
       {
-        label: "Погода",
+        label: "Последнее обновление",
+        meta: null,
+        tone: lastSyncAt ? "ok" : canSync ? "warning" : "muted",
+        value: lastSyncLabel,
+      },
+      {
+        label: "Погода отправлена",
         meta: lastWeatherAt ? formatDateTime(lastWeatherAt) : null,
         tone: lastWeatherAt ? "ok" : canSync ? "warning" : "muted",
         value: lastWeatherAt
@@ -6493,22 +6502,22 @@ function getDirectWatchUserDiagnostics(
           : weatherLabel,
       },
       {
-        label: "Показатели дня",
+        label: "Данные получены",
         meta: lastActivityAt ? formatDateTime(lastActivityAt) : null,
         tone: config.lastActivitySyncStatus === "error" ? "error" : lastActivityAt ? "ok" : "muted",
         value: dataDayLabel,
       },
       {
-        label: "Подключение",
-        meta: connectionLabel,
-        tone: bluetoothTone,
-        value: bluetoothValue,
+        label: "Следующее обновление",
+        meta: hasPending ? "очередь" : null,
+        tone: canSync ? "ok" : "muted",
+        value: autoLabel,
       },
       {
-        label: "Работа в фоне",
-        meta: isRunning ? "активно" : null,
-        tone: isRunning ? "ok" : canSync ? "warning" : "muted",
-        value: batteryValue,
+        label: "Bluetooth и фон",
+        meta: connectionLabel,
+        tone: userError ? "error" : bluetoothTone === "ok" ? backgroundTone : bluetoothTone,
+        value: userError ? userError : `${bluetoothValue}. ${batteryValue}.`,
       },
     ],
     userError,
@@ -6559,14 +6568,18 @@ function renderWatchSyncPanel(state: MobileAppState, date: string) {
             <span>Погода отправлена</span>
             <strong>${escapeHtml(userDiagnostics.lastWeatherLabel)}</strong>
           </article>
+          <article>
+            <span>Данные получены</span>
+            <strong>${escapeHtml(userDiagnostics.lastActivityLabel)}</strong>
+          </article>
         </div>
       </article>
       ${userDiagnostics.userError ? `<p class="watch-sync-error">${escapeHtml(userDiagnostics.userError)}</p>` : ""}
       <article class="watch-background-card">
         <div class="watch-background-card-head">
           <div>
-            <span>Что обновилось</span>
-            <strong>Последняя синхронизация</strong>
+            <span>Диагностика</span>
+            <strong>Статусы синхронизации</strong>
           </div>
           <em>${escapeHtml(userDiagnostics.connectionLabel)}</em>
         </div>
@@ -6582,7 +6595,6 @@ function renderWatchSyncPanel(state: MobileAppState, date: string) {
             </article>
           `).join("")}
         </div>
-        <p class="watch-background-next">Следующее автообновление: ${escapeHtml(userDiagnostics.autoLabel)}</p>
       </article>
       <div class="watch-sync-main-actions">
         <button
