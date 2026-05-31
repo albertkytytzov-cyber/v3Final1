@@ -846,17 +846,17 @@ button {
 .execution-date-filter,
 .plan-date-filter {
   display: grid;
-  gap: 6px;
-  padding: 10px 12px;
+  gap: 5px;
+  padding: 8px 10px;
   border: 1px solid rgba(15, 118, 110, 0.18);
-  border-radius: 16px;
+  border-radius: 14px;
   background: rgba(240, 253, 250, 0.72);
 }
 
 .execution-date-filter span,
 .plan-date-filter span {
   color: var(--muted);
-  font-size: 0.74rem;
+  font-size: 0.64rem;
   font-weight: 900;
   text-transform: uppercase;
 }
@@ -864,13 +864,13 @@ button {
 .execution-date-filter select,
 .plan-date-filter select {
   width: 100%;
-  min-height: 44px;
-  padding: 9px 11px;
+  min-height: 38px;
+  padding: 7px 9px;
   border: 1px solid var(--line);
-  border-radius: 13px;
+  border-radius: 12px;
   background: #fff;
   color: var(--text);
-  font-size: 0.92rem;
+  font-size: 0.84rem;
   font-weight: 850;
 }
 
@@ -2279,18 +2279,18 @@ button {
 
 .coach-day-control {
   display: grid;
-  gap: 10px;
-  margin-bottom: 10px;
-  padding: 12px;
-  border: 1px solid rgba(15, 118, 110, 0.2);
-  border-radius: 18px;
-  background: #e8f6f3;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 9px;
+  border: 1px solid rgba(15, 118, 110, 0.16);
+  border-radius: 15px;
+  background: rgba(232, 246, 243, 0.82);
 }
 
 .coach-day-control-head {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(118px, 0.82fr);
-  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) minmax(112px, 0.64fr);
+  gap: 8px;
   align-items: center;
 }
 
@@ -2303,19 +2303,20 @@ button {
 .coach-day-control-head span,
 .coach-day-plan-select span {
   color: var(--muted);
-  font-size: 0.74rem;
+  font-size: 0.62rem;
   font-weight: 900;
   text-transform: uppercase;
 }
 
 .coach-day-control-head strong {
   color: var(--text);
-  font-size: 1.18rem;
+  font-size: 0.98rem;
   line-height: 1.08;
 }
 
 .coach-day-control-head small {
   color: var(--muted);
+  font-size: 0.72rem;
   font-weight: 750;
 }
 
@@ -2323,30 +2324,31 @@ button {
 .coach-day-plan-select select {
   width: 100%;
   min-width: 0;
-  min-height: 44px;
-  padding: 9px 11px;
+  min-height: 36px;
+  padding: 6px 8px;
   border: 1px solid var(--line);
-  border-radius: 13px;
+  border-radius: 12px;
   background: #fff;
   color: var(--text);
+  font-size: 0.82rem;
   font-weight: 850;
 }
 
 .coach-day-control-actions {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+  gap: 6px;
 }
 
 .coach-day-control-actions button {
   min-width: 0;
-  min-height: 40px;
+  min-height: 32px;
   border: 1px solid rgba(15, 118, 110, 0.22);
-  border-radius: 14px;
+  border-radius: 11px;
   background: #fff;
   color: var(--accent-dark);
   cursor: pointer;
-  font-size: 0.86rem;
+  font-size: 0.76rem;
   font-weight: 850;
   line-height: 1.1;
 }
