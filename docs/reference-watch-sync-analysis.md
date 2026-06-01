@@ -196,6 +196,42 @@ service:
    after Android kill more explicit.
 5. Only after that run a long background test.
 
+## Applied Implementation Package 2026-06-01
+
+Implemented from the reference gaps above:
+
+- `AndroidManifest.xml` now declares:
+  - `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`;
+  - `SCHEDULE_EXACT_ALARM`;
+  - receivers for `TIME_CHANGED`, `TIMEZONE_CHANGED`, `DATE_CHANGED`.
+- `DirectWatchForegroundService` dynamically listens to the same time/date
+  events while the foreground service is already alive.
+- `DirectWatchSyncCoordinator` maps those events to explicit reasons:
+  - `time-changed`;
+  - `timezone-changed`;
+  - `date-changed`.
+- Time/date/package/boot events bypass the 10-minute gate because the watch
+  needs immediate time/weather refresh after those system events.
+- `DirectWatchAndroidPowerStatus` reports Android-level background blockers:
+  - battery optimization whitelist state;
+  - power save mode;
+  - background restriction;
+  - exact alarm capability;
+  - Xiaomi/Redmi/Poco aggressive battery vendor hint.
+- The mobile watch diagnostics UI now shows this as a plain user-facing
+  Bluetooth/background status instead of hiding Android restrictions behind
+  technical logs.
+
+No phone installation was done during this package. Verification was local:
+
+- `npm run typecheck --workspace @training-platform/mobile`
+- `npm run test`
+- `npm run sync:android --workspace @training-platform/mobile`
+- `./gradlew :app:assembleDebug`
+- merged manifest check for the new permissions and time/date receivers
+
+Result: APK builds successfully and is ready for device testing when approved.
+
 ## Product Conclusion
 
 We should not copy Mi Fitness. We cannot inspect its real code safely, and it
@@ -214,4 +250,3 @@ We should copy the verified architecture:
 - sequential file queue;
 - CRC before parse;
 - ACK only after safe save.
-

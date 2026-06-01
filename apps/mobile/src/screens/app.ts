@@ -56,6 +56,7 @@ import {
 import type {
   DirectWatchDailySyncPayload,
   DirectWatchDecryptedPacket,
+  DirectWatchAndroidPowerStatus,
   DirectWatchSyncCoordinatorRequest,
   DirectWatchServiceSyncResult,
 } from "../integrations/direct-watch.js";
@@ -6405,12 +6406,50 @@ function formatDirectWatchUserError(message?: string | null) {
   return message;
 }
 
+function getDirectWatchAndroidPowerWarning(
+  power: DirectWatchAndroidPowerStatus | null | undefined,
+) {
+  if (!power) {
+    return null;
+  }
+
+  const issues: string[] = [];
+  if (power.powerSaveMode) {
+    issues.push("включён режим энергосбережения");
+  }
+  if (power.backgroundRestricted) {
+    issues.push("Android ограничил работу приложения в фоне");
+  }
+  if (power.needsBatteryUnrestricted) {
+    issues.push("на Xiaomi/HyperOS нужен режим батареи «Без ограничений» для PERFORM");
+  }
+  if (power.exactAlarmRequired && power.canScheduleExactAlarms === false) {
+    issues.push("Android не разрешил точные таймеры");
+  }
+
+  const deviceLabel = [power.manufacturer, power.model].filter(Boolean).join(" ") || null;
+  if (!issues.length) {
+    return {
+      meta: deviceLabel,
+      tone: "ok" as const,
+      value: "Android не сообщает об ограничениях фона",
+    };
+  }
+
+  return {
+    meta: deviceLabel,
+    tone: "warning" as const,
+    value: `${issues.join(". ")}.`,
+  };
+}
+
 function getDirectWatchUserDiagnostics(
   config: DirectWatchLocalConfig,
   serviceStatus: MobileAppState["directWatchDiagnostic"]["serviceStatus"],
   coordinatorStatus: MobileAppState["directWatchDiagnostic"]["syncCoordinatorStatus"],
 ) {
   const backgroundSync = serviceStatus?.backgroundSync;
+  const powerWarning = getDirectWatchAndroidPowerWarning(serviceStatus?.androidPower);
   const isRunning = isDirectWatchServiceRunning(config, serviceStatus);
   const hasDevice = Boolean(config.deviceId);
   const hasAuthKey = Boolean(config.authKeyHex);
@@ -6470,6 +6509,8 @@ function getDirectWatchUserDiagnostics(
             : "после запуска синхронизации";
   const headline = userError
     ? userError
+    : powerWarning?.tone === "warning" && (weatherIsStale || activityIsStale)
+      ? "Android может ограничивать фон часов. Проверьте режим батареи, автозапуск и Bluetooth."
     : weatherIsStale && isRunning
       ? "Служба активна, но погода давно не обновлялась. Проверьте фон и энергосбережение Android."
       : activityIsStale && isRunning
@@ -6497,14 +6538,23 @@ function getDirectWatchUserDiagnostics(
     : canSync
       ? "Канал готов, часы отвечают при синхронизации"
       : "Нужно выбрать часы и сохранить Auth Key";
+  const powerValue = powerWarning?.value.replace(/[.。]+$/, "") ?? "Android не сообщает об ограничениях фона";
   const batteryValue = isRunning
-    ? "Фоновая служба активна"
+    ? `Фоновая служба активна. ${powerValue}`
     : userError
-      ? "Проверьте Bluetooth и ограничения Android"
+      ? powerValue || "Проверьте Bluetooth и ограничения Android"
       : canSync
-        ? "Служба готова к запуску"
+        ? powerWarning ? powerValue : "Служба готова к запуску"
         : "Настройка ещё не завершена";
-  const backgroundTone = userError ? "error" : isRunning ? "ok" : canSync ? "warning" : "muted";
+  const backgroundTone = userError
+    ? "error"
+    : powerWarning?.tone === "warning"
+      ? "warning"
+      : isRunning
+        ? "ok"
+        : canSync
+          ? "warning"
+          : "muted";
 
   return {
     autoLabel,
@@ -6550,7 +6600,7 @@ function getDirectWatchUserDiagnostics(
       },
       {
         label: "Bluetooth / фон",
-        meta: connectionLabel,
+        meta: powerWarning?.meta ?? connectionLabel,
         tone: userError ? "error" : bluetoothTone === "ok" ? backgroundTone : bluetoothTone,
         value: userError ? userError : `${bluetoothValue}. ${batteryValue}.`,
       },
@@ -6809,6 +6859,7 @@ function formatDirectWatchCoordinatorReason(reason: string) {
     "bluetooth-on": "Bluetooth включён",
     "bluetooth-reconnect": "Bluetooth reconnect",
     boot: "запуск телефона",
+    "date-changed": "смена даты",
     disabled: "координатор выключен",
     "failure-backoff": "пауза после ошибки",
     interval: "интервал 10 мин",
@@ -6819,6 +6870,8 @@ function formatDirectWatchCoordinatorReason(reason: string) {
     "service-start": "старт службы",
     "service-timer": "таймер службы",
     "sync-in-progress": "синхронизация уже идёт",
+    "time-changed": "изменение времени",
+    "timezone-changed": "смена часового пояса",
     "user-present": "разблокировка телефона",
   };
 

@@ -55,6 +55,9 @@ object DirectWatchSyncCoordinator {
     const val REASON_PACKAGE_REPLACED = "package-replaced"
     const val REASON_SERVICE_START = "service-start"
     const val REASON_SERVICE_TIMER = "service-timer"
+    const val REASON_DATE_CHANGED = "date-changed"
+    const val REASON_TIME_CHANGED = "time-changed"
+    const val REASON_TIMEZONE_CHANGED = "timezone-changed"
     const val REASON_USER_PRESENT = "user-present"
 
     private val listeners = CopyOnWriteArraySet<Listener>()
@@ -342,6 +345,9 @@ object DirectWatchSyncCoordinator {
             Intent.ACTION_BOOT_COMPLETED -> REASON_BOOT
             Intent.ACTION_MY_PACKAGE_REPLACED -> REASON_PACKAGE_REPLACED
             Intent.ACTION_USER_PRESENT -> REASON_USER_PRESENT
+            Intent.ACTION_TIME_CHANGED -> REASON_TIME_CHANGED
+            Intent.ACTION_TIMEZONE_CHANGED -> REASON_TIMEZONE_CHANGED
+            Intent.ACTION_DATE_CHANGED -> REASON_DATE_CHANGED
             BluetoothAdapter.ACTION_STATE_CHANGED -> {
                 val state = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, -1)
                 if (state == BluetoothAdapter.STATE_ON) REASON_BLUETOOTH_ON else return status(context)
@@ -350,7 +356,23 @@ object DirectWatchSyncCoordinator {
             BluetoothAdapter.ACTION_CONNECTION_STATE_CHANGED -> REASON_BLUETOOTH_RECONNECT
             else -> action
         }
-        return requestSync(context, reason, sourceDeviceId = sourceDeviceId)
+        return requestSync(
+            context = context,
+            reason = reason,
+            force = shouldForceBroadcastSync(reason),
+            sourceDeviceId = sourceDeviceId,
+        )
+    }
+
+    private fun shouldForceBroadcastSync(reason: String): Boolean {
+        return when (reason) {
+            REASON_BOOT,
+            REASON_PACKAGE_REPLACED,
+            REASON_DATE_CHANGED,
+            REASON_TIME_CHANGED,
+            REASON_TIMEZONE_CHANGED -> true
+            else -> false
+        }
     }
 
     private fun notifyListeners(request: JSObject) {

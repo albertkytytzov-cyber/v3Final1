@@ -403,7 +403,22 @@ export interface DirectWatchServiceSyncResult extends DirectWatchClassicProbe {
   syncedAt?: string | null;
 }
 
+export interface DirectWatchAndroidPowerStatus {
+  androidSdk?: number | null;
+  backgroundRestricted?: boolean | null;
+  canScheduleExactAlarms?: boolean | null;
+  exactAlarmRequired?: boolean | null;
+  ignoringBatteryOptimizations?: boolean | null;
+  isAggressiveBatteryVendor?: boolean | null;
+  manufacturer?: string | null;
+  model?: string | null;
+  needsBatteryUnrestricted?: boolean | null;
+  packageName?: string | null;
+  powerSaveMode?: boolean | null;
+}
+
 export interface DirectWatchSyncServiceStatus {
+  androidPower?: DirectWatchAndroidPowerStatus | null;
   backgroundSync?: DirectWatchBackgroundSyncStatus | null;
   bridgeUntil?: string | null;
   deviceId?: string | null;
@@ -1653,12 +1668,33 @@ function normalizeDirectWatchBackgroundSyncStatus(value: unknown): DirectWatchBa
   };
 }
 
+function normalizeDirectWatchAndroidPowerStatus(value: unknown): DirectWatchAndroidPowerStatus | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  return {
+    androidSdk: normalizeNumber(value.androidSdk),
+    backgroundRestricted: normalizeNullableBoolean(value.backgroundRestricted),
+    canScheduleExactAlarms: normalizeNullableBoolean(value.canScheduleExactAlarms),
+    exactAlarmRequired: normalizeNullableBoolean(value.exactAlarmRequired),
+    ignoringBatteryOptimizations: normalizeNullableBoolean(value.ignoringBatteryOptimizations),
+    isAggressiveBatteryVendor: normalizeNullableBoolean(value.isAggressiveBatteryVendor),
+    manufacturer: normalizeString(value.manufacturer),
+    model: normalizeString(value.model),
+    needsBatteryUnrestricted: normalizeNullableBoolean(value.needsBatteryUnrestricted),
+    packageName: normalizeString(value.packageName),
+    powerSaveMode: normalizeNullableBoolean(value.powerSaveMode),
+  };
+}
+
 function normalizeDirectWatchSyncServiceStatus(value: unknown): DirectWatchSyncServiceStatus {
   if (!isRecord(value)) {
     return { running: false };
   }
 
   return {
+    androidPower: normalizeDirectWatchAndroidPowerStatus(value.androidPower),
     backgroundSync: normalizeDirectWatchBackgroundSyncStatus(value.backgroundSync),
     bridgeUntil: normalizeString(value.bridgeUntil),
     deviceId: normalizeString(value.deviceId),

@@ -617,6 +617,7 @@ class DirectWatchPlugin : Plugin() {
     fun getSyncServiceStatus(call: PluginCall) {
         val status = DirectWatchForegroundService.status(context)
         status.put("backgroundSync", DirectWatchBackgroundSyncStore.status(context.applicationContext))
+        status.put("androidPower", DirectWatchAndroidPowerStatus.status(context.applicationContext))
         call.resolve(status)
     }
 
