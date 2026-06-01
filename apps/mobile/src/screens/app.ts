@@ -6247,6 +6247,24 @@ function getLatestIsoTimestamp(values: Array<string | null | undefined>) {
   return latestValue;
 }
 
+function getIsoTimestampAgeMinutes(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  const time = new Date(value).getTime();
+  if (!Number.isFinite(time)) {
+    return null;
+  }
+
+  return Math.max(0, Math.round((Date.now() - time) / 60000));
+}
+
+function isIsoTimestampStale(value: string | null | undefined, thresholdMinutes: number) {
+  const ageMinutes = getIsoTimestampAgeMinutes(value);
+  return ageMinutes !== null && ageMinutes > thresholdMinutes;
+}
+
 function getLatestDirectWatchConfigSyncAt(config: DirectWatchLocalConfig) {
   return getLatestIsoTimestamp([
     config.lastServiceSyncedAt,
@@ -6402,10 +6420,6 @@ function getDirectWatchUserDiagnostics(
   const lastSyncAt = getLatestDirectWatchSyncAt(config, serviceStatus, coordinatorStatus);
   const lastWeatherAt = getLatestIsoTimestamp([
     backgroundSync?.weatherUpdatedAt,
-    backgroundSync?.serviceUpdatedAt,
-    config.lastServiceSyncedAt,
-    coordinatorStatus?.lastSuccessfulAt,
-    serviceStatus?.updatedAt,
   ]);
   const lastActivityAt = getLatestIsoTimestamp([
     backgroundSync?.dataUpdatedAt,
@@ -6416,6 +6430,16 @@ function getDirectWatchUserDiagnostics(
   const activityHasFiles = (config.lastActivitySyncFileCount ?? 0) > 0;
   const retryAfterMs = coordinatorStatus?.retryAfterMs ?? null;
   const hasPending = Boolean(coordinatorStatus?.pendingRequestId);
+  const freshnessThresholdMinutes = Math.max(
+    30,
+    Math.ceil(((coordinatorStatus?.intervalMs ?? 10 * 60 * 1000) * 3) / 60000),
+  );
+  const weatherIsStale = canSync && (
+    !lastWeatherAt || isIsoTimestampStale(lastWeatherAt, freshnessThresholdMinutes)
+  );
+  const activityIsStale = canSync && (
+    !lastActivityAt || isIsoTimestampStale(lastActivityAt, freshnessThresholdMinutes)
+  );
   const userError = formatDirectWatchUserError(
     config.lastServiceError || (config.lastActivitySyncStatus === "error" ? config.lastActivitySyncDiagnostic : null),
   );
@@ -6429,7 +6453,9 @@ function getDirectWatchUserDiagnostics(
           ? "подключено"
           : "не подключено";
   const weatherLabel = lastWeatherAt
-    ? "отправлена на часы"
+    ? weatherIsStale
+      ? "давно не обновлялась"
+      : "отправлена на часы"
     : canSync
       ? "ждёт первой синхронизации"
       : "не настроена";
@@ -6446,7 +6472,11 @@ function getDirectWatchUserDiagnostics(
             : "после запуска синхронизации";
   const headline = userError
     ? userError
-    : isRunning
+    : weatherIsStale && isRunning
+      ? "Служба активна, но погода давно не обновлялась. Проверьте фон и энергосбережение Android."
+      : activityIsStale && isRunning
+        ? "Служба активна, но данные часов давно не обновлялись. Нужна проверка фоновой синхронизации."
+        : isRunning
       ? "Часы подключены. Погода и данные обновляются без открытия приложения."
       : canSync
         ? "Часы готовы к синхронизации."
@@ -6455,7 +6485,9 @@ function getDirectWatchUserDiagnostics(
   const lastWeatherLabel = lastWeatherAt ? formatDateTime(lastWeatherAt) : "ещё не отправлялась";
   const lastActivityLabel = lastActivityAt ? formatDateTime(lastActivityAt) : "ещё не получались";
   const dataDayLabel = backgroundSync?.available || config.lastActivitySyncStatus === "ok" || activityHasFiles
-    ? "Шаги, активность, сон и файлы часов получены"
+    ? activityIsStale
+      ? "Данные есть, но давно не обновлялись"
+      : "Шаги, активность, сон и файлы часов получены"
     : activityChecked
       ? "Дневные данные проверены, новых файлов нет"
       : config.lastActivitySyncStatus === "error"
@@ -6493,15 +6525,23 @@ function getDirectWatchUserDiagnostics(
       {
         label: "Погода отправлена",
         meta: lastWeatherAt ? formatDateTime(lastWeatherAt) : null,
-        tone: lastWeatherAt ? "ok" : canSync ? "warning" : "muted",
+        tone: weatherIsStale ? "warning" : lastWeatherAt ? "ok" : canSync ? "warning" : "muted",
         value: lastWeatherAt
-          ? "Температура, ветер, влажность и прогноз отправлены"
+          ? weatherIsStale
+            ? "Погода устарела. Проверьте фон, Bluetooth и ограничения батареи."
+            : "Температура, ветер, влажность и прогноз отправлены"
           : weatherLabel,
       },
       {
         label: "Данные получены",
         meta: lastActivityAt ? formatDateTime(lastActivityAt) : null,
-        tone: config.lastActivitySyncStatus === "error" ? "error" : lastActivityAt ? "ok" : "muted",
+        tone: config.lastActivitySyncStatus === "error"
+          ? "error"
+          : activityIsStale
+            ? "warning"
+            : lastActivityAt
+              ? "ok"
+              : "muted",
         value: dataDayLabel,
       },
       {
@@ -6511,7 +6551,7 @@ function getDirectWatchUserDiagnostics(
         value: autoLabel,
       },
       {
-        label: "Bluetooth и фон",
+        label: "Bluetooth / фон",
         meta: connectionLabel,
         tone: userError ? "error" : bluetoothTone === "ok" ? backgroundTone : bluetoothTone,
         value: userError ? userError : `${bluetoothValue}. ${batteryValue}.`,
@@ -6575,8 +6615,8 @@ function renderWatchSyncPanel(state: MobileAppState, date: string) {
       <article class="watch-background-card">
         <div class="watch-background-card-head">
           <div>
-            <span>Диагностика</span>
-            <strong>Статусы синхронизации</strong>
+            <span>Фоновая синхронизация</span>
+            <strong>Что обновилось</strong>
           </div>
           <em>${escapeHtml(userDiagnostics.connectionLabel)}</em>
         </div>
