@@ -8,9 +8,6 @@
 
 ## Локальные источники
 
-- `_external/notify-mi` - скачан из `https://github.com/dozy-programmer/notify-mi`.
-  Это не Android-приложение Notify for Xiaomi. Репозиторий не относится к
-  Xiaomi-часам, его не используем для протокола.
 - `_external/Gadgetbridge` - скачан с Codeberg как открытый технический
   ориентир по Xiaomi/Huami-устройствам.
 - `1778425134325log/` - логи Mi Fitness с реального телефона. Это главный

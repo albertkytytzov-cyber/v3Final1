@@ -115,9 +115,7 @@ Transport/auth:
 Gadgetbridge используем как эталон поведения протокола, но код не переносим
 дословно в основной PERFORM из-за AGPL.
 
-`_external/notify-mi` проверен отдельно: это не Android-клиент Notify for
-Xiaomi и не источник по BLE/Xiaomi-протоколу. Для сверки используем
-Gadgetbridge и реальные DirectWatch-логи.
+Для сверки используем Gadgetbridge и реальные DirectWatch-логи.
 
 | Слой | Gadgetbridge | PERFORM Sync | Статус |
 | --- | --- | --- | --- |
