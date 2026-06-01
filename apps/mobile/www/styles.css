@@ -2144,14 +2144,17 @@ button {
   position: relative;
   display: grid;
   gap: 0;
+  justify-items: end;
   margin-bottom: 6px;
 }
 
 .coach-utility-menu > summary {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, auto) auto;
   gap: 6px;
   align-items: center;
+  justify-self: end;
+  max-width: min(72vw, 280px);
   min-height: 34px;
   padding: 4px 6px 4px 8px;
   border: 1px solid rgba(15, 118, 110, 0.16);
@@ -2214,6 +2217,8 @@ button {
 .coach-utility-panel {
   display: grid;
   gap: 10px;
+  justify-self: stretch;
+  width: 100%;
   margin-top: 8px;
   padding: 10px;
   border: 1px solid rgba(15, 118, 110, 0.14);

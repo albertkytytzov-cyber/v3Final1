@@ -3755,9 +3755,7 @@ function renderCoachUtilityMenu(state: MobileAppState) {
   return `
     <details class="coach-utility-menu">
       <summary aria-label="Открыть меню тренера" title="Открыть меню тренера">
-        <span>Тренер</span>
         <strong>${escapeHtml(coachName)}</strong>
-        <em>${state.isOnline ? "онлайн" : "офлайн"}</em>
         <b aria-hidden="true">⋯</b>
       </summary>
       <div class="coach-utility-panel" aria-label="Действия тренера">
