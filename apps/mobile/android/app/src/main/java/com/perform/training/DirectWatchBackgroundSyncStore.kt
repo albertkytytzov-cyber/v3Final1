@@ -161,15 +161,23 @@ object DirectWatchBackgroundSyncStore {
         result: JSObject,
         savedAt: String,
     ) {
-        if (sentTime(result)) {
+        val sentTime = sentTime(result)
+        val sentWeather = sentWeather(result)
+        if (sentTime) {
             editor.putString(KEY_TIME_UPDATED_AT, savedAt)
         }
-        if (sentWeather(result)) {
+        if (sentWeather) {
             editor.putString(KEY_WEATHER_UPDATED_AT, savedAt)
         }
         if (sentService(result)) {
+            val message = when {
+                sentTime && sentWeather -> "Время и погода отправлены на часы."
+                sentWeather -> "Погода отправлена на часы."
+                sentTime -> "Время отправлено на часы."
+                else -> "Служебная синхронизация часов выполнена."
+            }
             editor.putString(KEY_SERVICE_UPDATED_AT, savedAt)
-            editor.putString(KEY_SERVICE_MESSAGE, "Время и погода отправлены на часы.")
+            editor.putString(KEY_SERVICE_MESSAGE, message)
         }
     }
 
@@ -185,12 +193,14 @@ object DirectWatchBackgroundSyncStore {
         return result.optBoolean("sentWeatherCurrent", false) ||
             result.optBoolean("sentWeatherDaily", false) ||
             result.optBoolean("sentWeatherHourly", false) ||
-            result.optBoolean("sentWeatherLocation", false) ||
-            result.optBoolean("sentWeatherLocationsRead", false) ||
-            result.optBoolean("sentWeatherLocationsOrder", false) ||
-            result.optBoolean("sentWeatherPrefs", false) ||
-            result.optBoolean("sentWeatherPrefsRead", false) ||
-            serviceCommands(result).any { it.startsWith("weather-") || it.startsWith("phone-location") }
+            serviceCommands(result).any {
+                it == "weather-current" ||
+                    it == "weather-daily" ||
+                    it == "weather-hourly" ||
+                    it == "weather-current-refresh" ||
+                    it == "weather-daily-refresh" ||
+                    it == "weather-hourly-refresh"
+            }
     }
 
     private fun serviceCommands(result: JSObject): List<String> {

@@ -3610,11 +3610,8 @@ class DirectWatchPlugin : Plugin() {
     }
 
     private fun resolveClassicWeatherPayload(seed: JSONObject?, appContext: Context = context): JSONObject? {
-        if (seed == null) {
-            return null
-        }
-
-        val locationResolution = resolveWeatherPayloadPhoneLocation(seed, appContext)
+        val basePayload = seed ?: JSONObject()
+        val locationResolution = resolveWeatherPayloadPhoneLocation(basePayload, appContext)
         val locatedPayload = locationResolution.payload
         val hasForecast = locatedPayload.optJSONObject("current") != null &&
             (locatedPayload.optJSONArray("daily")?.length() ?: 0) > 0 &&
@@ -3627,15 +3624,18 @@ class DirectWatchPlugin : Plugin() {
         if (hasForecast && !hasFreshForecast) {
             Log.i(TAG, "classic weather payload is stale; fetching fresh forecast")
         }
+        if (!hasForecast) {
+            Log.i(TAG, "classic weather payload has no forecast; fetching forecast from phone location")
+        }
 
         val fetchedPayload = fetchOpenMeteoWeatherPayload(locatedPayload)
         if (fetchedPayload != null) {
             return fetchedPayload
         }
 
-        val seedHasForecast = seed.optJSONObject("current") != null &&
-            (seed.optJSONArray("daily")?.length() ?: 0) > 0 &&
-            (seed.optJSONArray("hourly")?.length() ?: 0) > 0
+        val seedHasForecast = seed?.optJSONObject("current") != null &&
+            (seed?.optJSONArray("daily")?.length() ?: 0) > 0 &&
+            (seed?.optJSONArray("hourly")?.length() ?: 0) > 0
         return if (seedHasForecast) seed else null
     }
 

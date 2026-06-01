@@ -5,6 +5,7 @@ import android.bluetooth.BluetoothDevice
 import android.content.Context
 import android.content.Intent
 import com.getcapacitor.JSObject
+import org.json.JSONObject
 import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
@@ -83,16 +84,20 @@ object DirectWatchSyncCoordinator {
     ): JSObject {
         val normalizedDeviceId = deviceId?.trim()?.takeIf { it.isNotBlank() }
         val normalizedAuthKey = authKeyHex?.trim()?.lowercase()?.takeIf { it.matches(Regex("^[0-9a-f]{32}$")) }
-        val editor = prefs(context).edit()
+        val prefs = prefs(context)
+        val editor = prefs.edit()
             .putBoolean(KEY_ENABLED, enabled)
             .putString(KEY_DEVICE_ID, normalizedDeviceId)
             .putString(KEY_DEVICE_NAME, deviceName?.trim()?.takeIf { it.isNotBlank() })
             .putString(KEY_AUTH_KEY_HEX, normalizedAuthKey)
             .putString(KEY_LAST_EVENT_AT, Instant.now().toString())
 
-        val normalizedWeatherPayload = weatherPayloadJson?.trim()?.takeIf { it.isNotBlank() }
-        if (normalizedWeatherPayload != null) {
-            editor.putString(KEY_WEATHER_PAYLOAD_JSON, normalizedWeatherPayload)
+        val weatherPayloadForStorage = chooseWeatherPayloadForStorage(
+            existingJson = prefs.getString(KEY_WEATHER_PAYLOAD_JSON, null),
+            candidateJson = weatherPayloadJson,
+        )
+        if (weatherPayloadForStorage != null) {
+            editor.putString(KEY_WEATHER_PAYLOAD_JSON, weatherPayloadForStorage)
         }
         if (!enabled || normalizedDeviceId == null || normalizedAuthKey == null) {
             editor.putString(KEY_WEATHER_PAYLOAD_JSON, null)
@@ -161,10 +166,13 @@ object DirectWatchSyncCoordinator {
     }
 
     fun updateWeatherPayload(context: Context, weatherPayloadJson: String?): JSObject {
-        val normalizedWeatherPayload = weatherPayloadJson?.trim()?.takeIf { it.isNotBlank() }
-            ?: return status(context)
-        prefs(context).edit()
-            .putString(KEY_WEATHER_PAYLOAD_JSON, normalizedWeatherPayload)
+        val prefs = prefs(context)
+        val weatherPayloadForStorage = chooseWeatherPayloadForStorage(
+            existingJson = prefs.getString(KEY_WEATHER_PAYLOAD_JSON, null),
+            candidateJson = weatherPayloadJson,
+        ) ?: return status(context)
+        prefs.edit()
+            .putString(KEY_WEATHER_PAYLOAD_JSON, weatherPayloadForStorage)
             .putString(KEY_LAST_EVENT_AT, Instant.now().toString())
             .apply()
         return status(context)
@@ -442,6 +450,35 @@ object DirectWatchSyncCoordinator {
 
     private fun prefs(context: Context) =
         context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+    private fun chooseWeatherPayloadForStorage(existingJson: String?, candidateJson: String?): String? {
+        val candidate = candidateJson?.trim()?.takeIf { it.isNotBlank() } ?: return null
+        if (hasCompleteWeatherForecast(candidate)) {
+            return candidate
+        }
+
+        val existing = existingJson?.trim()?.takeIf { it.isNotBlank() }
+        if (hasCompleteWeatherForecast(existing)) {
+            return existing
+        }
+
+        return candidate
+    }
+
+    private fun hasCompleteWeatherForecast(payloadJson: String?): Boolean {
+        if (payloadJson.isNullOrBlank()) {
+            return false
+        }
+
+        return try {
+            val payload = JSONObject(payloadJson)
+            payload.optJSONObject("current") != null &&
+                (payload.optJSONArray("daily")?.length() ?: 0) > 0 &&
+                (payload.optJSONArray("hourly")?.length() ?: 0) > 0
+        } catch (_: Exception) {
+            false
+        }
+    }
 
     private fun parseInstantMs(value: String?): Long? {
         if (value.isNullOrBlank()) {
