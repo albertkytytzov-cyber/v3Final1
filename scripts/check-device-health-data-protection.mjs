@@ -193,7 +193,7 @@ check("mobile service status trusts native status over bridge hint", () => {
   assert.match(mobileApp, /const getSettledDirectWatchSyncServiceStatus = async \(\) =>/u);
   assert.match(mobileApp, /DIRECT_WATCH_SERVICE_STATUS_SETTLE_MS/u);
   assert.match(mobileApp, /window\.setTimeout\(\(\) => \{\s+void refreshDirectWatchSyncService\(\)\.catch\(\(\) => undefined\);\s+\}, DIRECT_WATCH_SERVICE_STATUS_SETTLE_MS\);/u);
-  assert.match(mobileApp, /serviceStatus\s+\?\s+serviceStatus\.running === true\s+:\s+Boolean\(result\.keptBluetoothBridge && isFutureDate\(result\.bridgeUntil\)\)/u);
+  assert.match(mobileApp, /serviceStatus\s+\?\s+serviceStatus\.running === true\s+:\s+Boolean\(serviceResult\?\.keptBluetoothBridge && isFutureDate\(serviceResult\.bridgeUntil\)\)/u);
   assert.doesNotMatch(mobileApp, /lastServiceStatus: completedServiceResult\.keptBluetoothBridge \? "running" : "synced"/u);
 });
 

@@ -32,6 +32,8 @@ class DirectWatchForegroundService : Service() {
     private var nativeSyncThread: Thread? = null
     @Volatile
     private var pendingNativeSyncReason: String? = null
+    @Volatile
+    private var pendingNativeSyncEntryDate: String? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -97,7 +99,10 @@ class DirectWatchForegroundService : Service() {
                 scheduleBridgeStop(bridgeUntil)
                 scheduleNativeSyncTimer()
                 if (intent?.getBooleanExtra(EXTRA_NATIVE_SYNC_REQUEST, false) == true) {
-                    requestNativeSync(intent.getStringExtra(EXTRA_SYNC_REASON) ?: DirectWatchSyncCoordinator.REASON_SERVICE_START)
+                    requestNativeSync(
+                        intent.getStringExtra(EXTRA_SYNC_REASON) ?: DirectWatchSyncCoordinator.REASON_SERVICE_START,
+                        intent.getStringExtra(EXTRA_ENTRY_DATE),
+                    )
                 }
                 return START_STICKY
             }
@@ -113,14 +118,16 @@ class DirectWatchForegroundService : Service() {
         nativeSyncThread?.interrupt()
         nativeSyncThread = null
         pendingNativeSyncReason = null
+        pendingNativeSyncEntryDate = null
         unregisterSyncReceiver()
         super.onDestroy()
     }
 
-    private fun requestNativeSync(reason: String) {
+    private fun requestNativeSync(reason: String, entryDate: String? = null) {
         val existingThread = nativeSyncThread
         if (existingThread != null && existingThread.isAlive) {
             pendingNativeSyncReason = reason
+            pendingNativeSyncEntryDate = entryDate
             return
         }
 
@@ -134,22 +141,30 @@ class DirectWatchForegroundService : Service() {
                 reason = reason,
                 message = "Фоновая синхронизация часов ждёт текущий Bluetooth-обмен PERFORM Sync.",
             )
-            DirectWatchSyncCoordinator.markCompleted(appContext, "service-synced")
+            DirectWatchSyncCoordinator.markCompleted(appContext, "service-error")
+            DirectWatchSyncCoordinator.markState(
+                appContext,
+                "bluetooth-busy",
+                "Bluetooth-канал занят другим обменом, повторим позже.",
+            )
             handler.post { scheduleNativeSyncTimer() }
             return
         }
 
         val worker = Thread {
             var nextReason: String? = reason
+            var nextEntryDate: String? = entryDate
             while (!Thread.currentThread().isInterrupted && nextReason != null) {
                 val currentReason = nextReason ?: DirectWatchSyncCoordinator.REASON_SERVICE_START
+                val currentEntryDate = nextEntryDate
                 nextReason = null
+                nextEntryDate = null
                 val config = DirectWatchSyncCoordinator.nativeSyncConfig(appContext)
                 if (config == null) {
                     DirectWatchBackgroundSyncStore.recordMessage(
                         context = appContext,
                         deviceId = null,
-                        entryDate = java.time.LocalDate.now().toString(),
+                        entryDate = currentEntryDate ?: java.time.LocalDate.now().toString(),
                         reason = currentReason,
                         message = "Фоновая синхронизация часов не настроена: выберите часы и сохраните Auth Key.",
                     )
@@ -162,6 +177,7 @@ class DirectWatchForegroundService : Service() {
                     context = appContext,
                     config = config,
                     reason = currentReason,
+                    entryDate = currentEntryDate,
                 )
                 val errorMessage = result.optString("error", "")
                 val hasError = errorMessage.isNotBlank() &&
@@ -172,8 +188,11 @@ class DirectWatchForegroundService : Service() {
                 )
 
                 val queuedReason = pendingNativeSyncReason
+                val queuedEntryDate = pendingNativeSyncEntryDate
                 pendingNativeSyncReason = null
+                pendingNativeSyncEntryDate = null
                 nextReason = queuedReason
+                nextEntryDate = queuedEntryDate
             }
             if (nativeSyncThread == Thread.currentThread()) {
                 nativeSyncThread = null
@@ -353,7 +372,10 @@ class DirectWatchForegroundService : Service() {
             )
             if (request.optBoolean("requested", false)) {
                 Log.i(TAG, "native timer requested watch sync reason=${request.optString("reason")}")
-                requestNativeSync(request.optString("reason", DirectWatchSyncCoordinator.REASON_SERVICE_TIMER))
+                requestNativeSync(
+                    request.optString("reason", DirectWatchSyncCoordinator.REASON_SERVICE_TIMER),
+                    request.optString("entryDate", "").takeIf { it.isNotBlank() },
+                )
             } else {
                 Log.i(TAG, "native timer skipped watch sync blocked=${request.optString("blockedReason")}")
                 scheduleNativeSyncTimer()
@@ -403,6 +425,7 @@ class DirectWatchForegroundService : Service() {
         private const val EXTRA_BRIDGE_UNTIL = "bridgeUntil"
         private const val EXTRA_NATIVE_SYNC_REQUEST = "nativeSyncRequest"
         private const val EXTRA_SYNC_REASON = "syncReason"
+        private const val EXTRA_ENTRY_DATE = "entryDate"
         private const val KEY_RUNNING = "running"
         private const val KEY_DEVICE_ID = "deviceId"
         private const val KEY_DEVICE_NAME = "deviceName"
@@ -447,6 +470,7 @@ class DirectWatchForegroundService : Service() {
         fun startNativeSync(
             context: Context,
             reason: String,
+            entryDate: String? = null,
             durationMs: Long = 12 * 60 * 60 * 1000L,
         ): Boolean {
             val config = DirectWatchSyncCoordinator.nativeSyncConfig(context.applicationContext)
@@ -468,6 +492,7 @@ class DirectWatchForegroundService : Service() {
                 .putExtra(EXTRA_DEVICE_NAME, config.deviceName)
                 .putExtra(EXTRA_NATIVE_SYNC_REQUEST, true)
                 .putExtra(EXTRA_SYNC_REASON, reason)
+                .putExtra(EXTRA_ENTRY_DATE, entryDate)
             return try {
                 ContextCompat.startForegroundService(context, intent)
                 true

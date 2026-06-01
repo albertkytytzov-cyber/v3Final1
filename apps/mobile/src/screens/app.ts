@@ -50,7 +50,6 @@ import {
   startDirectWatchSession,
   stopDirectWatchSession,
   stopDirectWatchSyncService,
-  syncDirectWatchService,
   unpairDirectWatchDevice,
 } from "../integrations/direct-watch.js";
 import type {
@@ -130,11 +129,12 @@ type SubmitOrQueueResult = "queued" | "skipped" | "submitted";
 const runtimeConfig = readRuntimeConfig();
 const SHOW_DIRECT_WATCH_DIAGNOSTICS = false;
 const DIRECT_WATCH_AUTH_KEY_PATTERN = /^[0-9a-f]{32}$/i;
-const DIRECT_WATCH_SERVICE_KEEP_ALIVE_MS = 12 * 60 * 60 * 1000;
 const DIRECT_WATCH_AUTO_SYNC_TICK_MS = 60 * 1000;
 const DIRECT_WATCH_BACKGROUND_RESULT_TICK_MS = 60 * 1000;
 const DIRECT_WATCH_AUTO_SYNC_START_DELAY_MS = 10 * 1000;
 const DIRECT_WATCH_NATIVE_SYNC_RETRY_DELAY_MS = 15 * 1000;
+const DIRECT_WATCH_NATIVE_MANUAL_SYNC_TIMEOUT_MS = 90 * 1000;
+const DIRECT_WATCH_NATIVE_MANUAL_SYNC_POLL_MS = 1_500;
 const DIRECT_WATCH_SERVICE_STATUS_SETTLE_MS = 8_000;
 const DIRECT_WATCH_HISTORY_SYNC_DAYS = 30;
 const DIRECT_WATCH_HISTORY_SYNC_DAY_DELAY_MS = 350;
@@ -1743,6 +1743,64 @@ export function bootstrapMobileApp(root: HTMLElement) {
     }
   };
 
+  const waitForDirectWatchNativeBackgroundResult = async (
+    deviceId: string,
+    entryDate: string | null,
+    startedAt: string,
+  ): Promise<DirectWatchServiceSyncResult | null> => {
+    const startedTime = new Date(startedAt).getTime();
+    const deadline = Date.now() + DIRECT_WATCH_NATIVE_MANUAL_SYNC_TIMEOUT_MS;
+
+    while (Date.now() < deadline) {
+      await delay(DIRECT_WATCH_NATIVE_MANUAL_SYNC_POLL_MS);
+      const result = await getDirectWatchBackgroundSyncResult().catch(() => null);
+      if (!result) {
+        continue;
+      }
+
+      const resultDeviceId = result.backgroundDeviceId ?? result.deviceId ?? null;
+      if (resultDeviceId && resultDeviceId.toLowerCase() !== deviceId.toLowerCase()) {
+        continue;
+      }
+
+      const resultEntryDate = result.backgroundEntryDate ?? null;
+      if (entryDate && resultEntryDate && resultEntryDate !== entryDate) {
+        continue;
+      }
+
+      const resultTime = getLatestIsoTimestamp([
+        result.backgroundSavedAt,
+        result.syncedAt,
+      ]);
+      if (resultTime) {
+        const parsedResultTime = new Date(resultTime).getTime();
+        if (Number.isFinite(parsedResultTime) && Number.isFinite(startedTime) && parsedResultTime + 2_000 < startedTime) {
+          continue;
+        }
+      }
+
+      return result;
+    }
+
+    return null;
+  };
+
+  const getDirectWatchNativeSyncReason = (options: {
+    fetchActivity?: boolean;
+    includeHistory?: boolean;
+    includeSleep?: boolean;
+  }) => {
+    if (options.fetchActivity === false && options.includeHistory === false && options.includeSleep === false) {
+      return "manual-weather-sync";
+    }
+
+    if (options.fetchActivity === true) {
+      return "manual-daily-sync";
+    }
+
+    return "manual-full-sync";
+  };
+
   const syncDirectWatchServiceSettings = async (
     deviceId?: string | null,
     options: {
@@ -1805,7 +1863,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
       update({
         error: null,
         isBusy: true,
-        message: "PERFORM Sync обновляет время, часовой пояс и погоду на часах...",
+        message: "PERFORM Sync передал задачу native-сервису часов...",
       });
     }
 
@@ -1820,32 +1878,44 @@ export function bootstrapMobileApp(root: HTMLElement) {
         weatherPayload = buildDirectWatchWeatherLocationPayload(config);
       }
 
-      const result = await syncDirectWatchService(
-        targetDeviceId,
-        config.authKeyHex,
-        weatherPayload,
-        DIRECT_WATCH_SERVICE_KEEP_ALIVE_MS,
-        {
-          entryDate: options.entryDate,
-          fetchActivity: options.fetchActivity,
-          includeHistory: options.includeHistory ?? true,
-          includeSleep: options.includeSleep ?? true,
-        },
+      const startedAt = new Date().toISOString();
+      await configureDirectWatchSyncCoordinator({
+        authKeyHex: config.authKeyHex,
+        deviceId: targetDeviceId,
+        deviceName: targetDevice?.name ?? config.deviceName,
+        enabled: true,
+        weather: weatherPayload,
+      }).catch(() => null);
+      const request = await requestDirectWatchCoordinatorSync(
+        getDirectWatchNativeSyncReason(options),
+        true,
+        options.entryDate,
       );
-      options.onResult?.(result);
+      const coordinatorStatus = await getDirectWatchSyncCoordinatorStatus().catch(() => null);
+      const serviceResult = request.requested
+        ? await waitForDirectWatchNativeBackgroundResult(targetDeviceId, options.entryDate ?? null, startedAt)
+        : null;
+      if (serviceResult) {
+        options.onResult?.(serviceResult);
+      }
       const serviceStatus = await getSettledDirectWatchSyncServiceStatus();
-      const ok = isDirectWatchServiceSyncSuccessful(result);
-      const serviceBusy = isDirectWatchSyncAlreadyRunningResult(result);
-      const syncedAt = result.syncedAt ?? new Date().toISOString();
+      const ok = serviceResult ? isDirectWatchServiceSyncSuccessful(serviceResult) : Boolean(request.requested);
+      const serviceBusy =
+        request.blockedReason === "sync-in-progress" ||
+        (serviceResult ? isDirectWatchSyncAlreadyRunningResult(serviceResult) : false);
+      const syncedAt = serviceResult?.syncedAt ?? new Date().toISOString();
       const serviceIsRunning = serviceStatus
         ? serviceStatus.running === true
-        : Boolean(result.keptBluetoothBridge && isFutureDate(result.bridgeUntil));
+        : Boolean(serviceResult?.keptBluetoothBridge && isFutureDate(serviceResult.bridgeUntil));
       const serviceBridgeUntil = serviceIsRunning
-        ? serviceStatus?.bridgeUntil ?? result.bridgeUntil ?? null
+        ? serviceStatus?.bridgeUntil ?? serviceResult?.bridgeUntil ?? null
         : null;
       const serviceError = serviceBusy
         ? DIRECT_WATCH_SYNC_ALREADY_RUNNING_MESSAGE
-        : result.error || result.authKeyError || "Служебная синхронизация часов не подтвердилась.";
+        : serviceResult?.error ||
+          serviceResult?.authKeyError ||
+          request.blockedReason ||
+          "Native-сервис часов принял задачу, но результат ещё не вернулся.";
       rememberDirectWatchConfig({
         deviceId: targetDeviceId,
         deviceName: serviceStatus?.deviceName ?? targetDevice?.name ?? config.deviceName,
@@ -1869,25 +1939,33 @@ export function bootstrapMobileApp(root: HTMLElement) {
       update(options.silent ? {
         directWatchDiagnostic: {
           ...state.directWatchDiagnostic,
-          classicProbe: {
-            ...result,
-            sentActivityFileProbe: result.sentActivityFileProbe ?? false,
-          },
+          ...(serviceResult ? {
+            classicProbe: {
+              ...serviceResult,
+              sentActivityFileProbe: serviceResult.sentActivityFileProbe ?? false,
+            },
+          } : {}),
+          ...(coordinatorStatus ? { syncCoordinatorStatus: coordinatorStatus } : {}),
           serviceStatus,
         },
       } : {
         directWatchDiagnostic: {
           ...state.directWatchDiagnostic,
-          classicProbe: {
-            ...result,
-            sentActivityFileProbe: result.sentActivityFileProbe ?? false,
-          },
+          ...(serviceResult ? {
+            classicProbe: {
+              ...serviceResult,
+              sentActivityFileProbe: serviceResult.sentActivityFileProbe ?? false,
+            },
+          } : {}),
+          ...(coordinatorStatus ? { syncCoordinatorStatus: coordinatorStatus } : {}),
           serviceStatus,
         },
         error: ok || serviceBusy ? null : serviceError,
         isBusy: false,
         message: ok
-          ? formatDirectWatchServiceSyncMessage(result, weatherSourceLabel, weatherError)
+          ? serviceResult
+            ? formatDirectWatchServiceSyncMessage(serviceResult, weatherSourceLabel, weatherError)
+            : "Native-сервис часов запущен. Данные появятся после завершения очереди."
           : serviceBusy
             ? DIRECT_WATCH_SYNC_ALREADY_RUNNING_MESSAGE
             : null,
@@ -6467,6 +6545,11 @@ function getDirectWatchUserDiagnostics(
   const activityHasFiles = (config.lastActivitySyncFileCount ?? 0) > 0;
   const retryAfterMs = coordinatorStatus?.retryAfterMs ?? null;
   const hasPending = Boolean(coordinatorStatus?.pendingRequestId);
+  const coordinatorState = coordinatorStatus?.currentState ?? null;
+  const coordinatorStateLabel = coordinatorState
+    ? formatDirectWatchCoordinatorState(coordinatorState, coordinatorStatus?.currentStateMessage)
+    : null;
+  const coordinatorSyncTypesLabel = formatDirectWatchSyncTypes(coordinatorStatus?.currentSyncTypes ?? []);
   const freshnessThresholdMinutes = Math.max(
     30,
     Math.ceil(((coordinatorStatus?.intervalMs ?? 10 * 60 * 1000) * 3) / 60000),
@@ -6486,6 +6569,8 @@ function getDirectWatchUserDiagnostics(
       ? "нужен Auth Key"
       : userError
         ? "Bluetooth занят"
+        : coordinatorState && !["waiting-next-sync", "queued"].includes(coordinatorState)
+          ? "синхронизация идёт"
         : isRunning
           ? "подключено"
           : "не подключено";
@@ -6509,6 +6594,8 @@ function getDirectWatchUserDiagnostics(
             : "после запуска синхронизации";
   const headline = userError
     ? userError
+    : coordinatorStateLabel && coordinatorState && !["waiting-next-sync", "queued"].includes(coordinatorState)
+      ? coordinatorStateLabel
     : powerWarning?.tone === "warning" && (weatherIsStale || activityIsStale)
       ? "Android может ограничивать фон часов. Проверьте режим батареи, автозапуск и Bluetooth."
     : weatherIsStale && isRunning
@@ -6564,6 +6651,16 @@ function getDirectWatchUserDiagnostics(
     lastWeatherLabel,
     lastSyncLabel,
     updates: [
+      {
+        label: "Сейчас",
+        meta: coordinatorSyncTypesLabel,
+        tone: coordinatorState === "error" || coordinatorState === "bluetooth-busy"
+          ? "warning"
+          : coordinatorState
+            ? "ok"
+            : "muted",
+        value: coordinatorStateLabel ?? "Ожидает события от приложения, Android или часов",
+      },
       {
         label: "Последнее обновление",
         meta: null,
@@ -6825,16 +6922,23 @@ function renderWatchActivitySyncDiagnostic(config: DirectWatchLocalConfig) {
 }
 
 function renderWatchCoordinatorStatus(status: MobileAppState["directWatchDiagnostic"]["syncCoordinatorStatus"]) {
-  if (!status || (!status.pendingRequestId && !status.nextAllowedReason && !status.lastBlockedReason)) {
+  if (
+    !status ||
+    (!status.currentState && !status.pendingRequestId && !status.nextAllowedReason && !status.lastBlockedReason)
+  ) {
     return "";
   }
 
-  const title = status.pendingRequestId
+  const title = status.currentState
+    ? formatDirectWatchCoordinatorState(status.currentState, status.currentStateMessage)
+    : status.pendingRequestId
     ? "Запрос в очереди"
     : status.nextAllowedReason
       ? "Следующее автообновление"
       : "Последний автозапуск";
+  const syncTypes = formatDirectWatchSyncTypes(status.currentSyncTypes ?? status.lastSyncTypes ?? []);
   const details = [
+    syncTypes,
     status.pendingReason ? formatDirectWatchCoordinatorReason(status.pendingReason) : null,
     status.nextAllowedReason ? formatDirectWatchCoordinatorReason(status.nextAllowedReason) : null,
     status.lastBlockedReason ? formatDirectWatchCoordinatorReason(status.lastBlockedReason) : null,
@@ -6853,6 +6957,35 @@ function renderWatchCoordinatorStatus(status: MobileAppState["directWatchDiagnos
   `;
 }
 
+function formatDirectWatchCoordinatorState(state: string, message?: string | null) {
+  const labels: Record<string, string> = {
+    authorized: "Часы авторизованы",
+    authorizing: "Авторизация часов",
+    "bluetooth-busy": "Bluetooth занят, повторим позже",
+    connected: "Bluetooth подключён",
+    connecting: "Подключаемся к часам",
+    error: "Ошибка синхронизации",
+    "activity-reading": "Читаем показатели и тренировки",
+    queued: "Запрос поставлен в очередь",
+    "waiting-next-sync": "Ожидаем следующее обновление",
+    "weather-sent": "Время и погода отправлены",
+  };
+
+  return message || labels[state] || state;
+}
+
+function formatDirectWatchSyncTypes(types: string[]) {
+  const labels: Record<string, string> = {
+    "daily-sync": "день",
+    reconnect: "reconnect",
+    "time-sync": "время",
+    "weather-sync": "погода",
+    "workout-sync": "тренировки",
+  };
+  const items = types.map((type) => labels[type] ?? type).filter(Boolean);
+  return items.length ? items.join(" · ") : null;
+}
+
 function formatDirectWatchCoordinatorReason(reason: string) {
   const labels: Record<string, string> = {
     "app-visible": "возврат в приложение",
@@ -6863,6 +6996,9 @@ function formatDirectWatchCoordinatorReason(reason: string) {
     disabled: "координатор выключен",
     "failure-backoff": "пауза после ошибки",
     interval: "интервал 10 мин",
+    "manual-daily-sync": "ручное чтение дня",
+    "manual-full-sync": "ручная синхронизация",
+    "manual-weather-sync": "ручная погода/время",
     "missing-config": "нет настройки часов",
     "other-device": "другое устройство",
     "package-replaced": "обновление приложения",
@@ -14670,7 +14806,12 @@ function getCoachDaySummary(
   const diaryEntries = getCoachDiaryEntriesForAthleteDate(state, athleteId, date);
   const templateNames = Array.from(new Set(plans.map((plan) => plan.templateName).filter(Boolean)));
   const deviceWorkoutLinks = getDeviceWorkoutLinksForDate(state, athleteId, date);
-  const linkedBlockIds = new Set(deviceWorkoutLinks.map((link) => link.assignedBlockId));
+  const wholeBlockLinkedIds = new Set(
+    deviceWorkoutLinks
+      .filter((link) => !link.assignedExerciseId)
+      .map((link) => link.assignedBlockId),
+  );
+  const exerciseLinkedIdsByBlock = getDeviceWorkoutLinkedExerciseIdsByBlock(deviceWorkoutLinks);
   let sessionCount = 0;
   let blockCount = 0;
   let completedBlockCount = 0;
@@ -14691,17 +14832,28 @@ function getCoachDaySummary(
       const result = getExecutionResultForBlock(state, item.plan.id, item.block.id);
       const blockPlannedLoad = getExecutionBlockPlannedLoad(item.block, result);
       const blockStatus = getExecutionBlockStatus(item.block, result);
-      const statusForSummary = result || !linkedBlockIds.has(item.block.id)
-        ? blockStatus
-        : "completed";
       const exercises = item.block.exercises ?? [];
+      const exerciseLinkedIds = exerciseLinkedIdsByBlock.get(item.block.id) ?? new Set<string>();
+      const isWholeBlockDeviceLinked = wholeBlockLinkedIds.has(item.block.id);
+      const allExercisesDeviceLinked = exercises.length > 0 &&
+        exercises.every((exercise) => exerciseLinkedIds.has(exercise.id));
+      const hasPartialExerciseDeviceLink = exerciseLinkedIds.size > 0 && !allExercisesDeviceLinked;
+      const statusForSummary = result
+        ? blockStatus
+        : isWholeBlockDeviceLinked || allExercisesDeviceLinked
+          ? "completed"
+          : hasPartialExerciseDeviceLink
+            ? "partial"
+            : blockStatus;
 
       blockCount += 1;
       plannedLoad += blockPlannedLoad;
       manualActualLoad += getExecutionBlockActualLoad(item.block, result, blockPlannedLoad);
 
-      if (linkedBlockIds.has(item.block.id)) {
+      if (isWholeBlockDeviceLinked) {
         linkedPlannedLoad += blockPlannedLoad;
+      } else if (exerciseLinkedIds.size > 0 && exercises.length > 0) {
+        linkedPlannedLoad += blockPlannedLoad * Math.min(1, exerciseLinkedIds.size / exercises.length);
       }
 
       if (statusForSummary === "completed") {
@@ -14716,13 +14868,12 @@ function getCoachDaySummary(
 
       for (const exercise of exercises) {
         const exerciseResult = getExerciseResult(result, exercise.id);
+        const isExerciseDeviceLinked = isWholeBlockDeviceLinked || exerciseLinkedIds.has(exercise.id);
         const exerciseStatus = exerciseResult
           ? getExecutionExerciseStatus(exerciseResult)
-          : statusForSummary === "completed"
+          : isExerciseDeviceLinked
             ? "completed"
-            : statusForSummary === "partial"
-              ? "partial"
-              : "missed";
+            : "missed";
 
         if (exerciseStatus === "completed") {
           completedExerciseCount += 1;
@@ -14743,7 +14894,7 @@ function getCoachDaySummary(
         : completedBlockCount + partialBlockCount > 0
           ? "partial"
           : "missed";
-  const deviceConfirmedLoad = linkedBlockIds.size > 0
+  const deviceConfirmedLoad = wholeBlockLinkedIds.size > 0 || linkedPlannedLoad > 0
     ? roundLoad(Math.min(plannedLoad, linkedPlannedLoad > 0 ? linkedPlannedLoad : plannedLoad))
     : 0;
   const actualLoad = roundLoad(Math.max(manualActualLoad, deviceConfirmedLoad));
@@ -14785,7 +14936,12 @@ function getCoachDayCleanSummary(
   const deviceHealthSummary = getDeviceHealthSummaryForDate(state, athleteId, date);
   const deviceWorkouts = getDeviceWorkoutsForDate(state, athleteId, date);
   const deviceWorkoutLinks = getDeviceWorkoutLinksForDate(state, athleteId, date);
-  const linkedBlockIds = new Set(deviceWorkoutLinks.map((link) => link.assignedBlockId));
+  const wholeBlockLinkedIds = new Set(
+    deviceWorkoutLinks
+      .filter((link) => !link.assignedExerciseId)
+      .map((link) => link.assignedBlockId),
+  );
+  const exerciseLinkedIdsByBlock = getDeviceWorkoutLinkedExerciseIdsByBlock(deviceWorkoutLinks);
   let hasExecutionMarks = false;
   const blocks = groups.flatMap((group) =>
     group.blockItems.map((item) => {
@@ -14793,22 +14949,35 @@ function getCoachDayCleanSummary(
       hasExecutionMarks = hasExecutionMarks || Boolean(result);
       const plannedLoad = getExecutionBlockPlannedLoad(item.block, result);
       const actualLoad = getExecutionBlockActualLoad(item.block, result, plannedLoad);
-      const isDeviceLinked = linkedBlockIds.has(item.block.id);
-      const status = result || !isDeviceLinked
+      const exercisesSource = item.block.exercises ?? [];
+      const exerciseLinkedIds = exerciseLinkedIdsByBlock.get(item.block.id) ?? new Set<string>();
+      const isWholeBlockDeviceLinked = wholeBlockLinkedIds.has(item.block.id);
+      const allExercisesDeviceLinked = exercisesSource.length > 0 &&
+        exercisesSource.every((exercise) => exerciseLinkedIds.has(exercise.id));
+      const deviceConfirmedLoad = isWholeBlockDeviceLinked
+        ? plannedLoad
+        : exerciseLinkedIds.size > 0 && exercisesSource.length > 0
+          ? plannedLoad * Math.min(1, exerciseLinkedIds.size / exercisesSource.length)
+          : 0;
+      const isDeviceLinked = isWholeBlockDeviceLinked || allExercisesDeviceLinked;
+      const status = result
         ? getExecutionBlockStatus(item.block, result)
-        : "completed";
-      const exercises = (item.block.exercises ?? [])
+        : isWholeBlockDeviceLinked || allExercisesDeviceLinked
+          ? "completed"
+          : exerciseLinkedIds.size > 0
+            ? "partial"
+            : getExecutionBlockStatus(item.block, result);
+      const exercises = exercisesSource
         .slice()
         .sort((left, right) => left.orderIndex - right.orderIndex)
         .map((exercise) => {
           const exerciseResult = getExerciseResult(result, exercise.id);
+          const isExerciseDeviceLinked = isWholeBlockDeviceLinked || exerciseLinkedIds.has(exercise.id);
           const exerciseStatus = exerciseResult
             ? getExecutionExerciseStatus(exerciseResult)
-            : status === "completed"
+            : isExerciseDeviceLinked
               ? "completed"
-              : status === "partial"
-                ? "partial"
-                : "missed";
+              : "missed";
 
           return {
             actualDetails: formatExerciseActualDetails(exerciseResult),
@@ -14824,15 +14993,15 @@ function getCoachDayCleanSummary(
             statusLabel: exerciseResult
               ? formatExerciseResultStatus(exerciseResult)
               : getExecutionDayStatusLabel(exerciseStatus).toLowerCase(),
-            sourceLabel: getMobileExecutionSourceLabel(Boolean(exerciseResult || result), isDeviceLinked),
+            sourceLabel: getMobileExecutionSourceLabel(Boolean(exerciseResult || result), isExerciseDeviceLinked),
           };
         });
 
       return {
-        actualLoad: roundLoad(result ? actualLoad : isDeviceLinked ? plannedLoad : actualLoad),
+        actualLoad: roundLoad(result ? actualLoad : deviceConfirmedLoad > 0 ? deviceConfirmedLoad : actualLoad),
         assignedBlockId: item.block.id,
         assignedPlanId: item.plan.id,
-        deviceConfirmedLoad: isDeviceLinked ? roundLoad(plannedLoad) : 0,
+        deviceConfirmedLoad: roundLoad(deviceConfirmedLoad),
         exercises,
         loadDeltaLabel: formatExecutionBlockLoadDelta(actualLoad, plannedLoad),
         manualActualLoad: roundLoad(actualLoad),
@@ -14845,7 +15014,7 @@ function getCoachDayCleanSummary(
         sessionName: item.sessionName,
         status,
         statusLabel: getExecutionDayStatusLabel(status),
-        sourceLabel: getMobileExecutionSourceLabel(Boolean(result), isDeviceLinked),
+        sourceLabel: getMobileExecutionSourceLabel(Boolean(result), deviceConfirmedLoad > 0),
         target: formatBlockTarget(item.block),
       };
     }),
@@ -15578,12 +15747,31 @@ function getDeviceWorkoutLinksForDate(
     .sort((left, right) => left.workout.startTime.localeCompare(right.workout.startTime));
 }
 
+function getDeviceWorkoutLinkedExerciseIdsByBlock(links: DeviceWorkoutLink[]) {
+  const items = new Map<string, Set<string>>();
+
+  for (const link of links) {
+    if (!link.assignedExerciseId) {
+      continue;
+    }
+
+    const exerciseIds = items.get(link.assignedBlockId) ?? new Set<string>();
+    exerciseIds.add(link.assignedExerciseId);
+    items.set(link.assignedBlockId, exerciseIds);
+  }
+
+  return items;
+}
+
 function getDeviceWorkoutLinkGroupForBlocks(
   links: DeviceWorkoutLink[],
   assignedBlockIds: string[],
 ) {
   const assignedBlockIdSet = new Set(assignedBlockIds);
-  const groupLinks = links.filter((link) => assignedBlockIdSet.has(link.assignedBlockId));
+  const groupLinks = links.filter((link) =>
+    assignedBlockIdSet.has(link.assignedBlockId) &&
+    !link.assignedExerciseId
+  );
   const workoutIds = Array.from(new Set(groupLinks.map((link) => link.deviceWorkoutId)));
   const commonWorkoutId = workoutIds.length === 1 ? workoutIds[0] : null;
   const linkedWorkout = commonWorkoutId
@@ -17073,6 +17261,7 @@ function upsertDeviceWorkoutLinks(items: DeviceWorkoutLink[], links: DeviceWorko
     link.id === item.id ||
     (link.athleteId === item.athleteId &&
       link.assignedBlockId === item.assignedBlockId &&
+      (link.assignedExerciseId ?? null) === (item.assignedExerciseId ?? null) &&
       link.deviceWorkoutId === item.deviceWorkoutId)
   ));
   nextItems.unshift(...compactLinks);

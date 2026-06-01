@@ -669,7 +669,12 @@ class DirectWatchPlugin : Plugin() {
             context.applicationContext,
             DirectWatchSyncCoordinator.REASON_APP_VISIBLE,
         )
-        startNativeSyncIfServiceIdle(request.optString("reason", DirectWatchSyncCoordinator.REASON_APP_VISIBLE))
+        if (request.optBoolean("requested", false)) {
+            startNativeSyncForCoordinator(
+                request.optString("reason", DirectWatchSyncCoordinator.REASON_APP_VISIBLE),
+                request.optString("entryDate", "").takeIf { it.isNotBlank() },
+            )
+        }
         call.resolve(DirectWatchSyncCoordinator.status(context.applicationContext))
     }
 
@@ -677,13 +682,18 @@ class DirectWatchPlugin : Plugin() {
     fun requestCoordinatorSync(call: PluginCall) {
         val reason = call.getString("reason") ?: "manual"
         val force = call.getBoolean("force") ?: false
+        val entryDate = call.getString("entryDate")
         val request = DirectWatchSyncCoordinator.requestSync(
             context = context.applicationContext,
             reason = reason,
             force = force,
+            entryDateOverride = entryDate,
         )
         if (request.optBoolean("requested", false)) {
-            startNativeSyncIfServiceIdle(reason)
+            startNativeSyncForCoordinator(
+                request.optString("reason", reason),
+                request.optString("entryDate", "").takeIf { it.isNotBlank() },
+            )
         }
         call.resolve(request)
     }
@@ -699,11 +709,10 @@ class DirectWatchPlugin : Plugin() {
         )
     }
 
-    private fun startNativeSyncIfServiceIdle(reason: String) {
+    private fun startNativeSyncForCoordinator(reason: String, entryDate: String? = null) {
         val appContext = context.applicationContext
-        val serviceRunning = DirectWatchForegroundService.status(appContext).optBoolean("running", false)
-        if (!serviceRunning && DirectWatchSyncCoordinator.nativeSyncConfig(appContext) != null) {
-            DirectWatchForegroundService.startNativeSync(appContext, reason)
+        if (DirectWatchSyncCoordinator.nativeSyncConfig(appContext) != null) {
+            DirectWatchForegroundService.startNativeSync(appContext, reason, entryDate)
         }
     }
 
@@ -1572,19 +1581,23 @@ class DirectWatchPlugin : Plugin() {
     ): JSObject {
         val adapter = nativeBluetoothAdapter(context)
         if (adapter == null || !adapter.isEnabled) {
+            DirectWatchSyncCoordinator.markState(context, "error", "Bluetooth выключен на телефоне.")
             return buildNativeServiceError(config, reason, "Включите Bluetooth на телефоне для фоновой синхронизации часов.")
         }
         if (!hasNativeBluetoothConnectPermission(context)) {
+            DirectWatchSyncCoordinator.markState(context, "error", "Нет разрешения Bluetooth для PERFORM Sync.")
             return buildNativeServiceError(config, reason, "Нет разрешения Bluetooth для фоновой синхронизации часов.")
         }
 
         val device = try {
             adapter.getRemoteDevice(config.deviceId)
         } catch (error: IllegalArgumentException) {
+            DirectWatchSyncCoordinator.markState(context, "error", "Некорректный Bluetooth ID часов.")
             return buildNativeServiceError(config, reason, "Некорректный идентификатор Bluetooth-устройства.")
         }
 
         if (safeBondState(device) != BluetoothDevice.BOND_BONDED) {
+            DirectWatchSyncCoordinator.markState(context, "error", "Часы не сопряжены в Android.")
             return buildNativeServiceError(config, reason, "Для фоновой синхронизации часы должны быть в системном сопряжении.")
         }
 
@@ -1615,6 +1628,7 @@ class DirectWatchPlugin : Plugin() {
         val activityFileProbeRequests = mutableListOf<JSObject>()
         val bluetoothSyncOwner = "native-foreground-sync"
         var bluetoothSyncLocked = false
+        val fetchActivity = DirectWatchSyncCoordinator.shouldFetchActivityForReason(reason)
 
         fun response(): JSObject {
             val built = buildServiceSyncResponse(
@@ -1704,6 +1718,11 @@ class DirectWatchPlugin : Plugin() {
         }
 
         if (!DirectWatchBluetoothSyncLock.tryAcquire(bluetoothSyncOwner)) {
+            DirectWatchSyncCoordinator.markState(
+                context,
+                "bluetooth-busy",
+                "Bluetooth-канал занят другим обменом, повторим позже.",
+            )
             return buildNativeServiceError(
                 config,
                 reason,
@@ -1721,6 +1740,7 @@ class DirectWatchPlugin : Plugin() {
 
             socket = openClassicSocketWithRetry(device, "native-foreground-sync")
             connected = true
+            DirectWatchSyncCoordinator.markState(context, "connected", "Bluetooth-канал с часами открыт.")
 
             socket.outputStream.write(CLASSIC_SPP_V1_VERSION_REQUEST)
             socket.outputStream.flush()
@@ -1738,6 +1758,7 @@ class DirectWatchPlugin : Plugin() {
 
             phoneNonce = ByteArray(16)
             SecureRandom().nextBytes(phoneNonce)
+            DirectWatchSyncCoordinator.markState(context, "authorizing", "Авторизуемся в протоколе часов.")
             socket.outputStream.write(
                 if (useSppV2) {
                     buildClassicV2AuthStep1Packet(phoneNonce, 0)
@@ -1786,6 +1807,7 @@ class DirectWatchPlugin : Plugin() {
                 if (!useSppV2 || parsedAuthStep2.authStage != "authenticated" || authStep2.encryptionKey == null) {
                     errorMessage = "Часы авторизовались не полностью: фоновые команды доступны только в SPP v2 после auth."
                 } else {
+                    DirectWatchSyncCoordinator.markState(context, "authorized", "Часы авторизованы, отправляем время и погоду.")
                     if (parsedAuthStep2.authPacketSequenceNumber != null) {
                         socket.outputStream.write(buildClassicV2AckPacket(parsedAuthStep2.authPacketSequenceNumber))
                         socket.outputStream.flush()
@@ -1804,6 +1826,7 @@ class DirectWatchPlugin : Plugin() {
                         Thread.sleep(CLASSIC_POST_AUTH_COMMAND_DELAY_MS)
                     }
                     socket.outputStream.flush()
+                    DirectWatchSyncCoordinator.markState(context, "weather-sent", "Время, локация и погода отправлены на часы.")
                     errorMessage = readClassicPackets(
                         socket = socket,
                         packets = packets,
@@ -1812,33 +1835,36 @@ class DirectWatchPlugin : Plugin() {
                         ackedClassicV2DataSequences = classicV2DataAckedSequences,
                     ) ?: errorMessage
 
-                    val fetchResult = fetchClassicBridgeActivitySnapshot(
-                        context = context,
-                        device = device,
-                        socket = socket,
-                        encryptionKey = authStep2.encryptionKey,
-                        decryptionKey = authStep2.decryptionKey,
-                        authKeyHex = config.authKeyHex,
-                        phoneNonce = phoneNonce,
-                        entryDate = entryDate,
-                        includeSleep = includeSleep,
-                        initialSequenceNumber = nextServiceSequence,
-                    )
-                    nextServiceSequence = fetchResult.nextSequenceNumber
-                    if (fetchResult.response != null) {
-                        persist(fetchResult.response)
-                        sentActivityFileProbe = fetchResult.response.optBoolean("sentActivityFileProbe", false)
-                        activityFileProbeCount = fetchResult.response.optInt("activityFileProbeCount", 0)
-                        activityFileProbeCompletedCount = fetchResult.response.optInt("activityFileProbeCompletedCount", 0)
-                        activityFileProbeFailedCount = fetchResult.response.optInt("activityFileProbeFailedCount", 0)
-                        val requests = fetchResult.response.optJSONArray("activityFileProbeRequests")
-                        if (requests != null) {
-                            for (index in 0 until requests.length()) {
-                                requests.optJSONObject(index)?.let { activityFileProbeRequests.add(JSObject(it.toString())) }
+                    if (fetchActivity) {
+                        DirectWatchSyncCoordinator.markState(context, "activity-reading", "Читаем дневные данные, сон и тренировки.")
+                        val fetchResult = fetchClassicBridgeActivitySnapshot(
+                            context = context,
+                            device = device,
+                            socket = socket,
+                            encryptionKey = authStep2.encryptionKey,
+                            decryptionKey = authStep2.decryptionKey,
+                            authKeyHex = config.authKeyHex,
+                            phoneNonce = phoneNonce,
+                            entryDate = entryDate,
+                            includeSleep = includeSleep,
+                            initialSequenceNumber = nextServiceSequence,
+                        )
+                        nextServiceSequence = fetchResult.nextSequenceNumber
+                        if (fetchResult.response != null) {
+                            persist(fetchResult.response)
+                            sentActivityFileProbe = fetchResult.response.optBoolean("sentActivityFileProbe", false)
+                            activityFileProbeCount = fetchResult.response.optInt("activityFileProbeCount", 0)
+                            activityFileProbeCompletedCount = fetchResult.response.optInt("activityFileProbeCompletedCount", 0)
+                            activityFileProbeFailedCount = fetchResult.response.optInt("activityFileProbeFailedCount", 0)
+                            val requests = fetchResult.response.optJSONArray("activityFileProbeRequests")
+                            if (requests != null) {
+                                for (index in 0 until requests.length()) {
+                                    requests.optJSONObject(index)?.let { activityFileProbeRequests.add(JSObject(it.toString())) }
+                                }
                             }
+                        } else if (fetchResult.message != null) {
+                            Log.i(TAG, "native foreground activity refresh: ${fetchResult.message}")
                         }
-                    } else if (fetchResult.message != null) {
-                        Log.i(TAG, "native foreground activity refresh: ${fetchResult.message}")
                     }
 
                     if (errorMessage == null) {
@@ -1860,6 +1886,7 @@ class DirectWatchPlugin : Plugin() {
                             weatherPayload = resolvedWeatherPayload,
                             initialSequenceNumber = nextServiceSequence,
                             durationMs = CLASSIC_SERVICE_BRIDGE_MAX_MS.toLong(),
+                            fetchActivity = fetchActivity,
                         )
                     }
                 }
@@ -8340,6 +8367,7 @@ class DirectWatchPlugin : Plugin() {
         weatherPayload: JSONObject?,
         initialSequenceNumber: Int,
         durationMs: Long,
+        fetchActivity: Boolean = true,
     ) {
         val startedAt = android.os.SystemClock.uptimeMillis()
         var nextSequenceNumber = initialSequenceNumber
@@ -8470,7 +8498,7 @@ class DirectWatchPlugin : Plugin() {
                 nextWeatherRefreshAt = now + CLASSIC_SERVICE_BRIDGE_REFRESH_MS
             }
 
-            if (now >= nextActivityRefreshAt) {
+            if (fetchActivity && now >= nextActivityRefreshAt) {
                 val targetEntryDate = entryDate ?: LocalDate.now().toString()
                 try {
                     val fetchResult = fetchClassicBridgeActivitySnapshot(
@@ -9285,11 +9313,13 @@ class DirectWatchPlugin : Plugin() {
             context: Context,
             config: DirectWatchSyncCoordinator.NativeSyncConfig,
             reason: String,
+            entryDate: String? = null,
         ): JSObject {
             return DirectWatchPlugin().runNativeForegroundSyncInternal(
                 context = context.applicationContext,
                 config = config,
                 reason = reason,
+                entryDate = entryDate ?: LocalDate.now().toString(),
             )
         }
 

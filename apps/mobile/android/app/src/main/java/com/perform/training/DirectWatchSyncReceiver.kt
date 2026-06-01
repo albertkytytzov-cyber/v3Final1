@@ -18,16 +18,18 @@ class DirectWatchSyncReceiver : BroadcastReceiver() {
             ?: result.optString("lastReason", "").takeIf { it.isNotBlank() }
             ?: intent?.action
             ?: DirectWatchSyncCoordinator.REASON_SERVICE_START
+        val entryDate = result.optString("entryDate", "").takeIf { it.isNotBlank() }
+            ?: result.optString("pendingEntryDate", "").takeIf { it.isNotBlank() }
         val serviceRunning = DirectWatchForegroundService.status(context).optBoolean("running", false)
         val hasConfig = DirectWatchSyncCoordinator.nativeSyncConfig(context) != null
         val shouldStartSync = hasConfig && (
             result.optBoolean("requested", false) ||
                 !serviceRunning ||
                 intent?.action == DirectWatchSyncAlarmScheduler.ACTION_SERVICE_TIMER
-            )
+        )
 
         if (shouldStartSync) {
-            DirectWatchForegroundService.startNativeSync(context.applicationContext, reason)
+            DirectWatchForegroundService.startNativeSync(context.applicationContext, reason, entryDate)
             return
         }
 

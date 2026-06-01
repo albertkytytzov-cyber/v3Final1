@@ -462,10 +462,14 @@ export interface DirectWatchSyncCoordinatorRequest {
   reason?: string | null;
   requested?: boolean;
   source?: string | null;
+  syncTypes?: string[];
 }
 
 export interface DirectWatchSyncCoordinatorStatus {
   configured?: boolean;
+  currentState?: string | null;
+  currentStateMessage?: string | null;
+  currentSyncTypes?: string[];
   deviceId?: string | null;
   deviceName?: string | null;
   enabled?: boolean;
@@ -481,6 +485,7 @@ export interface DirectWatchSyncCoordinatorStatus {
   lastReason?: string | null;
   lastRequestedAt?: string | null;
   lastSuccessfulAt?: string | null;
+  lastSyncTypes?: string[];
   nextAllowedAt?: string | null;
   nextAllowedReason?: string | null;
   pendingAgeMs?: number | null;
@@ -542,6 +547,7 @@ interface DirectWatchPlugin {
   }) => Promise<DirectWatchClassicProbe>;
   requestAuthorization?: () => Promise<DirectWatchPermissionResult>;
   requestCoordinatorSync?: (input: {
+    entryDate?: string | null;
     force?: boolean;
     reason?: string;
   }) => Promise<DirectWatchSyncCoordinatorRequest>;
@@ -797,6 +803,7 @@ export async function notifyDirectWatchAppVisible(): Promise<DirectWatchSyncCoor
 export async function requestDirectWatchCoordinatorSync(
   reason: string,
   force = false,
+  entryDate?: string | null,
 ): Promise<DirectWatchSyncCoordinatorRequest> {
   const plugin = getDirectWatchPlugin();
 
@@ -804,7 +811,7 @@ export async function requestDirectWatchCoordinatorSync(
     return { requested: false, reason, blockedReason: "not-supported" };
   }
 
-  const request = await plugin.requestCoordinatorSync({ force, reason });
+  const request = await plugin.requestCoordinatorSync({ entryDate, force, reason });
   return normalizeDirectWatchSyncCoordinatorRequest(request);
 }
 
@@ -1721,6 +1728,7 @@ function normalizeDirectWatchSyncCoordinatorRequest(value: unknown): DirectWatch
     reason: normalizeString(value.reason),
     requested: normalizeBoolean(value.requested),
     source: normalizeString(value.source),
+    syncTypes: normalizeStringList(value.syncTypes),
   };
 }
 
@@ -1731,6 +1739,9 @@ function normalizeDirectWatchSyncCoordinatorStatus(value: unknown): DirectWatchS
 
   return {
     configured: normalizeBoolean(value.configured),
+    currentState: normalizeString(value.currentState),
+    currentStateMessage: normalizeString(value.currentStateMessage),
+    currentSyncTypes: normalizeStringList(value.currentSyncTypes),
     deviceId: normalizeString(value.deviceId),
     deviceName: normalizeString(value.deviceName),
     enabled: normalizeBoolean(value.enabled),
@@ -1746,6 +1757,7 @@ function normalizeDirectWatchSyncCoordinatorStatus(value: unknown): DirectWatchS
     lastReason: normalizeString(value.lastReason),
     lastRequestedAt: normalizeString(value.lastRequestedAt),
     lastSuccessfulAt: normalizeString(value.lastSuccessfulAt),
+    lastSyncTypes: normalizeStringList(value.lastSyncTypes),
     nextAllowedAt: normalizeString(value.nextAllowedAt),
     nextAllowedReason: normalizeString(value.nextAllowedReason),
     pendingAgeMs: normalizeNumber(value.pendingAgeMs),
@@ -3277,6 +3289,16 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function normalizeString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function normalizeStringList(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((item) => normalizeString(item))
+    .filter((item): item is string => Boolean(item));
 }
 
 function normalizeNumber(value: unknown) {

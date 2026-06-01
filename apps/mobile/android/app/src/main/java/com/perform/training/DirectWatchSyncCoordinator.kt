@@ -4,6 +4,7 @@ import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.content.Context
 import android.content.Intent
+import com.getcapacitor.JSArray
 import com.getcapacitor.JSObject
 import org.json.JSONObject
 import java.time.Instant
@@ -42,6 +43,10 @@ object DirectWatchSyncCoordinator {
     private const val KEY_LAST_OUTCOME = "lastOutcome"
     private const val KEY_LAST_BLOCKED_REASON = "lastBlockedReason"
     private const val KEY_LAST_EVENT_AT = "lastEventAt"
+    private const val KEY_CURRENT_STATE = "currentState"
+    private const val KEY_CURRENT_STATE_MESSAGE = "currentStateMessage"
+    private const val KEY_CURRENT_SYNC_TYPES = "currentSyncTypes"
+    private const val KEY_LAST_SYNC_TYPES = "lastSyncTypes"
 
     private const val QUICK_THROTTLE_MS = 2_500L
     private const val FAILURE_BACKOFF_MS = 5 * 60 * 1000L
@@ -56,6 +61,9 @@ object DirectWatchSyncCoordinator {
     const val REASON_SERVICE_START = "service-start"
     const val REASON_SERVICE_TIMER = "service-timer"
     const val REASON_DATE_CHANGED = "date-changed"
+    const val REASON_MANUAL_DAILY_SYNC = "manual-daily-sync"
+    const val REASON_MANUAL_FULL_SYNC = "manual-full-sync"
+    const val REASON_MANUAL_WEATHER_SYNC = "manual-weather-sync"
     const val REASON_TIME_CHANGED = "time-changed"
     const val REASON_TIMEZONE_CHANGED = "timezone-changed"
     const val REASON_USER_PRESENT = "user-present"
@@ -140,6 +148,10 @@ object DirectWatchSyncCoordinator {
         response.put("lastOutcome", prefs.getString(KEY_LAST_OUTCOME, null))
         response.put("lastBlockedReason", prefs.getString(KEY_LAST_BLOCKED_REASON, null))
         response.put("lastEventAt", prefs.getString(KEY_LAST_EVENT_AT, null))
+        response.put("currentState", prefs.getString(KEY_CURRENT_STATE, null))
+        response.put("currentStateMessage", prefs.getString(KEY_CURRENT_STATE_MESSAGE, null))
+        response.put("currentSyncTypes", JSArray(readSyncTypes(prefs.getString(KEY_CURRENT_SYNC_TYPES, null))))
+        response.put("lastSyncTypes", JSArray(readSyncTypes(prefs.getString(KEY_LAST_SYNC_TYPES, null))))
         response.put("intervalMs", AUTO_SYNC_INTERVAL_MS)
         response.put("failureBackoffMs", FAILURE_BACKOFF_MS)
         response.put("pendingTtlMs", PENDING_REQUEST_TTL_MS)
@@ -212,10 +224,21 @@ object DirectWatchSyncCoordinator {
     fun markCompleted(context: Context, outcome: String?): JSObject {
         val normalizedOutcome = normalizeOutcome(outcome, "completed")
         val now = Instant.now().toString()
+        val currentTypes = prefs(context).getString(KEY_CURRENT_SYNC_TYPES, null)
         val editor = prefs(context).edit()
             .putString(KEY_LAST_COMPLETED_AT, now)
             .putString(KEY_LAST_OUTCOME, normalizedOutcome)
             .putString(KEY_LAST_BLOCKED_REASON, null)
+            .putString(KEY_CURRENT_STATE, if (isSuccessfulOutcome(normalizedOutcome)) "waiting-next-sync" else "error")
+            .putString(
+                KEY_CURRENT_STATE_MESSAGE,
+                if (isSuccessfulOutcome(normalizedOutcome)) {
+                    "Синхронизация завершена, ждём следующий запуск."
+                } else {
+                    "Синхронизация завершилась ошибкой."
+                },
+            )
+            .putString(KEY_LAST_SYNC_TYPES, currentTypes)
             .putString(KEY_PENDING_REQUEST_ID, null)
             .putString(KEY_PENDING_REASON, null)
             .putString(KEY_PENDING_ENTRY_DATE, null)
@@ -231,12 +254,25 @@ object DirectWatchSyncCoordinator {
 
     fun noteSyncStarted(context: Context, reason: String): JSObject {
         val now = Instant.now().toString()
+        val syncTypes = syncTypesForReason(reason)
         prefs(context).edit()
             .putString(KEY_LAST_REQUESTED_AT, now)
             .putString(KEY_LAST_HANDLED_AT, now)
             .putString(KEY_LAST_REASON, reason)
             .putString(KEY_LAST_OUTCOME, "started")
             .putString(KEY_LAST_BLOCKED_REASON, null)
+            .putString(KEY_CURRENT_STATE, "connecting")
+            .putString(KEY_CURRENT_STATE_MESSAGE, "Подключаемся к часам.")
+            .putString(KEY_CURRENT_SYNC_TYPES, writeSyncTypes(syncTypes))
+            .apply()
+        return status(context)
+    }
+
+    fun markState(context: Context, state: String, message: String? = null): JSObject {
+        prefs(context).edit()
+            .putString(KEY_CURRENT_STATE, state)
+            .putString(KEY_CURRENT_STATE_MESSAGE, message)
+            .putString(KEY_LAST_EVENT_AT, Instant.now().toString())
             .apply()
         return status(context)
     }
@@ -245,6 +281,7 @@ object DirectWatchSyncCoordinator {
         context: Context,
         reason: String,
         force: Boolean = false,
+        entryDateOverride: String? = null,
         sourceDeviceId: String? = null,
     ): JSObject {
         val appContext = context.applicationContext
@@ -255,9 +292,16 @@ object DirectWatchSyncCoordinator {
         val configuredDeviceId = prefs.getString(KEY_DEVICE_ID, null)
 
         fun blocked(blockedReason: String): JSObject {
+            val blockedState = when (blockedReason) {
+                "sync-in-progress" -> "activity-reading"
+                "failure-backoff", "interval", "quick-throttle" -> "waiting-next-sync"
+                else -> "error"
+            }
             prefs.edit()
                 .putString(KEY_LAST_BLOCKED_REASON, blockedReason)
                 .putString(KEY_LAST_EVENT_AT, now)
+                .putString(KEY_CURRENT_STATE, blockedState)
+                .putString(KEY_CURRENT_STATE_MESSAGE, blockedReasonMessage(blockedReason))
                 .apply()
             val response = status(appContext)
             response.put("requested", false)
@@ -314,7 +358,8 @@ object DirectWatchSyncCoordinator {
         }
 
         val requestId = UUID.randomUUID().toString()
-        val entryDate = LocalDate.now().toString()
+        val entryDate = normalizeEntryDate(entryDateOverride) ?: LocalDate.now().toString()
+        val syncTypes = syncTypesForReason(normalizedReason)
         prefs.edit()
             .putString(KEY_PENDING_REQUEST_ID, requestId)
             .putString(KEY_PENDING_REASON, normalizedReason)
@@ -324,6 +369,9 @@ object DirectWatchSyncCoordinator {
             .putString(KEY_LAST_REASON, normalizedReason)
             .putString(KEY_LAST_BLOCKED_REASON, null)
             .putString(KEY_LAST_EVENT_AT, now)
+            .putString(KEY_CURRENT_STATE, "queued")
+            .putString(KEY_CURRENT_STATE_MESSAGE, "Запрос синхронизации поставлен в очередь.")
+            .putString(KEY_CURRENT_SYNC_TYPES, writeSyncTypes(syncTypes))
             .apply()
 
         val request = buildRequest(
@@ -360,6 +408,7 @@ object DirectWatchSyncCoordinator {
             context = context,
             reason = reason,
             force = shouldForceBroadcastSync(reason),
+            entryDateOverride = null,
             sourceDeviceId = sourceDeviceId,
         )
     }
@@ -460,7 +509,32 @@ object DirectWatchSyncCoordinator {
         request.put("deviceName", prefs.getString(KEY_DEVICE_NAME, null))
         request.put("force", force)
         request.put("source", "native")
+        request.put("syncTypes", JSArray(syncTypesForReason(reason)))
         return request
+    }
+
+    fun syncTypesForReason(reason: String?): List<String> {
+        return when (reason?.trim()?.lowercase()) {
+            REASON_MANUAL_WEATHER_SYNC,
+            REASON_TIME_CHANGED,
+            REASON_TIMEZONE_CHANGED,
+            REASON_DATE_CHANGED -> listOf("time-sync", "weather-sync")
+            REASON_MANUAL_DAILY_SYNC -> listOf("daily-sync", "workout-sync")
+            REASON_BLUETOOTH_ON,
+            REASON_BLUETOOTH_RECONNECT -> listOf("reconnect", "time-sync", "weather-sync", "daily-sync", "workout-sync")
+            REASON_MANUAL_FULL_SYNC,
+            REASON_APP_VISIBLE,
+            REASON_BOOT,
+            REASON_PACKAGE_REPLACED,
+            REASON_SERVICE_START,
+            REASON_SERVICE_TIMER,
+            REASON_USER_PRESENT -> listOf("time-sync", "weather-sync", "daily-sync", "workout-sync")
+            else -> listOf("time-sync", "weather-sync", "daily-sync", "workout-sync")
+        }
+    }
+
+    fun shouldFetchActivityForReason(reason: String?): Boolean {
+        return syncTypesForReason(reason).any { it == "daily-sync" || it == "workout-sync" }
     }
 
     private fun isConfigured(context: Context): Boolean {
@@ -513,8 +587,41 @@ object DirectWatchSyncCoordinator {
         }
     }
 
+    private fun normalizeEntryDate(value: String?): String? {
+        val candidate = value?.trim()?.takeIf { it.matches(Regex("^\\d{4}-\\d{2}-\\d{2}$")) } ?: return null
+        return try {
+            LocalDate.parse(candidate).toString()
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun readSyncTypes(value: String?): List<String> {
+        return value?.split(",")
+            ?.map { it.trim() }
+            ?.filter { it.isNotBlank() }
+            ?: emptyList()
+    }
+
+    private fun writeSyncTypes(values: List<String>): String {
+        return values.distinct().joinToString(",")
+    }
+
     private fun normalizeOutcome(outcome: String?, fallback: String): String {
         return outcome?.trim()?.lowercase()?.takeIf { it.isNotBlank() } ?: fallback
+    }
+
+    private fun blockedReasonMessage(reason: String): String {
+        return when (reason) {
+            "disabled" -> "Автосинхронизация часов выключена."
+            "failure-backoff" -> "Была ошибка синхронизации, ждём повтор по backoff."
+            "interval" -> "Синхронизация уже свежая, ждём следующий запуск по таймеру."
+            "missing-config" -> "Не выбраны часы или не сохранён Auth Key."
+            "other-device" -> "Событие пришло от других часов."
+            "quick-throttle" -> "Запрос пришёл слишком быстро после предыдущего."
+            "sync-in-progress" -> "Синхронизация уже идёт, новый запуск поставлен на ожидание."
+            else -> reason
+        }
     }
 
     private fun isSuccessfulOutcome(outcome: String?): Boolean {
