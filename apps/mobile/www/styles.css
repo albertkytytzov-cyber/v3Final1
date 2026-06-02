@@ -2792,6 +2792,21 @@ button {
   font-weight: 850;
 }
 
+.coach-athlete-metric-value {
+  fill: var(--text);
+  font-size: 0.58rem;
+  font-weight: 950;
+  letter-spacing: 0;
+  paint-order: stroke;
+  stroke: rgba(255, 255, 255, 0.94);
+  stroke-linejoin: round;
+  stroke-width: 4px;
+}
+
+.coach-athlete-metric-value.is-pulse {
+  fill: #1d6f9f;
+}
+
 .coach-athlete-metric-reference {
   stroke: var(--accent);
   stroke-dasharray: 5 7;

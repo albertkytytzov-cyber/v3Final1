@@ -5006,10 +5006,11 @@ function renderCoachReadinessMetricSvg(
   referenceValue: number | null,
 ) {
   const width = 300;
-  const height = 116;
+  const hasValueLabels = definition.metric === "restingHr";
+  const height = hasValueLabels ? 132 : 116;
   const leftPadding = 34;
   const rightPadding = 10;
-  const topPadding = 14;
+  const topPadding = hasValueLabels ? 28 : 14;
   const bottomPadding = 18;
   const chartWidth = width - leftPadding - rightPadding;
   const chartHeight = height - topPadding - bottomPadding;
@@ -5046,6 +5047,14 @@ function renderCoachReadinessMetricSvg(
         : ""}
       <polygon class="coach-athlete-metric-area ${definition.lineClass}" points="${areaPoints}"></polygon>
       <polyline class="coach-athlete-metric-line ${definition.lineClass}" points="${polyline}"></polyline>
+      ${chartPoints.map((point, index) => shouldRenderCoachMetricValueLabel(index, chartPoints.length, definition) ? `
+        <text
+          class="coach-athlete-metric-value ${definition.lineClass}"
+          x="${Math.max(leftPadding + 8, Math.min(width - rightPadding - 8, point.x)).toFixed(1)}"
+          y="${Math.max(11, point.y - 8).toFixed(1)}"
+          text-anchor="middle"
+        >${escapeHtml(formatCoachReadinessPointLabel(point.value, definition))}</text>
+      ` : "").join("")}
       ${chartPoints.map((point) => `
         <circle class="coach-athlete-metric-dot ${definition.lineClass}" cx="${point.x.toFixed(1)}" cy="${point.y.toFixed(1)}" r="3.7"></circle>
       `).join("")}
@@ -5053,6 +5062,34 @@ function renderCoachReadinessMetricSvg(
       <text class="coach-athlete-metric-date" x="${width - 52}" y="${height - 2}">${formatShortDate(points[points.length - 1].entry.entryDate)}</text>
     </svg>
   `;
+}
+
+function shouldRenderCoachMetricValueLabel(
+  index: number,
+  total: number,
+  definition: CoachReadinessChartDefinition,
+) {
+  if (definition.metric !== "restingHr") {
+    return false;
+  }
+
+  if (total <= 15) {
+    return true;
+  }
+
+  if (index === total - 1) {
+    return true;
+  }
+
+  return index % (total <= 22 ? 2 : 3) === 0;
+}
+
+function formatCoachReadinessPointLabel(value: number, definition: CoachReadinessChartDefinition) {
+  if (definition.metric === "restingHr") {
+    return String(Math.round(value));
+  }
+
+  return formatCoachReadinessAxisValue(value, definition);
 }
 
 function getCoachReadinessMetricValue(entry: ReadinessEntry, metric: CoachReadinessChartMetric) {
