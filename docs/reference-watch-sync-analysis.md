@@ -76,6 +76,41 @@ Important code references:
 - `XiaomiActivityParser.java`
 - parsers under `service/devices/xiaomi/activity/impl/`
 
+### Sleep Data Rules
+
+Reference files checked:
+
+- `SleepDetailsParser.java`
+- `SleepStagesParser.java`
+
+The important point for PERFORM: Xiaomi sleep files have two different layers,
+and they must not be mixed.
+
+| Source | Gadgetbridge behavior | PERFORM rule |
+| --- | --- | --- |
+| `type=0/subtype=8`, packet `type=16` | Authoritative sleep summary: total sleep, awake, light, REM, deep | Use these fields as the main summary |
+| `type=0/subtype=8`, packet `type=17` | Stage-change samples: stage code plus offset minutes | Treat as timeline samples only; do not blindly sum offsets into total sleep |
+| `type=0/subtype=3/version=2` | Separate sleep stages file with direct totals for sleep/deep/light/REM/awake | Parse direct totals by field order |
+| CRC-false file read | Not a safe final file | Do not block a later CRC-true retry |
+
+Regression that was found on 2026-06-01:
+
+- One watch sleep file (`9CA01C6A0C0421`) was fully read with CRC OK.
+- It contained valid summary data: sleep `364` min, light `364` min, awake
+  `120` min.
+- It did not contain credible deep/REM totals. The app must show that deep/REM
+  were not provided by the watch instead of inventing them from noisy stage
+  samples.
+
+Guardrails now expected in PERFORM:
+
+- sleep duration excludes awake time;
+- stage packet totals are accepted only if they are inside the sleep window,
+  close to the summary duration and contain useful deep or REM detail;
+- short/partial sleep packets do not overwrite a full night;
+- incoming null deep/REM values do not erase existing deep/REM values;
+- CRC-false attempts do not suppress a later successful CRC-true file.
+
 ### Weather
 
 Gadgetbridge sends the same Xiaomi protobuf layers PERFORM already targets:

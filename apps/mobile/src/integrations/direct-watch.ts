@@ -18,6 +18,7 @@ import type { DirectWatchWeatherPayload } from "./watch-weather.js";
 const DIRECT_WATCH_TIME_OFFSET_MINUTES = 0;
 const DIRECT_WATCH_RAW_CACHE_KEY = "perform.mobile.directWatchRawCache";
 const DIRECT_WATCH_RAW_CACHE_LIMIT = 6;
+const DIRECT_WATCH_SLEEP_MIN_MEANINGFUL_MINUTES = 120;
 
 export interface DirectWatchAvailability {
   available?: boolean;
@@ -3172,13 +3173,14 @@ function hasDirectWatchOxygenData(value: DeviceHealthOxygenSaturationSummary) {
 }
 
 function hasDirectWatchSleepData(value: DeviceHealthSleepSummary) {
+  const stageTotal = sumDirectWatchSleepStages(value);
+  const duration = chooseDirectWatchSleepDuration(value);
+
   return Boolean(
-    value.startTime ||
-      value.endTime ||
+    (duration !== null && duration >= DIRECT_WATCH_SLEEP_MIN_MEANINGFUL_MINUTES) ||
+      (stageTotal !== null && stageTotal >= DIRECT_WATCH_SLEEP_MIN_MEANINGFUL_MINUTES) ||
       [
-        value.awakeMinutes,
         value.deepMinutes,
-        value.durationMinutes,
         value.lightMinutes,
         value.remMinutes,
         value.score,
@@ -3187,21 +3189,53 @@ function hasDirectWatchSleepData(value: DeviceHealthSleepSummary) {
 }
 
 function normalizeDirectWatchSleepSummary(value: DeviceHealthSleepSummary): DeviceHealthSleepSummary {
-  const stageTotal = sumDirectWatchSleepStages(value);
-  const windowDuration = getDirectWatchSleepWindowDurationMinutes(value);
-  const durationCandidates = [value.durationMinutes, stageTotal, windowDuration]
-    .filter(isMeaningfulDirectWatchNumber);
-  const bestDuration = durationCandidates.length ? Math.max(...durationCandidates) : value.durationMinutes ?? null;
-
   return {
     ...value,
-    durationMinutes: bestDuration,
+    durationMinutes: chooseDirectWatchSleepDuration(value),
   };
+}
+
+function chooseDirectWatchSleepDuration(value: DeviceHealthSleepSummary) {
+  const explicitDuration = isMeaningfulDirectWatchNumber(value.durationMinutes) ? value.durationMinutes : null;
+  const stageTotal = sumDirectWatchSleepStages(value);
+  const awakeDuration = isMeaningfulDirectWatchNumber(value.awakeMinutes) ? value.awakeMinutes : null;
+  const windowDuration = getDirectWatchSleepWindowDurationMinutes(value);
+
+  if (
+    explicitDuration !== null &&
+    stageTotal !== null &&
+    awakeDuration !== null &&
+    stageTotal >= DIRECT_WATCH_SLEEP_MIN_MEANINGFUL_MINUTES &&
+    Math.abs(explicitDuration - (stageTotal + awakeDuration)) <= 2
+  ) {
+    return stageTotal;
+  }
+
+  if (
+    stageTotal !== null &&
+    stageTotal >= DIRECT_WATCH_SLEEP_MIN_MEANINGFUL_MINUTES &&
+    (explicitDuration === null || explicitDuration < DIRECT_WATCH_SLEEP_MIN_MEANINGFUL_MINUTES)
+  ) {
+    return stageTotal;
+  }
+
+  if (explicitDuration !== null && explicitDuration >= DIRECT_WATCH_SLEEP_MIN_MEANINGFUL_MINUTES) {
+    return explicitDuration;
+  }
+
+  if (stageTotal !== null && stageTotal >= DIRECT_WATCH_SLEEP_MIN_MEANINGFUL_MINUTES) {
+    return stageTotal;
+  }
+
+  if (windowDuration !== null && windowDuration >= DIRECT_WATCH_SLEEP_MIN_MEANINGFUL_MINUTES) {
+    return windowDuration;
+  }
+
+  return explicitDuration ?? stageTotal ?? windowDuration ?? null;
 }
 
 function sumDirectWatchSleepStages(value: DeviceHealthSleepSummary) {
   const stages = [
-    value.awakeMinutes,
     value.deepMinutes,
     value.lightMinutes,
     value.remMinutes,

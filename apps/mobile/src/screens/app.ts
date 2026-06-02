@@ -1402,7 +1402,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
 
     if (!config.authKeyHex) {
       if (!options.silent) {
-        update({ error: "Сначала сохраните Auth Key часов в блоке PERFORM Sync." });
+        update({ error: "Сначала сохраните ключ часов в настройке часов." });
       }
       return false;
     }
@@ -1478,7 +1478,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
     }
 
     if (!config.authKeyHex) {
-      update({ error: "Сначала сохраните Auth Key часов в настройке часов." });
+      update({ error: "Сначала сохраните ключ часов в настройке часов." });
       return;
     }
 
@@ -1553,12 +1553,12 @@ export function bootstrapMobileApp(root: HTMLElement) {
     const targetDeviceId = deviceId || config.deviceId;
 
     if (!targetDeviceId) {
-      update({ error: "Сначала выберите часы в настройке PERFORM Sync." });
+      update({ error: "Сначала выберите часы в настройке часов." });
       return;
     }
 
     if (!config.authKeyHex) {
-      update({ error: "Сначала сохраните Auth Key часов." });
+      update({ error: "Сначала сохраните ключ часов." });
       return;
     }
 
@@ -1597,7 +1597,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
       update({
         error: null,
         isBusy: true,
-        message: "PERFORM Sync проверяет список файлов на часах...",
+        message: "Проверяю, за какие дни часы готовы отдать историю...",
       });
 
       try {
@@ -1620,13 +1620,13 @@ export function bootstrapMobileApp(root: HTMLElement) {
           error: null,
           isBusy: true,
           message: inventory.fileCount > 0
-            ? `Часы отдали список файлов: ${availableDays} из ${dates.length} дней.`
-            : "Список файлов пустой, пробуем пройти 30 дней напрямую.",
+            ? `Часы нашли данные: ${availableDays} из ${dates.length} дней.`
+            : "Список истории пустой, пробуем проверить дни напрямую.",
         });
       } catch (error) {
         lastError = error instanceof Error
           ? error.message
-          : "Не удалось получить список файлов часов.";
+          : "Не удалось получить список истории часов.";
         rememberDirectWatchConfig({
           lastHistorySyncError: lastError,
         });
@@ -1634,8 +1634,8 @@ export function bootstrapMobileApp(root: HTMLElement) {
 
       if (!datesToRead.length) {
         lastError = fileCount
-          ? "Часы отдали файлы, но ни один не попал в последние 30 дней."
-          : lastError || "Часы не отдали список файлов активности.";
+          ? "Часы нашли историю, но не за последние 30 дней."
+          : lastError || "Часы не отдали историю активности.";
       }
 
       for (const [index, entryDate] of datesToRead.entries()) {
@@ -1835,7 +1835,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
 
     if (!config.authKeyHex) {
       if (!options.silent) {
-        update({ error: "Сначала сохраните Auth Key часов в блоке PERFORM Sync." });
+        update({ error: "Сначала сохраните ключ часов в настройке часов." });
       }
       return false;
     }
@@ -2095,16 +2095,16 @@ export function bootstrapMobileApp(root: HTMLElement) {
 
     if (!normalized) {
       update({
-        error: config.authKeyHex ? null : "Введите Auth Key часов, чтобы включить PERFORM Sync.",
+        error: config.authKeyHex ? null : "Введите ключ часов, чтобы включить прямую синхронизацию.",
         message: config.authKeyHex
-          ? "Auth Key уже сохранён. Введите новый ключ только если нужно заменить старый."
+          ? "Ключ часов уже сохранён. Введите новый ключ только если нужно заменить старый."
           : null,
       });
       return;
     }
 
     if (!DIRECT_WATCH_AUTH_KEY_PATTERN.test(normalized)) {
-      update({ error: "Auth Key должен быть 32 hex-символа." });
+      update({ error: "Ключ часов должен быть 32 hex-символа." });
       return;
     }
 
@@ -2114,7 +2114,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
     if (input) {
       input.value = "";
     }
-    update({ error: null, message: "Auth Key PERFORM Sync сохранён только на этом телефоне." });
+    update({ error: null, message: "Ключ часов сохранён только на этом телефоне." });
   };
 
   const selectDirectWatchDevice = (deviceId: string) => {
@@ -6474,7 +6474,7 @@ function formatDirectWatchUserError(message?: string | null) {
   }
 
   if (lowerMessage.includes("auth")) {
-    return "Часы не прошли авторизацию. Проверьте Auth Key и подключение часов.";
+    return "Часы не прошли авторизацию. Проверьте ключ и подключение часов.";
   }
 
   if (lowerMessage.includes("crc")) {
@@ -6549,7 +6549,6 @@ function getDirectWatchUserDiagnostics(
   const coordinatorStateLabel = coordinatorState
     ? formatDirectWatchCoordinatorState(coordinatorState, coordinatorStatus?.currentStateMessage)
     : null;
-  const coordinatorSyncTypesLabel = formatDirectWatchSyncTypes(coordinatorStatus?.currentSyncTypes ?? []);
   const freshnessThresholdMinutes = Math.max(
     30,
     Math.ceil(((coordinatorStatus?.intervalMs ?? 10 * 60 * 1000) * 3) / 60000),
@@ -6566,7 +6565,7 @@ function getDirectWatchUserDiagnostics(
   const connectionLabel = !hasDevice
     ? "часы не выбраны"
     : !hasAuthKey
-      ? "нужен Auth Key"
+      ? "нужен ключ"
       : userError
         ? "Bluetooth занят"
         : coordinatorState && !["waiting-next-sync", "queued"].includes(coordinatorState)
@@ -6606,7 +6605,7 @@ function getDirectWatchUserDiagnostics(
       ? "Часы подключены. Погода и данные обновляются без открытия приложения."
       : canSync
         ? "Часы готовы к синхронизации."
-        : "Для прямой синхронизации выберите часы и сохраните Auth Key.";
+        : "Для прямой синхронизации выберите часы и сохраните ключ.";
   const lastSyncLabel = lastSyncAt ? formatDateTime(lastSyncAt) : "ещё не было";
   const lastWeatherLabel = lastWeatherAt ? formatDateTime(lastWeatherAt) : "ещё не отправлялась";
   const lastActivityLabel = lastActivityAt ? formatDateTime(lastActivityAt) : "ещё не получались";
@@ -6623,11 +6622,11 @@ function getDirectWatchUserDiagnostics(
   const bluetoothValue = userError
     ? userError
     : canSync
-      ? "Канал готов, часы отвечают при синхронизации"
-      : "Нужно выбрать часы и сохранить Auth Key";
+      ? "Подключение настроено, часы отвечают при обновлении"
+      : "Нужно выбрать часы и сохранить ключ";
   const powerValue = powerWarning?.value.replace(/[.。]+$/, "") ?? "Android не сообщает об ограничениях фона";
   const batteryValue = isRunning
-    ? `Фоновая служба активна. ${powerValue}`
+    ? `Автообновление активно. ${powerValue}`
     : userError
       ? powerValue || "Проверьте Bluetooth и ограничения Android"
       : canSync
@@ -6653,13 +6652,13 @@ function getDirectWatchUserDiagnostics(
     updates: [
       {
         label: "Сейчас",
-        meta: coordinatorSyncTypesLabel,
+        meta: null,
         tone: coordinatorState === "error" || coordinatorState === "bluetooth-busy"
           ? "warning"
           : coordinatorState
             ? "ok"
             : "muted",
-        value: coordinatorStateLabel ?? "Ожидает события от приложения, Android или часов",
+        value: coordinatorStateLabel ?? "Ждём следующую синхронизацию",
       },
       {
         label: "Последнее обновление",
@@ -6789,7 +6788,7 @@ function renderWatchSyncPanel(state: MobileAppState, date: string) {
           Синхронизировать сейчас
         </button>
         <details class="watch-technical-status watch-technical-drawer">
-          <summary aria-label="Дополнительные настройки часов">Настройки</summary>
+          <summary aria-label="Настройка часов">Настройка</summary>
           <div class="watch-technical-body">
             <div class="watch-sync-actions">
               <button
@@ -6799,7 +6798,7 @@ function renderWatchSyncPanel(state: MobileAppState, date: string) {
                 type="button"
                 ${state.isBusy || !canServiceSync ? "disabled" : ""}
               >
-                Считать данные
+                Обновить данные
               </button>
               <button
                 class="secondary-action"
@@ -6807,7 +6806,7 @@ function renderWatchSyncPanel(state: MobileAppState, date: string) {
                 type="button"
                 ${state.isBusy || !canServiceSync ? "disabled" : ""}
               >
-                Время и погода
+                Обновить погоду
               </button>
             </div>
             <section class="watch-history-sync-card is-${escapeHtml(historyProgress.statusKind)}">
@@ -6835,16 +6834,16 @@ function renderWatchSyncPanel(state: MobileAppState, date: string) {
             ${renderWatchCoordinatorStatus(state.directWatchDiagnostic.syncCoordinatorStatus)}
             <div class="watch-sync-grid">
               <article>
-                <span>Источник погоды</span>
+                <span>Город погоды</span>
                 <strong>${escapeHtml(weatherSourceLabel)}</strong>
               </article>
               <article>
-                <span>Служба</span>
+                <span>Автообновление</span>
                 <strong>${escapeHtml(bridgeLabel)}</strong>
               </article>
               <article>
-                <span>Погода на часы</span>
-                <strong>влажность · ветер · UV/AQI · солнце</strong>
+                <span>Что отправляем</span>
+                <strong>температура, влажность, ветер, прогноз</strong>
               </article>
             </div>
             <div class="watch-sync-setup-grid">
@@ -6853,7 +6852,7 @@ function renderWatchSyncPanel(state: MobileAppState, date: string) {
                 <input data-direct-watch-weather-city inputmode="text" placeholder="если геолокация недоступна" type="text" value="${escapeHtml(weatherFallbackCity)}">
               </label>
               <label class="wide-field">
-                <span>Auth Key часов</span>
+                <span>Ключ часов</span>
                 <input data-direct-watch-auth-key inputmode="text" placeholder="${escapeHtml(hasAuthKey ? "ключ сохранён" : "32 hex-символа")}" type="password" autocomplete="off">
               </label>
             </div>
@@ -6868,7 +6867,7 @@ function renderWatchSyncPanel(state: MobileAppState, date: string) {
                 Найти часы
               </button>
               <button class="secondary-action" data-direct-watch-service-status type="button" ${state.isBusy ? "disabled" : ""}>
-                Обновить статус
+                Проверить состояние
               </button>
               <button
                 class="secondary-action"
@@ -6876,7 +6875,7 @@ function renderWatchSyncPanel(state: MobileAppState, date: string) {
                 type="button"
                 ${state.isBusy || !isRunning ? "disabled" : ""}
               >
-                Остановить службу
+                Остановить автообновление
               </button>
             </div>
             ${renderWatchSyncDevicePicker(state, config)}
@@ -6904,8 +6903,6 @@ function renderWatchActivitySyncDiagnostic(config: DirectWatchLocalConfig) {
       : "Нужна проверка тренировки";
   const meta = [
     config.lastActivitySyncAt ? formatDateTime(config.lastActivitySyncAt) : null,
-    config.lastActivitySyncFileCount !== null ? `файлов ${config.lastActivitySyncFileCount}` : null,
-    config.lastActivitySyncSportsFileCount !== null ? `SPORTS ${config.lastActivitySyncSportsFileCount}` : null,
     config.lastActivitySyncWorkoutCount !== null ? `тренировок ${config.lastActivitySyncWorkoutCount}` : null,
   ].filter((item): item is string => Boolean(item));
 
@@ -6936,23 +6933,25 @@ function renderWatchCoordinatorStatus(status: MobileAppState["directWatchDiagnos
     : status.nextAllowedReason
       ? "Следующее автообновление"
       : "Последний автозапуск";
-  const syncTypes = formatDirectWatchSyncTypes(status.currentSyncTypes ?? status.lastSyncTypes ?? []);
+  const tone = status.currentState === "error" || status.currentState === "bluetooth-busy"
+    ? "error"
+    : status.pendingRequestId || status.retryAfterMs
+      ? "warning"
+      : "ok";
   const details = [
-    syncTypes,
-    status.pendingReason ? formatDirectWatchCoordinatorReason(status.pendingReason) : null,
-    status.nextAllowedReason ? formatDirectWatchCoordinatorReason(status.nextAllowedReason) : null,
+    status.pendingRequestId ? "обновление уже в очереди" : null,
     status.lastBlockedReason ? formatDirectWatchCoordinatorReason(status.lastBlockedReason) : null,
     status.retryAfterMs && status.retryAfterMs > 0 ? `через ${formatDeviceWorkoutDuration(status.retryAfterMs / 60000)}` : null,
-    status.lastSuccessfulAt ? `успешно ${formatDateTime(status.lastSuccessfulAt)}` : null,
+    status.lastSuccessfulAt ? `последний успех ${formatDateTime(status.lastSuccessfulAt)}` : null,
   ].filter((item): item is string => Boolean(item));
 
   return `
-    <article class="watch-sync-diagnostic is-warning">
+    <article class="watch-sync-diagnostic is-${escapeHtml(tone)}">
       <div>
         <span>Автосинхронизация</span>
         <strong>${escapeHtml(title)}</strong>
       </div>
-      <p>${escapeHtml(details.join(" · ") || "координатор ждёт следующего события")}</p>
+      <p>${escapeHtml(details.join(" · ") || "Ждём следующий запуск по расписанию.")}</p>
     </article>
   `;
 }
@@ -6974,28 +6973,16 @@ function formatDirectWatchCoordinatorState(state: string, message?: string | nul
   return message || labels[state] || state;
 }
 
-function formatDirectWatchSyncTypes(types: string[]) {
-  const labels: Record<string, string> = {
-    "daily-sync": "день",
-    reconnect: "reconnect",
-    "time-sync": "время",
-    "weather-sync": "погода",
-    "workout-sync": "тренировки",
-  };
-  const items = types.map((type) => labels[type] ?? type).filter(Boolean);
-  return items.length ? items.join(" · ") : null;
-}
-
 function formatDirectWatchCoordinatorReason(reason: string) {
   const labels: Record<string, string> = {
     "app-visible": "возврат в приложение",
     "bluetooth-on": "Bluetooth включён",
-    "bluetooth-reconnect": "Bluetooth reconnect",
+    "bluetooth-reconnect": "Bluetooth подключился",
     boot: "запуск телефона",
     "date-changed": "смена даты",
-    disabled: "координатор выключен",
+    disabled: "автообновление выключено",
     "failure-backoff": "пауза после ошибки",
-    interval: "интервал 10 мин",
+    interval: "следующий запуск по расписанию",
     "manual-daily-sync": "ручное чтение дня",
     "manual-full-sync": "ручная синхронизация",
     "manual-weather-sync": "ручная погода/время",
@@ -7003,8 +6990,8 @@ function formatDirectWatchCoordinatorReason(reason: string) {
     "other-device": "другое устройство",
     "package-replaced": "обновление приложения",
     "quick-throttle": "слишком частый запуск",
-    "service-start": "старт службы",
-    "service-timer": "таймер службы",
+    "service-start": "запуск автообновления",
+    "service-timer": "автообновление",
     "sync-in-progress": "синхронизация уже идёт",
     "time-changed": "изменение времени",
     "timezone-changed": "смена часового пояса",
@@ -8436,7 +8423,7 @@ function formatWatchSourceHint(summary: DeviceHealthDailySummary | null) {
   }
 
   if (isDirectWatchRuntime()) {
-    return "PERFORM Sync, Auth Key и Bluetooth";
+    return "PERFORM Sync, ключ часов и Bluetooth";
   }
 
   return "Health Connect и приложения здоровья";
@@ -9222,7 +9209,7 @@ function buildDirectWatchActivitySyncDiagnostic(
       dailyFileCount,
       fileCount,
       message: fileCount > 0
-        ? `Файлы активности получены (${fileCount}), но день не собрался: ${errorMessage}`
+        ? `Часы отдали данные, но день не собрался: ${errorMessage}`
         : `Синхронизация не завершилась: ${errorMessage}`,
       sportsFileCount,
       status: "error",
@@ -9235,7 +9222,7 @@ function buildDirectWatchActivitySyncDiagnostic(
     return {
       dailyFileCount,
       fileCount,
-      message: `Часы ответили, но есть ошибки чтения: ${failedCount} не завершено, ${crcErrorCount} с ошибкой CRC. Повторите синхронизацию рядом с часами.`,
+      message: `Часы ответили, но часть данных не прочиталась. Повторите синхронизацию рядом с часами.`,
       sportsFileCount,
       status: "warning",
       syncedAt,
@@ -9247,7 +9234,7 @@ function buildDirectWatchActivitySyncDiagnostic(
     return {
       dailyFileCount,
       fileCount,
-      message: `Тренировки: ${workoutCount}. Файлы: ${fileCount || completedCount}, SPORTS: ${sportsFileCount}.`,
+      message: `Тренировки получены: ${workoutCount}.`,
       sportsFileCount,
       status: "ok",
       syncedAt,
@@ -9260,8 +9247,8 @@ function buildDirectWatchActivitySyncDiagnostic(
       dailyFileCount,
       fileCount,
       message: unparsedSportsCount > 0
-        ? `SPORTS-файлы пришли (${sportsFileCount}), но часть не распознана. Нужно проверить parser этого типа тренировки.`
-        : `SPORTS-файлы пришли (${sportsFileCount}), но тренировка не сохранилась. Нужно проверить сопоставление summary/details.`,
+        ? "Часы отдали тренировку, но её формат ещё не распознан."
+        : "Часы отдали тренировку, но она не сохранилась. Нужна повторная проверка.",
       sportsFileCount,
       status: "warning",
       syncedAt,
@@ -9273,7 +9260,7 @@ function buildDirectWatchActivitySyncDiagnostic(
     return {
       dailyFileCount,
       fileCount,
-      message: "Дневные данные пришли, но SPORTS-файлов нет. Если тренировка есть на часах, ее могло уже считать другое приложение.",
+    message: "Дневные данные пришли, но тренировок за выбранный день нет. Если тренировка есть на часах, её могло уже считать другое приложение.",
       sportsFileCount,
       status: "warning",
       syncedAt,
@@ -9284,7 +9271,7 @@ function buildDirectWatchActivitySyncDiagnostic(
   return {
     dailyFileCount,
     fileCount,
-    message: "Часы подключились, но activity-файлы за выбранный день не пришли. Проверьте дату, заряд часов и что другое приложение не забрало данные раньше.",
+    message: "Часы подключились, но данных за выбранный день не пришло. Проверьте дату, заряд часов и что другое приложение не забрало данные раньше.",
     sportsFileCount,
     status: "warning",
     syncedAt,
@@ -9438,16 +9425,12 @@ function formatDirectWatchServiceRuntime(
   config: DirectWatchLocalConfig,
   status: MobileAppState["directWatchDiagnostic"]["serviceStatus"],
 ) {
-  const bridgeUntil = status?.bridgeUntil ?? config.lastServiceBridgeUntil;
-
   if (isDirectWatchServiceRunning(config, status)) {
-    return bridgeUntil
-      ? `Bluetooth-канал активен до ${formatDateTime(bridgeUntil)}.`
-      : "Bluetooth-канал активен.";
+    return "Погода и данные обновляются в фоне.";
   }
 
   if (!config.deviceId || !config.authKeyHex) {
-    return "Сначала выберите часы и сохраните Auth Key.";
+    return "Сначала выберите часы и сохраните ключ.";
   }
 
   if (config.lastServiceStatus === "error") {
@@ -9462,10 +9445,9 @@ function getDirectWatchHistorySyncProgress(config: DirectWatchLocalConfig) {
   const completedDays = Math.max(0, Math.min(totalDays, config.lastHistorySyncCompletedDays ?? 0));
   const successDays = Math.max(0, Math.min(totalDays, config.lastHistorySyncSuccessDays ?? 0));
   const availableDays = config.lastHistorySyncAvailableDays;
-  const fileCount = config.lastHistorySyncFileCount;
   const hasAvailableDays = availableDays !== null && availableDays !== undefined && availableDays > 0;
   const inventoryLabel = availableDays !== null && availableDays !== undefined
-    ? ` За ${totalDays} дней часы нашли ${availableDays} дней${fileCount ? `, файлов: ${fileCount}.` : "."}`
+    ? ` Часы нашли данные за ${availableDays} из ${totalDays} дней.`
     : "";
   const runningLabelTotal = hasAvailableDays ? availableDays : totalDays;
   const runningLabelDone = hasAvailableDays
@@ -12433,7 +12415,6 @@ function renderResultsScreen(state: MobileAppState, athleteId: string | null) {
   const plans = getPlansForAthlete(state, athleteId);
   const canSubmitExecution = state.session.user?.role === "athlete";
   const isCoachReview = isCoachRole(state.session.user?.role);
-  const selectedDayDate = isCoachReview ? state.selectedDayDate : null;
   const selectedAthlete = isCoachReview ? getCoachContextAthlete(state, athleteId) : null;
 
   if (canSubmitExecution) {
@@ -12456,8 +12437,6 @@ function renderResultsScreen(state: MobileAppState, athleteId: string | null) {
     )}
     ${isCoachReview ? renderCoachExecutionReviewSummary(state, athleteId, state.selectedDayDate) : ""}
     ${renderExecutionForm(state, plans)}
-    ${renderCoachDiaryHistory(state, athleteId, selectedDayDate)}
-    ${renderExecutionHistory(state, athleteId, selectedDayDate)}
   `;
 }
 
@@ -16978,7 +16957,6 @@ function getDeviceHealthSleepStageTotalMinutes(sleep: DeviceHealthSleepLike | nu
   }
 
   const values = [
-    sleep.awakeMinutes,
     sleep.deepMinutes,
     sleep.lightMinutes,
     sleep.remMinutes,
@@ -17002,16 +16980,12 @@ function getDeviceHealthSleepWindowDurationMinutes(sleep: DeviceHealthSleepLike 
 }
 
 function normalizeDeviceHealthSleepSummaryForStorage<T extends DeviceHealthSleepLike>(sleep: T): T {
-  const stageTotal = getDeviceHealthSleepStageTotalMinutes(sleep);
-  const windowDuration = getDeviceHealthSleepWindowDurationMinutes(sleep);
-  const durationCandidates = [sleep.durationMinutes, stageTotal, windowDuration]
-    .filter(isPositiveNumber);
+  const bestDuration = chooseDeviceHealthSleepDuration(sleep);
 
-  if (!durationCandidates.length) {
+  if (bestDuration === null) {
     return sleep;
   }
 
-  const bestDuration = Math.max(...durationCandidates);
   if (sleep.durationMinutes === bestDuration) {
     return sleep;
   }
@@ -17020,6 +16994,45 @@ function normalizeDeviceHealthSleepSummaryForStorage<T extends DeviceHealthSleep
     ...sleep,
     durationMinutes: bestDuration,
   };
+}
+
+function chooseDeviceHealthSleepDuration(sleep: DeviceHealthSleepLike) {
+  const explicitDuration = isPositiveNumber(sleep.durationMinutes) ? sleep.durationMinutes : null;
+  const stageTotal = getDeviceHealthSleepStageTotalMinutes(sleep);
+  const awakeDuration = isPositiveNumber(sleep.awakeMinutes) ? sleep.awakeMinutes : null;
+  const windowDuration = getDeviceHealthSleepWindowDurationMinutes(sleep);
+
+  if (
+    explicitDuration !== null &&
+    stageTotal !== null &&
+    awakeDuration !== null &&
+    stageTotal >= WATCH_SLEEP_MIN_MEANINGFUL_MINUTES &&
+    Math.abs(explicitDuration - (stageTotal + awakeDuration)) <= 2
+  ) {
+    return stageTotal;
+  }
+
+  if (
+    stageTotal !== null &&
+    stageTotal >= WATCH_SLEEP_MIN_MEANINGFUL_MINUTES &&
+    (explicitDuration === null || explicitDuration < WATCH_SLEEP_MIN_MEANINGFUL_MINUTES)
+  ) {
+    return stageTotal;
+  }
+
+  if (explicitDuration !== null && explicitDuration >= WATCH_SLEEP_MIN_MEANINGFUL_MINUTES) {
+    return explicitDuration;
+  }
+
+  if (stageTotal !== null && stageTotal >= WATCH_SLEEP_MIN_MEANINGFUL_MINUTES) {
+    return stageTotal;
+  }
+
+  if (windowDuration !== null && windowDuration >= WATCH_SLEEP_MIN_MEANINGFUL_MINUTES) {
+    return windowDuration;
+  }
+
+  return explicitDuration ?? stageTotal ?? windowDuration ?? null;
 }
 
 function normalizeDeviceHealthDailySummaryForStorage<T extends DeviceHealthDailySummary | DeviceHealthDailySummaryPayload>(summary: T): T {
@@ -17070,8 +17083,10 @@ function mergeDeviceHealthSleepSummary(
   const normalizedIncoming = normalizeDeviceHealthSleepSummaryForStorage(incoming);
   const existingDuration = normalizedExisting.durationMinutes ?? null;
   const incomingDuration = normalizedIncoming.durationMinutes ?? null;
+  const sameSleepWindow = hasSameDeviceHealthSleepWindow(normalizedExisting, normalizedIncoming);
   const preferExisting = typeof existingDuration === "number" &&
     typeof incomingDuration === "number" &&
+    !sameSleepWindow &&
     incomingDuration + WATCH_SLEEP_SHORTER_TOLERANCE_MINUTES < existingDuration;
 
   return normalizeDeviceHealthSleepSummaryForStorage({
@@ -17086,6 +17101,32 @@ function mergeDeviceHealthSleepSummary(
     score: mergeValue(normalizedIncoming.score, normalizedExisting.score),
     startTime: preferExisting ? mergeValue(normalizedExisting.startTime, normalizedIncoming.startTime) : mergeValue(normalizedIncoming.startTime, normalizedExisting.startTime),
   });
+}
+
+function hasSameDeviceHealthSleepWindow(
+  existing: DeviceHealthSleepLike,
+  incoming: DeviceHealthSleepLike,
+) {
+  const existingStart = getDeviceHealthSleepTimeMs(existing.startTime);
+  const existingEnd = getDeviceHealthSleepTimeMs(existing.endTime);
+  const incomingStart = getDeviceHealthSleepTimeMs(incoming.startTime);
+  const incomingEnd = getDeviceHealthSleepTimeMs(incoming.endTime);
+
+  return existingStart !== null &&
+    existingEnd !== null &&
+    incomingStart !== null &&
+    incomingEnd !== null &&
+    existingStart === incomingStart &&
+    existingEnd === incomingEnd;
+}
+
+function getDeviceHealthSleepTimeMs(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  const timestamp = new Date(value).getTime();
+  return Number.isFinite(timestamp) ? timestamp : null;
 }
 
 function mergeDeviceHealthHeartRateSummary(

@@ -79,6 +79,8 @@ interface DeviceWorkoutRow {
   updated_at: string;
 }
 
+const SLEEP_MIN_MEANINGFUL_DURATION_MINUTES = 120;
+
 interface DeviceWorkoutSampleRow {
   id: string;
   device_workout_id: string;
@@ -161,7 +163,6 @@ function sumSleepStages(sleep: DeviceHealthDailySummaryPayload["sleep"]) {
   }
 
   const values = [
-    sleep.awakeMinutes,
     sleep.deepMinutes,
     sleep.lightMinutes,
     sleep.remMinutes,
@@ -185,22 +186,57 @@ function getSleepWindowDurationMinutes(sleep: DeviceHealthDailySummaryPayload["s
 }
 
 export function normalizeSleepSummary<T extends NonNullable<DeviceHealthDailySummaryPayload["sleep"]>>(sleep: T): T {
-  const stageTotal = sumSleepStages(sleep);
-  const windowDuration = getSleepWindowDurationMinutes(sleep);
-  const durationCandidates = [sleep.durationMinutes, stageTotal, windowDuration]
-    .filter(hasPositiveNumber);
+  const bestDuration = chooseSleepDuration(sleep);
 
-  if (!durationCandidates.length) {
+  if (bestDuration === null) {
     return sleep;
   }
 
-  const bestDuration = Math.max(...durationCandidates);
   return sleep.durationMinutes === bestDuration
     ? sleep
     : {
         ...sleep,
         durationMinutes: bestDuration,
       };
+}
+
+function chooseSleepDuration(sleep: NonNullable<DeviceHealthDailySummaryPayload["sleep"]>) {
+  const explicitDuration = hasPositiveNumber(sleep.durationMinutes) ? sleep.durationMinutes : null;
+  const stageTotal = sumSleepStages(sleep);
+  const awakeDuration = hasPositiveNumber(sleep.awakeMinutes) ? sleep.awakeMinutes : null;
+  const windowDuration = getSleepWindowDurationMinutes(sleep);
+
+  if (
+    explicitDuration !== null &&
+    stageTotal !== null &&
+    awakeDuration !== null &&
+    stageTotal >= SLEEP_MIN_MEANINGFUL_DURATION_MINUTES &&
+    Math.abs(explicitDuration - (stageTotal + awakeDuration)) <= 2
+  ) {
+    return stageTotal;
+  }
+
+  if (
+    stageTotal !== null &&
+    stageTotal >= SLEEP_MIN_MEANINGFUL_DURATION_MINUTES &&
+    (explicitDuration === null || explicitDuration < SLEEP_MIN_MEANINGFUL_DURATION_MINUTES)
+  ) {
+    return stageTotal;
+  }
+
+  if (explicitDuration !== null && explicitDuration >= SLEEP_MIN_MEANINGFUL_DURATION_MINUTES) {
+    return explicitDuration;
+  }
+
+  if (stageTotal !== null && stageTotal >= SLEEP_MIN_MEANINGFUL_DURATION_MINUTES) {
+    return stageTotal;
+  }
+
+  if (windowDuration !== null && windowDuration >= SLEEP_MIN_MEANINGFUL_DURATION_MINUTES) {
+    return windowDuration;
+  }
+
+  return explicitDuration ?? stageTotal ?? windowDuration ?? null;
 }
 
 function normalizeDeviceHealthDailySummaryPayload<T extends DeviceHealthDailySummaryPayload>(payload: T): T {
@@ -703,7 +739,19 @@ export async function upsertDeviceHealthDailySummary(input: {
         source_device = COALESCE(EXCLUDED.source_device, device_health_daily_summaries.source_device),
         sleep_start_time = CASE WHEN $31 THEN COALESCE(EXCLUDED.sleep_start_time, device_health_daily_summaries.sleep_start_time) ELSE device_health_daily_summaries.sleep_start_time END,
         sleep_end_time = CASE WHEN $31 THEN COALESCE(EXCLUDED.sleep_end_time, device_health_daily_summaries.sleep_end_time) ELSE device_health_daily_summaries.sleep_end_time END,
-        sleep_duration_minutes = CASE WHEN $31 THEN COALESCE(GREATEST(device_health_daily_summaries.sleep_duration_minutes, EXCLUDED.sleep_duration_minutes), EXCLUDED.sleep_duration_minutes, device_health_daily_summaries.sleep_duration_minutes) ELSE device_health_daily_summaries.sleep_duration_minutes END,
+        sleep_duration_minutes = CASE WHEN $31 THEN
+          CASE
+            WHEN EXCLUDED.sleep_duration_minutes IS NULL THEN device_health_daily_summaries.sleep_duration_minutes
+            WHEN device_health_daily_summaries.sleep_duration_minutes IS NULL THEN EXCLUDED.sleep_duration_minutes
+            WHEN EXCLUDED.sleep_duration_minutes >= 120
+              AND EXCLUDED.sleep_start_time IS NOT NULL
+              AND EXCLUDED.sleep_end_time IS NOT NULL
+              AND device_health_daily_summaries.sleep_start_time = EXCLUDED.sleep_start_time
+              AND device_health_daily_summaries.sleep_end_time = EXCLUDED.sleep_end_time
+            THEN EXCLUDED.sleep_duration_minutes
+            ELSE COALESCE(GREATEST(device_health_daily_summaries.sleep_duration_minutes, EXCLUDED.sleep_duration_minutes), EXCLUDED.sleep_duration_minutes, device_health_daily_summaries.sleep_duration_minutes)
+          END
+        ELSE device_health_daily_summaries.sleep_duration_minutes END,
         deep_sleep_minutes = CASE WHEN $31 THEN COALESCE(EXCLUDED.deep_sleep_minutes, device_health_daily_summaries.deep_sleep_minutes) ELSE device_health_daily_summaries.deep_sleep_minutes END,
         light_sleep_minutes = CASE WHEN $31 THEN COALESCE(EXCLUDED.light_sleep_minutes, device_health_daily_summaries.light_sleep_minutes) ELSE device_health_daily_summaries.light_sleep_minutes END,
         rem_sleep_minutes = CASE WHEN $31 THEN COALESCE(EXCLUDED.rem_sleep_minutes, device_health_daily_summaries.rem_sleep_minutes) ELSE device_health_daily_summaries.rem_sleep_minutes END,

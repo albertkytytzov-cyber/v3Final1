@@ -15,6 +15,7 @@
 | Bluetooth занят | Не запускать вторую сессию, показать причину и поставить retry/backoff | current state `bluetooth-busy` | `DirectWatchBluetoothSyncLock.isBusy()` пишет статус и backoff | Во время синхронизации нажать ещё раз, приложение пишет “Bluetooth занят, повторим позже” |
 | Android ограничил фон | Диагностика показывает power save, background restriction, exact alarm и Xiaomi battery hint | диагностика | `DirectWatchAndroidPowerStatus.status` возвращает поля в UI | Проверить блок `Bluetooth / фон` в настройках часов |
 | Неполный пакет данных | Не затирать более полный день: обновлять только реально пришедшие поля | data protection | тесты защиты daily merge проходят | Повторная синхронизация не уменьшает шаги/сон/пульс без причины |
+| Сон | `type=16` даёт summary, `type=17` даёт только stage events; awake не входит в длительность сна | `sleep-sync` | тест сверяет PERFORM с `SleepDetailsParser` / `SleepStagesParser` Gadgetbridge | Проверить ночь: если часы не отдали deep/REM, приложение показывает отсутствие детализации, а не фейковые стадии |
 | Файлы тренировки | Читать список, chunks, CRC, parser; ACK только после сохранения | `workout-sync` | parser coverage и raw activity probe логируются | Сделать тренировку, синхронизировать, проверить карточку и отсутствие дублей |
 | API offline | Не ACK на часы до успешного сохранения или queued raw cache | queue/ACK | raw cache получает `queued`, ACK откладывается | Отключить сеть, синхронизировать, затем включить сеть и проверить отправку |
 

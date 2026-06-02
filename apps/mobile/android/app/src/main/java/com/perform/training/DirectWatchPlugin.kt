@@ -3220,7 +3220,7 @@ class DirectWatchPlugin : Plugin() {
                                         activityAssemblyFile = null
                                     }
                                 }
-                                if (file?.crcValid != null && !seenCompleteActivityFiles.add(file.file.idHex)) {
+                                if (file?.crcValid == true && !seenCompleteActivityFiles.add(file.file.idHex)) {
                                     offset += packetSize.coerceAtLeast(1)
                                     continue
                                 }
@@ -6317,12 +6317,154 @@ class DirectWatchPlugin : Plugin() {
 
         var summary: ClassicSleepSummary? = null
         var stageCount = 0
+        var stagePacketCount = 0
+        val bigEndianStageCounts = IntArray(5)
+        val littleEndianStageCounts = IntArray(5)
+        val sleepStageSamples = mutableListOf<Pair<Long, Int>>()
+
+        fun littleEndianUInt64Local(readOffset: Int): Long {
+            if (bytes.size < readOffset + 8) {
+                return 0L
+            }
+            var value = 0L
+            for (index in 0 until 8) {
+                value = value or ((bytes[readOffset + index].toLong() and 0xffL) shl (index * 8))
+            }
+            return value
+        }
+
+        fun normalizeSleepStageTimestampMs(value: Long): Long? {
+            if (value <= 0) {
+                return null
+            }
+            val timestampMs = when {
+                value > 100_000_000_000_000L -> value / 1_000_000L
+                value > 100_000_000_000L -> value
+                else -> value * 1000L
+            }
+            return timestampMs.takeIf { it in 946_684_800_000L..4_102_444_800_000L }
+        }
+
+        fun addSleepStageSamples(packetTimestamp: Long, dataOffset: Int, dataLength: Int) {
+            val baseTimestampMs = normalizeSleepStageTimestampMs(packetTimestamp) ?: return
+            stagePacketCount += 1
+            var currentTimestampMs = baseTimestampMs
+            var index = 0
+            while (index + 2 <= dataLength) {
+                val encoded = bigEndianUInt16(bytes, dataOffset + index)
+                val littleEndianEncoded = littleEndianUInt16(bytes, dataOffset + index)
+                val stage = encoded ushr 12
+                val littleEndianStage = littleEndianEncoded ushr 12
+                val offsetMinutes = encoded and 0x0fff
+                index += 2
+
+                if (stage in 0..4) {
+                    bigEndianStageCounts[stage] += 1
+                    sleepStageSamples.add(currentTimestampMs to stage)
+                    stageCount += 1
+                }
+                if (littleEndianStage in 0..4) {
+                    littleEndianStageCounts[littleEndianStage] += 1
+                }
+
+                if (offsetMinutes <= 0 || offsetMinutes > 24 * 60) {
+                    continue
+                }
+
+                currentTimestampMs += offsetMinutes.toLong() * 60_000L
+            }
+        }
+
+        fun mergeParsedSleepStages(sleepSummary: ClassicSleepSummary): ClassicSleepSummary {
+            val sleepStartMs = bedTime.takeIf { it > 0 }?.let { it * 1000L }
+            val sleepEndMs = wakeupTime.takeIf { it > bedTime }?.let { it * 1000L }
+            if (sleepStartMs == null || sleepEndMs == null || sleepStageSamples.isEmpty()) {
+                return sleepSummary.copy(stageCount = maxOf(sleepSummary.stageCount ?: 0, stageCount))
+            }
+
+            val clippedStartMs = sleepStartMs - 60L * 60_000L
+            val clippedEndMs = sleepEndMs + 60L * 60_000L
+            val timeline = sleepStageSamples
+                .filter { (timestampMs, stage) -> stage in 0..4 && timestampMs in clippedStartMs..clippedEndMs }
+                .sortedBy { it.first }
+                .fold(linkedMapOf<Long, Int>()) { acc, sample ->
+                    acc[sample.first] = sample.second
+                    acc
+                }
+                .entries
+                .map { it.key to it.value }
+
+            var stageAwakeMinutes = 0
+            var stageDeepMinutes = 0
+            var stageLightMinutes = 0
+            var stageRemMinutes = 0
+
+            timeline.forEachIndexed { index, (timestampMs, stage) ->
+                val nextTimestampMs = timeline.getOrNull(index + 1)?.first ?: sleepEndMs
+                val intervalStartMs = maxOf(timestampMs, sleepStartMs)
+                val intervalEndMs = minOf(nextTimestampMs, sleepEndMs)
+                val intervalMinutes = ((intervalEndMs - intervalStartMs) / 60_000L).toInt()
+                if (intervalMinutes <= 0) {
+                    return@forEachIndexed
+                }
+
+                when (stage) {
+                    0 -> stageAwakeMinutes += intervalMinutes
+                    1 -> stageLightMinutes += intervalMinutes
+                    2 -> stageDeepMinutes += intervalMinutes
+                    3 -> stageRemMinutes += intervalMinutes
+                }
+            }
+
+            val sleepStageMinutes = stageDeepMinutes + stageLightMinutes + stageRemMinutes
+            val windowMinutes = durationMinutesBetweenEpochSeconds(bedTime, wakeupTime)
+            val summaryDuration = sleepSummary.durationMinutes
+            val targetDuration = summaryDuration ?: windowMinutes
+            val toleranceMinutes = targetDuration?.let { maxOf(20, (it * 0.25).toInt()) } ?: 20
+            val hasUsefulDetails = stageDeepMinutes > 0 || stageRemMinutes > 0
+            val isPlausible = sleepStageMinutes > 0 &&
+                hasUsefulDetails &&
+                windowMinutes != null &&
+                sleepStageMinutes <= windowMinutes &&
+                (targetDuration == null || kotlin.math.abs(sleepStageMinutes - targetDuration) <= toleranceMinutes)
+            val bigEndianStageBreakdown = bigEndianStageCounts.mapIndexed { index, count -> "$index:$count" }.joinToString(",")
+            val littleEndianStageBreakdown = littleEndianStageCounts.mapIndexed { index, count -> "$index:$count" }.joinToString(",")
+
+            if (!isPlausible) {
+                Log.i(
+                    TAG,
+                    "classic sleep stage totals ignored file=${file.idHex} duration=$sleepStageMinutes " +
+                        "deep=$stageDeepMinutes light=$stageLightMinutes rem=$stageRemMinutes awake=$stageAwakeMinutes " +
+                        "target=$targetDuration window=$windowMinutes packets=$stagePacketCount stages=$stageCount " +
+                        "bigStages=$bigEndianStageBreakdown littleStages=$littleEndianStageBreakdown",
+                )
+                return sleepSummary.copy(stageCount = maxOf(sleepSummary.stageCount ?: 0, stageCount))
+            }
+
+            val mergedSummary = sleepSummary.copy(
+                durationMinutes = sleepStageMinutes,
+                deepMinutes = stageDeepMinutes.takeIf { it > 0 },
+                lightMinutes = stageLightMinutes.takeIf { it > 0 },
+                remMinutes = stageRemMinutes.takeIf { it > 0 },
+                awakeMinutes = stageAwakeMinutes.takeIf { it > 0 } ?: sleepSummary.awakeMinutes,
+                stageCount = maxOf(sleepSummary.stageCount ?: 0, stageCount),
+            )
+            Log.i(
+                TAG,
+                "classic sleep stage totals file=${file.idHex} duration=${mergedSummary.durationMinutes} " +
+                    "deep=${mergedSummary.deepMinutes} light=${mergedSummary.lightMinutes} rem=${mergedSummary.remMinutes} " +
+                    "awake=${mergedSummary.awakeMinutes} packets=$stagePacketCount stages=${mergedSummary.stageCount}",
+            )
+            return mergedSummary
+        }
+
         while (offset + 17 <= dataEnd) {
             val headerOffset = findClassicSleepPacketHeader(bytes, offset, dataEnd) ?: break
             offset = headerOffset + 4
             if (offset + 13 > dataEnd) break
 
             offset += 1 // packet header length
+            val packetTimestamp = littleEndianUInt64Local(offset)
             offset += 8 // packet timestamp
             offset += 1 // parity
             val packetType = bytes[offset++].toInt() and 0xff
@@ -6341,7 +6483,7 @@ class DirectWatchPlugin : Plugin() {
             offset += dataLength
 
             if (packetType == 16 && dataLength >= 13) {
-                summary = ClassicSleepSummary(
+                val parsedSummary = ClassicSleepSummary(
                     startTime = epochSecondsIso(bedTime),
                     endTime = epochSecondsIso(wakeupTime),
                     durationMinutes = bigEndianUInt16(bytes, dataOffset + 1).takeIf { it > 0 },
@@ -6361,13 +6503,20 @@ class DirectWatchPlugin : Plugin() {
                     spo2Max = spo2Values.maxOrNull(),
                     samples = sleepSamples.values.toList(),
                 )
+                summary = parsedSummary
+                Log.i(
+                    TAG,
+                    "classic sleep summary file=${file.idHex} start=${parsedSummary.startTime} end=${parsedSummary.endTime} " +
+                        "duration=${parsedSummary.durationMinutes} deep=${parsedSummary.deepMinutes} light=${parsedSummary.lightMinutes} " +
+                        "rem=${parsedSummary.remMinutes} awake=${parsedSummary.awakeMinutes} stages=$stageCount",
+                )
             } else if (packetType == 17) {
-                stageCount += dataLength / 2
+                addSleepStageSamples(packetTimestamp, dataOffset, dataLength)
             }
         }
 
         val fallbackDuration = durationMinutesBetweenEpochSeconds(bedTime, wakeupTime)
-        return summary?.copy(stageCount = maxOf(summary.stageCount ?: 0, stageCount)) ?: ClassicSleepSummary(
+        return summary?.let { mergeParsedSleepStages(it) } ?: mergeParsedSleepStages(ClassicSleepSummary(
             startTime = epochSecondsIso(bedTime),
             endTime = epochSecondsIso(wakeupTime),
             durationMinutes = fallbackDuration,
@@ -6386,7 +6535,7 @@ class DirectWatchPlugin : Plugin() {
             spo2Min = spo2Values.minOrNull(),
             spo2Max = spo2Values.maxOrNull(),
             samples = sleepSamples.values.toList(),
-        )
+        ))
     }
 
     private fun parseClassicSleepStages(
@@ -6432,7 +6581,7 @@ class DirectWatchPlugin : Plugin() {
         if (!skip(1)) return null
         val stageCount = ((dataEnd - offset).coerceAtLeast(0) / 5).takeIf { it > 0 }
 
-        return ClassicSleepSummary(
+        val sleepSummary = ClassicSleepSummary(
             startTime = epochSecondsIso(bedTime),
             endTime = epochSecondsIso(wakeupTime),
             durationMinutes = duration ?: durationMinutesBetweenEpochSeconds(bedTime, wakeupTime),
@@ -6444,6 +6593,13 @@ class DirectWatchPlugin : Plugin() {
             stageCount = stageCount,
             isAwake = false,
         )
+        Log.i(
+            TAG,
+            "classic sleep stages file=${file.idHex} start=${sleepSummary.startTime} end=${sleepSummary.endTime} " +
+                "duration=${sleepSummary.durationMinutes} deep=${sleepSummary.deepMinutes} light=${sleepSummary.lightMinutes} " +
+                "rem=${sleepSummary.remMinutes} awake=${sleepSummary.awakeMinutes} stages=$stageCount",
+        )
+        return sleepSummary
     }
 
     private fun parseClassicDailySummary(
@@ -8237,9 +8393,10 @@ class DirectWatchPlugin : Plugin() {
         val combined = java.io.ByteArrayOutputStream()
         val ackedSequences = mutableSetOf<Int>()
         var nextSequenceNumber = initialSequenceNumber
+        val includeHistory = includeSleep
 
-        Log.i(TAG, "classic bridge activity refresh entryDate=$entryDate")
-        buildClassicPostAuthProbeCommands(includeHistory = false).forEach { command ->
+        Log.i(TAG, "classic bridge activity refresh entryDate=$entryDate includeHistory=$includeHistory includeSleep=$includeSleep")
+        buildClassicPostAuthProbeCommands(includeHistory = includeHistory).forEach { command ->
             socket.outputStream.write(
                 buildClassicV2EncryptedCommandPacket(
                     command = command.payload,
@@ -8251,16 +8408,26 @@ class DirectWatchPlugin : Plugin() {
         }
         socket.outputStream.flush()
 
-        val inventoryError = readClassicPacketsUntilActivitySelection(
-            socket,
-            packets,
-            combined,
-            decryptionKey,
-            entryDate,
-            includeSleep,
-            CLASSIC_POST_AUTH_READ_MS,
-            ackedSequences,
-        )
+        val inventoryError = if (includeHistory) {
+            readClassicPackets(
+                socket = socket,
+                packets = packets,
+                combined = combined,
+                durationMs = CLASSIC_POST_AUTH_HISTORY_READ_MS,
+                ackedClassicV2DataSequences = ackedSequences,
+            )
+        } else {
+            readClassicPacketsUntilActivitySelection(
+                socket,
+                packets,
+                combined,
+                decryptionKey,
+                entryDate,
+                includeSleep,
+                CLASSIC_POST_AUTH_READ_MS,
+                ackedSequences,
+            )
+        }
         if (inventoryError != null) {
             Log.w(TAG, "classic bridge activity inventory warning: $inventoryError")
         }
