@@ -5006,7 +5006,7 @@ function renderCoachReadinessMetricSvg(
   referenceValue: number | null,
 ) {
   const width = 300;
-  const hasValueLabels = definition.metric === "restingHr";
+  const hasValueLabels = shouldRenderCoachMetricValueLabels(definition);
   const height = hasValueLabels ? 132 : 116;
   const leftPadding = 34;
   const rightPadding = 10;
@@ -5069,7 +5069,7 @@ function shouldRenderCoachMetricValueLabel(
   total: number,
   definition: CoachReadinessChartDefinition,
 ) {
-  if (definition.metric !== "restingHr") {
+  if (!shouldRenderCoachMetricValueLabels(definition)) {
     return false;
   }
 
@@ -5082,6 +5082,12 @@ function shouldRenderCoachMetricValueLabel(
   }
 
   return index % (total <= 22 ? 2 : 3) === 0;
+}
+
+function shouldRenderCoachMetricValueLabels(definition: CoachReadinessChartDefinition) {
+  return definition.metric === "readiness"
+    || definition.metric === "restingHr"
+    || definition.metric === "bodyWeight";
 }
 
 function formatCoachReadinessPointLabel(value: number, definition: CoachReadinessChartDefinition) {

@@ -2807,6 +2807,14 @@ button {
   fill: #1d6f9f;
 }
 
+.coach-athlete-metric-value.is-readiness {
+  fill: var(--accent);
+}
+
+.coach-athlete-metric-value.is-weight {
+  fill: #8a5415;
+}
+
 .coach-athlete-metric-reference {
   stroke: var(--accent);
   stroke-dasharray: 5 7;
