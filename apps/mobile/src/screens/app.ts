@@ -140,7 +140,7 @@ const DIRECT_WATCH_HISTORY_SYNC_DAYS = 30;
 const DIRECT_WATCH_HISTORY_SYNC_DAY_DELAY_MS = 350;
 const COACH_READINESS_CHART_LIMIT = 4;
 const DIRECT_WATCH_SYNC_ALREADY_RUNNING_MESSAGE =
-  "PERFORM Sync уже синхронизирует часы. Данные обновятся автоматически.";
+  "Часы уже синхронизируются. Данные обновятся автоматически.";
 const DEVICE_WORKOUT_SERIES_RENDER_LIMIT = 1_600;
 const WATCH_SLEEP_MIN_MEANINGFUL_MINUTES = 120;
 const WATCH_SLEEP_SHORTER_TOLERANCE_MINUTES = 30;
@@ -1171,7 +1171,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
     const directWatchConfig = loadDirectWatchConfig();
     if (isDirectWatchRuntime() && directWatchConfig.deviceId && directWatchConfig.authKeyHex) {
       try {
-        update({ error: null, isBusy: true, message: "PERFORM Sync читает день напрямую с часов..." });
+        update({ error: null, isBusy: true, message: "Читаю день напрямую с часов..." });
         const { payload, payloadError, serviceBusy, serviceResult } = await readDirectWatchDailyWithServiceSession(
           entryDate,
           directWatchConfig.deviceId,
@@ -1188,7 +1188,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
           }
           throw payloadError instanceof Error
             ? payloadError
-            : new Error("PERFORM Sync не смог считать день с часов.");
+            : new Error("Не удалось считать день с часов.");
         }
         await submitDirectWatchSyncPayload(payload, { silent: true });
         await refreshData(true).catch(() => undefined);
@@ -1267,7 +1267,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
         }
       }
     } else if (!serviceOk) {
-      const serviceError = loadDirectWatchConfig().lastServiceError || "PERFORM Sync не смог открыть прямую сессию часов.";
+      const serviceError = loadDirectWatchConfig().lastServiceError || "Не удалось открыть прямое подключение часов.";
       serviceBusy = isDirectWatchSyncAlreadyRunningMessage(serviceError);
       payloadError = new Error(serviceBusy ? DIRECT_WATCH_SYNC_ALREADY_RUNNING_MESSAGE : serviceError);
     }
@@ -1382,7 +1382,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
     if (state.session.user?.role !== "athlete") {
       if (!options.silent) {
         update({
-          error: "PERFORM Sync выполняет спортсмен в своём Android-приложении.",
+          error: "Прямая синхронизация часов выполняется в Android-приложении спортсмена.",
           isBusy: false,
           message: null,
         });
@@ -1395,7 +1395,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
 
     if (!targetDeviceId) {
       if (!options.silent) {
-        update({ error: "Сначала выберите часы в блоке PERFORM Sync." });
+        update({ error: "Сначала выберите часы в настройке часов." });
       }
       return false;
     }
@@ -1417,7 +1417,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
     void syncDirectWatchNativeCoordinatorConfig(nextConfig);
 
     if (!options.silent) {
-      update({ error: null, isBusy: true, message: "PERFORM Sync читает день напрямую с часов..." });
+      update({ error: null, isBusy: true, message: "Читаю день напрямую с часов..." });
     }
 
     try {
@@ -1435,7 +1435,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
         }
         throw payloadError instanceof Error
           ? payloadError
-          : new Error("PERFORM Sync не смог считать день с часов.");
+          : new Error("Не удалось считать день с часов.");
       }
       await submitDirectWatchSyncPayload(payload, { silent: true });
       if (!options.silent) {
@@ -1450,7 +1450,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
     } catch (error) {
       if (!options.silent) {
         update({
-          error: error instanceof Error ? error.message : "PERFORM Sync не смог считать день с часов.",
+          error: error instanceof Error ? error.message : "Не удалось считать день с часов.",
           isBusy: false,
           message: null,
         });
@@ -1462,7 +1462,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
   const syncDirectWatchFull = async (entryDate: string, deviceId?: string | null) => {
     if (state.session.user?.role !== "athlete") {
       update({
-        error: "PERFORM Sync выполняет спортсмен в своём Android-приложении.",
+        error: "Прямая синхронизация часов выполняется в Android-приложении спортсмена.",
         isBusy: false,
         message: null,
       });
@@ -1521,7 +1521,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
 
     const errorMessage = payloadError instanceof Error
       ? payloadError.message
-      : "PERFORM Sync не смог считать данные часов.";
+      : "Не удалось считать данные часов.";
     const isNoDailyFiles = errorMessage.includes("не отдали отдельные файлы активности");
     update({
       error: isNoDailyFiles && serviceOk ? null : errorMessage,
@@ -1828,7 +1828,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
 
     if (!targetDeviceId) {
       if (!options.silent) {
-        update({ error: "Сначала выберите часы в блоке PERFORM Sync." });
+        update({ error: "Сначала выберите часы в настройке часов." });
       }
       return false;
     }
@@ -1863,7 +1863,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
       update({
         error: null,
         isBusy: true,
-        message: "PERFORM Sync передал задачу native-сервису часов...",
+        message: "Передаю задачу фоновой синхронизации часов...",
       });
     }
 
@@ -1915,7 +1915,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
         : serviceResult?.error ||
           serviceResult?.authKeyError ||
           request.blockedReason ||
-          "Native-сервис часов принял задачу, но результат ещё не вернулся.";
+          "Фоновая синхронизация часов приняла задачу, но результат ещё не вернулся.";
       rememberDirectWatchConfig({
         deviceId: targetDeviceId,
         deviceName: serviceStatus?.deviceName ?? targetDevice?.name ?? config.deviceName,
@@ -1965,7 +1965,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
         message: ok
           ? serviceResult
             ? formatDirectWatchServiceSyncMessage(serviceResult, weatherSourceLabel, weatherError)
-            : "Native-сервис часов запущен. Данные появятся после завершения очереди."
+            : "Фоновая синхронизация часов запущена. Данные появятся после завершения очереди."
           : serviceBusy
             ? DIRECT_WATCH_SYNC_ALREADY_RUNNING_MESSAGE
             : null,
@@ -2119,7 +2119,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
 
   const selectDirectWatchDevice = (deviceId: string) => {
     if (!deviceId) {
-      update({ error: "Выберите часы для PERFORM Sync." });
+      update({ error: "Выберите часы для прямой синхронизации." });
       return;
     }
 
@@ -2133,7 +2133,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
     void syncDirectWatchNativeCoordinatorConfig(nextConfig);
     update({
       error: null,
-      message: `${device?.name || "Часы"} выбраны для PERFORM Sync.`,
+      message: `${device?.name || "Часы"} выбраны для прямой синхронизации.`,
     });
   };
 
@@ -2184,7 +2184,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
       return;
     }
 
-    update({ error: null, isBusy: true, message: "Подключаюсь к часам и читаю BLE-сервисы..." });
+    update({ error: null, isBusy: true, message: "Подключаюсь к часам и читаю служебные каналы..." });
 
     try {
       const inspection = await inspectDirectWatchDevice(deviceId);
@@ -2246,7 +2246,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
         error: null,
         isBusy: false,
         message: isBonded
-          ? "Сопряжение выполнено. Теперь нажмите “Проверить”, чтобы прочитать BLE-сервисы часов."
+          ? "Сопряжение выполнено. Теперь нажмите “Проверить”, чтобы прочитать служебные каналы часов."
           : "Сопряжение не завершено. Проверьте системное окно Bluetooth и подтвердите запрос на часах.",
       });
     } catch (error) {
@@ -2304,7 +2304,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
 
   const probeDirectWatchClassic = async (deviceId: string, authStep1 = false) => {
     if (!deviceId) {
-      update({ error: "Выберите часы для проверки Classic/SPP." });
+      update({ error: "Выберите часы для проверки подключения." });
       return;
     }
 
@@ -2312,8 +2312,8 @@ export function bootstrapMobileApp(root: HTMLElement) {
       error: null,
       isBusy: true,
       message: authStep1
-        ? "Проверяю первый шаг Xiaomi Auth..."
-        : "Проверяю Classic/SPP-канал часов...",
+        ? "Проверяю авторизацию часов..."
+        : "Проверяю прямое подключение часов...",
     });
 
     try {
@@ -2333,7 +2333,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
           ...state.directWatchDiagnostic,
           classicProbe: null,
         },
-        error: error instanceof Error ? error.message : "Не удалось проверить Classic/SPP-канал часов.",
+        error: error instanceof Error ? error.message : "Не удалось проверить прямое подключение часов.",
         isBusy: false,
         message: null,
       });
@@ -2342,14 +2342,14 @@ export function bootstrapMobileApp(root: HTMLElement) {
 
   const startDirectWatchConnection = async (deviceId: string) => {
     if (!deviceId) {
-      update({ error: "Выберите часы для PERFORM Sync." });
+      update({ error: "Выберите часы для прямой синхронизации." });
       return;
     }
 
     update({
       error: null,
       isBusy: true,
-      message: "Открываю PERFORM Sync-сессию и подписываюсь на BLE-каналы часов...",
+      message: "Открываю прямое подключение и слушаю каналы часов...",
     });
 
     try {
@@ -2366,7 +2366,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
       });
     } catch (error) {
       update({
-        error: error instanceof Error ? error.message : "Не удалось открыть PERFORM Sync-сессию.",
+        error: error instanceof Error ? error.message : "Не удалось открыть прямое подключение часов.",
         isBusy: false,
         message: null,
       });
@@ -2377,7 +2377,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
     update({
       error: null,
       isBusy: true,
-      message: "Отключаю PERFORM Sync от часов...",
+      message: "Отключаю прямую синхронизацию от часов...",
     });
 
     try {
@@ -2389,11 +2389,11 @@ export function bootstrapMobileApp(root: HTMLElement) {
         },
         error: null,
         isBusy: false,
-        message: "PERFORM Sync-сессия остановлена.",
+        message: "Прямое подключение часов остановлено.",
       });
     } catch (error) {
       update({
-        error: error instanceof Error ? error.message : "Не удалось остановить PERFORM Sync-сессию.",
+        error: error instanceof Error ? error.message : "Не удалось остановить прямое подключение часов.",
         isBusy: false,
         message: null,
       });
@@ -5354,20 +5354,9 @@ function renderDeviceHealthCard(
           <h3>${escapeHtml(formatDeviceHealthCardTitle(summary))}</h3>
           <p>${escapeHtml(formatDate(date))} · ${escapeHtml(syncLabel)}</p>
         </div>
-        ${canSync && isAppleHealthRuntime() ? `
+        ${canSync ? `
           <div class="device-health-actions">
-            <button class="secondary-action" data-device-health-sync data-device-health-date="${escapeHtml(date)}" type="button" ${state.isBusy ? "disabled" : ""}>
-              Синхронизировать часы
-            </button>
-          </div>
-        ` : canSync ? `
-          <div class="device-health-actions">
-            <button class="secondary-action" data-huawei-health-sync data-huawei-health-date="${escapeHtml(date)}" type="button" ${state.isBusy ? "disabled" : ""}>
-              Huawei
-            </button>
-            <button class="secondary-action" data-health-connect-sync data-health-connect-date="${escapeHtml(date)}" type="button" ${state.isBusy ? "disabled" : ""}>
-              Health Connect
-            </button>
+            ${renderDeviceHealthSyncActionButton(state, date)}
           </div>
         ` : ""}
       </div>
@@ -5396,11 +5385,13 @@ function renderDeviceHealthCard(
           formatDeviceHealthWorkoutValue(summary),
           formatDeviceHealthWorkoutDetail(summary),
         )}
-        ${renderTodayIndicator(
-          "Источник",
-          summary ? "подключён" : "нет данных",
-          summary?.sourceDevice || "разрешение выдаёт спортсмен",
-        )}
+        ${summary?.provider === "direct-watch"
+          ? ""
+          : renderTodayIndicator(
+            "Источник",
+            summary ? "подключён" : "нет данных",
+            summary?.sourceDevice || "разрешение выдаёт спортсмен",
+          )}
       </div>
       <div class="device-health-signal-list">
         <article>
@@ -5419,7 +5410,7 @@ function renderDeviceHealthCard(
           ${workouts.map((workout) => `
             <article>
               <strong>${escapeHtml(formatDeviceWorkoutTitle(workout))}</strong>
-              <p>${escapeHtml(formatDeviceWorkoutSummary(workout) || workout.sourceDevice || "Health Connect")}</p>
+              <p>${escapeHtml(formatDeviceWorkoutSummary(workout) || workout.sourceDevice || "данные тренировки получены")}</p>
             </article>
           `).join("")}
         </div>
@@ -5480,9 +5471,7 @@ function renderCompactDeviceHealthCard(
       ` : ""}
       ${canSync ? `
         <div class="device-health-actions device-health-compact-actions">
-          <button class="secondary-action" data-device-health-sync data-device-health-date="${escapeHtml(date)}" type="button" ${state.isBusy ? "disabled" : ""}>
-            Синхронизировать часы
-          </button>
+          ${renderDeviceHealthSyncActionButton(state, date)}
         </div>
       ` : ""}
       ${canSync && SHOW_DIRECT_WATCH_DIAGNOSTICS && isDirectWatchRuntime() ? renderDirectWatchDiagnostics(state, date) : ""}
@@ -7086,9 +7075,7 @@ function renderWatchRecoveryCard(
         <span>${escapeHtml(formatWatchInsightText(summary))}</span>
       </div>
       <div class="watch-actions">
-        <button class="primary-action" data-device-health-sync data-device-health-date="${escapeHtml(date)}" type="button" ${state.isBusy ? "disabled" : ""}>
-          Считать данные за сегодня
-        </button>
+        ${renderDeviceHealthSyncActionButton(state, date, "Считать данные за сегодня", "primary-action")}
       </div>
     </section>
   `;
@@ -7153,7 +7140,7 @@ function renderWatchHeartRateChartCard(
           </aside>
         </div>
       ` : `
-        <p class="watch-empty-note">Пока есть только дневной итог. После новой синхронизации PERFORM Sync сохранит все точки пульса без усреднения.</p>
+        <p class="watch-empty-note">Пока есть только дневной итог. После новой синхронизации часы передадут точки пульса без усреднения.</p>
       `}
     </section>
   `;
@@ -8423,7 +8410,7 @@ function formatWatchSourceHint(summary: DeviceHealthDailySummary | null) {
   }
 
   if (isDirectWatchRuntime()) {
-    return "PERFORM Sync, ключ часов и Bluetooth";
+    return "Прямая синхронизация, ключ часов и Bluetooth";
   }
 
   return "Health Connect и приложения здоровья";
@@ -8458,7 +8445,7 @@ function formatWatchProviderLabel(summary: DeviceHealthDailySummary | null) {
 
 function formatWatchSourceDescription(summary: DeviceHealthDailySummary | null) {
   if (summary?.provider === "direct-watch") {
-    return "PERFORM Sync читает часы напрямую. Диагностика ниже нужна только для настройки и проверки соединения.";
+    return "Прямая синхронизация читает часы напрямую. Настройка ниже нужна только для подключения и проверки соединения.";
   }
 
   if (summary?.provider === "apple-health" || isAppleHealthRuntime()) {
@@ -8500,7 +8487,7 @@ function renderDirectWatchDiagnostics(state: MobileAppState, date: string) {
     <div class="device-health-diagnostics direct-watch-diagnostics">
       <div class="summary-inline-head">
         <div>
-          <span>PERFORM Sync</span>
+          <span>Прямая синхронизация</span>
           <h3>Диагностика прямого подключения</h3>
         </div>
         <div class="direct-watch-header-actions">
@@ -8518,13 +8505,13 @@ function renderDirectWatchDiagnostics(state: MobileAppState, date: string) {
         </div>
       </div>
       <p>
-        Android проверяет часы напрямую по Bluetooth: поиск, сопряжение, BLE-сервисы и чтение дневных файлов активности.
+        Android проверяет часы напрямую по Bluetooth: поиск, сопряжение, служебные каналы и чтение дневных файлов активности.
       </p>
       <details class="direct-watch-services" ${hasAuthKey ? "" : "open"}>
-        <summary>Настройка PERFORM Sync</summary>
+        <summary>Настройка прямой синхронизации</summary>
         <div class="device-health-diagnostics-grid">
           <article>
-            <span>Auth Key</span>
+            <span>Ключ часов</span>
             <strong>${escapeHtml(hasAuthKey ? "сохранён на телефоне" : "не сохранён")}</strong>
           </article>
           <article>
@@ -8541,7 +8528,7 @@ function renderDirectWatchDiagnostics(state: MobileAppState, date: string) {
           </article>
         </div>
         <label class="wide-field">
-          <span>Auth Key часов</span>
+          <span>Ключ часов</span>
           <input data-direct-watch-auth-key inputmode="text" placeholder="32 hex-символа" type="password" autocomplete="off">
         </label>
         <label class="wide-field">
@@ -8601,7 +8588,7 @@ function renderDirectWatchDiagnostics(state: MobileAppState, date: string) {
               </div>
               <div class="direct-watch-device-actions">
                 ${activeSessionDeviceId === device.id ? `
-                  <span class="direct-watch-session-pill">PERFORM Sync активен</span>
+                  <span class="direct-watch-session-pill">Подключение активно</span>
                 ` : `
                   <button
                     class="secondary-action"
@@ -8733,7 +8720,7 @@ function renderDirectWatchDiagnostics(state: MobileAppState, date: string) {
           ${renderDirectWatchStandardReadings(inspection)}
           ${services.length ? `
             <details class="direct-watch-services">
-              <summary>Показать BLE-сервисы</summary>
+              <summary>Показать служебные каналы</summary>
               <ul>
                 ${services.slice(0, 12).map((service) => `
                   <li>
@@ -8764,7 +8751,7 @@ function renderDirectWatchSession(
   return `
     <div class="direct-watch-session ${session.connected ? "is-connected" : "is-stopped"}">
       <div class="device-health-status ${session.connected ? "is-connected" : "is-missing"}">
-        <strong>${escapeHtml(session.connected ? "PERFORM Sync подключен" : "PERFORM Sync отключен")}</strong>
+        <strong>${escapeHtml(session.connected ? "Часы подключены" : "Часы отключены")}</strong>
         <span>${escapeHtml(formatDirectWatchSessionSummary(session))}</span>
       </div>
       <div class="device-health-diagnostics-grid">
@@ -8800,7 +8787,7 @@ function renderDirectWatchSession(
           ${packetItems.map((packet) => `
             <article>
               <div>
-                <strong>${escapeHtml(packet.name || packet.characteristicUuid || "BLE packet")}</strong>
+                <strong>${escapeHtml(packet.name || packet.characteristicUuid || "пакет часов")}</strong>
                 <span>${escapeHtml(packet.receivedAt ? formatDateTime(packet.receivedAt) : "только что")} · ${escapeHtml(String(packet.byteLength ?? 0))} байт</span>
               </div>
               <code>${escapeHtml(packet.rawHex || "empty")}</code>
@@ -8881,7 +8868,7 @@ function renderDirectWatchClassicProbe(
           `).join("")}
         </div>
       ` : `
-        <p class="muted-copy">Classic/SPP открылся без входящих пакетов. Если это повторится, часы могут ждать авторизацию или канал занят другим приложением.</p>
+        <p class="muted-copy">Прямое подключение открылось без входящих пакетов. Если это повторится, часы могут ждать авторизацию или канал занят другим приложением.</p>
       `}
       ${probe.decryptedPackets?.length ? `
         <div class="direct-watch-packet-list">
@@ -9043,7 +9030,7 @@ function formatDirectWatchInspectionMessage(
   inspection: NonNullable<MobileAppState["directWatchDiagnostic"]["inspection"]>,
 ) {
   if (inspection.canSubscribeHeartRate) {
-    return "Диагностика готова: часы отдают стандартный канал живого пульса. Следующий шаг — тестовое чтение пульса и запись в PERFORM Sync.";
+    return "Диагностика готова: часы отдают стандартный канал живого пульса. Следующий шаг — тестовое чтение пульса и запись в приложение.";
   }
 
   if (inspection.canReadBatteryLevel || inspection.canReadDeviceInfo) {
@@ -9057,21 +9044,21 @@ function formatDirectWatchSessionMessage(
   session: NonNullable<MobileAppState["directWatchDiagnostic"]["session"]>,
 ) {
   if (!session.connected) {
-    return "PERFORM Sync не удержал подключение к часам. Повторите, когда часы в режиме сопряжения и рядом с телефоном.";
+    return "Прямая синхронизация не удержала подключение к часам. Повторите, когда часы в режиме сопряжения и рядом с телефоном.";
   }
 
   if ((session.subscribedCount ?? 0) > 0) {
-    return "PERFORM Sync подключен: подписки открыты. Теперь ждём сырые пакеты от часов для разбора протокола.";
+    return "Часы подключены: служебные каналы открыты. Теперь ждём пакеты от часов для разбора протокола.";
   }
 
-  return "PERFORM Sync подключился к часам, но Android не смог включить уведомления BLE-характеристик.";
+  return "Приложение подключилось к часам, но Android не смог включить уведомления служебных каналов.";
 }
 
 function formatDirectWatchClassicProbeMessage(
   probe: NonNullable<MobileAppState["directWatchDiagnostic"]["classicProbe"]>,
 ) {
   if (probe.error) {
-    return "Classic/SPP проверен, но канал не открылся. Подробность показана в диагностике.";
+    return "Прямое подключение проверено, но канал не открылся. Подробность показана в диагностике.";
   }
 
   if (probe.detectedProtocol === "spp-v1" || probe.detectedProtocol === "spp-v2") {
@@ -9084,16 +9071,16 @@ function formatDirectWatchClassicProbeMessage(
     if (probe.authStage === "watch-nonce") {
       return probe.authKeyStatus === "valid"
         ? "Ключ совпал с ответом часов. Следующий шаг — завершить авторизацию."
-        : "Часы отдали первый ответ Xiaomi Auth. Следующий шаг — проверить настоящий Auth Key.";
+        : "Часы отдали первый ответ авторизации. Следующий шаг — проверить сохранённый ключ.";
     }
-    return "Classic/SPP канал часов отвечает. Следующий шаг — авторизация через Auth Key.";
+    return "Прямой канал часов отвечает. Следующий шаг — авторизация через ключ.";
   }
 
   if (probe.connected) {
-    return "Classic/SPP сокет открылся, но часы не вернули версию протокола.";
+    return "Прямой канал открылся, но часы не вернули версию протокола.";
   }
 
-  return "Classic/SPP канал не подтвердился.";
+  return "Прямой канал не подтвердился.";
 }
 
 function hasDirectWatchServiceSyncSignal(result: DirectWatchServiceSyncResult | null | undefined) {
@@ -9539,21 +9526,21 @@ function formatDirectWatchClassicProbeTitle(
   probe: NonNullable<MobileAppState["directWatchDiagnostic"]["classicProbe"]>,
 ) {
   if (probe.error) {
-    return "Classic/SPP не прошёл";
+    return "Прямой канал не прошёл";
   }
 
   if (probe.detectedProtocol === "spp-v1" || probe.detectedProtocol === "spp-v2") {
     if (probe.authStage === "authenticated") {
       return "Xiaomi Auth пройден";
     }
-    return probe.authStage === "watch-nonce" ? "Xiaomi Auth отвечает" : "Classic/SPP отвечает";
+    return probe.authStage === "watch-nonce" ? "Авторизация отвечает" : "Прямой канал отвечает";
   }
 
   if (probe.connected) {
-    return "Classic/SPP подключился";
+    return "Прямой канал подключился";
   }
 
-  return "Classic/SPP не подключился";
+  return "Прямой канал не подключился";
 }
 
 function formatDirectWatchClassicProbeSummary(
@@ -9586,7 +9573,7 @@ function formatDirectWatchUnpairMessage(status: string | null | undefined) {
   }
 
   if (status === "still-bonded") {
-    return "Часы снова остались в системной паре. Для PERFORM Sync нужно удалить пару и включить режим нового сопряжения на часах.";
+    return "Часы снова остались в системной паре. Для прямой синхронизации нужно удалить пару и включить режим нового сопряжения на часах.";
   }
 
   return "Сброс привязки запущен. Если часы не найдутся в BLE, переведите их в режим нового сопряжения.";
@@ -9651,7 +9638,7 @@ function renderDirectWatchStandardReadings(
     <div class="direct-watch-reading-list">
       ${readings.map((reading) => `
         <article>
-          <span>${escapeHtml(reading.name || "BLE value")}</span>
+          <span>${escapeHtml(reading.name || "значение часов")}</span>
           <strong>${escapeHtml(formatDirectWatchReadingValue(reading))}</strong>
         </article>
       `).join("")}
@@ -9713,7 +9700,7 @@ function renderHealthConnectDiagnostics(
       value: readDeviceHealthRawText(rawPayload, "dataOrigin") || "Health Connect",
     },
     {
-      label: "Xiaomi / Notify",
+      label: "Xiaomi",
       value: readDeviceHealthRawBoolean(rawPayload, "hasKnownHealthSource") === false ? "не найден" : "найден",
     },
     {
@@ -9767,13 +9754,13 @@ function renderHealthConnectDiagnostics(
   const allRestingHrCount = readDeviceHealthRawOptionalCount(rawPayload, "allRestingHeartRateRecordCount");
   const restingHrSource = readDeviceHealthRawText(rawPayload, "restingHeartRateSource");
   const guidance = sleepCount === 0 && (allSleepCount ?? 0) > 0
-    ? "Сон есть в Health Connect, но источник не входит в поддерживаемые источники Xiaomi/Notify. Проверьте, какое приложение записало сон."
+    ? "Сон есть в Health Connect, но источник не входит в поддерживаемые источники Xiaomi. Проверьте, какое приложение записало сон."
     : restingHrCount === 0 && (allRestingHrCount ?? 0) > 0
-      ? "Пульс покоя есть в Health Connect, но источник не входит в поддерживаемые источники Xiaomi/Notify. Проверьте источник записи пульса покоя."
+      ? "Пульс покоя есть в Health Connect, но источник не входит в поддерживаемые источники Xiaomi. Проверьте источник записи пульса покоя."
       : restingHrCount === 0 && isEstimatedRestingHrSource(restingHrSource)
         ? "Отдельного пульса покоя нет, поэтому PERFORM рассчитал средний пульс только по замерам внутри интервала сна. Для аналитики это помечено как оценка."
       : sleepCount === 0 || restingHrCount === 0
-        ? "Если разрешения включены, но счётчик Xiaomi/Notify 0, значит приложение-источник не передало этот тип данных в Health Connect за выбранный день."
+        ? "Если разрешения включены, но счётчик Xiaomi 0, значит приложение-источник не передало этот тип данных в Health Connect за выбранный день."
     : "Health Connect отдал ключевые записи для разбора дня.";
 
   const content = `
@@ -9870,8 +9857,8 @@ function formatHealthConnectDiagnosticCount(
   const allSourcesCount = readDeviceHealthRawOptionalCount(rawPayload, allSourcesKey);
 
   return allSourcesCount === null
-    ? `${miFitnessCount} Xiaomi/Notify`
-    : `${miFitnessCount} Xiaomi/Notify / ${allSourcesCount} всего`;
+    ? `${miFitnessCount} Xiaomi`
+    : `${miFitnessCount} Xiaomi / ${allSourcesCount} всего`;
 }
 
 function formatHealthConnectRestingHrEstimate(rawPayload: Record<string, unknown>) {
@@ -9994,7 +9981,7 @@ function formatDeviceHealthSyncLabel(summary: DeviceHealthDailySummary | null) {
 
 function formatDeviceHealthProviderLabel(summary: DeviceHealthDailySummary | null) {
   if (summary?.provider === "direct-watch") {
-    return "PERFORM Sync";
+    return "Часы";
   }
 
   if (summary?.provider === "apple-health" || isAppleHealthRuntime()) {
@@ -12259,6 +12246,36 @@ function renderTodayIndicator(label: string, value: string, detail: string) {
       <strong>${escapeHtml(value)}</strong>
       <small>${escapeHtml(detail)}</small>
     </article>
+  `;
+}
+
+function renderDeviceHealthSyncActionButton(
+  state: MobileAppState,
+  date: string,
+  label = "Синхронизировать часы",
+  buttonClass = "secondary-action",
+) {
+  if (isDirectWatchRuntime()) {
+    const config = loadDirectWatchConfig();
+    const canDirectSync = Boolean(config.deviceId && config.authKeyHex);
+
+    return `
+      <button
+        class="${escapeHtml(buttonClass)}"
+        data-direct-watch-full-sync="${escapeHtml(config.deviceId || "")}"
+        data-direct-watch-full-sync-date="${escapeHtml(date)}"
+        type="button"
+        ${state.isBusy || !canDirectSync ? "disabled" : ""}
+      >
+        ${escapeHtml(label)}
+      </button>
+    `;
+  }
+
+  return `
+    <button class="${escapeHtml(buttonClass)}" data-device-health-sync data-device-health-date="${escapeHtml(date)}" type="button" ${state.isBusy ? "disabled" : ""}>
+      ${escapeHtml(label)}
+    </button>
   `;
 }
 

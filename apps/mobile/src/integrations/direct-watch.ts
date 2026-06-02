@@ -679,7 +679,7 @@ export async function startDirectWatchSession(deviceId: string): Promise<DirectW
   const plugin = getDirectWatchPlugin();
 
   if (!plugin?.startSession) {
-    throw new Error("PERFORM Sync-сессия доступна только в Android-сборке PERFORM.");
+    throw new Error("Прямое подключение часов доступно только в Android-сборке PERFORM.");
   }
 
   if (plugin.requestAuthorization) {
@@ -697,7 +697,7 @@ export async function stopDirectWatchSession(): Promise<DirectWatchSessionStatus
   const plugin = getDirectWatchPlugin();
 
   if (!plugin?.stopSession) {
-    throw new Error("PERFORM Sync-сессия доступна только в Android-сборке PERFORM.");
+    throw new Error("Прямое подключение часов доступно только в Android-сборке PERFORM.");
   }
 
   const status = await plugin.stopSession();
@@ -842,7 +842,7 @@ export async function probeDirectWatchClassicSession(
   const plugin = getDirectWatchPlugin();
 
   if (!plugin?.probeClassicSession) {
-    throw new Error("Classic/SPP-диагностика доступна только в Android-сборке PERFORM.");
+    throw new Error("Проверка прямого подключения часов доступна только в Android-сборке PERFORM.");
   }
 
   if (plugin.requestAuthorization) {
@@ -1048,7 +1048,7 @@ function buildDirectWatchDailySyncPayload(
   const workoutSummary = buildDirectWatchWorkoutSummary(workouts.workouts);
 
   if (!sleep && !heartRate && !oxygenSaturation && !dailySummary && !workoutSummary) {
-    throw new Error("PERFORM Sync прочитал день, но пока не нашёл сон, пульс, SpO2 или итоговые показатели.");
+    throw new Error("Часы ответили, но за этот день пока не найден сон, пульс, SpO2 или итоговые показатели.");
   }
 
   return {
@@ -1056,7 +1056,7 @@ function buildDirectWatchDailySyncPayload(
     summary: {
       entryDate,
       provider: "direct-watch",
-      sourceDevice: probe.deviceName || "Redmi Watch / PERFORM Sync",
+      sourceDevice: probe.deviceName || "Redmi Watch / Часы",
       sleep,
       heartRate,
       oxygenSaturation,
@@ -1074,7 +1074,7 @@ function formatDirectWatchAuthFailure(probe: DirectWatchClassicProbe) {
     return probe.error;
   }
 
-  return probe.authKeyError || probe.error || "PERFORM Sync не смог авторизоваться на часах.";
+  return probe.authKeyError || probe.error || "Не удалось авторизоваться на часах.";
 }
 
 function dedupeDirectWatchActivityPackets(packets: DirectWatchDecryptedPacket[]) {
@@ -2571,7 +2571,7 @@ function buildDirectWatchDeviceWorkout(
     minHeartRateBpm: normalizeWorkoutHeartRate(summaryPacket?.activityHeartRateMin) ?? minDirectWatchNumber(heartRates),
     provider: "direct-watch",
     rawPayload: {
-      dataOrigin: "PERFORM Sync",
+      dataOrigin: "Часы",
       files: files.map((file) => ({
         detailType: file.detailType ?? null,
         idHex: file.idHex ?? null,
@@ -2638,7 +2638,7 @@ function buildDirectWatchDeviceWorkout(
       },
     },
     samples,
-    sourceDevice: probe.deviceName || "Redmi Watch / PERFORM Sync",
+    sourceDevice: probe.deviceName || "Redmi Watch / Часы",
     sourceWorkoutId,
     startTime: new Date(startMs).toISOString(),
     syncedAt: new Date().toISOString(),
@@ -3023,7 +3023,7 @@ function buildDirectWatchRawPayload(
     activityFileProbeCount: probe.activityFileProbeCount ?? 0,
     activityFileProbeFailedCount: probe.activityFileProbeFailedCount ?? 0,
     authKeyStatus: probe.authKeyStatus ?? null,
-    dataOrigin: "PERFORM Sync",
+    dataOrigin: "Часы",
     fileCount: dayPackets.length,
     workoutFileCount: workouts.length,
     activityFileProbeRequests: (probe.activityFileProbeRequests ?? []).slice(0, 48).map((request) => ({
