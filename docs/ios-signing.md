@@ -77,8 +77,7 @@ Store Connect asks for export compliance answers on each new build.
 
 ## App Store Release Metadata
 
-Before sending the production App Store version to review, keep these public
-links live on the deployed web site:
+Keep these public links live on the deployed web site during App Review:
 
 - Support URL: `https://185.195.185.67.sslip.io/support`
 - Privacy Policy URL: `https://185.195.185.67.sslip.io/privacy`
@@ -92,6 +91,9 @@ Current production version setup:
 
 - Version: `1.0`
 - Selected App Store build: `1.0 (4)`
+- App Review submission: sent on `2026-06-04 00:35` with submission ID
+  `74cd5191-5c95-4cf1-b033-90df3c3c3696`.
+- App Review status at submission check: waiting for review.
 - Release mode: manual release after App Review approval.
 - Pricing: free in all countries and regions.
 - Availability: all countries and regions.
@@ -105,7 +107,7 @@ Current production version setup:
   user ID used for app functionality only.
 - TestFlight: external group `PERFORM Athletes` has build `1.0 (3)` submitted
   to TestFlight Beta Review. Build `1.0 (4)` is the iPhone-only production
-  build prepared for App Review.
+  build submitted to App Review.
 
 Prepared screenshot assets are stored locally here:
 
@@ -113,13 +115,10 @@ Prepared screenshot assets are stored locally here:
 app-store-assets/screenshots-iphone-65/
 ```
 
-They are 6.5-inch iPhone screenshots at `1242 x 2688` PNG and are ready for
-upload to App Store Connect. The current in-app browser cannot pass local
-files into Apple's screenshot uploader, and no local App Store Connect API key
-(`AuthKey_*.p8`) is present. Upload screenshots manually in App Store Connect
-or add an API key and upload through the official API/automation.
+They are 6.5-inch iPhone screenshots at `1242 x 2688` PNG and can be reused
+for future metadata updates.
 
-Remaining App Store blockers before final App Review submission:
+Remaining App Store follow-up items:
 
 - Complete EU Digital Services Act account information in App Store Connect
   under Business. This requires the real legal/trader status and account
