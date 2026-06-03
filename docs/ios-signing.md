@@ -51,6 +51,7 @@ The iOS app record must exist before uploading a TestFlight build:
 - App Store Connect Apple ID: `6776354606`
 - SKU used locally: `PERFORM-IOS-001`
 - Internal TestFlight group: `PERFORM Internal`
+- External TestFlight group: `PERFORM Athletes`
 
 For the local Xcode-managed flow, `xcodebuild -exportArchive` can upload the
 archive when the export options use `method = app-store-connect` and
@@ -73,3 +74,57 @@ PERFORM does not use proprietary or non-standard encryption. It relies on
 Apple/system networking such as HTTPS. Keep
 `ITSAppUsesNonExemptEncryption = false` in the iOS `Info.plist`; otherwise App
 Store Connect asks for export compliance answers on each new build.
+
+## App Store Release Metadata
+
+Before sending the production App Store version to review, keep these public
+links live on the deployed web site:
+
+- Support URL: `https://185.195.185.67.sslip.io/support`
+- Privacy Policy URL: `https://185.195.185.67.sslip.io/privacy`
+
+Use manual release for the first App Store submission so Apple approval does
+not immediately publish the app before the final coach/athlete smoke test.
+
+## App Store Connect Status
+
+Current production version setup:
+
+- Version: `1.0`
+- Selected build: `1.0 (3)`
+- Release mode: manual release after App Review approval.
+- Pricing: free in all countries and regions.
+- Availability: all countries and regions.
+- Device availability: iPhone/iOS only. Mac with Apple silicon and Apple
+  Vision Pro availability are disabled until those targets are tested.
+- Primary category: Sports.
+- Secondary category: Health and Fitness.
+- Age rating: 9+ with regional exceptions shown by App Store Connect.
+- Regulated medical device: no.
+- App Privacy: published with name, email, health, fitness, user content, and
+  user ID used for app functionality only.
+- TestFlight: external group `PERFORM Athletes` has build `1.0 (3)` submitted
+  to TestFlight Beta Review.
+
+Prepared screenshot assets are stored locally here:
+
+```text
+app-store-assets/screenshots-iphone-65/
+```
+
+They are 6.5-inch iPhone screenshots at `1242 x 2688` PNG and are ready for
+upload to App Store Connect. The current in-app browser cannot pass local
+files into Apple's screenshot uploader, and no local App Store Connect API key
+(`AuthKey_*.p8`) is present. Upload screenshots manually in App Store Connect
+or add an API key and upload through the official API/automation.
+
+Remaining App Store blockers before final App Review submission:
+
+- Upload at least one iPhone screenshot set, preferably the five prepared
+  screenshots.
+- Complete EU Digital Services Act account information in App Store Connect
+  under Business. This requires the real legal/trader status and account
+  contact details and should not be guessed.
+- Optionally add accessibility labels only after a real accessibility check.
+  Do not claim support for VoiceOver, large text, contrast, or other features
+  until they are verified.
