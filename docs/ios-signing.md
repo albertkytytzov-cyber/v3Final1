@@ -91,7 +91,7 @@ not immediately publish the app before the final coach/athlete smoke test.
 Current production version setup:
 
 - Version: `1.0`
-- Selected build: `1.0 (3)`
+- Selected App Store build: `1.0 (4)`
 - Release mode: manual release after App Review approval.
 - Pricing: free in all countries and regions.
 - Availability: all countries and regions.
@@ -104,7 +104,8 @@ Current production version setup:
 - App Privacy: published with name, email, health, fitness, user content, and
   user ID used for app functionality only.
 - TestFlight: external group `PERFORM Athletes` has build `1.0 (3)` submitted
-  to TestFlight Beta Review.
+  to TestFlight Beta Review. Build `1.0 (4)` is the iPhone-only production
+  build prepared for App Review.
 
 Prepared screenshot assets are stored locally here:
 
@@ -120,8 +121,6 @@ or add an API key and upload through the official API/automation.
 
 Remaining App Store blockers before final App Review submission:
 
-- Upload at least one iPhone screenshot set, preferably the five prepared
-  screenshots.
 - Complete EU Digital Services Act account information in App Store Connect
   under Business. This requires the real legal/trader status and account
   contact details and should not be guessed.
