@@ -158,7 +158,7 @@ jobs:
           IOS_EXPORT_METHOD: ${{ secrets.IOS_EXPORT_METHOD }}
           IOS_BUNDLE_ID: ${{ secrets.IOS_BUNDLE_ID }}
         run: |
-          EXPORT_METHOD="${IOS_EXPORT_METHOD:-app-store}"
+          EXPORT_METHOD="${IOS_EXPORT_METHOD:-app-store-connect}"
           BUNDLE_ID="${IOS_BUNDLE_ID:-com.perform.training}"
 
           cat > build/ExportOptions.plist <<EOF

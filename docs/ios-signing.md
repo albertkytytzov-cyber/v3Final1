@@ -17,9 +17,9 @@ Add these secrets in GitHub repository settings:
 Optional secrets:
 
 - `IOS_BUNDLE_ID` - app bundle id. Defaults to `com.perform.training`.
-- `IOS_EXPORT_METHOD` - Xcode export method. Defaults to `app-store` for
-  TestFlight/App Store builds. Use `ad-hoc` only when the provisioning profile
-  is created for registered test devices.
+- `IOS_EXPORT_METHOD` - Xcode export method. Defaults to `app-store-connect`
+  for TestFlight/App Store builds. Use `ad-hoc` only when the provisioning
+  profile is created for registered test devices.
 
 ## Encoding Files
 
@@ -41,3 +41,27 @@ manually. The workflow uploads:
 - `perform-ios-unsigned-ipa` - unsigned build artifact.
 - `perform-ios-signed-ipa` - signed build artifact, only when signing secrets
   are present.
+
+## App Store Connect Setup
+
+The iOS app record must exist before uploading a TestFlight build:
+
+- App name: `PERFORM`
+- Bundle ID: `com.perform.training`
+- App Store Connect Apple ID: `6776354606`
+- SKU used locally: `PERFORM-IOS-001`
+
+For the local Xcode-managed flow, `xcodebuild -exportArchive` can upload the
+archive when the export options use `method = app-store-connect` and
+`destination = upload`.
+
+## HealthKit Privacy Strings
+
+The iOS target has the HealthKit entitlement, so App Store Connect requires
+both privacy descriptions in `apps/mobile/ios/App/App/Info.plist`:
+
+- `NSHealthShareUsageDescription`
+- `NSHealthUpdateUsageDescription`
+
+Without `NSHealthUpdateUsageDescription`, App Store Connect rejects upload with
+error `90683` even when the app mainly reads Apple Health data.

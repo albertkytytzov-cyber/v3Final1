@@ -26,6 +26,8 @@
 	<true/>
 	<key>NSHealthShareUsageDescription</key>
 	<string>PERFORM читает сон, пульс, SpO₂ и тренировки из Apple Health, чтобы спортсмен мог передать тренеру показатели готовности и данные дня.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>PERFORM может сохранять показатели тренировок и готовности в Apple Health, чтобы данные спортсмена оставались синхронизированными между приложениями здоровья.</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
