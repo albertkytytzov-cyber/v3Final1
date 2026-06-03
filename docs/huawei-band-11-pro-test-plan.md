@@ -114,14 +114,38 @@ Success criteria:
 
 ### 4. Huawei Wear Engine
 
-Not the primary health-data path.
+Official direct phone-watch SDK path, but not the same as Xiaomi raw file
+sync.
 
-Wear Engine is useful for phone-watch message and file communication when both
-sides have a compatible app/permission setup. It should not be treated as proof
-that PERFORM can read Huawei health files directly from the band.
+Huawei documents Wear Engine as a way to share app features and services
+between phones and wearables. The official feature list includes:
 
-Use only if we decide to build a Huawei-specific watch-side or message-based
-feature later.
+- paired wearable list;
+- wearable status monitoring;
+- health and fitness status monitoring;
+- phone-watch message and file communication;
+- sensor management for accelerometer and ECG/PPG-style signals.
+
+This means Huawei does provide a direct SDK channel, but it is an approved
+Huawei API layer, not arbitrary Bluetooth access to every private watch file.
+The codelab flow also expects Huawei Health pairing/authorization and, for
+phone-watch messages/files, a peer watch app package and certificate
+fingerprint.
+
+Direct-access reality check:
+
+| Capability | Official path exists? | PERFORM meaning |
+| --- | --- | --- |
+| List paired Huawei wearables | yes, Wear Engine | Can detect selected Huawei device |
+| Connection/battery/worn/charging status | yes, Wear Engine | Useful diagnostics |
+| Message/file exchange with watch app | yes, Wear Engine | Needs compatible watch-side app/setup |
+| Some health/fitness status monitoring | yes, Wear Engine | Must verify exact metric depth on Band 11 Pro |
+| Sensor management | yes, Wear Engine | Potential live measurements, not guaranteed historical archive |
+| Historical sleep/workout raw files like Xiaomi | not publicly proven | Needs device probe; do not assume |
+| Time/weather ownership like Xiaomi DirectWatch | not publicly proven | Huawei Health may remain owner unless Wear Engine supports needed calls |
+
+Use Wear Engine as the R&D path for `direct-huawei`, while Health Kit remains
+the first stable product path for stored health/workout data.
 
 ## Unified PERFORM Provider Model
 
@@ -130,6 +154,7 @@ Add Huawei as a provider beside DirectWatch/Xiaomi:
 | Provider | Owner of watch connection | PERFORM reads from | Main risk |
 | --- | --- | --- | --- |
 | `direct-xiaomi` | PERFORM native service | raw watch files | protocol changes, auth, CRC/parser coverage |
+| `direct-huawei` | PERFORM native service or Huawei Wear Engine bridge | Wear Engine/live device APIs if supported | metric depth, watch-side app support, Huawei approval |
 | `huawei-health-kit` | Huawei Health | Huawei Health Kit | region/app approval, permission coverage |
 | `health-connect` | source app | Android Health Connect | partial metrics, source ambiguity |
 | `apple-health` | source app | Apple HealthKit | partial metrics, source ambiguity |
