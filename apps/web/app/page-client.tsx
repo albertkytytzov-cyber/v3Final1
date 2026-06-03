@@ -182,6 +182,7 @@ const mobileAppDownloadUrl =
   process.env.NEXT_PUBLIC_MOBILE_APP_DOWNLOAD_URL?.trim() ||
   "/downloads/perform-mobile-android.apk";
 const SHOW_OFFLINE_CENTER_NAV = false;
+const DISPLAY_TIME_ZONE = "Europe/Sofia";
 
 function getDateInputValue(date = new Date()) {
   return date.toISOString().slice(0, 10);
@@ -1910,7 +1911,11 @@ function formatDeviceRawTimeRange(rawPayload: Record<string, unknown> | null | u
   }
 
   const locale = language === "en" ? "en-US" : language === "bg" ? "bg-BG" : "ru-RU";
-  const formatter = new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit" });
+  const formatter = new Intl.DateTimeFormat(locale, {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: DISPLAY_TIME_ZONE,
+  });
   return `${copyFor(language, { en: "sleep", ru: "сон", bg: "сън" })} ${formatter.format(new Date(start))}-${formatter.format(new Date(end))}`;
 }
 
@@ -1971,7 +1976,11 @@ function formatDeviceWorkoutTitle(workout: DeviceWorkout, language: Language) {
 
 function formatDeviceWorkoutTimeRange(workout: DeviceWorkout, language: Language) {
   const locale = language === "en" ? "en-US" : language === "bg" ? "bg-BG" : "ru-RU";
-  const formatter = new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit" });
+  const formatter = new Intl.DateTimeFormat(locale, {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: DISPLAY_TIME_ZONE,
+  });
   return `${formatter.format(new Date(workout.startTime))}-${formatter.format(new Date(workout.endTime))}`;
 }
 
@@ -2278,7 +2287,11 @@ function hasDeviceWorkoutGraph(workout: DeviceWorkout) {
 
 function formatDeviceWorkoutGraphTime(value: number, language: Language) {
   const locale = language === "en" ? "en-US" : language === "bg" ? "bg-BG" : "ru-RU";
-  return new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit" }).format(new Date(value));
+  return new Intl.DateTimeFormat(locale, {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: DISPLAY_TIME_ZONE,
+  }).format(new Date(value));
 }
 
 function getDeviceWorkoutGraphTime(value: string) {
