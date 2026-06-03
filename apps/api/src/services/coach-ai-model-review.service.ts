@@ -37,6 +37,10 @@ const maxExercisesPerBlock = 12;
 const systemPrompt = [
   "Ты серверный помощник тренера в платформе PERFORM.",
   "Разбери только переданную карточку дня спортсмена.",
+  "Используй analysisContext как обязательную научную рамку PERFORM для борьбы: фаза, intent блока, энергетическая система, локальные зоны, контакт, техника, восстановление и вес.",
+  "Не своди вывод к одной цифре нагрузки. Отдельно думай о локальной усталости хвата/плеч/шеи/ног, контактной плотности, качестве техники под утомлением и фазе подготовки.",
+  "Если фаза похожа на подводку или соревнование, не предлагай добирать объём; приоритет — свежесть, резкость и качество.",
+  "Если есть весогонка или быстрые изменения веса, учитывай это как фактор риска вместе со сном, пульсом покоя и гликолитической/контактной работой.",
   "Если limitations или dataQuality.missing содержат сон, пульс покоя, SpO2, выполнение или комментарий тренера, обязательно добавь в riskNotes фразу: «Вывод ограничен, потому что не хватает ...».",
   "Сравни плановую нагрузку, фактическую нагрузку и расхождение; используй load.explanation как объяснение расчёта.",
   "Если есть данные устройства, учитывай сон, пульс покоя, SpO2 и тренировки с телефона как контекст восстановления, но не делай медицинских выводов.",
@@ -175,6 +179,53 @@ function readCoachAiModelConfig() {
 
 function buildModelSafePayload(payload: CoachDayAiPayload) {
   return {
+    analysisContext: payload.analysisContext
+      ? {
+        blocks: payload.analysisContext.blocks.slice(0, maxPlanBlocks).map((block) => ({
+          blockName: toLimitedString(block.blockName, maxShortStringLength),
+          contactIntensity: block.contactIntensity,
+          energySystem: toLimitedString(block.energySystem, maxShortStringLength),
+          intent: toLimitedString(block.intent, maxShortStringLength),
+          localZones: block.localZones.slice(0, 8).map((item) =>
+            toLimitedString(item, maxShortStringLength)
+          ),
+          rationale: toLimitedString(block.rationale, maxStringLength),
+          sessionName: toLimitedString(block.sessionName, maxShortStringLength),
+          technicalFocus: block.technicalFocus.slice(0, 8).map((item) =>
+            toLimitedString(item, maxShortStringLength)
+          ),
+        })),
+        contactFocus: payload.analysisContext.contactFocus.slice(0, 8).map((item) =>
+          toLimitedString(item, maxShortStringLength)
+        ),
+        energySystems: payload.analysisContext.energySystems.slice(0, 8).map((item) =>
+          toLimitedString(item, maxShortStringLength)
+        ),
+        frameworkVersion: toLimitedString(payload.analysisContext.frameworkVersion, maxShortStringLength),
+        keyQuestions: payload.analysisContext.keyQuestions.slice(0, 6).map((item) =>
+          toLimitedString(item, maxStringLength)
+        ),
+        localLoadZones: payload.analysisContext.localLoadZones.slice(0, 10).map((item) =>
+          toLimitedString(item, maxShortStringLength)
+        ),
+        phase: toLimitedString(payload.analysisContext.phase, maxShortStringLength),
+        primaryIntents: payload.analysisContext.primaryIntents.slice(0, 8).map((item) =>
+          toLimitedString(item, maxShortStringLength)
+        ),
+        recoverySignals: payload.analysisContext.recoverySignals.slice(0, 8).map((item) =>
+          toLimitedString(item, maxShortStringLength)
+        ),
+        rules: payload.analysisContext.rules.slice(0, 6).map((item) =>
+          toLimitedString(item, maxStringLength)
+        ),
+        technicalFocus: payload.analysisContext.technicalFocus.slice(0, 8).map((item) =>
+          toLimitedString(item, maxShortStringLength)
+        ),
+        weightCutSignals: payload.analysisContext.weightCutSignals.slice(0, 8).map((item) =>
+          toLimitedString(item, maxShortStringLength)
+        ),
+      }
+      : null,
     coachComment: toLimitedNullableString(payload.coachComment, maxStringLength),
     dataQuality: payload.dataQuality
       ? {

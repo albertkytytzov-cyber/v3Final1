@@ -86,6 +86,47 @@ function buildDiagnosticCoachDayPayload(entryDate: string): CoachDayAiPayload {
       weightClass: null,
     },
     coachComment: "Тестовая проверка подключения ИИ. Не записывать в дневник.",
+    analysisContext: {
+      blocks: [
+        {
+          blockName: "Техника",
+          contactIntensity: "moderate",
+          energySystem: "mixed",
+          intent: "technical_resisted",
+          localZones: ["ноги", "корпус", "плечевой пояс"],
+          rationale: "Технические проходы связаны с блоком плана и подтверждены устройством.",
+          sessionName: "Утро",
+          technicalFocus: ["входы", "качество техники"],
+        },
+        {
+          blockName: "Восстановление",
+          contactIntensity: "none",
+          energySystem: "recovery",
+          intent: "recovery_regeneration",
+          localZones: [],
+          rationale: "Заминка и дыхание снижают восстановительный долг после основной работы.",
+          sessionName: "Утро",
+          technicalFocus: [],
+        },
+      ],
+      contactFocus: ["техника с умеренным сопротивлением"],
+      energySystems: ["mixed", "recovery"],
+      frameworkVersion: "PERFORM wrestling analysis v1",
+      keyQuestions: [
+        "Сохранилось ли качество техники при частичном выполнении?",
+        "Не конфликтует ли следующий день с жёлтой готовностью?",
+      ],
+      localLoadZones: ["ноги", "корпус", "плечевой пояс"],
+      phase: "не указана",
+      primaryIntents: ["technical_resisted", "recovery_regeneration"],
+      recoverySignals: ["готовность жёлтая", "сон 7 ч 35 мин", "пульс покоя 54"],
+      rules: [
+        "Технику под сопротивлением не усиливать, если готовность жёлтая.",
+        "Связанную тренировку устройства учитывать как факт, но не суммировать повторно с ручной отметкой.",
+      ],
+      technicalFocus: ["входы", "качество техники"],
+      weightCutSignals: [],
+    },
     dataQuality: {
       actions: [],
       available: [
@@ -428,6 +469,7 @@ function buildRiskNotes(payload: CoachDayAiPayload) {
     risks.push("Готовность требует снижения нагрузки: тяжёлую работу лучше оставить только при необходимости.");
   }
 
+  addWrestlingAnalysisRiskNotes(risks, payload);
   addDeviceHealthRiskNotes(risks, payload);
 
   return risks.length ? risks : ["Критичных рисков по текущим данным не видно."];
@@ -457,6 +499,8 @@ function buildTomorrowActions(payload: CoachDayAiPayload) {
   } else if (payload.readiness?.status === "yellow") {
     actions.push("Сохраните только техническую или лёгкую специальную часть, объём держите ниже плана.");
   }
+
+  addWrestlingAnalysisTomorrowActions(actions, payload);
 
   if (!payload.coachComment) {
     actions.push("Добавьте короткий комментарий тренера, чтобы следующий разбор учитывал причину решения.");
@@ -534,6 +578,84 @@ function addDataQualityTomorrowActions(actions: string[], payload: CoachDayAiPay
 
   for (const action of dataQuality.actions.slice(0, 2)) {
     actions.push(action);
+  }
+}
+
+function addWrestlingAnalysisRiskNotes(risks: string[], payload: CoachDayAiPayload) {
+  const context = payload.analysisContext;
+
+  if (!context) {
+    risks.push("Научная рамка PERFORM для борьбы не передана: локальная усталость, контакт и intent блоков оцениваются ограниченно.");
+    return;
+  }
+
+  const highContactBlocks = context.blocks.filter((block) => block.contactIntensity === "high");
+  const gripOrUpperLoad = context.localLoadZones.some((zone) =>
+    /предплеч|хват|плеч|шея|верх/u.test(zone.toLowerCase())
+  );
+  const glycolyticIntent = context.energySystems.some((item) =>
+    /glycolytic|гликолит|z4|z5|mixed/u.test(item.toLowerCase())
+  );
+  const taperOrCompetition = /taper|подвод|старт|соревн|competition/u.test(context.phase.toLowerCase());
+  const recoveryLimited = payload.readiness?.status === "yellow" ||
+    payload.readiness?.status === "red" ||
+    isDeviceSleepLow(payload) ||
+    isDeviceRestingHrHigh(payload);
+
+  if (highContactBlocks.length > 0) {
+    risks.push(`Контактная нагрузка высокая: ${highContactBlocks.slice(0, 3).map((block) => block.blockName).join(", ")}. Оценивайте день не только по общей нагрузке, но и по контакту.`);
+  }
+
+  if (gripOrUpperLoad) {
+    risks.push("Есть локальная нагрузка на хват/верх: перед борьбой, партером или клинчем проверьте предплечья, плечи и шею.");
+  }
+
+  if (glycolyticIntent && recoveryLimited) {
+    risks.push("Гликолитическая или смешанная работа совпадает с ограниченным восстановлением: нельзя автоматически добавлять финишные отрезки или борьбу в темпе.");
+  }
+
+  if (taperOrCompetition && payload.load.actual > payload.load.planned * 1.05) {
+    risks.push("Фаза подводки/соревнования не должна добирать лишний объём: факт выше плана может ухудшить свежесть.");
+  }
+
+  for (const signal of context.weightCutSignals.slice(0, 2)) {
+    risks.push(`Контекст веса: ${signal}.`);
+  }
+}
+
+function addWrestlingAnalysisTomorrowActions(actions: string[], payload: CoachDayAiPayload) {
+  const context = payload.analysisContext;
+
+  if (!context) {
+    return;
+  }
+
+  const hasHighContact = context.blocks.some((block) => block.contactIntensity === "high");
+  const hasTechnicalUnderFatigue = context.primaryIntents.some((intent) =>
+    /fatigue|соревнов|competition|combat_rounds/u.test(intent.toLowerCase())
+  );
+  const hasLocalGripLoad = context.localLoadZones.some((zone) =>
+    /предплеч|хват|плеч|шея/u.test(zone.toLowerCase())
+  );
+  const recoveryLimited = payload.readiness?.status === "yellow" ||
+    payload.readiness?.status === "red" ||
+    isDeviceSleepLow(payload) ||
+    isDeviceRestingHrHigh(payload);
+
+  if (hasHighContact && recoveryLimited) {
+    actions.push("На следующий день снизьте контакт: оставьте технику без силового давления или короткую активацию.");
+  }
+
+  if (hasTechnicalUnderFatigue) {
+    actions.push("Проверьте качество техники: если оно падало под утомлением, не переносите весь объём, а оставьте только ключевой технический акцент.");
+  }
+
+  if (hasLocalGripLoad) {
+    actions.push("Перед следующей борьбой с захватами уточните локальную усталость предплечий/плеч и не ставьте тяжёлый хват подряд.");
+  }
+
+  for (const rule of context.rules.slice(0, 1)) {
+    actions.push(rule);
   }
 }
 

@@ -13435,6 +13435,7 @@ interface CoachDayExerciseCleanSummary {
 interface CoachDayBlockCleanSummary {
   assignedPlanId: string;
   assignedBlockId: string;
+  blockType: AssignedPlanBlock["blockType"];
   planName: string;
   sessionName: string;
   sessionDeviceLinkMode?: MobileAssignedPlanSession["deviceLinkMode"];
@@ -15040,6 +15041,7 @@ function getCoachDayCleanSummary(
         actualLoad: roundLoad(result ? actualLoad : deviceConfirmedLoad > 0 ? deviceConfirmedLoad : actualLoad),
         assignedBlockId: item.block.id,
         assignedPlanId: item.plan.id,
+        blockType: item.block.blockType,
         deviceConfirmedLoad: roundLoad(deviceConfirmedLoad),
         exercises,
         loadDeltaLabel: formatExecutionBlockLoadDelta(actualLoad, plannedLoad),
@@ -15196,6 +15198,7 @@ function buildCoachDayAiPayload(dayData: CoachDayCleanSummary): CoachDayAiPayloa
       weightClass: dayData.athlete?.weightClass || null,
     },
     coachComment: dayData.latestDiaryEntry ? dayData.coachNote : null,
+    analysisContext: buildCoachDayAiAnalysisContext(dayData),
     dataQuality,
     date: dayData.date,
     deviceHealth: buildCoachDayAiDeviceHealth(dayData),
@@ -15259,6 +15262,431 @@ function buildCoachDayAiPayload(dayData: CoachDayCleanSummary): CoachDayAiPayloa
       }
       : null,
   };
+}
+
+function buildCoachDayAiAnalysisContext(dayData: CoachDayCleanSummary): CoachDayAiPayload["analysisContext"] {
+  const blocks = dayData.blocks
+    .filter((block) => isMobileLoadBearingPlanBlock(block))
+    .map(buildCoachDayAiAnalysisBlock);
+  const primaryIntents = uniqueCoachAiStrings(blocks.map((block) => block.intent));
+  const energySystems = uniqueCoachAiStrings(blocks.map((block) => block.energySystem));
+  const localLoadZones = uniqueCoachAiStrings(blocks.flatMap((block) => block.localZones));
+  const contactFocus = uniqueCoachAiStrings(blocks
+    .filter((block) => block.contactIntensity !== "none")
+    .map((block) => `${block.blockName}: ${formatCoachAiContactIntensity(block.contactIntensity)}`));
+  const technicalFocus = uniqueCoachAiStrings(blocks.flatMap((block) => block.technicalFocus));
+  const phase = buildCoachDayAiPhaseLabel(dayData);
+  const recoverySignals = buildCoachDayAiRecoverySignals(dayData);
+  const weightCutSignals = buildCoachDayAiWeightCutSignals(dayData);
+
+  return {
+    blocks,
+    contactFocus,
+    energySystems,
+    frameworkVersion: "PERFORM wrestling analysis v1",
+    keyQuestions: buildCoachDayAiKeyQuestions({
+      blocks,
+      energySystems,
+      localLoadZones,
+      phase,
+      recoverySignals,
+      weightCutSignals,
+    }),
+    localLoadZones,
+    phase,
+    primaryIntents,
+    recoverySignals,
+    rules: buildCoachDayAiRules({
+      blocks,
+      energySystems,
+      localLoadZones,
+      phase,
+      recoverySignals,
+      weightCutSignals,
+    }),
+    technicalFocus,
+    weightCutSignals,
+  };
+}
+
+function buildCoachDayAiAnalysisBlock(
+  block: CoachDayBlockCleanSummary,
+): NonNullable<CoachDayAiPayload["analysisContext"]>["blocks"][number] {
+  const text = normalizeCoachAiAnalysisText([
+    block.blockType,
+    block.name,
+    block.sessionName,
+    block.target,
+    block.notes,
+    ...block.exercises.flatMap((exercise) => [
+      exercise.name,
+      exercise.plannedWork,
+      exercise.plannedControl,
+      exercise.actualDetails,
+    ]),
+  ].join(" "));
+  const intent = inferCoachAiTrainingIntent(block, text);
+  const energySystem = inferCoachAiEnergySystem(block, text, intent);
+  const localZones = inferCoachAiLocalZones(text);
+  const contactIntensity = inferCoachAiContactIntensity(text, intent);
+  const technicalFocus = inferCoachAiTechnicalFocus(text, intent);
+
+  return {
+    blockName: block.name,
+    contactIntensity,
+    energySystem,
+    intent,
+    localZones,
+    rationale: buildCoachAiBlockRationale({
+      block,
+      contactIntensity,
+      energySystem,
+      intent,
+      localZones,
+      technicalFocus,
+    }),
+    sessionName: block.sessionName,
+    technicalFocus,
+  };
+}
+
+function inferCoachAiTrainingIntent(block: CoachDayBlockCleanSummary, text: string) {
+  if (/восстанов|отдых|прогул|мобил|растяж|замин|сон|дыхани/u.test(text) || block.blockType === "recovery" || block.rowKind === "recovery") {
+    return "recovery_regeneration";
+  }
+
+  if (/3\s*мин\s*\+\s*30\s*сек|2×3|2x3|соревнов|встреч|турнир/u.test(text)) {
+    return "competition_simulation";
+  }
+
+  if (/схват|борьб|клинч|давлен|партер/u.test(text)) {
+    return /финиш|последн|утом|темп|85|90|95/u.test(text) ? "technical_under_fatigue" : "combat_rounds";
+  }
+
+  if (/хват|канат|полотен|фермер|pinch|вис/u.test(text)) {
+    return "grip_endurance";
+  }
+
+  if (/присед|станов|жим|тяга|болгар|штанг|80%|83%|75%|70%/u.test(text) || block.blockType === "strength") {
+    return "max_strength";
+  }
+
+  if (/взрыв|спринт|ускор|прыж|медбол|скорост|резк/u.test(text) || block.blockType === "speed" || block.blockType === "CNS_high") {
+    return "explosive_strength";
+  }
+
+  if (/30\s*сек|20\s*сек|40\s*сек|интервал|финиш|лактат|закисл|170|180|185/u.test(text) || block.blockType === "metabolic") {
+    return "glycolytic_intervals";
+  }
+
+  if (/кросс|z1|z2|аэроб|ходьб|бег/u.test(text) || block.blockType === "conditioning") {
+    return "aerobic_base";
+  }
+
+  if (/техник|отработ|вход/u.test(text) || block.blockType === "technical") {
+    return /лёгк|легк|без\s+нагруз|без\s+закисл/u.test(text) ? "technical_clean" : "technical_resisted";
+  }
+
+  if (block.blockType === "mobility" || block.blockType === "activation") {
+    return block.blockType === "activation" ? "technical_activation" : "recovery_regeneration";
+  }
+
+  return "mixed_training";
+}
+
+function inferCoachAiEnergySystem(
+  block: CoachDayBlockCleanSummary,
+  text: string,
+  intent: string,
+) {
+  if (intent === "recovery_regeneration") {
+    return "recovery";
+  }
+
+  if (/z1|z2|кросс|аэроб|ходьб|120|135|145/u.test(text) || intent === "aerobic_base") {
+    return "aerobic_base";
+  }
+
+  if (/спринт|ускор|прыж|медбол|резк|коротк/u.test(text) || intent === "explosive_strength") {
+    return "alactic_power";
+  }
+
+  if (/30\s*сек|20\s*сек|40\s*сек|интервал|финиш|лактат|закисл|170|180|185|85|90|95/u.test(text) ||
+    intent === "glycolytic_intervals" ||
+    intent === "technical_under_fatigue") {
+    return "glycolytic";
+  }
+
+  if (/3\s*мин\s*\+\s*30\s*сек|2×3|2x3|схват|борьб|встреч/u.test(text) || intent === "competition_simulation" || intent === "combat_rounds") {
+    return "mixed";
+  }
+
+  if (block.blockType === "strength" || intent === "max_strength") {
+    return "neuromuscular";
+  }
+
+  return "mixed";
+}
+
+function inferCoachAiLocalZones(text: string) {
+  const zones: string[] = [];
+
+  if (/хват|канат|полотен|фермер|pinch|вис/u.test(text)) {
+    zones.push("предплечья", "кисть", "плечевой пояс");
+  }
+
+  if (/жим|подтяг|тяга|жгут|медбол|плеч|верх/u.test(text)) {
+    zones.push("плечевой пояс", "спина");
+  }
+
+  if (/шея|клинч|давлен|захват/u.test(text)) {
+    zones.push("шея", "плечевой пояс", "корпус");
+  }
+
+  if (/присед|станов|румын|болгар|спринт|прыж|проход|спрол|ног|икр|носок/u.test(text)) {
+    zones.push("ноги", "таз", "корпус");
+  }
+
+  if (/пресс|планк|корпус|стабилизац/u.test(text)) {
+    zones.push("корпус");
+  }
+
+  return uniqueCoachAiStrings(zones);
+}
+
+function inferCoachAiContactIntensity(
+  text: string,
+  intent: string,
+): NonNullable<CoachDayAiPayload["analysisContext"]>["blocks"][number]["contactIntensity"] {
+  if (/схват|борьб|встреч|клинч|давлен|партер/u.test(text)) {
+    return /90|95|тяж|максим|ключев|3\s*встреч|3\s*цикл/u.test(text) ? "high" : "moderate";
+  }
+
+  if (/вход|проход|спрол|защит|атаки/u.test(text) || intent === "technical_resisted") {
+    return "low";
+  }
+
+  return "none";
+}
+
+function inferCoachAiTechnicalFocus(text: string, intent: string) {
+  const focus: string[] = [];
+
+  if (/вход|проход|атаки|ног/u.test(text)) {
+    focus.push("входы в ноги");
+  }
+
+  if (/защит|спрол/u.test(text)) {
+    focus.push("защита/спрол");
+  }
+
+  if (/клинч|давлен/u.test(text)) {
+    focus.push("клинч и давление");
+  }
+
+  if (/скорост|резк|дистанц/u.test(text)) {
+    focus.push("скорость и дистанция");
+  }
+
+  if (/финиш|последн|2-й|втор/u.test(text)) {
+    focus.push("качество в конце периода");
+  }
+
+  if (/партер/u.test(text)) {
+    focus.push("партер");
+  }
+
+  if (/техник|отработ/u.test(text) || intent.startsWith("technical")) {
+    focus.push("качество техники");
+  }
+
+  return uniqueCoachAiStrings(focus);
+}
+
+function buildCoachAiBlockRationale(input: {
+  block: CoachDayBlockCleanSummary;
+  contactIntensity: NonNullable<CoachDayAiPayload["analysisContext"]>["blocks"][number]["contactIntensity"];
+  energySystem: string;
+  intent: string;
+  localZones: string[];
+  technicalFocus: string[];
+}) {
+  const parts = [
+    `intent ${input.intent}`,
+    `энергетика ${input.energySystem}`,
+    input.contactIntensity !== "none" ? `контакт ${formatCoachAiContactIntensity(input.contactIntensity)}` : "",
+    input.localZones.length ? `локальные зоны: ${input.localZones.join(", ")}` : "",
+    input.technicalFocus.length ? `техника: ${input.technicalFocus.join(", ")}` : "",
+    input.block.status !== "completed" ? `статус выполнения: ${input.block.statusLabel}` : "",
+  ].filter(Boolean);
+
+  return parts.join("; ");
+}
+
+function buildCoachDayAiPhaseLabel(dayData: CoachDayCleanSummary) {
+  const phaseLabels = uniqueCoachAiStrings(dayData.plans.flatMap((plan) => [
+    plan.competitionContextSnapshot?.phase ?? "",
+    plan.plannedPhase ?? "",
+    plan.competitionContextSnapshot?.taperState ? "taper" : "",
+    plan.competitionContextSnapshot?.weightCutState ? "weight_cut" : "",
+    plan.competitionContextSnapshot?.daysToCompetition !== null &&
+      plan.competitionContextSnapshot?.daysToCompetition !== undefined
+      ? `${plan.competitionContextSnapshot.daysToCompetition} дней до старта`
+      : "",
+  ]).filter(Boolean));
+
+  return phaseLabels.length ? phaseLabels.join(" · ") : "не указана";
+}
+
+function buildCoachDayAiRecoverySignals(dayData: CoachDayCleanSummary) {
+  const signals: string[] = [];
+  const readiness = dayData.readinessEntry;
+  const device = dayData.deviceHealthSummary;
+
+  if (readiness) {
+    signals.push(`готовность ${readiness.status} · ${readiness.score}`);
+    signals.push(formatReadinessFlags(readiness));
+  }
+
+  if (device?.sleep?.durationMinutes !== null && device?.sleep?.durationMinutes !== undefined) {
+    signals.push(`сон ${formatDeviceWorkoutDuration(device.sleep.durationMinutes)}`);
+  }
+
+  if (device?.heartRate?.restingBpm !== null && device?.heartRate?.restingBpm !== undefined) {
+    signals.push(`пульс покоя ${device.heartRate.restingBpm}`);
+  }
+
+  const loadDelta = roundLoad(dayData.summary.actualLoad - dayData.summary.plannedLoad);
+
+  if (loadDelta !== 0) {
+    signals.push(`нагрузка ${loadDelta > 0 ? "+" : ""}${roundLoad(loadDelta)}`);
+  }
+
+  return uniqueCoachAiStrings(signals).slice(0, 8);
+}
+
+function buildCoachDayAiWeightCutSignals(dayData: CoachDayCleanSummary) {
+  const signals: string[] = [];
+  const combinedText = normalizeCoachAiAnalysisText([
+    dayData.athlete?.weightClass ?? "",
+    ...dayData.plans.flatMap((plan) => [
+      plan.templateName,
+      plan.day.notes,
+      plan.competitionContextSnapshot?.weightCutState ? "weight_cut" : "",
+    ]),
+    ...dayData.blocks.flatMap((block) => [block.name, block.notes, block.target]),
+  ].join(" "));
+
+  if (/weight_cut|сгон|вес|57|58|59|60|углевод|соль|гликоген|жкт/u.test(combinedText)) {
+    signals.push("есть контекст веса/сгонки: нагрузку оценивать вместе со сном, пульсом и свежестью");
+  }
+
+  if (dayData.plans.some((plan) => plan.competitionContextSnapshot?.weightCutState)) {
+    signals.push("соревновательный план отмечен как weight-cut sensitive");
+  }
+
+  return signals;
+}
+
+function buildCoachDayAiKeyQuestions(input: {
+  blocks: NonNullable<CoachDayAiPayload["analysisContext"]>["blocks"];
+  energySystems: string[];
+  localLoadZones: string[];
+  phase: string;
+  recoverySignals: string[];
+  weightCutSignals: string[];
+}) {
+  const questions = [
+    "Совпал ли фактический стимул с intent плана?",
+    "Не потерялось ли качество техники под утомлением?",
+  ];
+
+  if (input.localLoadZones.length) {
+    questions.push(`Какие локальные зоны требуют восстановления: ${input.localLoadZones.slice(0, 4).join(", ")}?`);
+  }
+
+  if (input.blocks.some((block) => block.contactIntensity === "high")) {
+    questions.push("Не слишком ли высокая контактная плотность для текущей готовности?");
+  }
+
+  if (input.energySystems.includes("glycolytic")) {
+    questions.push("Оправдана ли гликолитическая работа в этой фазе и при текущем восстановлении?");
+  }
+
+  if (/taper|подвод|competition|соревн|старт/u.test(input.phase)) {
+    questions.push("Сохраняет ли день свежесть, резкость и качество перед стартом?");
+  }
+
+  if (input.weightCutSignals.length) {
+    questions.push("Не конфликтуют ли весогонка, сон и контактная/гликолитическая нагрузка?");
+  }
+
+  if (!input.recoverySignals.length) {
+    questions.push("Достаточно ли данных готовности, сна и пульса для уверенного решения?");
+  }
+
+  return uniqueCoachAiStrings(questions).slice(0, 8);
+}
+
+function buildCoachDayAiRules(input: {
+  blocks: NonNullable<CoachDayAiPayload["analysisContext"]>["blocks"];
+  energySystems: string[];
+  localLoadZones: string[];
+  phase: string;
+  recoverySignals: string[];
+  weightCutSignals: string[];
+}) {
+  const rules = [
+    "Не оценивать день только по общей load-цифре: отдельно учитывать intent, контакт, локальные зоны и восстановление.",
+  ];
+
+  if (input.localLoadZones.some((zone) => /предплеч|хват|плеч|шея/u.test(zone.toLowerCase()))) {
+    rules.push("После нагрузки на хват/верх не ставить тяжёлый клинч, партер или борьбу за захват подряд без проверки локальной усталости.");
+  }
+
+  if (input.blocks.some((block) => block.contactIntensity === "high")) {
+    rules.push("После высокой контактной нагрузки следующий день не усиливать автоматически; сначала проверить сон, пульс покоя, боль и качество техники.");
+  }
+
+  if (input.energySystems.includes("glycolytic")) {
+    rules.push("Гликолитические и финишные отрезки резать первыми при жёлтой/красной готовности, плохом сне или росте пульса покоя.");
+  }
+
+  if (/taper|подвод|competition|соревн|старт/u.test(input.phase)) {
+    rules.push("В подводке не добирать объём: сохранять короткую резкость, технику и восстановление.");
+  }
+
+  if (input.weightCutSignals.length) {
+    rules.push("При весогонке снижать контактную и гликолитическую плотность, если падает сон, растёт пульс покоя или ухудшается самочувствие.");
+  }
+
+  return uniqueCoachAiStrings(rules).slice(0, 8);
+}
+
+function normalizeCoachAiAnalysisText(value: string) {
+  return value.toLowerCase().replace(/ё/g, "е");
+}
+
+function uniqueCoachAiStrings(items: string[]) {
+  return Array.from(new Set(items.map((item) => item.trim()).filter(Boolean)));
+}
+
+function formatCoachAiContactIntensity(
+  value: NonNullable<CoachDayAiPayload["analysisContext"]>["blocks"][number]["contactIntensity"],
+) {
+  if (value === "high") {
+    return "высокий";
+  }
+
+  if (value === "moderate") {
+    return "средний";
+  }
+
+  if (value === "low") {
+    return "низкий";
+  }
+
+  return "нет";
 }
 
 function buildCoachDayAiLimitations(dataQuality: NonNullable<CoachDayAiPayload["dataQuality"]>) {

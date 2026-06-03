@@ -51,6 +51,9 @@ function readDayPayload(value: unknown): CoachDayAiPayload {
   const dataQuality = payload.dataQuality === null || payload.dataQuality === undefined
     ? null
     : readDataQuality(payload.dataQuality);
+  const analysisContext = payload.analysisContext === null || payload.analysisContext === undefined
+    ? null
+    : readAnalysisContext(payload.analysisContext);
   const deviceHealth = payload.deviceHealth === null || payload.deviceHealth === undefined
     ? null
     : readDeviceHealth(payload.deviceHealth);
@@ -66,6 +69,7 @@ function readDayPayload(value: unknown): CoachDayAiPayload {
       weightClass: readNullableString(athlete.weightClass, "athlete.weightClass"),
     },
     coachComment: readNullableString(payload.coachComment, "coachComment"),
+    analysisContext,
     dataQuality,
     date: readEntryDate(payload.date),
     deviceHealth,
@@ -119,6 +123,66 @@ function readDayPayload(value: unknown): CoachDayAiPayload {
         statusLabel: readString(readiness.statusLabel, "readiness.statusLabel"),
       }
       : null,
+  };
+}
+
+function readAnalysisContext(value: unknown): CoachDayAiPayload["analysisContext"] {
+  const context = readRecord(value, "analysisContext");
+
+  return {
+    blocks: readArray(context.blocks ?? [], "analysisContext.blocks").map(readAnalysisBlock),
+    contactFocus: readArray(context.contactFocus ?? [], "analysisContext.contactFocus").map((item) =>
+      readString(item, "analysisContext.contactFocus[]")
+    ),
+    energySystems: readArray(context.energySystems ?? [], "analysisContext.energySystems").map((item) =>
+      readString(item, "analysisContext.energySystems[]")
+    ),
+    frameworkVersion: readString(context.frameworkVersion, "analysisContext.frameworkVersion"),
+    keyQuestions: readArray(context.keyQuestions ?? [], "analysisContext.keyQuestions").map((item) =>
+      readString(item, "analysisContext.keyQuestions[]")
+    ),
+    localLoadZones: readArray(context.localLoadZones ?? [], "analysisContext.localLoadZones").map((item) =>
+      readString(item, "analysisContext.localLoadZones[]")
+    ),
+    phase: readString(context.phase, "analysisContext.phase"),
+    primaryIntents: readArray(context.primaryIntents ?? [], "analysisContext.primaryIntents").map((item) =>
+      readString(item, "analysisContext.primaryIntents[]")
+    ),
+    recoverySignals: readArray(context.recoverySignals ?? [], "analysisContext.recoverySignals").map((item) =>
+      readString(item, "analysisContext.recoverySignals[]")
+    ),
+    rules: readArray(context.rules ?? [], "analysisContext.rules").map((item) =>
+      readString(item, "analysisContext.rules[]")
+    ),
+    technicalFocus: readArray(context.technicalFocus ?? [], "analysisContext.technicalFocus").map((item) =>
+      readString(item, "analysisContext.technicalFocus[]")
+    ),
+    weightCutSignals: readArray(context.weightCutSignals ?? [], "analysisContext.weightCutSignals").map((item) =>
+      readString(item, "analysisContext.weightCutSignals[]")
+    ),
+  };
+}
+
+function readAnalysisBlock(value: unknown) {
+  const block = readRecord(value, "analysisContext.blocks[]");
+
+  return {
+    blockName: readString(block.blockName, "analysisContext.blocks[].blockName"),
+    contactIntensity: readEnum(
+      block.contactIntensity,
+      ["none", "low", "moderate", "high"],
+      "analysisContext.blocks[].contactIntensity",
+    ),
+    energySystem: readString(block.energySystem, "analysisContext.blocks[].energySystem"),
+    intent: readString(block.intent, "analysisContext.blocks[].intent"),
+    localZones: readArray(block.localZones ?? [], "analysisContext.blocks[].localZones").map((item) =>
+      readString(item, "analysisContext.blocks[].localZones[]")
+    ),
+    rationale: readString(block.rationale, "analysisContext.blocks[].rationale"),
+    sessionName: readString(block.sessionName, "analysisContext.blocks[].sessionName"),
+    technicalFocus: readArray(block.technicalFocus ?? [], "analysisContext.blocks[].technicalFocus").map((item) =>
+      readString(item, "analysisContext.blocks[].technicalFocus[]")
+    ),
   };
 }
 

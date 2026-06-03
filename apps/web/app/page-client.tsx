@@ -2679,11 +2679,15 @@ function buildCoachDayAiPayloadFromReview(input: {
 
       return {
         actualLoad,
+        blockType: block.blockType,
         exercises,
         name: block.name,
+        notes: block.notes,
         plannedLoad,
+        rowKind: block.rowKind,
         sessionName: session.name,
         status: getCoachAiReviewStatusFromReview(block.executionStatus),
+        target: formatAssignedPlanDisplayVolume(block, input.language, input.review.dayLabel),
       };
     }),
   );
@@ -2785,6 +2789,16 @@ function buildCoachDayAiPayloadFromReview(input: {
       weightClass: input.athlete?.weightClass || null,
     },
     coachComment,
+    analysisContext: buildCoachDayAiAnalysisContextFromReview({
+      actualLoad,
+      athlete: input.athlete,
+      blocks,
+      deviceHealthSummary: input.deviceHealthSummary,
+      language: input.language,
+      plannedLoad,
+      readinessEntry: input.readinessEntry,
+      review: input.review,
+    }),
     dataQuality,
     date: input.review.dayDate,
     limitations: buildCoachDayAiLimitations(dataQuality, input.language),
@@ -2905,6 +2919,483 @@ function buildCoachDayAiPayloadFromReview(input: {
         }
       : null,
   };
+}
+
+type CoachDayAiReviewAnalysisBlock = {
+  actualLoad: number;
+  blockType: ReviewBlock["blockType"];
+  exercises: Array<{
+    actual: string;
+    name: string;
+    plannedControl: string;
+    plannedWork: string;
+    status: CoachDayAiTaskStatus;
+  }>;
+  name: string;
+  notes: string | null;
+  plannedLoad: number;
+  rowKind: ReviewBlock["rowKind"];
+  sessionName: string;
+  status: CoachDayAiTaskStatus;
+  target: string;
+};
+
+function buildCoachDayAiAnalysisContextFromReview(input: {
+  actualLoad: number;
+  athlete: CoachAthleteSummary | null;
+  blocks: CoachDayAiReviewAnalysisBlock[];
+  deviceHealthSummary: DeviceHealthDailySummary | null;
+  language: Language;
+  plannedLoad: number;
+  readinessEntry: ReadinessEntry | null;
+  review: ExecutionReviewPlan;
+}): CoachDayAiPayload["analysisContext"] {
+  const analysisBlocks = input.blocks
+    .filter((block) => isCoachAiLoadBearingReviewBlock(block))
+    .map(buildCoachDayAiAnalysisBlockFromReview);
+  const primaryIntents = uniqueCoachAiAnalysisStrings(analysisBlocks.map((block) => block.intent));
+  const energySystems = uniqueCoachAiAnalysisStrings(analysisBlocks.map((block) => block.energySystem));
+  const localLoadZones = uniqueCoachAiAnalysisStrings(analysisBlocks.flatMap((block) => block.localZones));
+  const contactFocus = uniqueCoachAiAnalysisStrings(analysisBlocks
+    .filter((block) => block.contactIntensity !== "none")
+    .map((block) => `${block.blockName}: ${formatCoachAiAnalysisContactIntensity(block.contactIntensity)}`));
+  const technicalFocus = uniqueCoachAiAnalysisStrings(analysisBlocks.flatMap((block) => block.technicalFocus));
+  const phase = buildCoachDayAiPhaseLabelFromReview(input.review);
+  const recoverySignals = buildCoachDayAiRecoverySignalsFromReview(input);
+  const weightCutSignals = buildCoachDayAiWeightCutSignalsFromReview(input);
+
+  return {
+    blocks: analysisBlocks,
+    contactFocus,
+    energySystems,
+    frameworkVersion: "PERFORM wrestling analysis v1",
+    keyQuestions: buildCoachDayAiKeyQuestionsFromAnalysis({
+      blocks: analysisBlocks,
+      energySystems,
+      localLoadZones,
+      phase,
+      recoverySignals,
+      weightCutSignals,
+    }),
+    localLoadZones,
+    phase,
+    primaryIntents,
+    recoverySignals,
+    rules: buildCoachDayAiRulesFromAnalysis({
+      blocks: analysisBlocks,
+      energySystems,
+      localLoadZones,
+      phase,
+      recoverySignals,
+      weightCutSignals,
+    }),
+    technicalFocus,
+    weightCutSignals,
+  };
+}
+
+function isCoachAiLoadBearingReviewBlock(block: Pick<CoachDayAiReviewAnalysisBlock, "rowKind">) {
+  return !["instruction", "control", "note", "recovery"].includes(block.rowKind ?? "exercise");
+}
+
+function buildCoachDayAiAnalysisBlockFromReview(
+  block: CoachDayAiReviewAnalysisBlock,
+): NonNullable<CoachDayAiPayload["analysisContext"]>["blocks"][number] {
+  const text = normalizeCoachAiAnalysisText([
+    block.blockType,
+    block.name,
+    block.sessionName,
+    block.target,
+    block.notes,
+    ...block.exercises.flatMap((exercise) => [
+      exercise.name,
+      exercise.plannedWork,
+      exercise.plannedControl,
+      exercise.actual,
+    ]),
+  ].join(" "));
+  const intent = inferCoachAiAnalysisIntent(block, text);
+  const energySystem = inferCoachAiAnalysisEnergySystem(block, text, intent);
+  const localZones = inferCoachAiAnalysisLocalZones(text);
+  const contactIntensity = inferCoachAiAnalysisContactIntensity(text, intent);
+  const technicalFocus = inferCoachAiAnalysisTechnicalFocus(text, intent);
+
+  return {
+    blockName: block.name,
+    contactIntensity,
+    energySystem,
+    intent,
+    localZones,
+    rationale: buildCoachAiAnalysisBlockRationale({
+      block,
+      contactIntensity,
+      energySystem,
+      intent,
+      localZones,
+      technicalFocus,
+    }),
+    sessionName: block.sessionName,
+    technicalFocus,
+  };
+}
+
+function inferCoachAiAnalysisIntent(block: CoachDayAiReviewAnalysisBlock, text: string) {
+  if (/восстанов|отдых|прогул|мобил|растяж|замин|сон|дыхани/u.test(text) || block.blockType === "recovery" || block.rowKind === "recovery") {
+    return "recovery_regeneration";
+  }
+
+  if (/3\s*мин\s*\+\s*30\s*сек|2×3|2x3|соревнов|встреч|турнир/u.test(text)) {
+    return "competition_simulation";
+  }
+
+  if (/схват|борьб|клинч|давлен|партер/u.test(text)) {
+    return /финиш|последн|утом|темп|85|90|95/u.test(text) ? "technical_under_fatigue" : "combat_rounds";
+  }
+
+  if (/хват|канат|полотен|фермер|pinch|вис/u.test(text)) {
+    return "grip_endurance";
+  }
+
+  if (/присед|станов|жим|тяга|болгар|штанг|80%|83%|75%|70%/u.test(text) || block.blockType === "strength") {
+    return "max_strength";
+  }
+
+  if (/взрыв|спринт|ускор|прыж|медбол|скорост|резк/u.test(text) || block.blockType === "speed" || block.blockType === "CNS_high") {
+    return "explosive_strength";
+  }
+
+  if (/30\s*сек|20\s*сек|40\s*сек|интервал|финиш|лактат|закисл|170|180|185/u.test(text) || block.blockType === "metabolic") {
+    return "glycolytic_intervals";
+  }
+
+  if (/кросс|z1|z2|аэроб|ходьб|бег/u.test(text) || block.blockType === "conditioning") {
+    return "aerobic_base";
+  }
+
+  if (/техник|отработ|вход/u.test(text) || block.blockType === "technical") {
+    return /лёгк|легк|без\s+нагруз|без\s+закисл/u.test(text) ? "technical_clean" : "technical_resisted";
+  }
+
+  if (block.blockType === "mobility" || block.blockType === "activation") {
+    return block.blockType === "activation" ? "technical_activation" : "recovery_regeneration";
+  }
+
+  return "mixed_training";
+}
+
+function inferCoachAiAnalysisEnergySystem(
+  block: CoachDayAiReviewAnalysisBlock,
+  text: string,
+  intent: string,
+) {
+  if (intent === "recovery_regeneration") {
+    return "recovery";
+  }
+
+  if (/z1|z2|кросс|аэроб|ходьб|120|135|145/u.test(text) || intent === "aerobic_base") {
+    return "aerobic_base";
+  }
+
+  if (/спринт|ускор|прыж|медбол|резк|коротк/u.test(text) || intent === "explosive_strength") {
+    return "alactic_power";
+  }
+
+  if (/30\s*сек|20\s*сек|40\s*сек|интервал|финиш|лактат|закисл|170|180|185|85|90|95/u.test(text) ||
+    intent === "glycolytic_intervals" ||
+    intent === "technical_under_fatigue") {
+    return "glycolytic";
+  }
+
+  if (/3\s*мин\s*\+\s*30\s*сек|2×3|2x3|схват|борьб|встреч/u.test(text) || intent === "competition_simulation" || intent === "combat_rounds") {
+    return "mixed";
+  }
+
+  if (block.blockType === "strength" || intent === "max_strength") {
+    return "neuromuscular";
+  }
+
+  return "mixed";
+}
+
+function inferCoachAiAnalysisLocalZones(text: string) {
+  const zones: string[] = [];
+
+  if (/хват|канат|полотен|фермер|pinch|вис/u.test(text)) {
+    zones.push("предплечья", "кисть", "плечевой пояс");
+  }
+
+  if (/жим|подтяг|тяга|жгут|медбол|плеч|верх/u.test(text)) {
+    zones.push("плечевой пояс", "спина");
+  }
+
+  if (/шея|клинч|давлен|захват/u.test(text)) {
+    zones.push("шея", "плечевой пояс", "корпус");
+  }
+
+  if (/присед|станов|румын|болгар|спринт|прыж|проход|спрол|ног|икр|носок/u.test(text)) {
+    zones.push("ноги", "таз", "корпус");
+  }
+
+  if (/пресс|планк|корпус|стабилизац/u.test(text)) {
+    zones.push("корпус");
+  }
+
+  return uniqueCoachAiAnalysisStrings(zones);
+}
+
+function inferCoachAiAnalysisContactIntensity(
+  text: string,
+  intent: string,
+): NonNullable<CoachDayAiPayload["analysisContext"]>["blocks"][number]["contactIntensity"] {
+  if (/схват|борьб|встреч|клинч|давлен|партер/u.test(text)) {
+    return /90|95|тяж|максим|ключев|3\s*встреч|3\s*цикл/u.test(text) ? "high" : "moderate";
+  }
+
+  if (/вход|проход|спрол|защит|атаки/u.test(text) || intent === "technical_resisted") {
+    return "low";
+  }
+
+  return "none";
+}
+
+function inferCoachAiAnalysisTechnicalFocus(text: string, intent: string) {
+  const focus: string[] = [];
+
+  if (/вход|проход|атаки|ног/u.test(text)) {
+    focus.push("входы в ноги");
+  }
+
+  if (/защит|спрол/u.test(text)) {
+    focus.push("защита/спрол");
+  }
+
+  if (/клинч|давлен/u.test(text)) {
+    focus.push("клинч и давление");
+  }
+
+  if (/скорост|резк|дистанц/u.test(text)) {
+    focus.push("скорость и дистанция");
+  }
+
+  if (/финиш|последн|2-й|втор/u.test(text)) {
+    focus.push("качество в конце периода");
+  }
+
+  if (/партер/u.test(text)) {
+    focus.push("партер");
+  }
+
+  if (/техник|отработ/u.test(text) || intent.startsWith("technical")) {
+    focus.push("качество техники");
+  }
+
+  return uniqueCoachAiAnalysisStrings(focus);
+}
+
+function buildCoachAiAnalysisBlockRationale(input: {
+  block: CoachDayAiReviewAnalysisBlock;
+  contactIntensity: NonNullable<CoachDayAiPayload["analysisContext"]>["blocks"][number]["contactIntensity"];
+  energySystem: string;
+  intent: string;
+  localZones: string[];
+  technicalFocus: string[];
+}) {
+  const parts = [
+    `intent ${input.intent}`,
+    `энергетика ${input.energySystem}`,
+    input.contactIntensity !== "none" ? `контакт ${formatCoachAiAnalysisContactIntensity(input.contactIntensity)}` : "",
+    input.localZones.length ? `локальные зоны: ${input.localZones.join(", ")}` : "",
+    input.technicalFocus.length ? `техника: ${input.technicalFocus.join(", ")}` : "",
+    input.block.status !== "completed" ? `статус выполнения: ${input.block.status}` : "",
+  ].filter(Boolean);
+
+  return parts.join("; ");
+}
+
+function buildCoachDayAiPhaseLabelFromReview(review: ExecutionReviewPlan) {
+  const text = normalizeCoachAiAnalysisText([
+    review.templateName,
+    review.dayLabel,
+    ...review.sessions.flatMap((session) => [
+      session.name,
+      ...session.blocks.flatMap((block) => [block.name, block.notes]),
+    ]),
+  ].join(" "));
+  const labels: string[] = [];
+
+  if (/соревнов|турнир|старт|европ|чемпион/u.test(text)) {
+    labels.push("competition");
+  }
+
+  if (/подвод|taper|свеж|резк/u.test(text)) {
+    labels.push("taper");
+  }
+
+  if (/сгон|вес/u.test(text)) {
+    labels.push("weight_cut");
+  }
+
+  if (/баз|base/u.test(text)) {
+    labels.push("base");
+  }
+
+  if (/спец|specific|боев/u.test(text)) {
+    labels.push("specific");
+  }
+
+  return labels.length ? uniqueCoachAiAnalysisStrings(labels).join(" · ") : "не указана";
+}
+
+function buildCoachDayAiRecoverySignalsFromReview(input: {
+  actualLoad: number;
+  deviceHealthSummary: DeviceHealthDailySummary | null;
+  language: Language;
+  plannedLoad: number;
+  readinessEntry: ReadinessEntry | null;
+}) {
+  const signals: string[] = [];
+
+  if (input.readinessEntry) {
+    signals.push(`готовность ${input.readinessEntry.status} · ${input.readinessEntry.score}`);
+    signals.push(formatCoachAiReadinessFlags(input.readinessEntry, input.language));
+  }
+
+  if (input.deviceHealthSummary?.sleep?.durationMinutes !== null && input.deviceHealthSummary?.sleep?.durationMinutes !== undefined) {
+    signals.push(`сон ${formatDeviceDuration(input.deviceHealthSummary.sleep.durationMinutes, input.language)}`);
+  }
+
+  if (input.deviceHealthSummary?.heartRate?.restingBpm !== null && input.deviceHealthSummary?.heartRate?.restingBpm !== undefined) {
+    signals.push(`пульс покоя ${input.deviceHealthSummary.heartRate.restingBpm}`);
+  }
+
+  const loadDelta = roundCoachAiLoad(input.actualLoad - input.plannedLoad);
+
+  if (loadDelta !== 0) {
+    signals.push(`нагрузка ${loadDelta > 0 ? "+" : ""}${formatCoachDayLoadValue(loadDelta)}`);
+  }
+
+  return uniqueCoachAiAnalysisStrings(signals).slice(0, 8);
+}
+
+function buildCoachDayAiWeightCutSignalsFromReview(input: {
+  athlete: CoachAthleteSummary | null;
+  blocks: CoachDayAiReviewAnalysisBlock[];
+  review: ExecutionReviewPlan;
+}) {
+  const signals: string[] = [];
+  const combinedText = normalizeCoachAiAnalysisText([
+    input.athlete?.weightClass ?? "",
+    input.review.templateName,
+    input.review.dayLabel,
+    ...input.blocks.flatMap((block) => [block.name, block.notes, block.target]),
+  ].join(" "));
+
+  if (/сгон|вес|57|58|59|60|углевод|соль|гликоген|жкт/u.test(combinedText)) {
+    signals.push("есть контекст веса/сгонки: нагрузку оценивать вместе со сном, пульсом и свежестью");
+  }
+
+  return signals;
+}
+
+function buildCoachDayAiKeyQuestionsFromAnalysis(input: {
+  blocks: NonNullable<CoachDayAiPayload["analysisContext"]>["blocks"];
+  energySystems: string[];
+  localLoadZones: string[];
+  phase: string;
+  recoverySignals: string[];
+  weightCutSignals: string[];
+}) {
+  const questions = [
+    "Совпал ли фактический стимул с intent плана?",
+    "Не потерялось ли качество техники под утомлением?",
+  ];
+
+  if (input.localLoadZones.length) {
+    questions.push(`Какие локальные зоны требуют восстановления: ${input.localLoadZones.slice(0, 4).join(", ")}?`);
+  }
+
+  if (input.blocks.some((block) => block.contactIntensity === "high")) {
+    questions.push("Не слишком ли высокая контактная плотность для текущей готовности?");
+  }
+
+  if (input.energySystems.includes("glycolytic")) {
+    questions.push("Оправдана ли гликолитическая работа в этой фазе и при текущем восстановлении?");
+  }
+
+  if (/taper|подвод|competition|соревн|старт/u.test(input.phase)) {
+    questions.push("Сохраняет ли день свежесть, резкость и качество перед стартом?");
+  }
+
+  if (input.weightCutSignals.length) {
+    questions.push("Не конфликтуют ли весогонка, сон и контактная/гликолитическая нагрузка?");
+  }
+
+  if (!input.recoverySignals.length) {
+    questions.push("Достаточно ли данных готовности, сна и пульса для уверенного решения?");
+  }
+
+  return uniqueCoachAiAnalysisStrings(questions).slice(0, 8);
+}
+
+function buildCoachDayAiRulesFromAnalysis(input: {
+  blocks: NonNullable<CoachDayAiPayload["analysisContext"]>["blocks"];
+  energySystems: string[];
+  localLoadZones: string[];
+  phase: string;
+  recoverySignals: string[];
+  weightCutSignals: string[];
+}) {
+  const rules = [
+    "Не оценивать день только по общей load-цифре: отдельно учитывать intent, контакт, локальные зоны и восстановление.",
+  ];
+
+  if (input.localLoadZones.some((zone) => /предплеч|хват|плеч|шея/u.test(zone.toLowerCase()))) {
+    rules.push("После нагрузки на хват/верх не ставить тяжёлый клинч, партер или борьбу за захват подряд без проверки локальной усталости.");
+  }
+
+  if (input.blocks.some((block) => block.contactIntensity === "high")) {
+    rules.push("После высокой контактной нагрузки следующий день не усиливать автоматически; сначала проверить сон, пульс покоя, боль и качество техники.");
+  }
+
+  if (input.energySystems.includes("glycolytic")) {
+    rules.push("Гликолитические и финишные отрезки резать первыми при жёлтой/красной готовности, плохом сне или росте пульса покоя.");
+  }
+
+  if (/taper|подвод|competition|соревн|старт/u.test(input.phase)) {
+    rules.push("В подводке не добирать объём: сохранять короткую резкость, технику и восстановление.");
+  }
+
+  if (input.weightCutSignals.length) {
+    rules.push("При весогонке снижать контактную и гликолитическую плотность, если падает сон, растёт пульс покоя или ухудшается самочувствие.");
+  }
+
+  return uniqueCoachAiAnalysisStrings(rules).slice(0, 8);
+}
+
+function normalizeCoachAiAnalysisText(value: string) {
+  return value.toLowerCase().replace(/ё/g, "е");
+}
+
+function uniqueCoachAiAnalysisStrings(items: string[]) {
+  return Array.from(new Set(items.map((item) => item.trim()).filter(Boolean)));
+}
+
+function formatCoachAiAnalysisContactIntensity(
+  value: NonNullable<CoachDayAiPayload["analysisContext"]>["blocks"][number]["contactIntensity"],
+) {
+  if (value === "high") {
+    return "высокий";
+  }
+
+  if (value === "moderate") {
+    return "средний";
+  }
+
+  if (value === "low") {
+    return "низкий";
+  }
+
+  return "нет";
 }
 
 function withFallbackOptions(options: string[], fallback: string) {

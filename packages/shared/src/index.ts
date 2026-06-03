@@ -1295,6 +1295,32 @@ export interface CoachDayDataQuality {
   statusLabel: string;
 }
 
+export interface CoachDayAiAnalysisBlock {
+  blockName: string;
+  sessionName: string;
+  intent: string;
+  energySystem: string;
+  localZones: string[];
+  contactIntensity: "none" | "low" | "moderate" | "high";
+  technicalFocus: string[];
+  rationale: string;
+}
+
+export interface CoachDayAiAnalysisContext {
+  frameworkVersion: string;
+  phase: string;
+  primaryIntents: string[];
+  energySystems: string[];
+  localLoadZones: string[];
+  contactFocus: string[];
+  technicalFocus: string[];
+  recoverySignals: string[];
+  weightCutSignals: string[];
+  keyQuestions: string[];
+  rules: string[];
+  blocks: CoachDayAiAnalysisBlock[];
+}
+
 export interface CoachDayAiPayload {
   athlete: {
     displayName: string;
@@ -1304,6 +1330,7 @@ export interface CoachDayAiPayload {
   };
   coachComment: string | null;
   dataQuality: CoachDayDataQuality | null;
+  analysisContext: CoachDayAiAnalysisContext | null;
   date: string;
   limitations: string[];
   deviceHealth: {
