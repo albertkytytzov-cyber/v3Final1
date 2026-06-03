@@ -65,3 +65,10 @@ both privacy descriptions in `apps/mobile/ios/App/App/Info.plist`:
 
 Without `NSHealthUpdateUsageDescription`, App Store Connect rejects upload with
 error `90683` even when the app mainly reads Apple Health data.
+
+## Export Compliance
+
+PERFORM does not use proprietary or non-standard encryption. It relies on
+Apple/system networking such as HTTPS. Keep
+`ITSAppUsesNonExemptEncryption = false` in the iOS `Info.plist`; otherwise App
+Store Connect asks for export compliance answers on each new build.
