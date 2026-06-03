@@ -1,5 +1,8 @@
 # Huawei Health Android setup
 
+For the Huawei Band 11 Pro device-specific test plan, see
+`docs/huawei-band-11-pro-test-plan.md`.
+
 This project reads Huawei Health data through the Android app. Do not collect or store the user's Huawei login and password on the server.
 
 Required Huawei/AppGallery setup:

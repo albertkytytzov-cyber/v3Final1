@@ -8,6 +8,10 @@ Goal: stop guessing about watch background behavior. Use:
 - Mi Fitness as the installed behavioral reference.
 - PERFORM Sync as the implementation we compare against.
 
+Huawei watches are tracked separately because their first integration path is
+Huawei Health Kit rather than Xiaomi-style raw watch files. See
+`docs/huawei-band-11-pro-test-plan.md`.
+
 No DirectWatch code changes should be made from this document alone. The next
 implementation step should be based on the gaps below.
 
