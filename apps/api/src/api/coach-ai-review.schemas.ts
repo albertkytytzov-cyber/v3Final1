@@ -2,6 +2,8 @@ import type {
   CoachDayAiExecutionStatus,
   CoachDayAiPayload,
   CoachDayAiReviewRequest,
+  CoachPeriodAiReviewRequest,
+  CoachPeriodAiPayload,
   ReadinessStatus,
 } from "@training-platform/shared";
 
@@ -14,6 +16,7 @@ const executionStatuses: Array<Exclude<CoachDayAiExecutionStatus, "no-plan">> = 
   "missed",
 ];
 const readinessStatuses: ReadinessStatus[] = ["green", "yellow", "red"];
+type PeriodTrendStatus = CoachPeriodAiPayload["periodContext"]["trends"]["load"];
 
 export function parseCoachDayAiAthleteParams(params: unknown): { athleteId: string } {
   const athleteId = (params as { athleteId?: unknown } | null)?.athleteId;
@@ -38,6 +41,17 @@ export function parseCoachDayAiReviewBody(body: unknown): CoachDayAiReviewReques
   }
 
   return { entryDate, dayPayload };
+}
+
+export function parseCoachPeriodAiReviewBody(body: unknown): CoachPeriodAiReviewRequest {
+  const payload = (body ?? {}) as {
+    selectedDate?: unknown;
+    windowDays?: unknown;
+  };
+  const selectedDate = readEntryDate(payload.selectedDate);
+  const windowDays = readWindowDays(payload.windowDays);
+
+  return { selectedDate, windowDays };
 }
 
 function readDayPayload(value: unknown): CoachDayAiPayload {
@@ -123,6 +137,123 @@ function readDayPayload(value: unknown): CoachDayAiPayload {
         statusLabel: readString(readiness.statusLabel, "readiness.statusLabel"),
       }
       : null,
+  };
+}
+
+export function readCoachPeriodAiPayload(value: unknown): CoachPeriodAiPayload {
+  const payload = readRecord(value, "periodPayload");
+
+  return {
+    athlete: readPeriodAthlete(payload.athlete),
+    periodContext: readPeriodContext(payload.periodContext),
+    periodEnd: readEntryDate(payload.periodEnd),
+    periodStart: readEntryDate(payload.periodStart),
+    selectedDate: readEntryDate(payload.selectedDate),
+    windowDays: readWindowDays(payload.windowDays),
+  };
+}
+
+function readPeriodAthlete(value: unknown): CoachPeriodAiPayload["athlete"] {
+  const athlete = readRecord(value, "periodPayload.athlete");
+
+  return {
+    displayName: readString(athlete.displayName, "periodPayload.athlete.displayName"),
+    discipline: readNullableString(athlete.discipline, "periodPayload.athlete.discipline"),
+    sport: readNullableString(athlete.sport, "periodPayload.athlete.sport"),
+    weightClass: readNullableString(athlete.weightClass, "periodPayload.athlete.weightClass"),
+  };
+}
+
+function readPeriodContext(value: unknown): CoachPeriodAiPayload["periodContext"] {
+  const context = readRecord(value, "periodContext");
+  const trends = readRecord(context.trends, "periodContext.trends");
+
+  return {
+    days: readArray(context.days ?? [], "periodContext.days").map(readPeriodContextDay),
+    generatedAt: readString(context.generatedAt, "periodContext.generatedAt"),
+    interpretation: readArray(context.interpretation ?? [], "periodContext.interpretation").map((item) =>
+      readString(item, "periodContext.interpretation[]")
+    ),
+    mesocycle30: readPeriodWindowSummary(context.mesocycle30, "periodContext.mesocycle30"),
+    microcycle7: readPeriodWindowSummary(context.microcycle7, "periodContext.microcycle7"),
+    periodEnd: readEntryDate(context.periodEnd),
+    periodStart: readEntryDate(context.periodStart),
+    selectedDate: readEntryDate(context.selectedDate),
+    trends: {
+      bodyWeight: readTrendStatus(trends.bodyWeight, "periodContext.trends.bodyWeight"),
+      load: readTrendStatus(trends.load, "periodContext.trends.load"),
+      readiness: readTrendStatus(trends.readiness, "periodContext.trends.readiness"),
+      restingHr: readTrendStatus(trends.restingHr, "periodContext.trends.restingHr"),
+      sleep: readTrendStatus(trends.sleep, "periodContext.trends.sleep"),
+    },
+    warnings: readArray(context.warnings ?? [], "periodContext.warnings").map((item) =>
+      readString(item, "periodContext.warnings[]")
+    ),
+    windowDays: readCount(context.windowDays, "periodContext.windowDays"),
+  };
+}
+
+const trendStatuses: PeriodTrendStatus[] = ["up", "down", "stable", "unknown"];
+
+function readTrendStatus(value: unknown, fieldName: string) {
+  return readEnum(value, trendStatuses, fieldName);
+}
+
+function readPeriodContextDay(value: unknown) {
+  const day = readRecord(value, "periodContext.days[]");
+
+  return {
+    actualLoad: readNumber(day.actualLoad, "periodContext.days[].actualLoad"),
+    bodyWeightKg: readNullableNumber(day.bodyWeightKg, "periodContext.days[].bodyWeightKg"),
+    completedBlocks: readCount(day.completedBlocks, "periodContext.days[].completedBlocks"),
+    date: readEntryDate(day.date),
+    loadDelta: readNumber(day.loadDelta, "periodContext.days[].loadDelta"),
+    missedBlocks: readCount(day.missedBlocks, "periodContext.days[].missedBlocks"),
+    notesPresent: readBoolean(day.notesPresent, "periodContext.days[].notesPresent"),
+    partialBlocks: readCount(day.partialBlocks, "periodContext.days[].partialBlocks"),
+    plannedBlocks: readCount(day.plannedBlocks, "periodContext.days[].plannedBlocks"),
+    plannedLoad: readNumber(day.plannedLoad, "periodContext.days[].plannedLoad"),
+    readinessScore: readNullableNumber(day.readinessScore, "periodContext.days[].readinessScore"),
+    readinessStatus: day.readinessStatus === null || day.readinessStatus === undefined
+      ? null
+      : readEnum(day.readinessStatus, readinessStatuses, "periodContext.days[].readinessStatus"),
+    restingHr: readNullableNumber(day.restingHr, "periodContext.days[].restingHr"),
+    sleepMinutes: readNullableNumber(day.sleepMinutes, "periodContext.days[].sleepMinutes"),
+    workoutCalories: readNullableNumber(day.workoutCalories, "periodContext.days[].workoutCalories"),
+    workoutCount: readCount(day.workoutCount, "periodContext.days[].workoutCount"),
+    workoutDistanceMeters: readNullableNumber(day.workoutDistanceMeters, "periodContext.days[].workoutDistanceMeters"),
+    workoutDurationMinutes: readNullableNumber(day.workoutDurationMinutes, "periodContext.days[].workoutDurationMinutes"),
+  };
+}
+
+function readPeriodWindowSummary(value: unknown, fieldName: string) {
+  const summary = readRecord(value, fieldName);
+
+  return {
+    actualLoad: readNumber(summary.actualLoad, `${fieldName}.actualLoad`),
+    bodyWeightDeltaKg: readNullableNumber(summary.bodyWeightDeltaKg, `${fieldName}.bodyWeightDeltaKg`),
+    completedBlocks: readCount(summary.completedBlocks, `${fieldName}.completedBlocks`),
+    completionRate: readNullableNumber(summary.completionRate, `${fieldName}.completionRate`),
+    daysWithDeviceData: readCount(summary.daysWithDeviceData, `${fieldName}.daysWithDeviceData`),
+    daysWithPlan: readCount(summary.daysWithPlan, `${fieldName}.daysWithPlan`),
+    daysWithReadiness: readCount(summary.daysWithReadiness, `${fieldName}.daysWithReadiness`),
+    highLoadDays: readCount(summary.highLoadDays, `${fieldName}.highLoadDays`),
+    incompletePlanDays: readCount(summary.incompletePlanDays, `${fieldName}.incompletePlanDays`),
+    loadDelta: readNumber(summary.loadDelta, `${fieldName}.loadDelta`),
+    loadRatio: readNullableNumber(summary.loadRatio, `${fieldName}.loadRatio`),
+    partialBlocks: readCount(summary.partialBlocks, `${fieldName}.partialBlocks`),
+    periodDays: readCount(summary.periodDays, `${fieldName}.periodDays`),
+    plannedBlocks: readCount(summary.plannedBlocks, `${fieldName}.plannedBlocks`),
+    plannedLoad: readNumber(summary.plannedLoad, `${fieldName}.plannedLoad`),
+    readinessAverage: readNullableNumber(summary.readinessAverage, `${fieldName}.readinessAverage`),
+    readinessGreenDays: readCount(summary.readinessGreenDays, `${fieldName}.readinessGreenDays`),
+    readinessRedDays: readCount(summary.readinessRedDays, `${fieldName}.readinessRedDays`),
+    readinessYellowDays: readCount(summary.readinessYellowDays, `${fieldName}.readinessYellowDays`),
+    restingHrAverage: readNullableNumber(summary.restingHrAverage, `${fieldName}.restingHrAverage`),
+    sleepAverageMinutes: readNullableNumber(summary.sleepAverageMinutes, `${fieldName}.sleepAverageMinutes`),
+    workoutCount: readCount(summary.workoutCount, `${fieldName}.workoutCount`),
+    workoutDays: readCount(summary.workoutDays, `${fieldName}.workoutDays`),
+    workoutDurationMinutes: readNullableNumber(summary.workoutDurationMinutes, `${fieldName}.workoutDurationMinutes`),
   };
 }
 
@@ -443,6 +574,16 @@ function readCount(value: unknown, fieldName: string) {
 
   if (!Number.isInteger(numericValue) || numericValue < 0) {
     throw new Error(`${fieldName} must be a non-negative integer`);
+  }
+
+  return numericValue;
+}
+
+function readWindowDays(value: unknown) {
+  const numericValue = readNumber(value, "windowDays");
+
+  if (![7, 14, 30].includes(numericValue)) {
+    throw new Error("windowDays must be 7, 14 or 30");
   }
 
   return numericValue;

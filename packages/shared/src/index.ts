@@ -1438,6 +1438,74 @@ export interface CoachDayAiPayload {
   } | null;
 }
 
+export interface CoachDayAiPeriodContextDay {
+  actualLoad: number;
+  bodyWeightKg: number | null;
+  completedBlocks: number;
+  date: string;
+  loadDelta: number;
+  missedBlocks: number;
+  notesPresent: boolean;
+  partialBlocks: number;
+  plannedBlocks: number;
+  plannedLoad: number;
+  readinessScore: number | null;
+  readinessStatus: ReadinessStatus | null;
+  restingHr: number | null;
+  sleepMinutes: number | null;
+  workoutCalories: number | null;
+  workoutCount: number;
+  workoutDistanceMeters: number | null;
+  workoutDurationMinutes: number | null;
+}
+
+export interface CoachDayAiPeriodWindowSummary {
+  actualLoad: number;
+  bodyWeightDeltaKg: number | null;
+  completedBlocks: number;
+  completionRate: number | null;
+  daysWithDeviceData: number;
+  daysWithPlan: number;
+  daysWithReadiness: number;
+  highLoadDays: number;
+  incompletePlanDays: number;
+  loadDelta: number;
+  loadRatio: number | null;
+  partialBlocks: number;
+  periodDays: number;
+  plannedBlocks: number;
+  plannedLoad: number;
+  readinessAverage: number | null;
+  readinessGreenDays: number;
+  readinessRedDays: number;
+  readinessYellowDays: number;
+  restingHrAverage: number | null;
+  sleepAverageMinutes: number | null;
+  workoutCount: number;
+  workoutDays: number;
+  workoutDurationMinutes: number | null;
+}
+
+export interface CoachDayAiPeriodContext {
+  days: CoachDayAiPeriodContextDay[];
+  generatedAt: string;
+  interpretation: string[];
+  mesocycle30: CoachDayAiPeriodWindowSummary;
+  microcycle7: CoachDayAiPeriodWindowSummary;
+  periodEnd: string;
+  periodStart: string;
+  selectedDate: string;
+  trends: {
+    bodyWeight: "up" | "down" | "stable" | "unknown";
+    load: "up" | "down" | "stable" | "unknown";
+    readiness: "up" | "down" | "stable" | "unknown";
+    restingHr: "up" | "down" | "stable" | "unknown";
+    sleep: "up" | "down" | "stable" | "unknown";
+  };
+  warnings: string[];
+  windowDays: number;
+}
+
 export type CoachDayAiReviewSource = "local-rules" | "server-rules" | "model";
 export type CoachAiReviewServerSource = "server-rules" | "model";
 
@@ -1480,6 +1548,46 @@ export interface CoachDayAiReviewResponse {
 
 export interface CoachDayAiReviewHistoryResponse {
   reviews: CoachDayAiReview[];
+}
+
+export interface CoachPeriodAiPayload {
+  athlete: CoachDayAiPayload["athlete"];
+  periodContext: CoachDayAiPeriodContext;
+  periodEnd: string;
+  periodStart: string;
+  selectedDate: string;
+  windowDays: number;
+}
+
+export interface CoachPeriodAiReview {
+  id?: string;
+  athleteId: string;
+  coachUserId?: string;
+  createdAt?: string;
+  generatedAt: string;
+  observation: string;
+  periodActions: string[];
+  periodEnd: string;
+  periodPayload: CoachPeriodAiPayload;
+  periodPayloadJson: string;
+  periodStart: string;
+  riskNotes: string[];
+  selectedDate: string;
+  source: CoachDayAiReviewSource;
+  windowDays: number;
+}
+
+export interface CoachPeriodAiReviewRequest {
+  selectedDate: string;
+  windowDays: number;
+}
+
+export interface CoachPeriodAiReviewResponse {
+  review: CoachPeriodAiReview;
+}
+
+export interface CoachPeriodAiReviewHistoryResponse {
+  reviews: CoachPeriodAiReview[];
 }
 
 export interface CoachAiReviewStatusResponse {

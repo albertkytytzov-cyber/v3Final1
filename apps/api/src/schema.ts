@@ -424,6 +424,23 @@ export async function ensureSchema() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
 
+    CREATE TABLE IF NOT EXISTS coach_ai_period_reviews (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      athlete_id UUID NOT NULL REFERENCES athletes(id) ON DELETE CASCADE,
+      coach_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      selected_date DATE NOT NULL,
+      period_start DATE NOT NULL,
+      period_end DATE NOT NULL,
+      window_days INTEGER NOT NULL DEFAULT 30,
+      source TEXT NOT NULL DEFAULT 'server-rules' CHECK (source IN ('server-rules', 'model')),
+      observation TEXT NOT NULL DEFAULT '',
+      risk_notes TEXT[] NOT NULL DEFAULT '{}'::text[],
+      period_actions TEXT[] NOT NULL DEFAULT '{}'::text[],
+      period_payload_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+      generated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
     CREATE TABLE IF NOT EXISTS device_health_daily_summaries (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       athlete_id UUID NOT NULL REFERENCES athletes(id) ON DELETE CASCADE,
@@ -925,6 +942,32 @@ export async function ensureSchema() {
   await ensureColumn("coach_ai_day_reviews", "day_payload_json", "JSONB NOT NULL DEFAULT '{}'::jsonb");
   await ensureColumn("coach_ai_day_reviews", "generated_at", "TIMESTAMPTZ NOT NULL DEFAULT NOW()");
   await ensureColumn("coach_ai_day_reviews", "created_at", "TIMESTAMPTZ NOT NULL DEFAULT NOW()");
+  await ensureUuidDefault("coach_ai_period_reviews");
+  await ensureColumn(
+    "coach_ai_period_reviews",
+    "athlete_id",
+    "UUID REFERENCES athletes(id) ON DELETE CASCADE",
+  );
+  await ensureColumn(
+    "coach_ai_period_reviews",
+    "coach_user_id",
+    "UUID REFERENCES users(id) ON DELETE CASCADE",
+  );
+  await ensureColumn("coach_ai_period_reviews", "selected_date", "DATE");
+  await ensureColumn("coach_ai_period_reviews", "period_start", "DATE");
+  await ensureColumn("coach_ai_period_reviews", "period_end", "DATE");
+  await ensureColumn("coach_ai_period_reviews", "window_days", "INTEGER NOT NULL DEFAULT 30");
+  await ensureColumn(
+    "coach_ai_period_reviews",
+    "source",
+    "TEXT NOT NULL DEFAULT 'server-rules' CHECK (source IN ('server-rules', 'model'))",
+  );
+  await ensureColumn("coach_ai_period_reviews", "observation", "TEXT NOT NULL DEFAULT ''");
+  await ensureColumn("coach_ai_period_reviews", "risk_notes", "TEXT[] NOT NULL DEFAULT '{}'::text[]");
+  await ensureColumn("coach_ai_period_reviews", "period_actions", "TEXT[] NOT NULL DEFAULT '{}'::text[]");
+  await ensureColumn("coach_ai_period_reviews", "period_payload_json", "JSONB NOT NULL DEFAULT '{}'::jsonb");
+  await ensureColumn("coach_ai_period_reviews", "generated_at", "TIMESTAMPTZ NOT NULL DEFAULT NOW()");
+  await ensureColumn("coach_ai_period_reviews", "created_at", "TIMESTAMPTZ NOT NULL DEFAULT NOW()");
   await ensureUuidDefault("device_health_daily_summaries");
   await ensureColumn(
     "device_health_daily_summaries",
@@ -1502,6 +1545,10 @@ export async function ensureSchema() {
       ON coach_ai_day_reviews (athlete_id, entry_date DESC, generated_at DESC);
     CREATE INDEX IF NOT EXISTS idx_coach_ai_day_reviews_coach_generated
       ON coach_ai_day_reviews (coach_user_id, generated_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_coach_ai_period_reviews_athlete_period
+      ON coach_ai_period_reviews (athlete_id, selected_date DESC, window_days, generated_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_coach_ai_period_reviews_coach_generated
+      ON coach_ai_period_reviews (coach_user_id, generated_at DESC);
     CREATE INDEX IF NOT EXISTS idx_device_health_daily_athlete_date
       ON device_health_daily_summaries (athlete_id, entry_date DESC);
     CREATE INDEX IF NOT EXISTS idx_device_health_samples_athlete_date_metric

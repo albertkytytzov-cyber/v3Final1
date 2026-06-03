@@ -2,6 +2,8 @@ import type {
   CoachAiReviewStatus,
   CoachDayAiPayload,
   CoachDayAiReview,
+  CoachPeriodAiPayload,
+  CoachPeriodAiReview,
 } from "@training-platform/shared";
 
 interface CoachDayAiReviewInput {
@@ -10,11 +12,19 @@ interface CoachDayAiReviewInput {
   dayPayload: CoachDayAiPayload;
 }
 
+interface CoachPeriodAiReviewInput {
+  athleteId: string;
+  periodPayload: CoachPeriodAiPayload;
+}
+
 interface ModelReviewJson {
   observation?: unknown;
   riskNotes?: unknown;
   tomorrowActions?: unknown;
+  periodActions?: unknown;
 }
+
+type ModelActionField = "tomorrowActions" | "periodActions";
 
 interface ResponsesApiPayload {
   output_text?: unknown;
@@ -36,8 +46,9 @@ const maxExercisesPerBlock = 12;
 
 const systemPrompt = [
   "Ты серверный помощник тренера в платформе PERFORM.",
-  "Разбери только переданную карточку дня спортсмена.",
+  "Разбери выбранный день спортсмена.",
   "Используй analysisContext как обязательную научную рамку PERFORM для борьбы: фаза, intent блока, энергетическая система, локальные зоны, контакт, техника, восстановление и вес.",
+  "Это дневной разбор: не подменяй его общим разбором периода.",
   "Не своди вывод к одной цифре нагрузки. Отдельно думай о локальной усталости хвата/плеч/шеи/ног, контактной плотности, качестве техники под утомлением и фазе подготовки.",
   "Если фаза похожа на подводку или соревнование, не предлагай добирать объём; приоритет — свежесть, резкость и качество.",
   "Если есть весогонка или быстрые изменения веса, учитывай это как фактор риска вместе со сном, пульсом покоя и гликолитической/контактной работой.",
@@ -54,6 +65,21 @@ const systemPrompt = [
   "observation: один короткий вывод по дню.",
   "riskNotes: 1-4 конкретных риска или важных наблюдения.",
   "tomorrowActions: 1-4 практических действия тренера на следующий день.",
+].join("\n");
+
+const periodSystemPrompt = [
+  "Ты серверный помощник тренера в платформе PERFORM.",
+  "Сделай общий разбор периода подготовки спортсмена, а не дневной разбор одной даты.",
+  "Смотри periodContext как основную основу: дни периода, микроцикл 7 дней, окно 7/14/30 дней, тренды нагрузки, готовности, сна, пульса покоя, веса, выполнения и тренировок устройства.",
+  "Отдельно оцени накопление нагрузки, конфликт нагрузки и восстановления, качество данных, недозакрытые дни, весовую динамику и устройство.",
+  "В борьбе учитывай локальную усталость ног/таза/корпуса/хвата/шеи, контактную плотность и риск ухудшения техники под утомлением.",
+  "Не делай медицинских диагнозов и не назначай лечение.",
+  "Не меняй план, дневник, назначения и статусы.",
+  "Отвечай на русском языке.",
+  "Верни только JSON с полями observation, riskNotes, periodActions.",
+  "observation: один короткий общий вывод по периоду.",
+  "riskNotes: 1-5 конкретных рисков или ограничений периода.",
+  "periodActions: 1-4 практических решения тренера по периоду или следующему микроциклу.",
 ].join("\n");
 
 export async function tryBuildCoachDayAiModelReview(
@@ -76,8 +102,12 @@ export async function tryBuildCoachDayAiModelReview(
   try {
     const modelReview = await requestModelReview({
       endpoint: config.endpoint,
+      actionField: "tomorrowActions",
       inputJson: payloadJson,
       model: config.model,
+      payloadLabel: "Карточка дня JSON",
+      schemaName: "coach_day_review",
+      systemPromptText: systemPrompt,
       timeoutMs: config.timeoutMs,
       apiKey: config.apiKey,
     });
@@ -92,11 +122,62 @@ export async function tryBuildCoachDayAiModelReview(
       observation: modelReview.observation,
       riskNotes: modelReview.riskNotes,
       source: "model",
-      tomorrowActions: modelReview.tomorrowActions,
+      tomorrowActions: modelReview.actions,
     };
   } catch (error) {
     console.warn(
       "Coach AI model review failed; using server rules.",
+      error instanceof Error ? error.message : "unknown error",
+    );
+    return null;
+  }
+}
+
+export async function tryBuildCoachPeriodAiModelReview(
+  input: CoachPeriodAiReviewInput,
+  fallbackReview: CoachPeriodAiReview,
+): Promise<CoachPeriodAiReview | null> {
+  const config = readCoachAiModelConfig();
+
+  if (!config.enabled) {
+    return null;
+  }
+
+  const modelPayload = buildPeriodModelSafePayload(input.periodPayload);
+  const payloadJson = JSON.stringify(modelPayload);
+
+  if (payloadJson.length > config.inputLimit) {
+    return null;
+  }
+
+  try {
+    const modelReview = await requestModelReview({
+      endpoint: config.endpoint,
+      actionField: "periodActions",
+      inputJson: payloadJson,
+      model: config.model,
+      payloadLabel: "Период подготовки JSON",
+      schemaName: "coach_period_review",
+      systemPromptText: periodSystemPrompt,
+      timeoutMs: config.timeoutMs,
+      apiKey: config.apiKey,
+    });
+
+    if (!modelReview) {
+      return null;
+    }
+
+    return {
+      ...fallbackReview,
+      generatedAt: new Date().toISOString(),
+      observation: modelReview.observation,
+      periodActions: modelReview.actions,
+      riskNotes: modelReview.riskNotes,
+      source: "model",
+    };
+  } catch (error) {
+    console.warn(
+      "Coach period AI model review failed; using server rules.",
       error instanceof Error ? error.message : "unknown error",
     );
     return null;
@@ -366,10 +447,64 @@ function buildModelSafePayload(payload: CoachDayAiPayload) {
   };
 }
 
+function buildPeriodModelSafePayload(payload: CoachPeriodAiPayload) {
+  return {
+    athlete: {
+      discipline: toLimitedNullableString(payload.athlete.discipline, maxShortStringLength),
+      displayName: toLimitedString(payload.athlete.displayName, maxShortStringLength),
+      sport: toLimitedNullableString(payload.athlete.sport, maxShortStringLength),
+      weightClass: toLimitedNullableString(payload.athlete.weightClass, maxShortStringLength),
+    },
+    periodContext: {
+      days: payload.periodContext.days.slice(-payload.windowDays).map((day) => ({
+        actualLoad: day.actualLoad,
+        bodyWeightKg: day.bodyWeightKg,
+        completedBlocks: day.completedBlocks,
+        date: day.date,
+        loadDelta: day.loadDelta,
+        missedBlocks: day.missedBlocks,
+        notesPresent: day.notesPresent,
+        partialBlocks: day.partialBlocks,
+        plannedBlocks: day.plannedBlocks,
+        plannedLoad: day.plannedLoad,
+        readinessScore: day.readinessScore,
+        readinessStatus: day.readinessStatus,
+        restingHr: day.restingHr,
+        sleepMinutes: day.sleepMinutes,
+        workoutCalories: day.workoutCalories,
+        workoutCount: day.workoutCount,
+        workoutDistanceMeters: day.workoutDistanceMeters,
+        workoutDurationMinutes: day.workoutDurationMinutes,
+      })),
+      interpretation: payload.periodContext.interpretation
+        .slice(0, 6)
+        .map((item) => toLimitedString(item, maxStringLength)),
+      mesocycle30: payload.periodContext.mesocycle30,
+      microcycle7: payload.periodContext.microcycle7,
+      periodEnd: payload.periodContext.periodEnd,
+      periodStart: payload.periodContext.periodStart,
+      selectedDate: payload.periodContext.selectedDate,
+      trends: payload.periodContext.trends,
+      warnings: payload.periodContext.warnings
+        .slice(0, 8)
+        .map((item) => toLimitedString(item, maxStringLength)),
+      windowDays: payload.periodContext.windowDays,
+    },
+    periodEnd: payload.periodEnd,
+    periodStart: payload.periodStart,
+    selectedDate: payload.selectedDate,
+    windowDays: payload.windowDays,
+  };
+}
+
 async function requestModelReview(input: {
   endpoint: string;
+  actionField: ModelActionField;
   inputJson: string;
   model: string;
+  payloadLabel: string;
+  schemaName: string;
+  systemPromptText: string;
   timeoutMs: number;
   apiKey: string;
 }) {
@@ -382,13 +517,13 @@ async function requestModelReview(input: {
         input: [
           {
             role: "system",
-            content: [{ type: "input_text", text: systemPrompt }],
+            content: [{ type: "input_text", text: input.systemPromptText }],
           },
           {
             role: "user",
             content: [{
               type: "input_text",
-              text: `Карточка дня JSON:\n${input.inputJson}`,
+              text: `${input.payloadLabel}:\n${input.inputJson}`,
             }],
           },
         ],
@@ -396,7 +531,7 @@ async function requestModelReview(input: {
         model: input.model,
         text: {
           format: {
-            name: "coach_day_review",
+            name: input.schemaName,
             schema: {
               type: "object",
               additionalProperties: false,
@@ -406,12 +541,12 @@ async function requestModelReview(input: {
                   type: "array",
                   items: { type: "string" },
                 },
-                tomorrowActions: {
+                [input.actionField]: {
                   type: "array",
                   items: { type: "string" },
                 },
               },
-              required: ["observation", "riskNotes", "tomorrowActions"],
+              required: ["observation", "riskNotes", input.actionField],
             },
             strict: true,
             type: "json_schema",
@@ -431,7 +566,7 @@ async function requestModelReview(input: {
     }
 
     const body = await response.json() as ResponsesApiPayload;
-    return parseModelReviewJson(extractResponseText(body));
+    return parseModelReviewJson(extractResponseText(body), input.actionField);
   } finally {
     clearTimeout(timeout);
   }
@@ -456,7 +591,7 @@ function extractResponseText(body: ResponsesApiPayload) {
   return "";
 }
 
-function parseModelReviewJson(rawValue: string) {
+function parseModelReviewJson(rawValue: string, actionField: ModelActionField) {
   const rawJson = rawValue.trim();
 
   if (!rawJson) {
@@ -472,16 +607,16 @@ function parseModelReviewJson(rawValue: string) {
 
   const observation = toModelText(parsed.observation);
   const riskNotes = toModelList(parsed.riskNotes);
-  const tomorrowActions = toModelList(parsed.tomorrowActions);
+  const actions = toModelList(parsed[actionField]);
 
-  if (!observation || riskNotes.length === 0 || tomorrowActions.length === 0) {
+  if (!observation || riskNotes.length === 0 || actions.length === 0) {
     return null;
   }
 
   return {
+    actions,
     observation,
     riskNotes,
-    tomorrowActions,
   };
 }
 

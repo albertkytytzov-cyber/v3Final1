@@ -48,6 +48,9 @@ import {
   type CoachDayAiReview,
   type CoachDayAiReviewHistoryResponse,
   type CoachDayAiReviewResponse,
+  type CoachPeriodAiReview,
+  type CoachPeriodAiReviewHistoryResponse,
+  type CoachPeriodAiReviewResponse,
   type CoachTeamDayResponse,
   type DeviceHealthDailySummariesResponse,
   type DeviceHealthDailySummary,
@@ -888,6 +891,142 @@ function getCoachAiReviewsForDay(
     )
     .slice()
     .sort(sortCoachAiReviewsNewestFirst);
+}
+
+function sortCoachPeriodAiReviewsNewestFirst(left: CoachPeriodAiReview, right: CoachPeriodAiReview) {
+  return right.generatedAt.localeCompare(left.generatedAt);
+}
+
+function upsertCoachPeriodAiReviewHistory(
+  reviews: CoachPeriodAiReview[],
+  review: CoachPeriodAiReview,
+) {
+  const nextReviews = review.id
+    ? reviews.filter((item) => item.id !== review.id)
+    : reviews.filter(
+        (item) =>
+          item.athleteId !== review.athleteId ||
+          item.selectedDate !== review.selectedDate ||
+          item.windowDays !== review.windowDays ||
+          item.generatedAt !== review.generatedAt,
+      );
+
+  return [review, ...nextReviews]
+    .filter((item) => item.source !== "local-rules")
+    .sort(sortCoachPeriodAiReviewsNewestFirst)
+    .slice(0, 300);
+}
+
+function getCoachPeriodAiReviewsForSelection(
+  reviews: CoachPeriodAiReview[],
+  athleteId: string,
+  selectedDate: string,
+  windowDays: number,
+) {
+  return reviews
+    .filter(
+      (review) =>
+        review.athleteId === athleteId &&
+        review.selectedDate === selectedDate &&
+        review.windowDays === windowDays &&
+        review.source !== "local-rules",
+    )
+    .slice()
+    .sort(sortCoachPeriodAiReviewsNewestFirst);
+}
+
+function buildCoachPeriodAiReviewUi(review: CoachPeriodAiReview, language: Language) {
+  const period = review.periodPayload.periodContext;
+  const microcycle = period.microcycle7;
+  const mesocycle = period.mesocycle30;
+  const riskText = review.riskNotes.join(" ").toLowerCase();
+  const tone = /риск|красн|снижен|конфликт|недовосстанов|risk|critical/iu.test(riskText)
+    ? "risk"
+    : review.riskNotes.length > 0 || period.warnings.length > 0
+      ? "caution"
+      : "normal";
+
+  return {
+    decision: {
+      detail: copyFor(language, {
+        en: `${review.periodStart} - ${review.periodEnd} · ${review.windowDays} days`,
+        ru: `${review.periodStart} - ${review.periodEnd} · ${review.windowDays} дней`,
+        bg: `${review.periodStart} - ${review.periodEnd} · ${review.windowDays} дни`,
+      }),
+      label:
+        tone === "normal"
+          ? copyFor(language, { en: "Stable", ru: "Стабильно", bg: "Стабилно" })
+          : tone === "caution"
+            ? copyFor(language, { en: "Watch", ru: "Контроль", bg: "Контрол" })
+            : copyFor(language, { en: "Risk", ru: "Риск", bg: "Риск" }),
+      tone,
+    },
+    metrics: [
+      {
+        detail: microcycle.completionRate !== null
+          ? `${copyFor(language, { en: "completion", ru: "выполнение", bg: "изпълнение" })} ${formatCoachDayLoadValue(microcycle.completionRate)}%`
+          : copyFor(language, { en: "completion not available", ru: "выполнение не рассчитано", bg: "няма изчисление" }),
+        label: copyFor(language, { en: "Load 7d", ru: "Нагрузка 7 дней", bg: "Натоварване 7 дни" }),
+        value: `${formatCoachDayLoadValue(microcycle.actualLoad)} / ${formatCoachDayLoadValue(microcycle.plannedLoad)}`,
+      },
+      {
+        detail: `${microcycle.daysWithReadiness}/${microcycle.periodDays} ${copyFor(language, { en: "days", ru: "дней", bg: "дни" })}`,
+        label: copyFor(language, { en: "Readiness", ru: "Готовность", bg: "Готовност" }),
+        value: microcycle.readinessAverage !== null ? formatCoachDayLoadValue(microcycle.readinessAverage) : "-",
+      },
+      {
+        detail: `${mesocycle.daysWithDeviceData}/${mesocycle.periodDays} ${copyFor(language, { en: "days with device data", ru: "дней с устройством", bg: "дни с устройство" })}`,
+        label: copyFor(language, { en: "Sleep avg", ru: "Сон средний", bg: "Среден сън" }),
+        value: microcycle.sleepAverageMinutes !== null
+          ? formatDeviceDuration(microcycle.sleepAverageMinutes, language)
+          : "-",
+      },
+      {
+        detail: copyFor(language, { en: "period body weight change", ru: "динамика веса за период", bg: "промяна на теглото за периода" }),
+        label: copyFor(language, { en: "Weight", ru: "Вес", bg: "Тегло" }),
+        value: mesocycle.bodyWeightDeltaKg !== null
+          ? `${mesocycle.bodyWeightDeltaKg > 0 ? "+" : ""}${formatCoachDayLoadValue(mesocycle.bodyWeightDeltaKg)} кг`
+          : "-",
+      },
+    ],
+    trends: [
+      {
+        label: copyFor(language, { en: "Load", ru: "Нагрузка", bg: "Натоварване" }),
+        value: formatCoachPeriodTrend(period.trends.load, language),
+      },
+      {
+        label: copyFor(language, { en: "Readiness", ru: "Готовность", bg: "Готовност" }),
+        value: formatCoachPeriodTrend(period.trends.readiness, language),
+      },
+      {
+        label: copyFor(language, { en: "Resting HR", ru: "Пульс покоя", bg: "Пулс в покой" }),
+        value: formatCoachPeriodTrend(period.trends.restingHr, language),
+      },
+      {
+        label: copyFor(language, { en: "Sleep", ru: "Сон", bg: "Сън" }),
+        value: formatCoachPeriodTrend(period.trends.sleep, language),
+      },
+    ],
+  };
+}
+
+function formatCoachPeriodTrend(
+  value: CoachPeriodAiReview["periodPayload"]["periodContext"]["trends"]["load"],
+  language: Language,
+) {
+  if (value === "up") {
+    return copyFor(language, { en: "up", ru: "растёт", bg: "расте" });
+  }
+
+  if (value === "down") {
+    return copyFor(language, { en: "down", ru: "снижается", bg: "спада" });
+  }
+
+  if (value === "stable") {
+    return copyFor(language, { en: "stable", ru: "стабильно", bg: "стабилно" });
+  }
+
+  return copyFor(language, { en: "no data", ru: "нет данных", bg: "няма данни" });
 }
 
 function getCoachDayAiPayloadFingerprint(payload: CoachDayAiPayload) {
@@ -8673,8 +8812,13 @@ export function PageClient({
   const [coachDiaryDraft, setCoachDiaryDraft] =
     useState<CoachDiaryDraft>(emptyCoachDiaryDraft);
   const [coachAiReviews, setCoachAiReviews] = useState<CoachDayAiReview[]>([]);
+  const [coachPeriodAiReviews, setCoachPeriodAiReviews] = useState<CoachPeriodAiReview[]>([]);
   const [coachAiReviewBusy, setCoachAiReviewBusy] = useState(false);
   const [coachAiReviewMessage, setCoachAiReviewMessage] = useState("");
+  const [coachPeriodAiReviewBusy, setCoachPeriodAiReviewBusy] = useState(false);
+  const [coachPeriodAiReviewMessage, setCoachPeriodAiReviewMessage] = useState("");
+  const [coachAiReviewTab, setCoachAiReviewTab] = useState<"day" | "period" | "history">("day");
+  const [coachPeriodWindowDays, setCoachPeriodWindowDays] = useState<7 | 14 | 30>(30);
   const [coachAiStatus, setCoachAiStatus] = useState<CoachAiReviewStatus | null>(null);
   const [coachAiDiagnostic, setCoachAiDiagnostic] =
     useState<CoachAiReviewDiagnosticResponse | null>(null);
@@ -8803,6 +8947,8 @@ export function PageClient({
     setCoachDiaryDraft(emptyCoachDiaryDraft);
     setCoachAiReviews([]);
     setCoachAiReviewMessage("");
+    setCoachPeriodAiReviews([]);
+    setCoachPeriodAiReviewMessage("");
     coachAnalyticsRequestIdRef.current += 1;
     setCoachAnalyticsOverview(null);
     setCoachAnalyticsLoading(false);
@@ -9909,6 +10055,11 @@ export function PageClient({
     setCoachAiReviews(response.reviews.slice().sort(sortCoachAiReviewsNewestFirst));
   }
 
+  async function loadCoachPeriodAiReviews() {
+    const response = await apiRequest<CoachPeriodAiReviewHistoryResponse>("/coach/ai-period-reviews");
+    setCoachPeriodAiReviews(response.reviews.slice().sort(sortCoachPeriodAiReviewsNewestFirst));
+  }
+
   async function loadCoachAiReviewStatus() {
     const response = await apiRequest<CoachAiReviewStatusResponse>("/coach/ai-day-review/status");
     setCoachAiStatus(response.status);
@@ -10526,6 +10677,7 @@ export function PageClient({
           loadCoachAthletes(),
           loadAvailableCoachAthletes(),
           loadCoachAiReviews(),
+          loadCoachPeriodAiReviews(),
           loadCoachAiReviewStatus(),
           loadPlanTemplates(),
           loadAssignedPlans(),
@@ -13259,6 +13411,8 @@ export function PageClient({
       setCoachAiDiagnosticMessage("");
       setCoachAiReviews([]);
       setCoachAiReviewMessage("");
+      setCoachPeriodAiReviews([]);
+      setCoachPeriodAiReviewMessage("");
       return;
     }
 
@@ -13266,6 +13420,9 @@ export function PageClient({
       void loadAvailableCoachAthletes();
       void loadCoachAiReviews().catch(() => {
         setCoachAiReviews([]);
+      });
+      void loadCoachPeriodAiReviews().catch(() => {
+        setCoachPeriodAiReviews([]);
       });
       void loadCoachAiReviewStatus().catch(() => {
         setCoachAiStatus(null);
@@ -13401,6 +13558,75 @@ export function PageClient({
       setErrorMessage(message);
     } finally {
       setCoachAiReviewBusy(false);
+    }
+  }
+
+  async function handleGenerateCoachPeriodAiReviewClick() {
+    if (!canSeeCoachWorkspace || !selectedAthleteId || !coachExecutionReview) {
+      setCoachPeriodAiReviewMessage(
+        copyFor(language, {
+          en: "Select an athlete and a date before generating the period review.",
+          ru: "Выберите спортсмена и дату перед формированием общего разбора.",
+          bg: "Изберете спортист и дата преди генериране на общ анализ.",
+        }),
+      );
+      return;
+    }
+
+    if (isPreviewMode) {
+      setCoachPeriodAiReviewMessage(
+        copyFor(language, {
+          en: "Period review generation is available after sign-in.",
+          ru: "Формирование общего разбора доступно после входа в аккаунт.",
+          bg: "Генерирането на общ анализ е достъпно след вход.",
+        }),
+      );
+      return;
+    }
+
+    setCoachPeriodAiReviewBusy(true);
+    setCoachPeriodAiReviewMessage(
+      copyFor(language, {
+        en: "Generating period review...",
+        ru: "Формирую общий разбор периода...",
+        bg: "Генерирам общ анализ за периода...",
+      }),
+    );
+    setErrorMessage("");
+
+    try {
+      const response = await apiRequest<CoachPeriodAiReviewResponse>(
+        `/coach/athletes/${encodeURIComponent(selectedAthleteId)}/ai-period-review`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            selectedDate: coachExecutionReview.dayDate,
+            windowDays: coachPeriodWindowDays,
+          }),
+        },
+      );
+      setCoachPeriodAiReviews((current) =>
+        upsertCoachPeriodAiReviewHistory(current, response.review)
+      );
+      setCoachPeriodAiReviewMessage(
+        copyFor(language, {
+          en: "Period review saved in history. Plan and diary were not changed.",
+          ru: "Общий разбор сохранён в истории. План и дневник не изменены.",
+          bg: "Общият анализ е запазен в историята. Планът и дневникът не са променени.",
+        }),
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setCoachPeriodAiReviewMessage(
+        copyFor(language, {
+          en: "Period review failed. Plan and diary were not changed.",
+          ru: "Общий разбор не прошёл. План и дневник не изменены.",
+          bg: "Общият анализ не мина. Планът и дневникът не са променени.",
+        }),
+      );
+      setErrorMessage(message);
+    } finally {
+      setCoachPeriodAiReviewBusy(false);
     }
   }
 
@@ -14289,6 +14515,18 @@ export function PageClient({
     ? getCoachAiReviewsForDay(coachAiReviews, selectedAthleteId, coachExecutionReview.dayDate)
     : [];
   const latestCoachAiReview = selectedCoachAiReviewHistory[0] ?? null;
+  const selectedCoachPeriodAiReviewHistory = shouldRenderCoachReviewSurface && coachExecutionReview
+    ? getCoachPeriodAiReviewsForSelection(
+        coachPeriodAiReviews,
+        selectedAthleteId,
+        coachExecutionReview.dayDate,
+        coachPeriodWindowDays,
+      )
+    : [];
+  const latestCoachPeriodAiReview = selectedCoachPeriodAiReviewHistory[0] ?? null;
+  const latestCoachPeriodAiReviewUi = latestCoachPeriodAiReview
+    ? buildCoachPeriodAiReviewUi(latestCoachPeriodAiReview, language)
+    : null;
   const selectedCoachReadinessEntry = shouldRenderCoachReviewSurface && coachExecutionReview
     ? (
         selectedAthleteEntries.find(
@@ -18753,184 +18991,388 @@ export function PageClient({
                             <div className="coach-ai-status-heading">
                               <strong>
                                 {copyFor(language, {
-                                  en: "AI review for this day",
-                                  ru: "Разбор ИИ по этому дню",
-                                  bg: "AI анализ за този ден",
+                                  en: "AI review",
+                                  ru: "ИИ-разбор",
+                                  bg: "AI анализ",
                                 })}
                               </strong>
                               <small>
                                 {copyFor(language, {
-                                  en: "Uses the selected day: data quality, readiness, plan, execution, device data, and coach note.",
-                                  ru: "Используется выбранный день: качество данных, готовность, план, выполнение, устройство и запись тренера.",
-                                  bg: "Използва избрания ден: качество на данните, готовност, план, изпълнение, устройство и запис на треньора.",
+                                  en: "Separate day review and period review. Plan and diary stay unchanged.",
+                                  ru: "Отдельно: разбор выбранного дня и общий разбор периода. План и дневник не меняются.",
+                                  bg: "Отделно: анализ на деня и общ анализ за периода. Планът и дневникът не се променят.",
                                 })}
                               </small>
                             </div>
-                            <button
-                              className="secondary-button"
-                              disabled={coachAiReviewBusy}
-                              onClick={() => void handleGenerateCoachAiReviewClick()}
-                              type="button"
-                            >
-                              {coachAiReviewBusy
-                                ? copyFor(language, {
-                                    en: "Generating...",
-                                    ru: "Формирую...",
-                                    bg: "Генерирам...",
-                                  })
-                                : copyFor(language, {
-                                    en: latestCoachAiReview ? "Update AI review" : "Generate AI review",
-                                    ru: latestCoachAiReview ? "Обновить ИИ-разбор" : "Сформировать ИИ-разбор",
-                                    bg: latestCoachAiReview ? "Обнови AI анализа" : "Генерирай AI анализ",
-                                  })}
-                            </button>
+                          </div>
+                          <div className="coach-ai-review-tabs" role="tablist">
+                            {([
+                              ["day", copyFor(language, { en: "Day review", ru: "Разбор дня", bg: "Дневен анализ" })],
+                              ["period", copyFor(language, { en: "Period review", ru: "Общий разбор", bg: "Общ анализ" })],
+                              ["history", copyFor(language, { en: "History", ru: "История", bg: "История" })],
+                            ] as const).map(([tab, label]) => (
+                              <button
+                                className={`coach-ai-review-tab${coachAiReviewTab === tab ? " is-active" : ""}`}
+                                key={tab}
+                                onClick={() => setCoachAiReviewTab(tab)}
+                                type="button"
+                              >
+                                {label}
+                              </button>
+                            ))}
                           </div>
 
-                          <p>
-                            {coachAiReviewMessage ||
-                              copyFor(language, {
-                                en: "The server saves only the recommendation history. Plan and diary stay unchanged.",
-                                ru: "Сервер сохраняет только историю рекомендации. План и дневник не меняются.",
-                                bg: "Сървърът запазва само историята на препоръката. Планът и дневникът не се променят.",
-                              })}
-                          </p>
-                          {isLatestCoachAiReviewStale ? (
-                            <p className="coach-ai-stale-warning">
-                              {latestCoachAiReviewUi?.staleReason}
-                            </p>
-                          ) : null}
-
-                          {latestCoachAiReview && latestCoachAiReviewUi ? (
-                            <div className="coach-ai-day-review-result">
-                              <div className="coach-ai-decision-grid">
-                                <article className="coach-ai-decision-card">
-                                  <span>
-                                    {copyFor(language, { en: "Main decision", ru: "Главное решение", bg: "Основно решение" })}
-                                  </span>
-                                  <div className="coach-ai-decision-status">
-                                    <strong className={`coach-ai-pill is-${latestCoachAiReviewUi.decision.tone}`}>
-                                      {latestCoachAiReviewUi.decision.label}
-                                    </strong>
-                                    <small>{latestCoachAiReviewUi.decision.detail}</small>
-                                  </div>
-                                  <p>{latestCoachAiReviewUi.decision.text}</p>
-                                </article>
-                                <article>
-                                  <span>
-                                    {copyFor(language, { en: "Confidence", ru: "Уверенность вывода", bg: "Увереност" })}
-                                  </span>
-                                  <div className="coach-ai-decision-status">
-                                    <strong className={`coach-ai-pill is-${latestCoachAiReviewUi.confidence.level}`}>
-                                      {latestCoachAiReviewUi.confidence.label}
-                                    </strong>
-                                  </div>
-                                  <p>{latestCoachAiReviewUi.confidence.reason}</p>
-                                </article>
-                              </div>
-
-                              <div className="coach-ai-method-grid">
-                                {latestCoachAiReviewUi.methodItems.map((item) => (
-                                  <article key={item.label}>
-                                    <span>{item.label}</span>
-                                    <strong>{item.value}</strong>
-                                    <small>{item.detail}</small>
-                                  </article>
-                                ))}
-                              </div>
-
-                              <div className="coach-ai-split-grid">
-                                <article>
-                                  <span>
-                                    {copyFor(language, { en: "What is visible", ru: "Что видно", bg: "Какво се вижда" })}
-                                  </span>
-                                  <p>{latestCoachAiReview.observation}</p>
-                                </article>
-                                <article>
-                                  <span>
+                          {coachAiReviewTab === "day" ? (
+                            <>
+                              <div className="summary-topline">
+                                <div className="coach-ai-status-heading">
+                                  <strong>
                                     {copyFor(language, {
-                                      en: "Missing for accuracy",
-                                      ru: "Чего не хватает для точности",
-                                      bg: "Какво липсва за точност",
+                                      en: "AI review for this day",
+                                      ru: "Разбор ИИ по этому дню",
+                                      bg: "AI анализ за този ден",
                                     })}
-                                  </span>
-                                  <ul>
-                                    {latestCoachAiReviewUi.missingItems.map((item) => (
-                                      <li key={item}>{item}</li>
-                                    ))}
-                                  </ul>
-                                </article>
+                                  </strong>
+                                  <small>
+                                    {copyFor(language, {
+                                      en: "Uses the selected day: data quality, readiness, plan, execution, device data, and coach note.",
+                                      ru: "Используется выбранный день: качество данных, готовность, план, выполнение, устройство и запись тренера.",
+                                      bg: "Използва избрания ден: качество на данните, готовност, план, изпълнение, устройство и запис на треньора.",
+                                    })}
+                                  </small>
+                                </div>
+                                <button
+                                  className="secondary-button"
+                                  disabled={coachAiReviewBusy}
+                                  onClick={() => void handleGenerateCoachAiReviewClick()}
+                                  type="button"
+                                >
+                                  {coachAiReviewBusy
+                                    ? copyFor(language, {
+                                        en: "Generating...",
+                                        ru: "Формирую...",
+                                        bg: "Генерирам...",
+                                      })
+                                    : copyFor(language, {
+                                        en: latestCoachAiReview ? "Update day review" : "Generate day review",
+                                        ru: latestCoachAiReview ? "Обновить разбор дня" : "Сформировать разбор дня",
+                                        bg: latestCoachAiReview ? "Обнови дневния анализ" : "Генерирай дневен анализ",
+                                      })}
+                                </button>
                               </div>
 
-                              {latestCoachAiReviewUi.blockRows.length > 0 ? (
-                                <article className="coach-ai-block-analysis">
-                                  <span>
-                                    {copyFor(language, { en: "Block analysis", ru: "Анализ по блокам", bg: "Анализ по блокове" })}
-                                  </span>
-                                  <div>
-                                    {latestCoachAiReviewUi.blockRows.map((row) => (
-                                      <div className="coach-ai-block-row" key={`${row.blockName}-${row.stimulus}`}>
-                                        <strong>{row.blockName}</strong>
-                                        <small>{row.stimulus}</small>
-                                        <small>{row.fact}</small>
-                                        <small>{row.local}</small>
-                                        <small>{row.risk}</small>
-                                      </div>
-                                    ))}
-                                  </div>
-                                </article>
+                              <p>
+                                {coachAiReviewMessage ||
+                                  copyFor(language, {
+                                    en: "The server saves only the day recommendation history.",
+                                    ru: "Сервер сохраняет только историю рекомендации по выбранному дню.",
+                                    bg: "Сървърът запазва само историята на препоръката за избрания ден.",
+                                  })}
+                              </p>
+                              {isLatestCoachAiReviewStale ? (
+                                <p className="coach-ai-stale-warning">
+                                  {latestCoachAiReviewUi?.staleReason}
+                                </p>
                               ) : null}
 
-                              <article className="coach-ai-tomorrow">
-                                <span>
-                                  {copyFor(language, {
-                                    en: "What to do tomorrow",
-                                    ru: "Что сделать завтра",
-                                    bg: "Какво да се направи утре",
-                                  })}
-                                </span>
-                                <div>
-                                  {latestCoachAiReviewUi.tomorrowItems.map((item) => (
-                                    <section key={item.label}>
-                                      <strong>{item.label}</strong>
-                                      <p>{item.text}</p>
-                                    </section>
-                                  ))}
+                              {latestCoachAiReview && latestCoachAiReviewUi ? (
+                                <div className="coach-ai-day-review-result">
+                                  <div className="coach-ai-decision-grid">
+                                    <article className="coach-ai-decision-card">
+                                      <span>
+                                        {copyFor(language, { en: "Main decision", ru: "Главное решение", bg: "Основно решение" })}
+                                      </span>
+                                      <div className="coach-ai-decision-status">
+                                        <strong className={`coach-ai-pill is-${latestCoachAiReviewUi.decision.tone}`}>
+                                          {latestCoachAiReviewUi.decision.label}
+                                        </strong>
+                                        <small>{latestCoachAiReviewUi.decision.detail}</small>
+                                      </div>
+                                      <p>{latestCoachAiReviewUi.decision.text}</p>
+                                    </article>
+                                    <article>
+                                      <span>
+                                        {copyFor(language, { en: "Confidence", ru: "Уверенность вывода", bg: "Увереност" })}
+                                      </span>
+                                      <div className="coach-ai-decision-status">
+                                        <strong className={`coach-ai-pill is-${latestCoachAiReviewUi.confidence.level}`}>
+                                          {latestCoachAiReviewUi.confidence.label}
+                                        </strong>
+                                      </div>
+                                      <p>{latestCoachAiReviewUi.confidence.reason}</p>
+                                    </article>
+                                  </div>
+
+                                  <div className="coach-ai-method-grid">
+                                    {latestCoachAiReviewUi.methodItems.map((item) => (
+                                      <article key={item.label}>
+                                        <span>{item.label}</span>
+                                        <strong>{item.value}</strong>
+                                        <small>{item.detail}</small>
+                                      </article>
+                                    ))}
+                                  </div>
+
+                                  <div className="coach-ai-split-grid">
+                                    <article>
+                                      <span>
+                                        {copyFor(language, { en: "What is visible", ru: "Что видно", bg: "Какво се вижда" })}
+                                      </span>
+                                      <p>{latestCoachAiReview.observation}</p>
+                                    </article>
+                                    <article>
+                                      <span>
+                                        {copyFor(language, {
+                                          en: "Missing for accuracy",
+                                          ru: "Чего не хватает для точности",
+                                          bg: "Какво липсва за точност",
+                                        })}
+                                      </span>
+                                      <ul>
+                                        {latestCoachAiReviewUi.missingItems.map((item) => (
+                                          <li key={item}>{item}</li>
+                                        ))}
+                                      </ul>
+                                    </article>
+                                  </div>
+
+                                  {latestCoachAiReviewUi.blockRows.length > 0 ? (
+                                    <article className="coach-ai-block-analysis">
+                                      <span>
+                                        {copyFor(language, { en: "Block analysis", ru: "Анализ по блокам", bg: "Анализ по блокове" })}
+                                      </span>
+                                      <div>
+                                        {latestCoachAiReviewUi.blockRows.map((row) => (
+                                          <div className="coach-ai-block-row" key={`${row.blockName}-${row.stimulus}`}>
+                                            <strong>{row.blockName}</strong>
+                                            <small>{row.stimulus}</small>
+                                            <small>{row.fact}</small>
+                                            <small>{row.local}</small>
+                                            <small>{row.risk}</small>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </article>
+                                  ) : null}
+
+                                  <article className="coach-ai-tomorrow">
+                                    <span>
+                                      {copyFor(language, {
+                                        en: "What to do tomorrow",
+                                        ru: "Что сделать завтра",
+                                        bg: "Какво да се направи утре",
+                                      })}
+                                    </span>
+                                    <div>
+                                      {latestCoachAiReviewUi.tomorrowItems.map((item) => (
+                                        <section key={item.label}>
+                                          <strong>{item.label}</strong>
+                                          <p>{item.text}</p>
+                                        </section>
+                                      ))}
+                                    </div>
+                                  </article>
+
+                                  <small>
+                                    {latestCoachAiReview.generatedAt.slice(0, 16)} / {latestCoachAiReviewUi.sourceLabel}
+                                  </small>
                                 </div>
-                              </article>
+                              ) : (
+                                <p className="placeholder-copy">
+                                  {copyFor(language, {
+                                    en: "There is no day AI review history for this date yet.",
+                                    ru: "Истории дневного ИИ-разбора за эту дату пока нет.",
+                                    bg: "Все още няма дневен AI анализ за тази дата.",
+                                  })}
+                                </p>
+                              )}
+                            </>
+                          ) : null}
 
-                              <small>
-                                {latestCoachAiReview.generatedAt.slice(0, 16)} / {latestCoachAiReviewUi.sourceLabel}
-                              </small>
-                            </div>
-                          ) : (
-                            <p className="placeholder-copy">
-                              {copyFor(language, {
-                                en: "There is no AI review history for this day yet.",
-                                ru: "Истории разбора ИИ за этот день пока нет.",
-                                bg: "Все още няма история на AI анализ за този ден.",
-                              })}
-                            </p>
-                          )}
+                          {coachAiReviewTab === "period" ? (
+                            <>
+                              <div className="summary-topline">
+                                <div className="coach-ai-status-heading">
+                                  <strong>
+                                    {copyFor(language, {
+                                      en: "Period review",
+                                      ru: "Общий разбор периода",
+                                      bg: "Общ анализ за периода",
+                                    })}
+                                  </strong>
+                                  <small>
+                                    {copyFor(language, {
+                                      en: "Uses accumulated load, readiness, sleep, resting HR, weight and device workouts.",
+                                      ru: "Использует накопленную нагрузку, готовность, сон, пульс покоя, вес и тренировки устройства.",
+                                      bg: "Използва натрупано натоварване, готовност, сън, пулс, тегло и тренировки от устройство.",
+                                    })}
+                                  </small>
+                                </div>
+                                <div className="coach-ai-period-actions">
+                                  <div className="coach-ai-review-tabs is-compact">
+                                    {([7, 14, 30] as const).map((days) => (
+                                      <button
+                                        className={`coach-ai-review-tab${coachPeriodWindowDays === days ? " is-active" : ""}`}
+                                        key={days}
+                                        onClick={() => setCoachPeriodWindowDays(days)}
+                                        type="button"
+                                      >
+                                        {days}
+                                      </button>
+                                    ))}
+                                  </div>
+                                  <button
+                                    className="secondary-button"
+                                    disabled={coachPeriodAiReviewBusy}
+                                    onClick={() => void handleGenerateCoachPeriodAiReviewClick()}
+                                    type="button"
+                                  >
+                                    {coachPeriodAiReviewBusy
+                                      ? copyFor(language, { en: "Generating...", ru: "Формирую...", bg: "Генерирам..." })
+                                      : copyFor(language, {
+                                          en: latestCoachPeriodAiReview ? "Update period review" : "Generate period review",
+                                          ru: latestCoachPeriodAiReview ? "Обновить общий разбор" : "Сформировать общий разбор",
+                                          bg: latestCoachPeriodAiReview ? "Обнови общия анализ" : "Генерирай общ анализ",
+                                        })}
+                                  </button>
+                                </div>
+                              </div>
 
-                          {selectedCoachAiReviewHistory.length > 1 ? (
-                            <details className="coach-ai-review-history">
-                              <summary>
-                                {copyFor(language, {
-                                  en: `AI review history · ${selectedCoachAiReviewHistory.length}`,
-                                  ru: `История ИИ-разборов · ${selectedCoachAiReviewHistory.length}`,
-                                  bg: `История на AI анализите · ${selectedCoachAiReviewHistory.length}`,
-                                })}
-                              </summary>
-                              {selectedCoachAiReviewHistory.slice(1, 6).map((review) => (
-                                <article key={`${review.generatedAt}-${review.source}`}>
-                                  <strong>{review.observation}</strong>
-                                  <span>
-                                    {review.generatedAt.slice(0, 16)} /{" "}
-                                    {formatCoachAiReviewSourceWithFramework(review, language)}
+                              <p>
+                                {coachPeriodAiReviewMessage ||
+                                  copyFor(language, {
+                                    en: "This review is about the period, not only the selected day.",
+                                    ru: "Этот разбор оценивает период, а не только выбранный день.",
+                                    bg: "Този анализ оценява периода, не само избрания ден.",
+                                  })}
+                              </p>
+
+                              {latestCoachPeriodAiReview && latestCoachPeriodAiReviewUi ? (
+                                <div className="coach-ai-day-review-result">
+                                  <div className="coach-ai-decision-grid">
+                                    <article className="coach-ai-decision-card">
+                                      <span>
+                                        {copyFor(language, { en: "Period decision", ru: "Вывод по периоду", bg: "Извод за периода" })}
+                                      </span>
+                                      <div className="coach-ai-decision-status">
+                                        <strong className={`coach-ai-pill is-${latestCoachPeriodAiReviewUi.decision.tone}`}>
+                                          {latestCoachPeriodAiReviewUi.decision.label}
+                                        </strong>
+                                        <small>{latestCoachPeriodAiReviewUi.decision.detail}</small>
+                                      </div>
+                                      <p>{latestCoachPeriodAiReview.observation}</p>
+                                    </article>
+                                    <article>
+                                      <span>
+                                        {copyFor(language, { en: "Source", ru: "Источник", bg: "Източник" })}
+                                      </span>
+                                      <p>
+                                        {latestCoachPeriodAiReview.generatedAt.slice(0, 16)} /{" "}
+                                        {formatCoachAiReviewSource(latestCoachPeriodAiReview.source, language)}
+                                      </p>
+                                    </article>
+                                  </div>
+
+                                  <div className="coach-ai-method-grid">
+                                    {latestCoachPeriodAiReviewUi.metrics.map((item) => (
+                                      <article key={item.label}>
+                                        <span>{item.label}</span>
+                                        <strong>{item.value}</strong>
+                                        <small>{item.detail}</small>
+                                      </article>
+                                    ))}
+                                  </div>
+
+                                  <div className="coach-ai-split-grid">
+                                    <article>
+                                      <span>
+                                        {copyFor(language, { en: "Trends", ru: "Тренды", bg: "Тенденции" })}
+                                      </span>
+                                      <div className="coach-ai-period-trends">
+                                        {latestCoachPeriodAiReviewUi.trends.map((trend) => (
+                                          <section key={trend.label}>
+                                            <small>{trend.label}</small>
+                                            <strong>{trend.value}</strong>
+                                          </section>
+                                        ))}
+                                      </div>
+                                    </article>
+                                    <article>
+                                      <span>
+                                        {copyFor(language, { en: "Risks", ru: "Риски", bg: "Рискове" })}
+                                      </span>
+                                      <ul>
+                                        {(latestCoachPeriodAiReview.riskNotes.length
+                                          ? latestCoachPeriodAiReview.riskNotes
+                                          : [copyFor(language, { en: "No critical period risks visible.", ru: "Критичных рисков по периоду не видно.", bg: "Няма видими критични рискове." })]
+                                        ).map((item) => (
+                                          <li key={item}>{item}</li>
+                                        ))}
+                                      </ul>
+                                    </article>
+                                  </div>
+
+                                  <article className="coach-ai-tomorrow">
+                                    <span>
+                                      {copyFor(language, {
+                                        en: "Coach decisions for the period",
+                                        ru: "Решения тренера по периоду",
+                                        bg: "Решения на треньора за периода",
+                                      })}
+                                    </span>
+                                    <div>
+                                      {latestCoachPeriodAiReview.periodActions.map((item, index) => (
+                                        <section key={`${index}-${item}`}>
+                                          <strong>{index + 1}</strong>
+                                          <p>{item}</p>
+                                        </section>
+                                      ))}
+                                    </div>
+                                  </article>
+                                </div>
+                              ) : (
+                                <p className="placeholder-copy">
+                                  {copyFor(language, {
+                                    en: "There is no period AI review for this window yet.",
+                                    ru: "Общего ИИ-разбора для этого окна пока нет.",
+                                    bg: "Все още няма общ AI анализ за този прозорец.",
+                                  })}
+                                </p>
+                              )}
+                            </>
+                          ) : null}
+
+                          {coachAiReviewTab === "history" ? (
+                            <div className="coach-ai-review-history">
+                              <article>
+                                <strong>
+                                  {copyFor(language, {
+                                    en: `Day reviews · ${selectedCoachAiReviewHistory.length}`,
+                                    ru: `Дневные разборы · ${selectedCoachAiReviewHistory.length}`,
+                                    bg: `Дневни анализи · ${selectedCoachAiReviewHistory.length}`,
+                                  })}
+                                </strong>
+                                {selectedCoachAiReviewHistory.slice(0, 6).map((review) => (
+                                  <span key={`${review.generatedAt}-${review.source}`}>
+                                    {review.generatedAt.slice(0, 16)} / {formatCoachAiReviewSourceWithFramework(review, language)} · {review.observation}
                                   </span>
-                                </article>
-                              ))}
-                            </details>
+                                ))}
+                              </article>
+                              <article>
+                                <strong>
+                                  {copyFor(language, {
+                                    en: `Period reviews · ${selectedCoachPeriodAiReviewHistory.length}`,
+                                    ru: `Общие разборы · ${selectedCoachPeriodAiReviewHistory.length}`,
+                                    bg: `Общи анализи · ${selectedCoachPeriodAiReviewHistory.length}`,
+                                  })}
+                                </strong>
+                                {selectedCoachPeriodAiReviewHistory.slice(0, 6).map((review) => (
+                                  <span key={`${review.generatedAt}-${review.source}-${review.windowDays}`}>
+                                    {review.generatedAt.slice(0, 16)} / {review.windowDays} {copyFor(language, { en: "days", ru: "дней", bg: "дни" })} · {review.observation}
+                                  </span>
+                                ))}
+                              </article>
+                            </div>
                           ) : null}
                         </div>
                       </details>
