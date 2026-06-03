@@ -942,6 +942,332 @@ function formatCoachAiReviewSource(source: CoachDayAiReview["source"], language:
   });
 }
 
+function formatCoachAiReviewSourceWithFramework(review: CoachDayAiReview, language: Language) {
+  const framework = review.dayPayload.analysisContext?.frameworkVersion;
+  const source = formatCoachAiReviewSource(review.source, language);
+
+  return framework ? `${source} · ${framework}` : source;
+}
+
+function buildCoachAiReviewUi(
+  review: CoachDayAiReview,
+  currentPayload: CoachDayAiPayload | null,
+  isStale: boolean,
+  language: Language,
+) {
+  const confidence = buildCoachAiReviewConfidence(review, language);
+  const decision = buildCoachAiReviewDecision(review, confidence.level, language);
+
+  return {
+    blockRows: buildCoachAiReviewBlockRows(review, language),
+    confidence,
+    decision,
+    methodItems: buildCoachAiReviewMethodItems(review, language),
+    missingItems: buildCoachAiReviewMissingItems(review, language),
+    sourceLabel: formatCoachAiReviewSourceWithFramework(review, language),
+    staleReason: isStale ? buildCoachAiReviewStaleReason(review, currentPayload, language) : "",
+    tomorrowItems: buildCoachAiReviewTomorrowItems(review, language),
+  };
+}
+
+function buildCoachAiReviewConfidence(review: CoachDayAiReview, language: Language) {
+  const missing = review.dayPayload.dataQuality?.missing ?? [];
+  const hasRecoveryMissing = missing.some((item) => /сон|sleep|пульс|hr|spo2|готов|readiness/iu.test(item));
+  const level =
+    missing.length === 0
+      ? "high"
+      : missing.length <= 2 && !hasRecoveryMissing
+        ? "medium"
+        : missing.length <= 5
+          ? "medium"
+          : "low";
+
+  return {
+    label:
+      level === "high"
+        ? copyFor(language, { en: "High", ru: "Высокая", bg: "Висока" })
+        : level === "medium"
+          ? copyFor(language, { en: "Medium", ru: "Средняя", bg: "Средна" })
+          : copyFor(language, { en: "Low", ru: "Низкая", bg: "Ниска" }),
+    level,
+    reason:
+      missing.length > 0
+        ? copyFor(language, {
+            en: `Missing: ${missing.slice(0, 6).join(", ")}.`,
+            ru: `Не хватает: ${missing.slice(0, 6).join(", ")}.`,
+            bg: `Липсва: ${missing.slice(0, 6).join(", ")}.`,
+          })
+        : copyFor(language, {
+            en: "Plan, execution and recovery context are enough for a confident review.",
+            ru: "План, выполнение и контекст восстановления достаточны для уверенного разбора.",
+            bg: "Планът, изпълнението и възстановяването са достатъчни за уверен анализ.",
+          }),
+  };
+}
+
+function buildCoachAiReviewDecision(
+  review: CoachDayAiReview,
+  confidenceLevel: string,
+  language: Language,
+) {
+  const payload = review.dayPayload;
+  const riskText = review.riskNotes.join(" ").toLowerCase();
+  const actionText = review.tomorrowActions.join(" ").toLowerCase();
+  const status = payload.execution.status;
+  const loadDelta = payload.load.delta;
+  const hasHardRisk = /красн|критич|травм|боль|не\s+усиливать|снизить|снижен|risk|critical/iu.test(riskText);
+  const hasCaution = hasHardRisk || confidenceLevel !== "high" || Math.abs(loadDelta) > 0 || /провер|данн|восстанов|готов/iu.test(actionText);
+  const tone =
+    hasHardRisk || confidenceLevel === "low"
+      ? "risk"
+      : hasCaution
+        ? "caution"
+        : "normal";
+
+  return {
+    detail:
+      status === "completed" && Math.abs(loadDelta) < 0.1
+        ? copyFor(language, {
+            en: "Day credited · decide the next day by recovery",
+            ru: "День зачтён · следующий день решать по восстановлению",
+            bg: "Денят е зачетен · следващият ден зависи от възстановяването",
+          })
+        : status === "partial"
+          ? copyFor(language, {
+              en: "Partial execution · check why the plan was not fully completed",
+              ru: "Частичное выполнение · проверьте, почему план не закрыт полностью",
+              bg: "Частично изпълнение · проверете защо планът не е изпълнен докрай",
+            })
+          : copyFor(language, {
+              en: "Review the day before changing the next load",
+              ru: "Разберите день перед изменением следующей нагрузки",
+              bg: "Анализирайте деня преди промяна на следващото натоварване",
+            }),
+    label:
+      tone === "normal"
+        ? copyFor(language, { en: "Normal", ru: "Норма", bg: "Норма" })
+        : tone === "caution"
+          ? copyFor(language, { en: "Caution", ru: "Осторожно", bg: "Внимание" })
+          : copyFor(language, { en: "Risk", ru: "Риск", bg: "Риск" }),
+    text: buildCoachAiReviewDecisionText(review, confidenceLevel, language),
+    tone,
+  };
+}
+
+function buildCoachAiReviewDecisionText(
+  review: CoachDayAiReview,
+  confidenceLevel: string,
+  language: Language,
+) {
+  const payload = review.dayPayload;
+
+  if (payload.execution.status === "completed" && Math.abs(payload.load.delta) < 0.1) {
+    return confidenceLevel === "high"
+      ? copyFor(language, {
+          en: "The fact matched the plan; the next day can follow the planned logic.",
+          ru: "Факт совпал с планом; следующий день можно вести по плановой логике.",
+          bg: "Фактът съвпада с плана; следващият ден може да следва плана.",
+        })
+      : copyFor(language, {
+          en: "The fact matched the plan, but without recovery data the next day should not be strengthened automatically.",
+          ru: "Факт совпал с планом, но без данных восстановления следующий день нельзя усиливать автоматически.",
+          bg: "Фактът съвпада с плана, но без данни за възстановяване следващият ден не трябва да се усилва автоматично.",
+        });
+  }
+
+  return review.observation;
+}
+
+function buildCoachAiReviewMethodItems(review: CoachDayAiReview, language: Language) {
+  const context = review.dayPayload.analysisContext;
+  const contact = context?.blocks.find((block) => block.contactIntensity === "high") ??
+    context?.blocks.find((block) => block.contactIntensity === "moderate") ??
+    context?.blocks.find((block) => block.contactIntensity === "low") ??
+    null;
+
+  return [
+    {
+      detail: context?.primaryIntents.slice(0, 2).join(" · ") || copyFor(language, { en: "not defined", ru: "не определён", bg: "не е определен" }),
+      label: copyFor(language, { en: "Energy", ru: "Энергетика", bg: "Енергетика" }),
+      value: context?.energySystems.slice(0, 2).join(" + ") || copyFor(language, { en: "not enough data", ru: "нет данных", bg: "няма данни" }),
+    },
+    {
+      detail: copyFor(language, {
+        en: "Check these zones before the next similar block.",
+        ru: "Проверить эти зоны перед похожим блоком.",
+        bg: "Проверете тези зони преди подобен блок.",
+      }),
+      label: copyFor(language, { en: "Local load", ru: "Локальная нагрузка", bg: "Локално натоварване" }),
+      value: context?.localLoadZones.slice(0, 4).join(" · ") || copyFor(language, { en: "not visible", ru: "не видно", bg: "не се вижда" }),
+    },
+    {
+      detail: contact
+        ? `${contact.blockName} · ${formatCoachAiAnalysisContactIntensity(contact.contactIntensity)}`
+        : copyFor(language, { en: "no heavy contact signal", ru: "нет сигнала тяжёлого контакта", bg: "няма сигнал за тежък контакт" }),
+      label: copyFor(language, { en: "Contact", ru: "Контакт", bg: "Контакт" }),
+      value: contact
+        ? formatCoachAiAnalysisContactIntensity(contact.contactIntensity)
+        : copyFor(language, { en: "none/low", ru: "нет/низкий", bg: "няма/нисък" }),
+    },
+    {
+      detail: copyFor(language, {
+        en: "Main quality marker for the coach.",
+        ru: "Главный маркер качества для тренера.",
+        bg: "Основен маркер за качество за треньора.",
+      }),
+      label: copyFor(language, { en: "Technique", ru: "Техника", bg: "Техника" }),
+      value: context?.technicalFocus.slice(0, 2).join(" · ") || copyFor(language, { en: "not defined", ru: "не определена", bg: "не е определена" }),
+    },
+  ];
+}
+
+function buildCoachAiReviewMissingItems(review: CoachDayAiReview, language: Language) {
+  const missing = review.dayPayload.dataQuality?.missing ?? [];
+
+  return missing.length
+    ? missing
+    : [
+        copyFor(language, {
+          en: "Enough data for the current review.",
+          ru: "Для текущего разбора данных достаточно.",
+          bg: "Има достатъчно данни за текущия анализ.",
+        }),
+      ];
+}
+
+function buildCoachAiReviewBlockRows(review: CoachDayAiReview, language: Language) {
+  const blocks = review.dayPayload.analysisContext?.blocks ?? [];
+
+  return blocks.slice(0, 4).map((block) => ({
+    blockName: block.blockName,
+    fact: findCoachAiReviewPlanBlockStatus(review, block.blockName, language),
+    local: block.localZones.slice(0, 4).join(", ") || copyFor(language, { en: "not isolated", ru: "не выделена", bg: "не е отделена" }),
+    risk: buildCoachAiReviewBlockRisk(block, language),
+    stimulus: `${block.intent} · ${block.energySystem}`,
+  }));
+}
+
+function findCoachAiReviewPlanBlockStatus(
+  review: CoachDayAiReview,
+  blockName: string,
+  language: Language,
+) {
+  const planBlock = review.dayPayload.plan.blocks.find((block) => block.name === blockName);
+
+  if (!planBlock) {
+    return copyFor(language, { en: "in analysis context", ru: "в контексте анализа", bg: "в контекста на анализа" });
+  }
+
+  const statusLabel =
+    planBlock.status === "completed"
+      ? copyFor(language, { en: "completed", ru: "выполнено", bg: "изпълнено" })
+      : planBlock.status === "partial"
+        ? copyFor(language, { en: "partial", ru: "частично", bg: "частично" })
+        : copyFor(language, { en: "not completed", ru: "не выполнено", bg: "не е изпълнено" });
+
+  return `${statusLabel} · ${formatCoachDayLoadValue(planBlock.actualLoad)} / ${formatCoachDayLoadValue(planBlock.plannedLoad)}`;
+}
+
+function buildCoachAiReviewBlockRisk(
+  block: NonNullable<CoachDayAiPayload["analysisContext"]>["blocks"][number],
+  language: Language,
+) {
+  if (block.contactIntensity === "high") {
+    return copyFor(language, {
+      en: "check contact fatigue",
+      ru: "проверить контактную усталость",
+      bg: "проверете контактната умора",
+    });
+  }
+
+  if (block.energySystem === "glycolytic") {
+    return copyFor(language, {
+      en: "watch technique under fatigue",
+      ru: "контроль техники под усталостью",
+      bg: "контрол на техниката при умора",
+    });
+  }
+
+  if (block.localZones.length) {
+    return copyFor(language, {
+      en: "check local freshness",
+      ru: "проверить локальную свежесть",
+      bg: "проверете локалната свежест",
+    });
+  }
+
+  return copyFor(language, { en: "no separate risk", ru: "отдельного риска нет", bg: "няма отделен риск" });
+}
+
+function buildCoachAiReviewTomorrowItems(review: CoachDayAiReview, language: Language) {
+  const actions = review.tomorrowActions;
+  const findAction = (pattern: RegExp, fallbackIndex: number) =>
+    actions.find((item) => pattern.test(item)) ?? actions[fallbackIndex] ?? review.observation;
+
+  return [
+    {
+      label: copyFor(language, { en: "Keep", ru: "Оставить", bg: "Остави" }),
+      text: findAction(/техник|quality|качест|остав|сохран/iu, 0),
+    },
+    {
+      label: copyFor(language, { en: "Check", ru: "Проверить", bg: "Провери" }),
+      text: findAction(/провер|сон|пульс|готов|свеж|боль|восстанов/iu, 1),
+    },
+    {
+      label: copyFor(language, { en: "Do not add", ru: "Не добавлять", bg: "Не добавяй" }),
+      text: findAction(/не\s+добав|не\s+добир|объ[её]м|усили/iu, 2),
+    },
+    {
+      label: copyFor(language, { en: "Decision after data", ru: "Решение после данных", bg: "Решение след данни" }),
+      text: findAction(/данн|после|если|готов/iu, 3),
+    },
+  ];
+}
+
+function buildCoachAiReviewStaleReason(
+  review: CoachDayAiReview,
+  currentPayload: CoachDayAiPayload | null,
+  language: Language,
+) {
+  if (!currentPayload) {
+    return copyFor(language, {
+      en: "The day data changed after the last review. Update it before making a decision.",
+      ru: "Данные дня изменились после последнего разбора. Обновите разбор перед решением.",
+      bg: "Данните за деня са променени след последния анализ. Обновете анализа преди решение.",
+    });
+  }
+
+  if (!review.dayPayload.analysisContext && currentPayload.analysisContext) {
+    return copyFor(language, {
+      en: "Review is outdated: the PERFORM wrestling analysis method was updated.",
+      ru: "Разбор устарел: обновилась методика PERFORM для анализа борьбы.",
+      bg: "Анализът е остарял: методиката PERFORM за борба е обновена.",
+    });
+  }
+
+  if (review.dayPayload.load.actual !== currentPayload.load.actual || review.dayPayload.load.planned !== currentPayload.load.planned) {
+    return copyFor(language, {
+      en: "Review is outdated: plan/fact load changed.",
+      ru: "Разбор устарел: изменилась нагрузка план/факт.",
+      bg: "Анализът е остарял: променено е натоварването план/факт.",
+    });
+  }
+
+  if (JSON.stringify(review.dayPayload.dataQuality?.missing ?? []) !== JSON.stringify(currentPayload.dataQuality?.missing ?? [])) {
+    return copyFor(language, {
+      en: "Review is outdated: the set of available data changed.",
+      ru: "Разбор устарел: изменился набор доступных данных.",
+      bg: "Анализът е остарял: променен е наборът от данни.",
+    });
+  }
+
+  return copyFor(language, {
+    en: "Review is outdated: the selected day was updated after the last review.",
+    ru: "Разбор устарел: выбранный день обновился после последнего разбора.",
+    bg: "Анализът е остарял: избраният ден е обновен след последния анализ.",
+  });
+}
+
 function getCoachTeamDayExecutionStatusLabel(
   status: CoachTeamDaySummary["executionStatus"],
   language: Language,
@@ -3231,7 +3557,7 @@ function buildCoachDayAiPhaseLabelFromReview(review: ExecutionReviewPlan) {
     labels.push("taper");
   }
 
-  if (/сгон|вес/u.test(text)) {
+  if (hasCoachAiExplicitWeightCutSignal(text)) {
     labels.push("weight_cut");
   }
 
@@ -3290,7 +3616,7 @@ function buildCoachDayAiWeightCutSignalsFromReview(input: {
     ...input.blocks.flatMap((block) => [block.name, block.notes, block.target]),
   ].join(" "));
 
-  if (/сгон|вес|57|58|59|60|углевод|соль|гликоген|жкт/u.test(combinedText)) {
+  if (hasCoachAiExplicitWeightCutSignal(combinedText)) {
     signals.push("есть контекст веса/сгонки: нагрузку оценивать вместе со сном, пульсом и свежестью");
   }
 
@@ -3374,6 +3700,10 @@ function buildCoachDayAiRulesFromAnalysis(input: {
 
 function normalizeCoachAiAnalysisText(value: string) {
   return value.toLowerCase().replace(/ё/g, "е");
+}
+
+function hasCoachAiExplicitWeightCutSignal(text: string) {
+  return /weight[_\s-]?cut|сгон|весогон|стартов(?:ая|ой)?\s+масс|ограничени[ея]\s+(?:вод|соли|соль|углевод)|обезвож|сушк|углевод|гликоген|жкт/iu.test(text);
 }
 
 function uniqueCoachAiAnalysisStrings(items: string[]) {
@@ -13990,6 +14320,14 @@ export function PageClient({
       selectedCoachDayAiPayloadJson &&
       getCoachDayAiPayloadFingerprint(latestCoachAiReview.dayPayload) !== selectedCoachDayAiPayloadJson,
   );
+  const latestCoachAiReviewUi = latestCoachAiReview
+    ? buildCoachAiReviewUi(
+        latestCoachAiReview,
+        selectedCoachDayAiPayload,
+        isLatestCoachAiReviewStale,
+        language,
+      )
+    : null;
   const selectedCoachDayDataQuality = shouldRenderCoachReviewSurface && coachExecutionReview
     ? buildCoachDayDataQuality({
         coachComment: latestCoachDiaryEntry?.notes.trim() || null,
@@ -18423,31 +18761,91 @@ export function PageClient({
                           </p>
                           {isLatestCoachAiReviewStale ? (
                             <p className="coach-ai-stale-warning">
-                              {copyFor(language, {
-                                en: "The day data has changed after the last review. Update the AI review before making a decision.",
-                                ru: "Данные дня изменились после последнего разбора. Обновите ИИ-разбор перед решением.",
-                                bg: "Данните за деня са променени след последния анализ. Обновете AI анализа преди решение.",
-                              })}
+                              {latestCoachAiReviewUi?.staleReason}
                             </p>
                           ) : null}
 
-                          {latestCoachAiReview ? (
+                          {latestCoachAiReview && latestCoachAiReviewUi ? (
                             <div className="coach-ai-day-review-result">
-                              <article>
-                                <span>
-                                  {copyFor(language, { en: "What is visible", ru: "Что видно", bg: "Какво се вижда" })}
-                                </span>
-                                <p>{latestCoachAiReview.observation}</p>
-                              </article>
-                              <article>
-                                <span>{copyFor(language, { en: "Risks", ru: "Риски", bg: "Рискове" })}</span>
-                                <ul>
-                                  {latestCoachAiReview.riskNotes.map((item) => (
-                                    <li key={item}>{item}</li>
-                                  ))}
-                                </ul>
-                              </article>
-                              <article>
+                              <div className="coach-ai-decision-grid">
+                                <article className="coach-ai-decision-card">
+                                  <span>
+                                    {copyFor(language, { en: "Main decision", ru: "Главное решение", bg: "Основно решение" })}
+                                  </span>
+                                  <div className="coach-ai-decision-status">
+                                    <strong className={`coach-ai-pill is-${latestCoachAiReviewUi.decision.tone}`}>
+                                      {latestCoachAiReviewUi.decision.label}
+                                    </strong>
+                                    <small>{latestCoachAiReviewUi.decision.detail}</small>
+                                  </div>
+                                  <p>{latestCoachAiReviewUi.decision.text}</p>
+                                </article>
+                                <article>
+                                  <span>
+                                    {copyFor(language, { en: "Confidence", ru: "Уверенность вывода", bg: "Увереност" })}
+                                  </span>
+                                  <div className="coach-ai-decision-status">
+                                    <strong className={`coach-ai-pill is-${latestCoachAiReviewUi.confidence.level}`}>
+                                      {latestCoachAiReviewUi.confidence.label}
+                                    </strong>
+                                  </div>
+                                  <p>{latestCoachAiReviewUi.confidence.reason}</p>
+                                </article>
+                              </div>
+
+                              <div className="coach-ai-method-grid">
+                                {latestCoachAiReviewUi.methodItems.map((item) => (
+                                  <article key={item.label}>
+                                    <span>{item.label}</span>
+                                    <strong>{item.value}</strong>
+                                    <small>{item.detail}</small>
+                                  </article>
+                                ))}
+                              </div>
+
+                              <div className="coach-ai-split-grid">
+                                <article>
+                                  <span>
+                                    {copyFor(language, { en: "What is visible", ru: "Что видно", bg: "Какво се вижда" })}
+                                  </span>
+                                  <p>{latestCoachAiReview.observation}</p>
+                                </article>
+                                <article>
+                                  <span>
+                                    {copyFor(language, {
+                                      en: "Missing for accuracy",
+                                      ru: "Чего не хватает для точности",
+                                      bg: "Какво липсва за точност",
+                                    })}
+                                  </span>
+                                  <ul>
+                                    {latestCoachAiReviewUi.missingItems.map((item) => (
+                                      <li key={item}>{item}</li>
+                                    ))}
+                                  </ul>
+                                </article>
+                              </div>
+
+                              {latestCoachAiReviewUi.blockRows.length > 0 ? (
+                                <article className="coach-ai-block-analysis">
+                                  <span>
+                                    {copyFor(language, { en: "Block analysis", ru: "Анализ по блокам", bg: "Анализ по блокове" })}
+                                  </span>
+                                  <div>
+                                    {latestCoachAiReviewUi.blockRows.map((row) => (
+                                      <div className="coach-ai-block-row" key={`${row.blockName}-${row.stimulus}`}>
+                                        <strong>{row.blockName}</strong>
+                                        <small>{row.stimulus}</small>
+                                        <small>{row.fact}</small>
+                                        <small>{row.local}</small>
+                                        <small>{row.risk}</small>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </article>
+                              ) : null}
+
+                              <article className="coach-ai-tomorrow">
                                 <span>
                                   {copyFor(language, {
                                     en: "What to do tomorrow",
@@ -18455,15 +18853,18 @@ export function PageClient({
                                     bg: "Какво да се направи утре",
                                   })}
                                 </span>
-                                <ul>
-                                  {latestCoachAiReview.tomorrowActions.map((item) => (
-                                    <li key={item}>{item}</li>
+                                <div>
+                                  {latestCoachAiReviewUi.tomorrowItems.map((item) => (
+                                    <section key={item.label}>
+                                      <strong>{item.label}</strong>
+                                      <p>{item.text}</p>
+                                    </section>
                                   ))}
-                                </ul>
+                                </div>
                               </article>
+
                               <small>
-                                {latestCoachAiReview.generatedAt.slice(0, 16)} /{" "}
-                                {formatCoachAiReviewSource(latestCoachAiReview.source, language)}
+                                {latestCoachAiReview.generatedAt.slice(0, 16)} / {latestCoachAiReviewUi.sourceLabel}
                               </small>
                             </div>
                           ) : (
@@ -18477,17 +18878,24 @@ export function PageClient({
                           )}
 
                           {selectedCoachAiReviewHistory.length > 1 ? (
-                            <div className="coach-ai-review-history">
-                              {selectedCoachAiReviewHistory.slice(1, 4).map((review) => (
+                            <details className="coach-ai-review-history">
+                              <summary>
+                                {copyFor(language, {
+                                  en: `AI review history · ${selectedCoachAiReviewHistory.length}`,
+                                  ru: `История ИИ-разборов · ${selectedCoachAiReviewHistory.length}`,
+                                  bg: `История на AI анализите · ${selectedCoachAiReviewHistory.length}`,
+                                })}
+                              </summary>
+                              {selectedCoachAiReviewHistory.slice(1, 6).map((review) => (
                                 <article key={`${review.generatedAt}-${review.source}`}>
                                   <strong>{review.observation}</strong>
                                   <span>
                                     {review.generatedAt.slice(0, 16)} /{" "}
-                                    {formatCoachAiReviewSource(review.source, language)}
+                                    {formatCoachAiReviewSourceWithFramework(review, language)}
                                   </span>
                                 </article>
                               ))}
-                            </div>
+                            </details>
                           ) : null}
                         </div>
                       </details>

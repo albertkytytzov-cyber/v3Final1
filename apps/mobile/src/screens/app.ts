@@ -12675,11 +12675,13 @@ function renderCoachAiReviewCard(
   reviewHistory: CoachDayAiReview[],
   isBusy: boolean,
 ) {
-  const currentPayloadFingerprint = getCoachDayAiPayloadFingerprint(buildCoachDayAiPayload(dayData));
+  const currentPayload = buildCoachDayAiPayload(dayData);
+  const currentPayloadFingerprint = getCoachDayAiPayloadFingerprint(currentPayload);
   const isReviewStale = Boolean(
     review && getCoachDayAiPayloadFingerprint(review.dayPayload) !== currentPayloadFingerprint,
   );
   const actionLabel = review ? "Обновить разбор" : "Сформировать разбор";
+  const reviewUi = review ? buildCoachAiReviewUi(review, currentPayload, isReviewStale) : null;
 
   return `
     <section class="coach-ai-review-card">
@@ -12694,30 +12696,81 @@ function renderCoachAiReviewCard(
         </button>
       </div>
       ${isReviewStale
-        ? `<p class="coach-ai-stale-warning">Данные дня изменились после последнего разбора. Обновите рекомендацию перед решением.</p>`
+        ? `<p class="coach-ai-stale-warning">${escapeHtml(reviewUi?.staleReason ?? "Разбор устарел. Обновите рекомендацию перед решением.")}</p>`
         : ""}
-      ${review
+      ${review && reviewUi
         ? `
           <div class="coach-ai-review-result">
-            <article>
-              <span>Наблюдение</span>
-              <p>${escapeHtml(review.observation)}</p>
-            </article>
-            <article>
-              <span>Риски</span>
-              <ul>
-                ${review.riskNotes.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
-              </ul>
-            </article>
-            <article>
-              <span>Следующее действие</span>
-              <ul>
-                ${review.tomorrowActions.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
-              </ul>
+            <div class="coach-ai-decision-grid">
+              <article class="coach-ai-decision-card">
+                <span>Главное решение</span>
+                <div class="coach-ai-decision-status">
+                  <strong class="coach-ai-pill is-${escapeHtml(reviewUi.decision.tone)}">${escapeHtml(reviewUi.decision.label)}</strong>
+                  <small>${escapeHtml(reviewUi.decision.detail)}</small>
+                </div>
+                <p>${escapeHtml(reviewUi.decision.text)}</p>
+              </article>
+              <article>
+                <span>Уверенность вывода</span>
+                <div class="coach-ai-decision-status">
+                  <strong class="coach-ai-pill is-${escapeHtml(reviewUi.confidence.level)}">${escapeHtml(reviewUi.confidence.label)}</strong>
+                </div>
+                <p>${escapeHtml(reviewUi.confidence.reason)}</p>
+              </article>
+            </div>
+            <div class="coach-ai-method-grid">
+              ${reviewUi.methodItems.map((item) => `
+                <article>
+                  <span>${escapeHtml(item.label)}</span>
+                  <strong>${escapeHtml(item.value)}</strong>
+                  <small>${escapeHtml(item.detail)}</small>
+                </article>
+              `).join("")}
+            </div>
+            <div class="coach-ai-split-grid">
+              <article>
+                <span>Что видно</span>
+                <p>${escapeHtml(review.observation)}</p>
+              </article>
+              <article>
+                <span>Чего не хватает для точности</span>
+                <ul>
+                  ${reviewUi.missingItems.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
+                </ul>
+              </article>
+            </div>
+            ${reviewUi.blockRows.length
+              ? `
+                <article class="coach-ai-block-analysis">
+                  <span>Анализ по блокам</span>
+                  <div>
+                    ${reviewUi.blockRows.map((row) => `
+                      <div class="coach-ai-block-row">
+                        <strong>${escapeHtml(row.blockName)}</strong>
+                        <small>${escapeHtml(row.stimulus)}</small>
+                        <small>${escapeHtml(row.fact)}</small>
+                        <small>${escapeHtml(row.local)}</small>
+                        <small>${escapeHtml(row.risk)}</small>
+                      </div>
+                    `).join("")}
+                  </div>
+                </article>
+              `
+              : ""}
+            <article class="coach-ai-tomorrow">
+              <span>Что сделать завтра</span>
+              <div>
+                ${reviewUi.tomorrowItems.map((item) => `
+                  <section>
+                    <strong>${escapeHtml(item.label)}</strong>
+                    <p>${escapeHtml(item.text)}</p>
+                  </section>
+                `).join("")}
+              </div>
             </article>
           </div>
           ${renderCoachAiReviewHistory(reviewHistory)}
-          <small>Сформировано: ${formatDateTime(review.generatedAt)} · ${escapeHtml(formatCoachDayAiReviewSource(review.source))}</small>
+          <small>Сформировано: ${formatDateTime(review.generatedAt)} · ${escapeHtml(reviewUi.sourceLabel)}</small>
         `
         : `
           <p class="coach-ai-review-empty">
@@ -12743,7 +12796,7 @@ function renderCoachAiReviewHistory(reviews: CoachDayAiReview[]) {
         ${serverReviews.slice(0, 5).map((review) => `
           <article>
             <strong>${formatDateTime(review.generatedAt)}</strong>
-            <span>${escapeHtml(formatCoachDayAiReviewSource(review.source))}</span>
+            <span>${escapeHtml(formatCoachDayAiReviewSourceWithFramework(review))}</span>
             <p>${escapeHtml(review.observation)}</p>
           </article>
         `).join("")}
@@ -15165,6 +15218,194 @@ function formatCoachDayAiReviewSource(source: CoachDayAiReview["source"]) {
   return "Локальный разбор";
 }
 
+function formatCoachDayAiReviewSourceWithFramework(review: CoachDayAiReview) {
+  const framework = review.dayPayload.analysisContext?.frameworkVersion;
+
+  return framework ? `${formatCoachDayAiReviewSource(review.source)} · ${framework}` : formatCoachDayAiReviewSource(review.source);
+}
+
+function buildCoachAiReviewUi(
+  review: CoachDayAiReview,
+  currentPayload: CoachDayAiPayload | null,
+  isStale: boolean,
+) {
+  const confidence = buildCoachAiReviewConfidence(review);
+  const decision = buildCoachAiReviewDecision(review, confidence.level);
+
+  return {
+    blockRows: buildCoachAiReviewBlockRows(review),
+    confidence,
+    decision,
+    methodItems: buildCoachAiReviewMethodItems(review),
+    missingItems: buildCoachAiReviewMissingItems(review),
+    sourceLabel: formatCoachDayAiReviewSourceWithFramework(review),
+    staleReason: isStale ? buildCoachAiReviewStaleReason(review, currentPayload) : "",
+    tomorrowItems: buildCoachAiReviewTomorrowItems(review),
+  };
+}
+
+function buildCoachAiReviewConfidence(review: CoachDayAiReview) {
+  const missing = review.dayPayload.dataQuality?.missing ?? [];
+  const hasRecoveryMissing = missing.some((item) => /сон|sleep|пульс|hr|spo2|готов|readiness/iu.test(item));
+  const level =
+    missing.length === 0
+      ? "high"
+      : missing.length <= 2 && !hasRecoveryMissing
+        ? "medium"
+        : missing.length <= 5
+          ? "medium"
+          : "low";
+
+  return {
+    label: level === "high" ? "Высокая" : level === "medium" ? "Средняя" : "Низкая",
+    level,
+    reason: missing.length > 0
+      ? `Не хватает: ${missing.slice(0, 6).join(", ")}.`
+      : "План, выполнение и контекст восстановления достаточны для уверенного разбора.",
+  };
+}
+
+function buildCoachAiReviewDecision(review: CoachDayAiReview, confidenceLevel: string) {
+  const payload = review.dayPayload;
+  const riskText = review.riskNotes.join(" ").toLowerCase();
+  const actionText = review.tomorrowActions.join(" ").toLowerCase();
+  const hasHardRisk = /красн|критич|травм|боль|не\s+усиливать|снизить|снижен|risk|critical/iu.test(riskText);
+  const hasCaution = hasHardRisk || confidenceLevel !== "high" || Math.abs(payload.load.delta) > 0 || /провер|данн|восстанов|готов/iu.test(actionText);
+  const tone = hasHardRisk || confidenceLevel === "low" ? "risk" : hasCaution ? "caution" : "normal";
+
+  return {
+    detail:
+      payload.execution.status === "completed" && Math.abs(payload.load.delta) < 0.1
+        ? "День зачтён · следующий день решать по восстановлению"
+        : payload.execution.status === "partial"
+          ? "Частичное выполнение · проверьте, почему план не закрыт полностью"
+          : "Разберите день перед изменением следующей нагрузки",
+    label: tone === "normal" ? "Норма" : tone === "caution" ? "Осторожно" : "Риск",
+    text:
+      payload.execution.status === "completed" && Math.abs(payload.load.delta) < 0.1
+        ? confidenceLevel === "high"
+          ? "Факт совпал с планом; следующий день можно вести по плановой логике."
+          : "Факт совпал с планом, но без данных восстановления следующий день нельзя усиливать автоматически."
+        : review.observation,
+    tone,
+  };
+}
+
+function buildCoachAiReviewMethodItems(review: CoachDayAiReview) {
+  const context = review.dayPayload.analysisContext;
+  const contact = context?.blocks.find((block) => block.contactIntensity === "high") ??
+    context?.blocks.find((block) => block.contactIntensity === "moderate") ??
+    context?.blocks.find((block) => block.contactIntensity === "low") ??
+    null;
+
+  return [
+    {
+      detail: context?.primaryIntents.slice(0, 2).join(" · ") || "не определён",
+      label: "Энергетика",
+      value: context?.energySystems.slice(0, 2).join(" + ") || "нет данных",
+    },
+    {
+      detail: "Проверить эти зоны перед похожим блоком.",
+      label: "Локальная нагрузка",
+      value: context?.localLoadZones.slice(0, 4).join(" · ") || "не видно",
+    },
+    {
+      detail: contact ? `${contact.blockName} · ${formatCoachAiContactIntensity(contact.contactIntensity)}` : "нет сигнала тяжёлого контакта",
+      label: "Контакт",
+      value: contact ? formatCoachAiContactIntensity(contact.contactIntensity) : "нет/низкий",
+    },
+    {
+      detail: "Главный маркер качества для тренера.",
+      label: "Техника",
+      value: context?.technicalFocus.slice(0, 2).join(" · ") || "не определена",
+    },
+  ];
+}
+
+function buildCoachAiReviewMissingItems(review: CoachDayAiReview) {
+  return review.dayPayload.dataQuality?.missing.length
+    ? review.dayPayload.dataQuality.missing
+    : ["Для текущего разбора данных достаточно."];
+}
+
+function buildCoachAiReviewBlockRows(review: CoachDayAiReview) {
+  const blocks = review.dayPayload.analysisContext?.blocks ?? [];
+
+  return blocks.slice(0, 4).map((block) => ({
+    blockName: block.blockName,
+    fact: findCoachAiReviewPlanBlockStatus(review, block.blockName),
+    local: block.localZones.slice(0, 4).join(", ") || "не выделена",
+    risk: buildCoachAiReviewBlockRisk(block),
+    stimulus: `${block.intent} · ${block.energySystem}`,
+  }));
+}
+
+function findCoachAiReviewPlanBlockStatus(review: CoachDayAiReview, blockName: string) {
+  const planBlock = review.dayPayload.plan.blocks.find((block) => block.name === blockName);
+
+  if (!planBlock) {
+    return "в контексте анализа";
+  }
+
+  const statusLabel = planBlock.status === "completed" ? "выполнено" : planBlock.status === "partial" ? "частично" : "не выполнено";
+
+  return `${statusLabel} · ${formatLoadValue(planBlock.actualLoad)} / ${formatLoadValue(planBlock.plannedLoad)}`;
+}
+
+function buildCoachAiReviewBlockRisk(
+  block: NonNullable<CoachDayAiPayload["analysisContext"]>["blocks"][number],
+) {
+  if (block.contactIntensity === "high") {
+    return "проверить контактную усталость";
+  }
+
+  if (block.energySystem === "glycolytic") {
+    return "контроль техники под усталостью";
+  }
+
+  if (block.localZones.length) {
+    return "проверить локальную свежесть";
+  }
+
+  return "отдельного риска нет";
+}
+
+function buildCoachAiReviewTomorrowItems(review: CoachDayAiReview) {
+  const actions = review.tomorrowActions;
+  const findAction = (pattern: RegExp, fallbackIndex: number) =>
+    actions.find((item) => pattern.test(item)) ?? actions[fallbackIndex] ?? review.observation;
+
+  return [
+    { label: "Оставить", text: findAction(/техник|quality|качест|остав|сохран/iu, 0) },
+    { label: "Проверить", text: findAction(/провер|сон|пульс|готов|свеж|боль|восстанов/iu, 1) },
+    { label: "Не добавлять", text: findAction(/не\s+добав|не\s+добир|объ[её]м|усили/iu, 2) },
+    { label: "Решение после данных", text: findAction(/данн|после|если|готов/iu, 3) },
+  ];
+}
+
+function buildCoachAiReviewStaleReason(
+  review: CoachDayAiReview,
+  currentPayload: CoachDayAiPayload | null,
+) {
+  if (!currentPayload) {
+    return "Данные дня изменились после последнего разбора. Обновите разбор перед решением.";
+  }
+
+  if (!review.dayPayload.analysisContext && currentPayload.analysisContext) {
+    return "Разбор устарел: обновилась методика PERFORM для анализа борьбы.";
+  }
+
+  if (review.dayPayload.load.actual !== currentPayload.load.actual || review.dayPayload.load.planned !== currentPayload.load.planned) {
+    return "Разбор устарел: изменилась нагрузка план/факт.";
+  }
+
+  if (JSON.stringify(review.dayPayload.dataQuality?.missing ?? []) !== JSON.stringify(currentPayload.dataQuality?.missing ?? [])) {
+    return "Разбор устарел: изменился набор доступных данных.";
+  }
+
+  return "Разбор устарел: выбранный день обновился после последнего разбора.";
+}
+
 function buildOfflineCoachDayAiReview(dayData: CoachDayCleanSummary): CoachDayAiReview {
   const payload = buildCoachDayAiPayload(dayData);
 
@@ -15577,7 +15818,7 @@ function buildCoachDayAiWeightCutSignals(dayData: CoachDayCleanSummary) {
     ...dayData.blocks.flatMap((block) => [block.name, block.notes, block.target]),
   ].join(" "));
 
-  if (/weight_cut|сгон|вес|57|58|59|60|углевод|соль|гликоген|жкт/u.test(combinedText)) {
+  if (hasCoachAiExplicitWeightCutSignal(combinedText)) {
     signals.push("есть контекст веса/сгонки: нагрузку оценивать вместе со сном, пульсом и свежестью");
   }
 
@@ -15665,6 +15906,10 @@ function buildCoachDayAiRules(input: {
 
 function normalizeCoachAiAnalysisText(value: string) {
   return value.toLowerCase().replace(/ё/g, "е");
+}
+
+function hasCoachAiExplicitWeightCutSignal(text: string) {
+  return /weight[_\s-]?cut|сгон|весогон|стартов(?:ая|ой)?\s+масс|ограничени[ея]\s+(?:вод|соли|соль|углевод)|обезвож|сушк|углевод|гликоген|жкт/iu.test(text);
 }
 
 function uniqueCoachAiStrings(items: string[]) {

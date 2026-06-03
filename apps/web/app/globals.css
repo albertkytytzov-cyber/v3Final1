@@ -4012,6 +4012,121 @@ td {
   min-width: 0;
 }
 
+.coach-ai-decision-grid,
+.coach-ai-split-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(260px, 0.8fr);
+  gap: 10px;
+  min-width: 0;
+}
+
+.coach-ai-decision-card {
+  border-color: rgba(15, 118, 110, 0.24) !important;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(236, 253, 245, 0.88)) !important;
+}
+
+.coach-ai-decision-status {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.coach-ai-pill {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  max-width: 100%;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(15, 118, 110, 0.12);
+  color: #0f766e;
+  font-size: 0.82rem;
+  font-weight: 950;
+  line-height: 1.1;
+}
+
+.coach-ai-pill.is-caution,
+.coach-ai-pill.is-medium {
+  background: rgba(245, 158, 11, 0.16);
+  color: #92400e;
+}
+
+.coach-ai-pill.is-risk,
+.coach-ai-pill.is-low {
+  background: rgba(239, 68, 68, 0.12);
+  color: #991b1b;
+}
+
+.coach-ai-pill.is-normal,
+.coach-ai-pill.is-high {
+  background: rgba(15, 118, 110, 0.12);
+  color: #0f766e;
+}
+
+.coach-ai-method-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  min-width: 0;
+}
+
+.coach-ai-method-grid article strong {
+  color: var(--foreground);
+  font-size: 0.98rem;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.coach-ai-block-analysis > div,
+.coach-ai-tomorrow > div {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.coach-ai-block-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.9fr) repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  align-items: start;
+  padding: 9px 0;
+  border-top: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.coach-ai-block-row:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.coach-ai-block-row strong {
+  color: var(--foreground);
+  font-size: 0.92rem;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.coach-ai-tomorrow > div {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.coach-ai-tomorrow section {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid rgba(15, 118, 110, 0.14);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.coach-ai-tomorrow section strong {
+  color: #0f766e;
+  font-size: 0.88rem;
+  font-weight: 950;
+}
+
 .coach-ai-day-review-result article,
 .coach-ai-review-history article {
   display: grid;
@@ -4057,6 +4172,24 @@ td {
   display: grid;
   gap: 8px;
   min-width: 0;
+}
+
+.coach-ai-review-history summary {
+  width: fit-content;
+  max-width: 100%;
+  color: #0f766e;
+  cursor: pointer;
+  font-weight: 900;
+}
+
+@media (max-width: 920px) {
+  .coach-ai-decision-grid,
+  .coach-ai-split-grid,
+  .coach-ai-method-grid,
+  .coach-ai-tomorrow > div,
+  .coach-ai-block-row {
+    grid-template-columns: 1fr;
+  }
 }
 
 .device-workout-link-panel {
