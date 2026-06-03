@@ -1087,9 +1087,11 @@ function buildCoachAiReviewMethodItems(review: CoachDayAiReview, language: Langu
 
   return [
     {
-      detail: context?.primaryIntents.slice(0, 2).join(" · ") || copyFor(language, { en: "not defined", ru: "не определён", bg: "не е определен" }),
+      detail: context?.primaryIntents.slice(0, 2).map((item) => formatCoachAiAnalysisIntent(item, language)).join(" · ") ||
+        copyFor(language, { en: "not defined", ru: "не определён", bg: "не е определен" }),
       label: copyFor(language, { en: "Energy", ru: "Энергетика", bg: "Енергетика" }),
-      value: context?.energySystems.slice(0, 2).join(" + ") || copyFor(language, { en: "not enough data", ru: "нет данных", bg: "няма данни" }),
+      value: context?.energySystems.slice(0, 2).map((item) => formatCoachAiAnalysisEnergySystem(item, language)).join(" + ") ||
+        copyFor(language, { en: "not enough data", ru: "нет данных", bg: "няма данни" }),
     },
     {
       detail: copyFor(language, {
@@ -1143,7 +1145,7 @@ function buildCoachAiReviewBlockRows(review: CoachDayAiReview, language: Languag
     fact: findCoachAiReviewPlanBlockStatus(review, block.blockName, language),
     local: block.localZones.slice(0, 4).join(", ") || copyFor(language, { en: "not isolated", ru: "не выделена", bg: "не е отделена" }),
     risk: buildCoachAiReviewBlockRisk(block, language),
-    stimulus: `${block.intent} · ${block.energySystem}`,
+    stimulus: `${formatCoachAiAnalysisIntent(block.intent, language)} · ${formatCoachAiAnalysisEnergySystem(block.energySystem, language)}`,
   }));
 }
 
@@ -1222,6 +1224,39 @@ function buildCoachAiReviewTomorrowItems(review: CoachDayAiReview, language: Lan
       text: findAction(/данн|после|если|готов/iu, 3),
     },
   ];
+}
+
+function formatCoachAiAnalysisIntent(value: string, language: Language) {
+  const labels: Record<string, Record<Language, string>> = {
+    aerobic_base: { en: "aerobic base", ru: "аэробная база", bg: "аеробна база" },
+    combat_rounds: { en: "combat rounds", ru: "борцовские раунды", bg: "борцови рундове" },
+    competition_simulation: { en: "competition simulation", ru: "модель схватки", bg: "симулация на среща" },
+    explosive_strength: { en: "explosive strength", ru: "взрывная сила", bg: "експлозивна сила" },
+    glycolytic_intervals: { en: "glycolytic intervals", ru: "гликолитические интервалы", bg: "гликолитични интервали" },
+    grip_endurance: { en: "grip endurance", ru: "выносливость хвата", bg: "издръжливост на захвата" },
+    max_strength: { en: "max strength", ru: "максимальная сила", bg: "максимална сила" },
+    mixed_training: { en: "mixed training", ru: "смешанная работа", bg: "смесена работа" },
+    recovery_regeneration: { en: "recovery", ru: "восстановление", bg: "възстановяване" },
+    technical_activation: { en: "technical activation", ru: "техническая активация", bg: "техническа активация" },
+    technical_clean: { en: "clean technique", ru: "чистая техника", bg: "чиста техника" },
+    technical_resisted: { en: "technique under resistance", ru: "техника под сопротивлением", bg: "техника под съпротивление" },
+    technical_under_fatigue: { en: "technique under fatigue", ru: "техника под утомлением", bg: "техника при умора" },
+  };
+
+  return labels[value]?.[language] ?? value.replace(/_/g, " ");
+}
+
+function formatCoachAiAnalysisEnergySystem(value: string, language: Language) {
+  const labels: Record<string, Record<Language, string>> = {
+    aerobic_base: { en: "aerobic", ru: "аэробная", bg: "аеробна" },
+    alactic_power: { en: "alactic power", ru: "алактатная мощность", bg: "алактатна мощност" },
+    glycolytic: { en: "glycolytic", ru: "гликолитическая", bg: "гликолитична" },
+    mixed: { en: "mixed", ru: "смешанная", bg: "смесена" },
+    neuromuscular: { en: "neuromuscular", ru: "нейромышечная", bg: "невромускулна" },
+    recovery: { en: "recovery", ru: "восстановительная", bg: "възстановителна" },
+  };
+
+  return labels[value]?.[language] ?? value.replace(/_/g, " ");
 }
 
 function buildCoachAiReviewStaleReason(

@@ -15300,9 +15300,9 @@ function buildCoachAiReviewMethodItems(review: CoachDayAiReview) {
 
   return [
     {
-      detail: context?.primaryIntents.slice(0, 2).join(" · ") || "не определён",
+      detail: context?.primaryIntents.slice(0, 2).map(formatCoachAiIntentLabel).join(" · ") || "не определён",
       label: "Энергетика",
-      value: context?.energySystems.slice(0, 2).join(" + ") || "нет данных",
+      value: context?.energySystems.slice(0, 2).map(formatCoachAiEnergySystemLabel).join(" + ") || "нет данных",
     },
     {
       detail: "Проверить эти зоны перед похожим блоком.",
@@ -15336,7 +15336,7 @@ function buildCoachAiReviewBlockRows(review: CoachDayAiReview) {
     fact: findCoachAiReviewPlanBlockStatus(review, block.blockName),
     local: block.localZones.slice(0, 4).join(", ") || "не выделена",
     risk: buildCoachAiReviewBlockRisk(block),
-    stimulus: `${block.intent} · ${block.energySystem}`,
+    stimulus: `${formatCoachAiIntentLabel(block.intent)} · ${formatCoachAiEnergySystemLabel(block.energySystem)}`,
   }));
 }
 
@@ -15381,6 +15381,39 @@ function buildCoachAiReviewTomorrowItems(review: CoachDayAiReview) {
     { label: "Не добавлять", text: findAction(/не\s+добав|не\s+добир|объ[её]м|усили/iu, 2) },
     { label: "Решение после данных", text: findAction(/данн|после|если|готов/iu, 3) },
   ];
+}
+
+function formatCoachAiIntentLabel(value: string) {
+  const labels: Record<string, string> = {
+    aerobic_base: "аэробная база",
+    combat_rounds: "борцовские раунды",
+    competition_simulation: "модель схватки",
+    explosive_strength: "взрывная сила",
+    glycolytic_intervals: "гликолитические интервалы",
+    grip_endurance: "выносливость хвата",
+    max_strength: "максимальная сила",
+    mixed_training: "смешанная работа",
+    recovery_regeneration: "восстановление",
+    technical_activation: "техническая активация",
+    technical_clean: "чистая техника",
+    technical_resisted: "техника под сопротивлением",
+    technical_under_fatigue: "техника под утомлением",
+  };
+
+  return labels[value] ?? value.replace(/_/g, " ");
+}
+
+function formatCoachAiEnergySystemLabel(value: string) {
+  const labels: Record<string, string> = {
+    aerobic_base: "аэробная",
+    alactic_power: "алактатная мощность",
+    glycolytic: "гликолитическая",
+    mixed: "смешанная",
+    neuromuscular: "нейромышечная",
+    recovery: "восстановительная",
+  };
+
+  return labels[value] ?? value.replace(/_/g, " ");
 }
 
 function buildCoachAiReviewStaleReason(
