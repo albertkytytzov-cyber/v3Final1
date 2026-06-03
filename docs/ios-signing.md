@@ -50,6 +50,7 @@ The iOS app record must exist before uploading a TestFlight build:
 - Bundle ID: `com.perform.training`
 - App Store Connect Apple ID: `6776354606`
 - SKU used locally: `PERFORM-IOS-001`
+- Internal TestFlight group: `PERFORM Internal`
 
 For the local Xcode-managed flow, `xcodebuild -exportArchive` can upload the
 archive when the export options use `method = app-store-connect` and
