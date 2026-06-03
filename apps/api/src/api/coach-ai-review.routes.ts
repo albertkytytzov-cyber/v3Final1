@@ -123,6 +123,8 @@ export function registerCoachAiReviewRoutes(
     await dependencies.guards.assertAthleteAccess(user, athleteId);
     const review = await buildCoachPeriodAiReview({
       athleteId,
+      periodEnd: payload.periodEnd,
+      periodStart: payload.periodStart,
       selectedDate: payload.selectedDate,
       windowDays: payload.windowDays,
     });

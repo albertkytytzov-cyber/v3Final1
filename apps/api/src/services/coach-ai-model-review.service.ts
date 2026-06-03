@@ -481,7 +481,6 @@ function buildPeriodModelSafePayload(payload: CoachPeriodAiPayload) {
       interpretation: payload.periodContext.interpretation
         .slice(0, 6)
         .map((item) => toLimitedString(item, maxStringLength)),
-      mesocycle30: payload.periodContext.mesocycle30,
       microcycle7: payload.periodContext.microcycle7,
       periodEnd: payload.periodContext.periodEnd,
       periodStart: payload.periodContext.periodStart,

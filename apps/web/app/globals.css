@@ -4037,6 +4037,45 @@ td {
   min-width: 0;
 }
 
+.coach-ai-period-picker {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.coach-ai-period-picker label {
+  display: grid;
+  gap: 3px;
+  min-width: 132px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 850;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.coach-ai-period-picker input {
+  min-height: 34px;
+  width: 100%;
+  border: 1px solid rgba(15, 118, 110, 0.18);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 800;
+  padding: 6px 10px;
+}
+
+.coach-ai-period-range-note {
+  display: block;
+  color: var(--muted);
+  font-weight: 750;
+}
+
 .coach-ai-period-trends {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

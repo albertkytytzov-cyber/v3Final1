@@ -183,6 +183,7 @@ const mobileAppDownloadUrl =
   "/downloads/perform-mobile-android.apk";
 const SHOW_OFFLINE_CENTER_NAV = false;
 const DISPLAY_TIME_ZONE = "Europe/Sofia";
+type CoachPeriodPresetDays = 7 | 15 | 30;
 
 function getDateInputValue(date = new Date()) {
   return date.toISOString().slice(0, 10);
@@ -208,6 +209,16 @@ function diffDateInputDays(fromDateValue: string, toDateValue: string) {
   }
 
   return Math.round((toDate.getTime() - fromDate.getTime()) / (24 * 60 * 60 * 1000));
+}
+
+function getCoachPeriodRangeDays(periodStart: string, periodEnd: string) {
+  const diffDays = diffDateInputDays(periodStart, periodEnd);
+
+  if (diffDays === null || diffDays < 0) {
+    return null;
+  }
+
+  return diffDays + 1;
 }
 
 function deriveAthletePreparationPhase(daysToCompetition: number | null): PreparationPhase | null {
@@ -907,8 +918,8 @@ function upsertCoachPeriodAiReviewHistory(
     : reviews.filter(
         (item) =>
           item.athleteId !== review.athleteId ||
-          item.selectedDate !== review.selectedDate ||
-          item.windowDays !== review.windowDays ||
+          item.periodEnd !== review.periodEnd ||
+          item.periodStart !== review.periodStart ||
           item.generatedAt !== review.generatedAt,
       );
 
@@ -921,15 +932,15 @@ function upsertCoachPeriodAiReviewHistory(
 function getCoachPeriodAiReviewsForSelection(
   reviews: CoachPeriodAiReview[],
   athleteId: string,
-  selectedDate: string,
-  windowDays: number,
+  periodStart: string,
+  periodEnd: string,
 ) {
   return reviews
     .filter(
       (review) =>
         review.athleteId === athleteId &&
-        review.selectedDate === selectedDate &&
-        review.windowDays === windowDays &&
+        review.periodStart === periodStart &&
+        review.periodEnd === periodEnd &&
         review.source !== "local-rules",
     )
     .slice()
@@ -938,8 +949,7 @@ function getCoachPeriodAiReviewsForSelection(
 
 function buildCoachPeriodAiReviewUi(review: CoachPeriodAiReview, language: Language) {
   const period = review.periodPayload.periodContext;
-  const microcycle = period.microcycle7;
-  const mesocycle = period.mesocycle30;
+  const selectedWindow = period.mesocycle30;
   const riskText = review.riskNotes.join(" ").toLowerCase();
   const tone = /риск|красн|снижен|конфликт|недовосстанов|risk|critical/iu.test(riskText)
     ? "risk"
@@ -964,29 +974,29 @@ function buildCoachPeriodAiReviewUi(review: CoachPeriodAiReview, language: Langu
     },
     metrics: [
       {
-        detail: microcycle.completionRate !== null
-          ? `${copyFor(language, { en: "completion", ru: "выполнение", bg: "изпълнение" })} ${formatCoachDayLoadValue(microcycle.completionRate)}%`
+        detail: selectedWindow.completionRate !== null
+          ? `${copyFor(language, { en: "completion", ru: "выполнение", bg: "изпълнение" })} ${formatCoachDayLoadValue(selectedWindow.completionRate)}%`
           : copyFor(language, { en: "completion not available", ru: "выполнение не рассчитано", bg: "няма изчисление" }),
-        label: copyFor(language, { en: "Load 7d", ru: "Нагрузка 7 дней", bg: "Натоварване 7 дни" }),
-        value: `${formatCoachDayLoadValue(microcycle.actualLoad)} / ${formatCoachDayLoadValue(microcycle.plannedLoad)}`,
+        label: copyFor(language, { en: "Period load", ru: "Нагрузка периода", bg: "Натоварване за периода" }),
+        value: `${formatCoachDayLoadValue(selectedWindow.actualLoad)} / ${formatCoachDayLoadValue(selectedWindow.plannedLoad)}`,
       },
       {
-        detail: `${microcycle.daysWithReadiness}/${microcycle.periodDays} ${copyFor(language, { en: "days", ru: "дней", bg: "дни" })}`,
+        detail: `${selectedWindow.daysWithReadiness}/${selectedWindow.periodDays} ${copyFor(language, { en: "days", ru: "дней", bg: "дни" })}`,
         label: copyFor(language, { en: "Readiness", ru: "Готовность", bg: "Готовност" }),
-        value: microcycle.readinessAverage !== null ? formatCoachDayLoadValue(microcycle.readinessAverage) : "-",
+        value: selectedWindow.readinessAverage !== null ? formatCoachDayLoadValue(selectedWindow.readinessAverage) : "-",
       },
       {
-        detail: `${mesocycle.daysWithDeviceData}/${mesocycle.periodDays} ${copyFor(language, { en: "days with device data", ru: "дней с устройством", bg: "дни с устройство" })}`,
+        detail: `${selectedWindow.daysWithDeviceData}/${selectedWindow.periodDays} ${copyFor(language, { en: "days with device data", ru: "дней с устройством", bg: "дни с устройство" })}`,
         label: copyFor(language, { en: "Sleep avg", ru: "Сон средний", bg: "Среден сън" }),
-        value: microcycle.sleepAverageMinutes !== null
-          ? formatDeviceDuration(microcycle.sleepAverageMinutes, language)
+        value: selectedWindow.sleepAverageMinutes !== null
+          ? formatDeviceDuration(selectedWindow.sleepAverageMinutes, language)
           : "-",
       },
       {
         detail: copyFor(language, { en: "period body weight change", ru: "динамика веса за период", bg: "промяна на теглото за периода" }),
         label: copyFor(language, { en: "Weight", ru: "Вес", bg: "Тегло" }),
-        value: mesocycle.bodyWeightDeltaKg !== null
-          ? `${mesocycle.bodyWeightDeltaKg > 0 ? "+" : ""}${formatCoachDayLoadValue(mesocycle.bodyWeightDeltaKg)} кг`
+        value: selectedWindow.bodyWeightDeltaKg !== null
+          ? `${selectedWindow.bodyWeightDeltaKg > 0 ? "+" : ""}${formatCoachDayLoadValue(selectedWindow.bodyWeightDeltaKg)} кг`
           : "-",
       },
     ],
@@ -8831,7 +8841,13 @@ export function PageClient({
   const [coachPeriodAiReviewBusy, setCoachPeriodAiReviewBusy] = useState(false);
   const [coachPeriodAiReviewMessage, setCoachPeriodAiReviewMessage] = useState("");
   const [coachAiReviewTab, setCoachAiReviewTab] = useState<"day" | "period" | "history">("day");
-  const [coachPeriodWindowDays, setCoachPeriodWindowDays] = useState<7 | 14 | 30>(30);
+  const [coachPeriodStartDate, setCoachPeriodStartDate] = useState(
+    shiftDateInputValue(previewState?.coachExecutionReview?.dayDate ?? getDateInputValue(), -29),
+  );
+  const [coachPeriodEndDate, setCoachPeriodEndDate] = useState(
+    previewState?.coachExecutionReview?.dayDate ?? getDateInputValue(),
+  );
+  const [coachPeriodPresetDays, setCoachPeriodPresetDays] = useState<CoachPeriodPresetDays>(30);
   const [coachAiStatus, setCoachAiStatus] = useState<CoachAiReviewStatus | null>(null);
   const [coachAiDiagnostic, setCoachAiDiagnostic] =
     useState<CoachAiReviewDiagnosticResponse | null>(null);
@@ -8929,6 +8945,16 @@ export function PageClient({
         : current.notes,
       }));
   }, [language]);
+
+  useEffect(() => {
+    if (!coachExecutionReview?.dayDate) {
+      return;
+    }
+
+    setCoachPeriodEndDate(coachExecutionReview.dayDate);
+    setCoachPeriodStartDate(shiftDateInputValue(coachExecutionReview.dayDate, -29));
+    setCoachPeriodPresetDays(30);
+  }, [coachExecutionReview?.dayDate]);
 
   function canLoadCoachScopedAthleteData(
     athleteId: string,
@@ -13597,6 +13623,19 @@ export function PageClient({
       return;
     }
 
+    const periodRangeDays = getCoachPeriodRangeDays(coachPeriodStartDate, coachPeriodEndDate);
+
+    if (periodRangeDays === null || periodRangeDays > 60) {
+      setCoachPeriodAiReviewMessage(
+        copyFor(language, {
+          en: "Select a valid period up to 60 days.",
+          ru: "Выберите корректный период до 60 дней.",
+          bg: "Изберете валиден период до 60 дни.",
+        }),
+      );
+      return;
+    }
+
     setCoachPeriodAiReviewBusy(true);
     setCoachPeriodAiReviewMessage(
       copyFor(language, {
@@ -13613,8 +13652,9 @@ export function PageClient({
         {
           method: "POST",
           body: JSON.stringify({
-            selectedDate: coachExecutionReview.dayDate,
-            windowDays: coachPeriodWindowDays,
+            periodEnd: coachPeriodEndDate,
+            periodStart: coachPeriodStartDate,
+            windowDays: periodRangeDays,
           }),
         },
       );
@@ -14528,12 +14568,13 @@ export function PageClient({
     ? getCoachAiReviewsForDay(coachAiReviews, selectedAthleteId, coachExecutionReview.dayDate)
     : [];
   const latestCoachAiReview = selectedCoachAiReviewHistory[0] ?? null;
-  const selectedCoachPeriodAiReviewHistory = shouldRenderCoachReviewSurface && coachExecutionReview
+  const coachPeriodRangeDays = getCoachPeriodRangeDays(coachPeriodStartDate, coachPeriodEndDate);
+  const selectedCoachPeriodAiReviewHistory = shouldRenderCoachReviewSurface && coachExecutionReview && coachPeriodRangeDays !== null
     ? getCoachPeriodAiReviewsForSelection(
         coachPeriodAiReviews,
         selectedAthleteId,
-        coachExecutionReview.dayDate,
-        coachPeriodWindowDays,
+        coachPeriodStartDate,
+        coachPeriodEndDate,
       )
     : [];
   const latestCoachPeriodAiReview = selectedCoachPeriodAiReviewHistory[0] ?? null;
@@ -19222,21 +19263,58 @@ export function PageClient({
                                   </small>
                                 </div>
                                 <div className="coach-ai-period-actions">
-                                  <div className="coach-ai-review-tabs is-compact">
-                                    {([7, 14, 30] as const).map((days) => (
-                                      <button
-                                        className={`coach-ai-review-tab${coachPeriodWindowDays === days ? " is-active" : ""}`}
-                                        key={days}
-                                        onClick={() => setCoachPeriodWindowDays(days)}
-                                        type="button"
-                                      >
-                                        {days}
-                                      </button>
-                                    ))}
+                                  <div className="coach-ai-period-picker">
+                                    <label>
+                                      <span>{copyFor(language, { en: "From", ru: "С даты", bg: "От дата" })}</span>
+                                      <input
+                                        onChange={(event) => {
+                                          const nextStartDate = event.target.value;
+                                          setCoachPeriodStartDate(nextStartDate);
+                                          const nextRangeDays = getCoachPeriodRangeDays(nextStartDate, coachPeriodEndDate);
+                                          if (nextRangeDays === 7 || nextRangeDays === 15 || nextRangeDays === 30) {
+                                            setCoachPeriodPresetDays(nextRangeDays);
+                                          }
+                                        }}
+                                        type="date"
+                                        value={coachPeriodStartDate}
+                                      />
+                                    </label>
+                                    <label>
+                                      <span>{copyFor(language, { en: "To", ru: "По дату", bg: "До дата" })}</span>
+                                      <input
+                                        onChange={(event) => {
+                                          const nextEndDate = event.target.value;
+                                          setCoachPeriodEndDate(nextEndDate);
+                                          const nextRangeDays = getCoachPeriodRangeDays(coachPeriodStartDate, nextEndDate);
+                                          if (nextRangeDays === 7 || nextRangeDays === 15 || nextRangeDays === 30) {
+                                            setCoachPeriodPresetDays(nextRangeDays);
+                                          }
+                                        }}
+                                        type="date"
+                                        value={coachPeriodEndDate}
+                                      />
+                                    </label>
+                                    <div className="coach-ai-review-tabs is-compact" aria-label="Period presets">
+                                      {([7, 15, 30] as const).map((days) => (
+                                        <button
+                                          className={`coach-ai-review-tab${coachPeriodRangeDays === days || (coachPeriodRangeDays === null && coachPeriodPresetDays === days) ? " is-active" : ""}`}
+                                          key={days}
+                                          onClick={() => {
+                                            const endDate = coachPeriodEndDate || coachExecutionReview?.dayDate || getDateInputValue();
+                                            setCoachPeriodEndDate(endDate);
+                                            setCoachPeriodStartDate(shiftDateInputValue(endDate, -(days - 1)));
+                                            setCoachPeriodPresetDays(days);
+                                          }}
+                                          type="button"
+                                        >
+                                          {days}
+                                        </button>
+                                      ))}
+                                    </div>
                                   </div>
                                   <button
                                     className="secondary-button"
-                                    disabled={coachPeriodAiReviewBusy}
+                                    disabled={coachPeriodAiReviewBusy || coachPeriodRangeDays === null || coachPeriodRangeDays > 60}
                                     onClick={() => void handleGenerateCoachPeriodAiReviewClick()}
                                     type="button"
                                   >
@@ -19259,6 +19337,19 @@ export function PageClient({
                                     bg: "Този анализ оценява периода, не само избрания ден.",
                                   })}
                               </p>
+                              <small className="coach-ai-period-range-note">
+                                {coachPeriodRangeDays === null || coachPeriodRangeDays > 60
+                                  ? copyFor(language, {
+                                      en: "Select a valid range up to 60 days.",
+                                      ru: "Выберите корректный диапазон до 60 дней.",
+                                      bg: "Изберете валиден диапазон до 60 дни.",
+                                    })
+                                  : copyFor(language, {
+                                      en: `Selected period: ${coachPeriodStartDate} - ${coachPeriodEndDate} · ${coachPeriodRangeDays} days`,
+                                      ru: `Выбранный период: ${coachPeriodStartDate} - ${coachPeriodEndDate} · ${coachPeriodRangeDays} дней`,
+                                      bg: `Избран период: ${coachPeriodStartDate} - ${coachPeriodEndDate} · ${coachPeriodRangeDays} дни`,
+                                    })}
+                              </small>
 
                               {latestCoachPeriodAiReview && latestCoachPeriodAiReviewUi ? (
                                 <div className="coach-ai-day-review-result">

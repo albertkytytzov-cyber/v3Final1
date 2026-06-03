@@ -1579,6 +1579,8 @@ export interface CoachPeriodAiReview {
 
 export interface CoachPeriodAiReviewRequest {
   selectedDate: string;
+  periodEnd: string;
+  periodStart: string;
   windowDays: number;
 }
 

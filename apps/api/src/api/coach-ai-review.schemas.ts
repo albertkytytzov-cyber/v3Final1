@@ -45,13 +45,42 @@ export function parseCoachDayAiReviewBody(body: unknown): CoachDayAiReviewReques
 
 export function parseCoachPeriodAiReviewBody(body: unknown): CoachPeriodAiReviewRequest {
   const payload = (body ?? {}) as {
+    periodEnd?: unknown;
+    periodStart?: unknown;
     selectedDate?: unknown;
     windowDays?: unknown;
   };
+
+  if (payload.periodStart !== undefined || payload.periodEnd !== undefined) {
+    const periodStart = readEntryDate(payload.periodStart);
+    const periodEnd = readEntryDate(payload.periodEnd);
+    const windowDays = diffEntryDateDays(periodStart, periodEnd) + 1;
+
+    if (windowDays <= 0) {
+      throw new Error("periodStart must be before or equal to periodEnd");
+    }
+
+    if (windowDays > 60) {
+      throw new Error("Period review range must be 60 days or less");
+    }
+
+    return {
+      periodEnd,
+      periodStart,
+      selectedDate: periodEnd,
+      windowDays,
+    };
+  }
+
   const selectedDate = readEntryDate(payload.selectedDate);
   const windowDays = readWindowDays(payload.windowDays);
 
-  return { selectedDate, windowDays };
+  return {
+    periodEnd: selectedDate,
+    periodStart: shiftEntryDate(selectedDate, -(windowDays - 1)),
+    selectedDate,
+    windowDays,
+  };
 }
 
 function readDayPayload(value: unknown): CoachDayAiPayload {
@@ -527,6 +556,19 @@ function readEntryDate(value: unknown) {
   return value;
 }
 
+function diffEntryDateDays(fromDateValue: string, toDateValue: string) {
+  const fromDate = new Date(`${fromDateValue}T00:00:00.000Z`);
+  const toDate = new Date(`${toDateValue}T00:00:00.000Z`);
+
+  return Math.round((toDate.getTime() - fromDate.getTime()) / (24 * 60 * 60 * 1000));
+}
+
+function shiftEntryDate(dateValue: string, days: number) {
+  const date = new Date(`${dateValue}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
 function readString(value: unknown, fieldName: string) {
   if (typeof value !== "string") {
     throw new Error(`${fieldName} must be a string`);
@@ -582,8 +624,8 @@ function readCount(value: unknown, fieldName: string) {
 function readWindowDays(value: unknown) {
   const numericValue = readNumber(value, "windowDays");
 
-  if (![7, 14, 30].includes(numericValue)) {
-    throw new Error("windowDays must be 7, 14 or 30");
+  if (!Number.isInteger(numericValue) || numericValue < 1 || numericValue > 60) {
+    throw new Error("windowDays must be an integer from 1 to 60");
   }
 
   return numericValue;

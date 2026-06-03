@@ -85,6 +85,8 @@ export async function buildCoachDayAiReview(input: {
 
 export async function buildCoachPeriodAiReview(input: {
   athleteId: string;
+  periodEnd: string;
+  periodStart: string;
   selectedDate: string;
   windowDays: number;
 }): Promise<CoachPeriodAiReview> {
@@ -128,11 +130,14 @@ export async function runCoachAiReviewDiagnostic() {
 
 async function buildCoachDayAiPeriodContext(input: {
   athleteId: string;
+  periodEnd: string;
+  periodStart: string;
   selectedDate: string;
   windowDays: number;
 }): Promise<CoachDayAiPeriodContext> {
-  const periodStart = addIsoDays(input.selectedDate, -(input.windowDays - 1));
-  const periodEnd = input.selectedDate;
+  const periodStart = input.periodStart;
+  const periodEnd = input.periodEnd;
+  const windowDays = diffIsoDays(periodStart, periodEnd) + 1;
   const rows = await pool.query<CoachDayAiPeriodRow>(
     `
       WITH days AS (
@@ -265,15 +270,17 @@ async function buildCoachDayAiPeriodContext(input: {
     microcycle7,
     periodEnd,
     periodStart,
-    selectedDate: input.selectedDate,
+    selectedDate: periodEnd,
     trends,
     warnings,
-    windowDays: input.windowDays,
+    windowDays,
   };
 }
 
 async function buildCoachPeriodAiPayload(input: {
   athleteId: string;
+  periodEnd: string;
+  periodStart: string;
   selectedDate: string;
   windowDays: number;
 }): Promise<CoachPeriodAiPayload> {
@@ -287,8 +294,8 @@ async function buildCoachPeriodAiPayload(input: {
     periodContext,
     periodEnd: periodContext.periodEnd,
     periodStart: periodContext.periodStart,
-    selectedDate: input.selectedDate,
-    windowDays: input.windowDays,
+    selectedDate: periodContext.selectedDate,
+    windowDays: periodContext.windowDays,
   };
 }
 
@@ -448,15 +455,15 @@ function buildCoachDayAiPeriodInterpretation(input: {
 
   if (input.microcycle7.plannedLoad > 0) {
     interpretation.push(
-      `Микроцикл 7 дней: факт ${formatLoadValue(input.microcycle7.actualLoad)} из плана ${formatLoadValue(input.microcycle7.plannedLoad)}, выполнение ${input.microcycle7.completionRate ?? 0}%.`,
+      `Свежий срез 7 дней: факт ${formatLoadValue(input.microcycle7.actualLoad)} из плана ${formatLoadValue(input.microcycle7.plannedLoad)}, выполнение ${input.microcycle7.completionRate ?? 0}%.`,
     );
   } else {
-    interpretation.push("Микроцикл 7 дней: плановая нагрузка не зафиксирована, поэтому контекст периода ограничен.");
+    interpretation.push("Свежий срез 7 дней: плановая нагрузка не зафиксирована, поэтому ближайший контекст ограничен.");
   }
 
   if (input.mesocycle30.plannedLoad > 0) {
     interpretation.push(
-      `Период 30 дней: факт ${formatLoadValue(input.mesocycle30.actualLoad)} из плана ${formatLoadValue(input.mesocycle30.plannedLoad)}, дней с готовностью ${input.mesocycle30.daysWithReadiness}/${input.mesocycle30.periodDays}.`,
+      `Выбранный период ${input.mesocycle30.periodDays} дней: факт ${formatLoadValue(input.mesocycle30.actualLoad)} из плана ${formatLoadValue(input.mesocycle30.plannedLoad)}, дней с готовностью ${input.mesocycle30.daysWithReadiness}/${input.mesocycle30.periodDays}.`,
     );
   }
 
@@ -1107,7 +1114,7 @@ function buildPeriodRiskNotes(payload: CoachPeriodAiPayload) {
   }
 
   if (period.microcycle7.daysWithReadiness < Math.min(4, period.microcycle7.periodDays)) {
-    risks.push("Мало дней с готовностью в микроцикле: общий вывод по восстановлению ограничен.");
+    risks.push("Мало дней с готовностью в свежем 7-дневном срезе: общий вывод по восстановлению ограничен.");
   }
 
   if (period.microcycle7.daysWithDeviceData < Math.min(4, period.microcycle7.periodDays)) {
@@ -1119,7 +1126,7 @@ function buildPeriodRiskNotes(payload: CoachPeriodAiPayload) {
     period.microcycle7.completionRate < 70 &&
     period.microcycle7.daysWithPlan >= 3
   ) {
-    risks.push("В микроцикле низкое закрытие плана: нужно искать причину, а не автоматически переносить весь недобор.");
+    risks.push("В свежем 7-дневном срезе низкое закрытие плана: нужно искать причину, а не автоматически переносить весь недобор.");
   }
 
   if (
@@ -1142,7 +1149,7 @@ function buildPeriodActions(payload: CoachPeriodAiPayload) {
   const actions: string[] = [];
 
   if (period.trends.load === "up" && period.trends.readiness === "down") {
-    actions.push("Следующий микроцикл решать от восстановления: сначала сон, пульс покоя, готовность и качество техники, потом добор объёма.");
+    actions.push("Следующий короткий цикл решать от восстановления: сначала сон, пульс покоя, готовность и качество техники, потом добор объёма.");
   }
 
   if (period.microcycle7.incompletePlanDays >= 2) {
@@ -1416,6 +1423,13 @@ function addIsoDays(value: string, days: number) {
   const date = new Date(Date.UTC(year, month - 1, day));
   date.setUTCDate(date.getUTCDate() + days);
   return date.toISOString().slice(0, 10);
+}
+
+function diffIsoDays(fromDateValue: string, toDateValue: string) {
+  const fromDate = new Date(`${fromDateValue}T00:00:00.000Z`);
+  const toDate = new Date(`${toDateValue}T00:00:00.000Z`);
+
+  return Math.round((toDate.getTime() - fromDate.getTime()) / (24 * 60 * 60 * 1000));
 }
 
 function toNumber(value: string | number | null | undefined) {
