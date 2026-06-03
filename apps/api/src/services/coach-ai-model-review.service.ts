@@ -70,7 +70,9 @@ const systemPrompt = [
 const periodSystemPrompt = [
   "Ты серверный помощник тренера в платформе PERFORM.",
   "Сделай общий разбор периода подготовки спортсмена, а не дневной разбор одной даты.",
-  "Смотри periodContext как основную основу: дни периода, микроцикл 7 дней, окно 7/14/30 дней, тренды нагрузки, готовности, сна, пульса покоя, веса, выполнения и тренировок устройства.",
+  "Смотри periodContext как основную основу: дни выбранного периода, selectedWindow, микроцикл 7 дней, тренды нагрузки, готовности, сна, пульса покоя, веса, выполнения и тренировок устройства.",
+  "windowDays — это выбранное тренером окно анализа. Если windowDays=30, главный вывод обязан быть по 30 дням; если 14 — по 14 дням; если 7 — по 7 дням.",
+  "microcycle7 используй только как дополнительный свежий срез последних 7 дней, не подменяй им выбранное окно 14/30 дней.",
   "Отдельно оцени накопление нагрузки, конфликт нагрузки и восстановления, качество данных, недозакрытые дни, весовую динамику и устройство.",
   "В борьбе учитывай локальную усталость ног/таза/корпуса/хвата/шеи, контактную плотность и риск ухудшения техники под утомлением.",
   "Не делай медицинских диагнозов и не назначай лечение.",
@@ -484,6 +486,7 @@ function buildPeriodModelSafePayload(payload: CoachPeriodAiPayload) {
       periodEnd: payload.periodContext.periodEnd,
       periodStart: payload.periodContext.periodStart,
       selectedDate: payload.periodContext.selectedDate,
+      selectedWindow: payload.periodContext.mesocycle30,
       trends: payload.periodContext.trends,
       warnings: payload.periodContext.warnings
         .slice(0, 8)

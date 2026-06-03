@@ -1077,21 +1077,21 @@ function buildTomorrowActions(payload: CoachDayAiPayload) {
 
 function buildPeriodObservation(payload: CoachPeriodAiPayload) {
   const period = payload.periodContext;
-  const microcycle = period.microcycle7;
-  const mesocycle = period.mesocycle30;
+  const selectedWindow = period.mesocycle30;
+  const periodLabel = `за выбранные ${period.windowDays} дней`;
   const parts = [
-    microcycle.plannedLoad > 0
-      ? `за последние 7 дней факт ${formatLoadValue(microcycle.actualLoad)} из плана ${formatLoadValue(microcycle.plannedLoad)}`
-      : "за последние 7 дней плановая нагрузка не зафиксирована",
-    microcycle.completionRate !== null ? `выполнение ${formatLoadValue(microcycle.completionRate)}%` : null,
-    microcycle.readinessAverage !== null
-      ? `готовность в среднем ${formatLoadValue(microcycle.readinessAverage)}`
+    selectedWindow.plannedLoad > 0
+      ? `${periodLabel} факт ${formatLoadValue(selectedWindow.actualLoad)} из плана ${formatLoadValue(selectedWindow.plannedLoad)}`
+      : `${periodLabel} плановая нагрузка не зафиксирована`,
+    selectedWindow.completionRate !== null ? `выполнение ${formatLoadValue(selectedWindow.completionRate)}%` : null,
+    selectedWindow.readinessAverage !== null
+      ? `готовность в среднем ${formatLoadValue(selectedWindow.readinessAverage)}`
       : null,
-    microcycle.sleepAverageMinutes !== null
-      ? `сон ${formatDurationMinutes(microcycle.sleepAverageMinutes)} в среднем`
+    selectedWindow.sleepAverageMinutes !== null
+      ? `сон ${formatDurationMinutes(selectedWindow.sleepAverageMinutes)} в среднем`
       : null,
-    mesocycle.bodyWeightDeltaKg !== null
-      ? `динамика веса ${formatSignedValue(mesocycle.bodyWeightDeltaKg)} кг`
+    selectedWindow.bodyWeightDeltaKg !== null
+      ? `динамика веса ${formatSignedValue(selectedWindow.bodyWeightDeltaKg)} кг`
       : null,
   ].filter((item): item is string => Boolean(item));
 
