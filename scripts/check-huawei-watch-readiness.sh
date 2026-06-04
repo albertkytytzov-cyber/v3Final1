@@ -32,12 +32,31 @@ if [[ "$DEVICE_COUNT" -eq 0 ]]; then
   exit 0
 fi
 
+ADB_TARGET="${ANDROID_SERIAL:-}"
+if [[ -z "$ADB_TARGET" ]]; then
+  ADB_TARGET="$(adb devices | awk 'NR > 1 && $2 == "device" && $1 ~ /:/ { print $1; exit }')"
+fi
+if [[ -z "$ADB_TARGET" ]]; then
+  ADB_TARGET="$(adb devices | awk 'NR > 1 && $2 == "device" { print $1; exit }')"
+fi
+
+ADB=(adb)
+if [[ -n "$ADB_TARGET" ]]; then
+  ADB=(adb -s "$ADB_TARGET")
+fi
+
+echo
+echo "Using device: ${ADB_TARGET:-default}"
+
 echo
 echo "Huawei packages"
 for package_name in com.huawei.hwid com.huawei.health; do
-  if adb shell pm path "$package_name" >/dev/null 2>&1; then
-    version="$(adb shell dumpsys package "$package_name" 2>/dev/null | awk -F= '/versionName=/{ print $2; exit }' | tr -d '\r')"
+  if "${ADB[@]}" shell pm path "$package_name" >/dev/null 2>&1; then
+    version="$("${ADB[@]}" shell dumpsys package "$package_name" 2>/dev/null | awk -F= '/versionName=/{ print $2; exit }' | tr -d '\r')"
     echo "OK  $package_name ${version:-installed}"
+  elif [[ "$package_name" == "com.huawei.hwid" ]]; then
+    echo "WARN $package_name missing"
+    echo "     Huawei Health may still expose health/device services on non-Huawei phones."
   else
     echo "NO  $package_name missing"
   fi
@@ -45,9 +64,18 @@ done
 
 echo
 echo "PERFORM package"
-if adb shell pm path com.perform.training >/dev/null 2>&1; then
-  version="$(adb shell dumpsys package com.perform.training 2>/dev/null | awk -F= '/versionName=/{ print $2; exit }' | tr -d '\r')"
+if "${ADB[@]}" shell pm path com.perform.training >/dev/null 2>&1; then
+  version="$("${ADB[@]}" shell dumpsys package com.perform.training 2>/dev/null | awk -F= '/versionName=/{ print $2; exit }' | tr -d '\r')"
   echo "OK  com.perform.training ${version:-installed}"
 else
   echo "NO  com.perform.training is not installed"
 fi
+
+echo
+echo "Huawei Bluetooth devices"
+"${ADB[@]}" shell dumpsys bluetooth_manager 2>/dev/null |
+  grep -Ei 'HUAWEI|Huawei|device_type=Watch|com\\.huawei\\.health|DeviceAddress=' |
+  head -20 |
+  sed 's/^/BT  /' |
+  sed -E 's/([0-9A-Fa-fxX]{2}:){5}[0-9A-Fa-fxX]{2}/XX:XX:XX:XX:XX:XX/g' ||
+  true

@@ -216,3 +216,36 @@ The first implementation milestone should be:
 If Huawei Health Kit exposes enough workout and recovery data, it will be a
 cleaner and safer path than raw BLE. If it does not expose enough detail, the
 next step is a focused gap analysis, not immediate reverse engineering.
+
+## First Android Probe 2026-06-04
+
+Connected phone:
+
+- Manufacturer/model: Xiaomi `2407FPN8EG`, Android `16`.
+- PERFORM is installed and visible through ADB over USB and Wi-Fi.
+- Huawei Health is installed: `com.huawei.health` version `16.1.4.310`.
+- A separate `com.huawei.hwid` package is not installed on this phone.
+- `agconnect-services.json` is not present in the Android project, so Huawei
+  Health Kit authorization cannot be tested yet.
+
+Observed Huawei watch:
+
+- Android Bluetooth reports `HUAWEI WATCH FIT 4 Pro-2F6`, not Band 11 Pro.
+- The device is bonded as `DUAL`.
+- Android metadata marks it as `device_type=Watch`.
+- Bluetooth diagnostics show successful encrypted classic connection,
+  HID connection and RFCOMM channel opening.
+- Huawei Health is running `DaemonService`, `PhoneService`,
+  `HiHealthService` and `DevicesManagementService` as foreground/bound
+  services.
+- Huawei Health performs BLE scans filtered to the Huawei watch address.
+
+Conclusion:
+
+- Huawei Health has a real live connection to the watch on this phone.
+- PERFORM can already inspect Android/Bluetooth readiness.
+- Official Huawei Health Kit reading is still blocked by missing
+  `agconnect-services.json`.
+- Missing `com.huawei.hwid` should be logged as context, but not treated as a
+  hard blocker because Huawei Health itself exposes active health/device
+  services on this device.

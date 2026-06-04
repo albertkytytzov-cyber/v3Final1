@@ -31,9 +31,10 @@ The check reports:
 
 - whether `agconnect-services.json` is present in the Android app;
 - whether the Android phone is visible through `adb`;
-- whether HMS Core (`com.huawei.hwid`) is installed;
+- whether HMS Core (`com.huawei.hwid`) is installed when the phone exposes it;
 - whether Huawei Health (`com.huawei.health`) is installed;
 - whether PERFORM (`com.perform.training`) is installed.
+- whether Huawei watches are visible in Android Bluetooth diagnostics.
 
 Current Huawei Android implementation:
 
@@ -41,6 +42,9 @@ Current Huawei Android implementation:
   AppGallery Connect config before it tries to authorize Health Kit.
 - If `agconnect-services.json` is missing, the app shows a specific setup
   error instead of a generic Huawei failure.
+- On non-Huawei Android phones, a separate `com.huawei.hwid` package may be
+  absent while Huawei Health still runs its own health/device services. Treat
+  missing `com.huawei.hwid` as diagnostic context, not an automatic blocker.
 - The first data read path is Huawei Health Kit:
   - sleep summary;
   - resting/continuous heart-rate summary;

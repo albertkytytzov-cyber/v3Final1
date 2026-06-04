@@ -59,7 +59,7 @@ public class HuaweiHealthPlugin extends Plugin {
         boolean hasHealth = isPackageInstalled(HUAWEI_HEALTH_PACKAGE);
         boolean hasAgConnectServices = BuildConfig.HAS_AGCONNECT_SERVICES;
 
-        result.put("available", hasAgConnectServices && hasHmsCore && hasHealth);
+        result.put("available", hasAgConnectServices && hasHealth);
         result.put("hasAgConnectServices", hasAgConnectServices);
         result.put("hasHmsCore", hasHmsCore);
         result.put("hasHuaweiHealth", hasHealth);
@@ -74,10 +74,10 @@ public class HuaweiHealthPlugin extends Plugin {
                 "reason",
                 "В Android-сборке нет agconnect-services.json. Настройте приложение com.perform.training в AppGallery Connect и добавьте файл в apps/mobile/android/app/."
             );
-        } else if (!hasHmsCore) {
-            result.put("reason", "На устройстве не найден HMS Core.");
         } else if (!hasHealth) {
             result.put("reason", "На устройстве не найдено приложение Huawei Health.");
+        } else if (!hasHmsCore) {
+            result.put("reason", "Huawei Health найден. Отдельный HMS Core не найден; продолжаем через сервисы Huawei Health.");
         } else {
             result.put("reason", JSONObject.NULL);
         }
@@ -94,8 +94,8 @@ public class HuaweiHealthPlugin extends Plugin {
             return;
         }
 
-        if (!isPackageInstalled(HUAWEI_HMS_PACKAGE) || !isPackageInstalled(HUAWEI_HEALTH_PACKAGE)) {
-            call.reject("Нужны HMS Core и приложение Huawei Health на устройстве.");
+        if (!isPackageInstalled(HUAWEI_HEALTH_PACKAGE)) {
+            call.reject("Нужно приложение Huawei Health на устройстве.");
             return;
         }
 

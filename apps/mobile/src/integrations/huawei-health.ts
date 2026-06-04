@@ -83,10 +83,6 @@ function formatHuaweiHealthAvailabilityError(availability: HuaweiHealthAvailabil
     return "Huawei Health Kit не настроен в этой Android-сборке: нужен apps/mobile/android/app/agconnect-services.json из AppGallery Connect.";
   }
 
-  if (!availability.hasHmsCore) {
-    return "На телефоне не найден HMS Core. Установите или обновите HMS Core/AppGallery перед тестом Huawei.";
-  }
-
   if (!availability.hasHuaweiHealth) {
     return "На телефоне не найдено приложение Huawei Health. Сначала подключите часы через Huawei Health.";
   }
