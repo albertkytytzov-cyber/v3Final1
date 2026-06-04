@@ -21,6 +21,24 @@ Required Huawei/AppGallery setup:
 6. Put the file at `apps/mobile/android/app/agconnect-services.json`.
 7. Build and sync the mobile app.
 
+Current Android identity for the local test build:
+
+- Package name: `com.perform.training`.
+- Version: `1.0.23`.
+- Debug signing certificate:
+  - SHA-1: `B8:AC:4A:15:EC:73:72:95:E8:EC:BF:BC:D4:89:7B:00:4E:EE:FD:08`
+  - SHA-256: `8F:E3:8C:5C:AD:5B:28:5C:54:49:61:E3:1B:4D:AA:2A:76:91:D2:E1:55:D5:44:2D:72:FE:97:8C:52:59:4E:31`
+
+After downloading `agconnect-services.json`, install it with:
+
+```bash
+scripts/install-huawei-agconnect.sh ~/Downloads/agconnect-services.json
+```
+
+The script validates that the file targets `com.perform.training`, copies it to
+`apps/mobile/android/app/agconnect-services.json`, and runs the readiness
+check. The file is intentionally ignored by git.
+
 Readiness check before device testing:
 
 ```bash
