@@ -6819,6 +6819,15 @@ function renderWatchSyncPanel(state: MobileAppState, date: string) {
         >
           Синхронизировать сейчас
         </button>
+        <button
+          class="secondary-action"
+          data-health-connect-sync
+          data-health-connect-date="${escapeHtml(date)}"
+          type="button"
+          ${state.isBusy ? "disabled" : ""}
+        >
+          Проверить Health Connect
+        </button>
         <details class="watch-technical-status watch-technical-drawer">
           <summary aria-label="Настройка часов">Настройка</summary>
           <div class="watch-technical-body">

@@ -30,6 +30,9 @@ type CapacitorWithHealthConnect = {
   };
 };
 
+const HEALTH_CONNECT_AUTH_TIMEOUT_MS = 45_000;
+const HEALTH_CONNECT_READ_TIMEOUT_MS = 20_000;
+
 export async function readMiFitnessHealthConnectDailySummary(
   entryDate: string,
 ): Promise<DeviceHealthDailySummaryPayload> {
@@ -48,7 +51,11 @@ export async function readHealthConnectDailySummary(
   }
 
   if (plugin.isAvailable) {
-    const availability = await plugin.isAvailable();
+    const availability = await withHealthConnectTimeout(
+      plugin.isAvailable(),
+      "проверку доступности",
+      HEALTH_CONNECT_READ_TIMEOUT_MS,
+    );
 
     if (!availability.available) {
       throw new Error(availability.reason || "Health Connect недоступен на этом устройстве.");
@@ -56,14 +63,22 @@ export async function readHealthConnectDailySummary(
   }
 
   if (plugin.requestAuthorization) {
-    const authorization = await plugin.requestAuthorization();
+    const authorization = await withHealthConnectTimeout(
+      plugin.requestAuthorization(),
+      "запрос разрешений",
+      HEALTH_CONNECT_AUTH_TIMEOUT_MS,
+    );
 
     if (!authorization.granted) {
       throw new Error(authorization.reason || "Нет разрешения Health Connect на чтение данных.");
     }
   }
 
-  const summary = await plugin.readDailySummary({ entryDate });
+  const summary = await withHealthConnectTimeout(
+    plugin.readDailySummary({ entryDate }),
+    "чтение данных",
+    HEALTH_CONNECT_READ_TIMEOUT_MS,
+  );
 
   return {
     entryDate,
@@ -96,7 +111,11 @@ export async function readHealthConnectDeviceWorkouts(
   }
 
   if (plugin.isAvailable) {
-    const availability = await plugin.isAvailable();
+    const availability = await withHealthConnectTimeout(
+      plugin.isAvailable(),
+      "проверку доступности",
+      HEALTH_CONNECT_READ_TIMEOUT_MS,
+    );
 
     if (!availability.available) {
       throw new Error(availability.reason || "Health Connect недоступен на этом устройстве.");
@@ -104,14 +123,22 @@ export async function readHealthConnectDeviceWorkouts(
   }
 
   if (plugin.requestAuthorization) {
-    const authorization = await plugin.requestAuthorization();
+    const authorization = await withHealthConnectTimeout(
+      plugin.requestAuthorization(),
+      "запрос разрешений",
+      HEALTH_CONNECT_AUTH_TIMEOUT_MS,
+    );
 
     if (!authorization.granted) {
       throw new Error(authorization.reason || "Нет разрешения Health Connect на чтение тренировок.");
     }
   }
 
-  const payload = await plugin.readDailyWorkouts({ entryDate });
+  const payload = await withHealthConnectTimeout(
+    plugin.readDailyWorkouts({ entryDate }),
+    "чтение тренировок",
+    HEALTH_CONNECT_READ_TIMEOUT_MS,
+  );
 
   return {
     entryDate,
@@ -126,6 +153,27 @@ export async function readHealthConnectDeviceWorkouts(
 
 function getHealthConnectPlugin() {
   return (globalThis as CapacitorWithHealthConnect).Capacitor?.Plugins?.HealthConnect ?? null;
+}
+
+async function withHealthConnectTimeout<T>(
+  operation: Promise<T>,
+  action: string,
+  timeoutMs: number,
+): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(`Health Connect не ответил на ${action} за ${Math.round(timeoutMs / 1000)} сек. Проверьте разрешения Health Connect и повторите синхронизацию.`));
+    }, timeoutMs);
+  });
+
+  try {
+    return await Promise.race([operation, timeout]);
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  }
 }
 
 function normalizeDeviceWorkout(
