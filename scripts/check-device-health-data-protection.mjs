@@ -50,6 +50,20 @@ const androidBluetoothSyncLockPath = join(
   "training",
   "DirectWatchBluetoothSyncLock.kt",
 );
+const androidHealthConnectPluginPath = join(
+  rootDir,
+  "apps",
+  "mobile",
+  "android",
+  "app",
+  "src",
+  "main",
+  "java",
+  "com",
+  "perform",
+  "training",
+  "HealthConnectPlugin.kt",
+);
 const gadgetbridgeSleepDetailsParserPath = join(
   rootDir,
   "_external",
@@ -98,6 +112,7 @@ const directWatch = readFileSync(directWatchPath, "utf8");
 const androidDirectWatchPlugin = readFileSync(androidDirectWatchPluginPath, "utf8");
 const androidForegroundService = readFileSync(androidForegroundServicePath, "utf8");
 const androidBluetoothSyncLock = readFileSync(androidBluetoothSyncLockPath, "utf8");
+const androidHealthConnectPlugin = readFileSync(androidHealthConnectPluginPath, "utf8");
 const gadgetbridgeSleepDetailsParser = readFileSync(gadgetbridgeSleepDetailsParserPath, "utf8");
 const gadgetbridgeSleepStagesParser = readFileSync(gadgetbridgeSleepStagesParserPath, "utf8");
 
@@ -281,6 +296,16 @@ check("mobile service status trusts native status over bridge hint", () => {
   assert.match(mobileApp, /window\.setTimeout\(\(\) => \{\s+void refreshDirectWatchSyncService\(\)\.catch\(\(\) => undefined\);\s+\}, DIRECT_WATCH_SERVICE_STATUS_SETTLE_MS\);/u);
   assert.match(mobileApp, /serviceStatus\s+\?\s+serviceStatus\.running === true\s+:\s+Boolean\(serviceResult\?\.keptBluetoothBridge && isFutureDate\(serviceResult\.bridgeUntil\)\)/u);
   assert.doesNotMatch(mobileApp, /lastServiceStatus: completedServiceResult\.keptBluetoothBridge \? "running" : "synced"/u);
+});
+
+check("Health Connect fallback accepts Huawei Health as a supported source", () => {
+  assert.match(androidHealthConnectPlugin, /private const val HUAWEI_HEALTH_PACKAGE = "com\.huawei\.health"/u);
+  assert.match(androidHealthConnectPlugin, /SUPPORTED_HEALTH_SOURCE_PACKAGES = XIAOMI_HEALTH_SOURCE_PACKAGES \+ HUAWEI_HEALTH_PACKAGE/u);
+  assert.match(androidHealthConnectPlugin, /rawPayload\.put\("hasHuaweiHealth", knownSourcePackages\.contains\(HUAWEI_HEALTH_PACKAGE\)\)/u);
+  assert.match(androidHealthConnectPlugin, /labels\.add\("Huawei Health"\)/u);
+  assert.match(mobileApp, /label: "Huawei"/u);
+  assert.match(mobileApp, /поддерживаемые источники PERFORM/u);
+  assert.doesNotMatch(mobileApp, /счётчик Xiaomi 0/u);
 });
 
 check("DirectWatch raw files are ACKed only after a real server submit or queued flush", () => {

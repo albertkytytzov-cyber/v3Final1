@@ -17,8 +17,8 @@ import {
   readAppleHealthDeviceWorkouts,
 } from "../integrations/apple-health.js";
 import {
-  readMiFitnessHealthConnectDailySummary,
-  readMiFitnessHealthConnectDeviceWorkouts,
+  readHealthConnectDailySummary,
+  readHealthConnectDeviceWorkouts,
 } from "../integrations/health-connect.js";
 import {
   ackDirectWatchActivityFiles,
@@ -1102,10 +1102,10 @@ export function bootstrapMobileApp(root: HTMLElement) {
     await submitDeviceHealthPayload(payload);
   };
 
-  const syncMiFitnessHealthConnect = async (entryDate: string) => {
+  const syncHealthConnect = async (entryDate: string) => {
     if (state.session.user?.role !== "athlete") {
       update({
-        error: "Подключение Mi Fitness выполняет спортсмен в своём Android-приложении.",
+        error: "Подключение Health Connect выполняет спортсмен в своём Android-приложении.",
         isBusy: false,
         message: null,
       });
@@ -1117,8 +1117,8 @@ export function bootstrapMobileApp(root: HTMLElement) {
     let payload: DeviceHealthDailySummaryPayload;
     let workoutsPayload: DeviceWorkoutsSyncPayload | null = null;
     try {
-      payload = await readMiFitnessHealthConnectDailySummary(entryDate);
-      workoutsPayload = await readMiFitnessHealthConnectDeviceWorkouts(entryDate).catch(() => null);
+      payload = await readHealthConnectDailySummary(entryDate);
+      workoutsPayload = await readHealthConnectDeviceWorkouts(entryDate).catch(() => null);
     } catch (error) {
       update({
         error: error instanceof Error ? error.message : "Health Connect недоступен.",
@@ -1205,8 +1205,8 @@ export function bootstrapMobileApp(root: HTMLElement) {
 
     let healthConnectError: unknown = null;
     try {
-      const payload = await readMiFitnessHealthConnectDailySummary(entryDate);
-      const workoutsPayload = await readMiFitnessHealthConnectDeviceWorkouts(entryDate).catch(() => null);
+      const payload = await readHealthConnectDailySummary(entryDate);
+      const workoutsPayload = await readHealthConnectDeviceWorkouts(entryDate).catch(() => null);
       await submitDeviceHealthPayload(payload);
 
       if (workoutsPayload && workoutsPayload.workouts.length > 0) {
@@ -3541,7 +3541,7 @@ export function bootstrapMobileApp(root: HTMLElement) {
 
     root.querySelectorAll<HTMLButtonElement>("[data-health-connect-sync]").forEach((button) => {
       button.addEventListener("click", () => {
-        void syncMiFitnessHealthConnect(button.dataset.healthConnectDate ?? todayValue());
+        void syncHealthConnect(button.dataset.healthConnectDate ?? todayValue());
       });
     });
 
@@ -9743,8 +9743,12 @@ function renderHealthConnectDiagnostics(
       value: readDeviceHealthRawText(rawPayload, "dataOrigin") || "Health Connect",
     },
     {
-      label: "Xiaomi",
+      label: "Поддержанный источник",
       value: readDeviceHealthRawBoolean(rawPayload, "hasKnownHealthSource") === false ? "не найден" : "найден",
+    },
+    {
+      label: "Huawei",
+      value: readDeviceHealthRawBoolean(rawPayload, "hasHuaweiHealth") === true ? "найден" : "не найден",
     },
     {
       label: "Сон",
@@ -9796,14 +9800,15 @@ function renderHealthConnectDiagnostics(
   const allSleepCount = readDeviceHealthRawOptionalCount(rawPayload, "allSleepRecordCount");
   const allRestingHrCount = readDeviceHealthRawOptionalCount(rawPayload, "allRestingHeartRateRecordCount");
   const restingHrSource = readDeviceHealthRawText(rawPayload, "restingHeartRateSource");
+  const supportedSources = readDeviceHealthRawText(rawPayload, "supportedHealthSources") || "Xiaomi/Huawei";
   const guidance = sleepCount === 0 && (allSleepCount ?? 0) > 0
-    ? "Сон есть в Health Connect, но источник не входит в поддерживаемые источники Xiaomi. Проверьте, какое приложение записало сон."
+    ? `Сон есть в Health Connect, но источник не входит в поддерживаемые источники PERFORM (${supportedSources}). Проверьте, какое приложение записало сон.`
     : restingHrCount === 0 && (allRestingHrCount ?? 0) > 0
-      ? "Пульс покоя есть в Health Connect, но источник не входит в поддерживаемые источники Xiaomi. Проверьте источник записи пульса покоя."
+      ? `Пульс покоя есть в Health Connect, но источник не входит в поддерживаемые источники PERFORM (${supportedSources}). Проверьте источник записи пульса покоя.`
       : restingHrCount === 0 && isEstimatedRestingHrSource(restingHrSource)
         ? "Отдельного пульса покоя нет, поэтому PERFORM рассчитал средний пульс только по замерам внутри интервала сна. Для аналитики это помечено как оценка."
       : sleepCount === 0 || restingHrCount === 0
-        ? "Если разрешения включены, но счётчик Xiaomi 0, значит приложение-источник не передало этот тип данных в Health Connect за выбранный день."
+        ? "Если разрешения включены, но счётчик поддержанного источника 0, значит приложение-источник не передало этот тип данных в Health Connect за выбранный день."
     : "Health Connect отдал ключевые записи для разбора дня.";
 
   const content = `
@@ -9893,15 +9898,16 @@ function readDeviceHealthRawOptionalCount(rawPayload: Record<string, unknown>, k
 
 function formatHealthConnectDiagnosticCount(
   rawPayload: Record<string, unknown>,
-  miFitnessKey: string,
+  supportedSourcesKey: string,
   allSourcesKey: string,
 ) {
-  const miFitnessCount = readDeviceHealthRawCount(rawPayload, miFitnessKey);
+  const supportedSourcesCount = readDeviceHealthRawCount(rawPayload, supportedSourcesKey);
   const allSourcesCount = readDeviceHealthRawOptionalCount(rawPayload, allSourcesKey);
+  const supportedSources = readDeviceHealthRawText(rawPayload, "supportedHealthSources") || "источник";
 
   return allSourcesCount === null
-    ? `${miFitnessCount} Xiaomi`
-    : `${miFitnessCount} Xiaomi / ${allSourcesCount} всего`;
+    ? `${supportedSourcesCount} ${supportedSources}`
+    : `${supportedSourcesCount} ${supportedSources} / ${allSourcesCount} всего`;
 }
 
 function formatHealthConnectRestingHrEstimate(rawPayload: Record<string, unknown>) {

@@ -72,5 +72,9 @@ Current Huawei Android implementation:
   - workout duration.
 - SpO2, HRV/stress and detailed workout graphs are not treated as done until
   we verify the exact Huawei Health Kit data types exposed by the Band 11 Pro.
+- While Health Kit is blocked by missing `agconnect-services.json`, Android
+  Health Connect can be used as a fallback probe. PERFORM accepts
+  `com.huawei.health` as a supported Health Connect source and shows whether
+  Huawei-origin records are present in diagnostics.
 
 The app reads only daily summaries requested by the athlete from the device. Synced summaries are sent to the platform API under the authenticated athlete account.

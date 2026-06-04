@@ -13,6 +13,7 @@ interface HealthConnectPlugin {
   isAvailable?: () => Promise<{
     available?: boolean;
     hasKnownHealthSource?: boolean;
+    hasHuaweiHealth?: boolean;
     hasMiFitness?: boolean;
     reason?: string;
   }>;
@@ -30,6 +31,12 @@ type CapacitorWithHealthConnect = {
 };
 
 export async function readMiFitnessHealthConnectDailySummary(
+  entryDate: string,
+): Promise<DeviceHealthDailySummaryPayload> {
+  return readHealthConnectDailySummary(entryDate);
+}
+
+export async function readHealthConnectDailySummary(
   entryDate: string,
 ): Promise<DeviceHealthDailySummaryPayload> {
   const plugin = getHealthConnectPlugin();
@@ -74,6 +81,12 @@ export async function readMiFitnessHealthConnectDailySummary(
 export async function readMiFitnessHealthConnectDeviceWorkouts(
   entryDate: string,
 ): Promise<DeviceWorkoutsSyncPayload> {
+  return readHealthConnectDeviceWorkouts(entryDate);
+}
+
+export async function readHealthConnectDeviceWorkouts(
+  entryDate: string,
+): Promise<DeviceWorkoutsSyncPayload> {
   const plugin = getHealthConnectPlugin();
 
   if (!plugin?.readDailyWorkouts) {
@@ -86,7 +99,7 @@ export async function readMiFitnessHealthConnectDeviceWorkouts(
     const availability = await plugin.isAvailable();
 
     if (!availability.available) {
-      throw new Error(availability.reason || "Health Connect РЅРµРґРѕСЃС‚СѓРїРµРЅ РЅР° СЌС‚РѕРј СѓСЃС‚СЂРѕР№СЃС‚РІРµ.");
+      throw new Error(availability.reason || "Health Connect недоступен на этом устройстве.");
     }
   }
 
@@ -94,7 +107,7 @@ export async function readMiFitnessHealthConnectDeviceWorkouts(
     const authorization = await plugin.requestAuthorization();
 
     if (!authorization.granted) {
-      throw new Error(authorization.reason || "РќРµС‚ СЂР°Р·СЂРµС€РµРЅРёСЏ Health Connect РЅР° С‡С‚РµРЅРёРµ С‚СЂРµРЅРёСЂРѕРІРѕРє.");
+      throw new Error(authorization.reason || "Нет разрешения Health Connect на чтение тренировок.");
     }
   }
 

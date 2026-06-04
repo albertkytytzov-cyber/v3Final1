@@ -52,6 +52,7 @@ class HealthConnectPlugin : Plugin() {
         val response = JSObject()
         response.put("available", sdkStatus == HealthConnectClient.SDK_AVAILABLE)
         response.put("hasMiFitness", installedKnownSources.contains(MI_FITNESS_PACKAGE))
+        response.put("hasHuaweiHealth", installedKnownSources.contains(HUAWEI_HEALTH_PACKAGE))
         response.put("hasKnownHealthSource", installedKnownSources.isNotEmpty())
         response.put("sdkStatus", sdkStatus)
         response.put(
@@ -148,11 +149,11 @@ class HealthConnectPlugin : Plugin() {
                 }
 
                 val summary = withContext(Dispatchers.IO) {
-                    readMiFitnessDailySummary(client, dayRange, granted)
+                    readHealthConnectDailySummary(client, dayRange, granted)
                 }
                 call.resolve(summary)
             } catch (error: Exception) {
-                call.reject("Не удалось прочитать Mi Fitness через Health Connect: ${safeMessage(error)}", error)
+                call.reject("Не удалось прочитать данные через Health Connect: ${safeMessage(error)}", error)
             }
         }
     }
@@ -180,21 +181,21 @@ class HealthConnectPlugin : Plugin() {
                 }
 
                 if (!granted.containsAll(requiredWorkoutPermissions)) {
-                    call.reject("РќРµС‚ СЂР°Р·СЂРµС€РµРЅРёСЏ Health Connect РЅР° С‡С‚РµРЅРёРµ С‚СЂРµРЅРёСЂРѕРІРѕРє.")
+                    call.reject("Нет разрешения Health Connect на чтение тренировок.")
                     return@launch
                 }
 
                 val workouts = withContext(Dispatchers.IO) {
-                    readMiFitnessDailyWorkouts(client, dayRange, granted)
+                    readHealthConnectDailyWorkouts(client, dayRange, granted)
                 }
                 call.resolve(workouts)
             } catch (error: Exception) {
-                call.reject("РќРµ СѓРґР°Р»РѕСЃСЊ РїСЂРѕС‡РёС‚Р°С‚СЊ С‚СЂРµРЅРёСЂРѕРІРєРё Health Connect: ${safeMessage(error)}", error)
+                call.reject("Не удалось прочитать тренировки Health Connect: ${safeMessage(error)}", error)
             }
         }
     }
 
-    private suspend fun readMiFitnessDailySummary(
+    private suspend fun readHealthConnectDailySummary(
         client: HealthConnectClient,
         dayRange: DayRange,
         grantedPermissions: Set<String>,
@@ -271,7 +272,9 @@ class HealthConnectPlugin : Plugin() {
             recordOrigins(supportedRecords).ifBlank { SUPPORTED_HEALTH_SOURCE_PACKAGES.joinToString(", ") },
         )
         rawPayload.put("hasMiFitness", knownSourcePackages.contains(MI_FITNESS_PACKAGE))
+        rawPayload.put("hasHuaweiHealth", knownSourcePackages.contains(HUAWEI_HEALTH_PACKAGE))
         rawPayload.put("hasKnownHealthSource", knownSourcePackages.isNotEmpty())
+        rawPayload.put("supportedHealthSources", supportedHealthSourceLabel(knownSourcePackages))
         rawPayload.put("knownHealthSourcesInstalled", installedKnownSources.joinToString(", "))
         rawPayload.put("knownHealthSourceOrigins", knownSourcePackages.joinToString(", "))
         rawPayload.put("sleepLookupStart", dayRange.sleepLookupStart.toString())
@@ -321,7 +324,7 @@ class HealthConnectPlugin : Plugin() {
         return result
     }
 
-    private suspend fun readMiFitnessDailyWorkouts(
+    private suspend fun readHealthConnectDailyWorkouts(
         client: HealthConnectClient,
         dayRange: DayRange,
         grantedPermissions: Set<String>,
@@ -843,8 +846,16 @@ class HealthConnectPlugin : Plugin() {
         if (installedKnownSources.any { packageName -> XIAOMI_HEALTH_SOURCE_PACKAGES.contains(packageName) }) {
             labels.add("Xiaomi")
         }
+        if (installedKnownSources.contains(HUAWEI_HEALTH_PACKAGE)) {
+            labels.add("Huawei Health")
+        }
 
         return if (labels.isEmpty()) "Health Connect" else "${labels.distinct().joinToString(" / ")} / Health Connect"
+    }
+
+    private fun supportedHealthSourceLabel(knownSources: List<String>): String {
+        return healthSourceDeviceLabel(knownSources).removeSuffix(" / Health Connect").takeIf { label -> label != "Health Connect" }
+            ?: "нет"
     }
 
     private fun putNullable(objectValue: JSObject, key: String, value: Any?) {
@@ -883,6 +894,7 @@ class HealthConnectPlugin : Plugin() {
         private const val MI_FITNESS_PACKAGE = "com.xiaomi.wearable"
         private const val XIAOMI_HEALTH_PACKAGE = "com.mi.health"
         private const val ZEPP_LIFE_PACKAGE = "com.xiaomi.hm.health"
+        private const val HUAWEI_HEALTH_PACKAGE = "com.huawei.health"
         private const val PROVIDER = "health-connect"
         private const val MILLIS_PER_MINUTE = 60000.0
         private const val SLEEP_LOOKUP_HOURS_BEFORE_DAY = 18L
@@ -895,7 +907,7 @@ class HealthConnectPlugin : Plugin() {
             XIAOMI_HEALTH_PACKAGE,
             ZEPP_LIFE_PACKAGE,
         )
-        private val SUPPORTED_HEALTH_SOURCE_PACKAGES = XIAOMI_HEALTH_SOURCE_PACKAGES
+        private val SUPPORTED_HEALTH_SOURCE_PACKAGES = XIAOMI_HEALTH_SOURCE_PACKAGES + HUAWEI_HEALTH_PACKAGE
         private val supportedHealthDataOrigins = SUPPORTED_HEALTH_SOURCE_PACKAGES.map { packageName ->
             DataOrigin(packageName)
         }.toSet()

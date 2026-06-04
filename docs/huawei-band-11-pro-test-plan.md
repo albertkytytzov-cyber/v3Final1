@@ -249,3 +249,25 @@ Conclusion:
 - Missing `com.huawei.hwid` should be logged as context, but not treated as a
   hard blocker because Huawei Health itself exposes active health/device
   services on this device.
+
+## Health Connect Fallback 2026-06-04
+
+Until `agconnect-services.json` is available, PERFORM can still test Huawei
+coverage through Android Health Connect.
+
+Implementation state:
+
+- `com.huawei.health` is now a supported Health Connect `DataOrigin` together
+  with Xiaomi/Zepp sources.
+- Health Connect daily summaries and workout reads accept Huawei-origin records
+  instead of showing them only in the "all sources" diagnostic counters.
+- The mobile diagnostics label now separates:
+  - supported source found/not found;
+  - Huawei Health found/not found;
+  - supported-source counters vs all-source counters.
+
+Important limitation:
+
+- This is only a fallback. It proves whether Huawei Health writes usable data
+  into Health Connect on this phone. It does not replace Huawei Health Kit and
+  does not prove direct watch access.
