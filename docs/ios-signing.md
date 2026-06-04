@@ -90,10 +90,21 @@ not immediately publish the app before the final coach/athlete smoke test.
 Current production version setup:
 
 - Version: `1.0`
-- Selected App Store build: `1.0 (4)`
+- Selected App Store build: `1.0 (4)`, rejected by App Review on
+  `2026-06-04`.
+- Fixed App Store build uploaded after rejection: `1.0 (5)` on
+  `2026-06-04 22:35 Europe/Bucharest`; App Store Connect reported the upload
+  succeeded and the package started processing.
 - App Review submission: sent on `2026-06-04 00:35` with submission ID
   `74cd5191-5c95-4cf1-b033-90df3c3c3696`.
-- App Review status at submission check: waiting for review.
+- App Review status at follow-up check: rejected with unresolved issues.
+- Rejection fixes:
+  - `Guideline 2.3.8`: replaced the placeholder-looking iOS app icon with a
+    finalized opaque 1024x1024 RGB icon.
+  - `Guideline 2.1(a)`: verified the production review account login against
+    `https://185.195.185.67.sslip.io/api/v1` and reset the App Review account
+    password locally in `.codex-local/ios/app-review.env`.
+- The uploaded archive is still iPhone-only: `UIDeviceFamily = [1]`.
 - Release mode: manual release after App Review approval.
 - Pricing: free in all countries and regions.
 - Availability: all countries and regions.
