@@ -6,9 +6,22 @@ import type {
 } from "../types/models.js";
 
 interface HuaweiHealthPlugin {
-  isAvailable?: () => Promise<{ available?: boolean; reason?: string }>;
+  isAvailable?: () => Promise<HuaweiHealthAvailability>;
   requestAuthorization?: () => Promise<{ granted?: boolean; reason?: string }>;
   readDailySummary?: (input: { entryDate: string }) => Promise<Partial<DeviceHealthDailySummaryPayload>>;
+}
+
+export interface HuaweiHealthAvailability {
+  available?: boolean;
+  hasAgConnectServices?: boolean;
+  hasHmsCore?: boolean;
+  hasHuaweiHealth?: boolean;
+  healthPackage?: string;
+  hmsPackage?: string;
+  packageName?: string;
+  provider?: string;
+  reason?: string;
+  scopes?: string[];
 }
 
 type CapacitorWithHuaweiHealth = {
@@ -34,7 +47,7 @@ export async function readHuaweiHealthDailySummary(
     const availability = await plugin.isAvailable();
 
     if (!availability.available) {
-      throw new Error(availability.reason || "Huawei Health недоступен на этом устройстве.");
+      throw new Error(formatHuaweiHealthAvailabilityError(availability));
     }
   }
 
@@ -63,6 +76,22 @@ export async function readHuaweiHealthDailySummary(
 
 function getHuaweiHealthPlugin() {
   return (globalThis as CapacitorWithHuaweiHealth).Capacitor?.Plugins?.HuaweiHealth ?? null;
+}
+
+function formatHuaweiHealthAvailabilityError(availability: HuaweiHealthAvailability) {
+  if (!availability.hasAgConnectServices) {
+    return "Huawei Health Kit не настроен в этой Android-сборке: нужен apps/mobile/android/app/agconnect-services.json из AppGallery Connect.";
+  }
+
+  if (!availability.hasHmsCore) {
+    return "На телефоне не найден HMS Core. Установите или обновите HMS Core/AppGallery перед тестом Huawei.";
+  }
+
+  if (!availability.hasHuaweiHealth) {
+    return "На телефоне не найдено приложение Huawei Health. Сначала подключите часы через Huawei Health.";
+  }
+
+  return availability.reason || "Huawei Health недоступен на этом устройстве.";
 }
 
 function normalizeSleepSummary(value: unknown): DeviceHealthSleepSummary | null {

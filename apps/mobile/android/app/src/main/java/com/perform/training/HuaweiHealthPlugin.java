@@ -34,6 +34,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.TimeZone;
 import java.util.concurrent.TimeUnit;
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -56,12 +57,24 @@ public class HuaweiHealthPlugin extends Plugin {
         JSObject result = new JSObject();
         boolean hasHmsCore = isPackageInstalled(HUAWEI_HMS_PACKAGE);
         boolean hasHealth = isPackageInstalled(HUAWEI_HEALTH_PACKAGE);
+        boolean hasAgConnectServices = BuildConfig.HAS_AGCONNECT_SERVICES;
 
-        result.put("available", hasHmsCore && hasHealth);
+        result.put("available", hasAgConnectServices && hasHmsCore && hasHealth);
+        result.put("hasAgConnectServices", hasAgConnectServices);
         result.put("hasHmsCore", hasHmsCore);
         result.put("hasHuaweiHealth", hasHealth);
+        result.put("hmsPackage", HUAWEI_HMS_PACKAGE);
+        result.put("healthPackage", HUAWEI_HEALTH_PACKAGE);
+        result.put("packageName", BuildConfig.APPLICATION_ID);
+        result.put("provider", PROVIDER);
+        result.put("scopes", new JSONArray(Arrays.asList(HEALTH_SCOPES)));
 
-        if (!hasHmsCore) {
+        if (!hasAgConnectServices) {
+            result.put(
+                "reason",
+                "В Android-сборке нет agconnect-services.json. Настройте приложение com.perform.training в AppGallery Connect и добавьте файл в apps/mobile/android/app/."
+            );
+        } else if (!hasHmsCore) {
             result.put("reason", "На устройстве не найден HMS Core.");
         } else if (!hasHealth) {
             result.put("reason", "На устройстве не найдено приложение Huawei Health.");
@@ -74,6 +87,13 @@ public class HuaweiHealthPlugin extends Plugin {
 
     @PluginMethod
     public void requestAuthorization(PluginCall call) {
+        if (!BuildConfig.HAS_AGCONNECT_SERVICES) {
+            call.reject(
+                "Huawei Health Kit не настроен в этой Android-сборке: нужен apps/mobile/android/app/agconnect-services.json."
+            );
+            return;
+        }
+
         if (!isPackageInstalled(HUAWEI_HMS_PACKAGE) || !isPackageInstalled(HUAWEI_HEALTH_PACKAGE)) {
             call.reject("Нужны HMS Core и приложение Huawei Health на устройстве.");
             return;
@@ -111,6 +131,13 @@ public class HuaweiHealthPlugin extends Plugin {
 
     @PluginMethod
     public void readDailySummary(PluginCall call) {
+        if (!BuildConfig.HAS_AGCONNECT_SERVICES) {
+            call.reject(
+                "Huawei Health Kit не настроен в этой Android-сборке: нужен apps/mobile/android/app/agconnect-services.json."
+            );
+            return;
+        }
+
         String entryDate = call.getString("entryDate");
 
         if (entryDate == null || entryDate.trim().isEmpty()) {
@@ -198,6 +225,9 @@ public class HuaweiHealthPlugin extends Plugin {
         rawPayload.put("sampleSetCount", sampleSets == null ? 0 : sampleSets.size());
         rawPayload.put("activityRecordCount", activityRecords == null ? JSONObject.NULL : activityRecords.size());
         rawPayload.put("activityRecordError", activityRecordError == null ? JSONObject.NULL : activityRecordError);
+        rawPayload.put("hasAgConnectServices", BuildConfig.HAS_AGCONNECT_SERVICES);
+        rawPayload.put("hmsPackage", HUAWEI_HMS_PACKAGE);
+        rawPayload.put("healthPackage", HUAWEI_HEALTH_PACKAGE);
         result.put("rawPayload", rawPayload);
 
         return result;

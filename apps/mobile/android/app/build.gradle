@@ -1,9 +1,15 @@
 apply plugin: 'com.android.application'
 apply plugin: 'org.jetbrains.kotlin.android'
 
+def huaweiAgconnectServicesJSON = file('agconnect-services.json')
+def hasHuaweiAgconnectServices = huaweiAgconnectServicesJSON.exists() && huaweiAgconnectServicesJSON.text.trim()
+
 android {
     namespace = "com.perform.training"
     compileSdk = rootProject.ext.compileSdkVersion
+    buildFeatures {
+        buildConfig true
+    }
     defaultConfig {
         applicationId "com.perform.training"
         minSdkVersion rootProject.ext.minSdkVersion
@@ -11,6 +17,7 @@ android {
         versionCode 24
         versionName "1.0.23"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField "boolean", "HAS_AGCONNECT_SERVICES", hasHuaweiAgconnectServices ? "true" : "false"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
              // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
@@ -51,8 +58,7 @@ dependencies {
 apply from: 'capacitor.build.gradle'
 
 try {
-    def agconnectServicesJSON = file('agconnect-services.json')
-    if (agconnectServicesJSON.exists() && agconnectServicesJSON.text) {
+    if (hasHuaweiAgconnectServices) {
         apply plugin: 'com.huawei.agconnect'
     }
 } catch(Exception e) {

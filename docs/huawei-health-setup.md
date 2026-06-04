@@ -21,4 +21,34 @@ Required Huawei/AppGallery setup:
 6. Put the file at `apps/mobile/android/app/agconnect-services.json`.
 7. Build and sync the mobile app.
 
+Readiness check before device testing:
+
+```bash
+scripts/check-huawei-watch-readiness.sh
+```
+
+The check reports:
+
+- whether `agconnect-services.json` is present in the Android app;
+- whether the Android phone is visible through `adb`;
+- whether HMS Core (`com.huawei.hwid`) is installed;
+- whether Huawei Health (`com.huawei.health`) is installed;
+- whether PERFORM (`com.perform.training`) is installed.
+
+Current Huawei Android implementation:
+
+- The native `HuaweiHealth` Capacitor plugin reports whether the build has
+  AppGallery Connect config before it tries to authorize Health Kit.
+- If `agconnect-services.json` is missing, the app shows a specific setup
+  error instead of a generic Huawei failure.
+- The first data read path is Huawei Health Kit:
+  - sleep summary;
+  - resting/continuous heart-rate summary;
+  - workout/activity records;
+  - distance;
+  - calories;
+  - workout duration.
+- SpO2, HRV/stress and detailed workout graphs are not treated as done until
+  we verify the exact Huawei Health Kit data types exposed by the Band 11 Pro.
+
 The app reads only daily summaries requested by the athlete from the device. Synced summaries are sent to the platform API under the authenticated athlete account.
