@@ -271,3 +271,26 @@ Important limitation:
 - This is only a fallback. It proves whether Huawei Health writes usable data
   into Health Connect on this phone. It does not replace Huawei Health Kit and
   does not prove direct watch access.
+
+## AppGallery Connect Status 2026-06-04
+
+Safari login reached AppGallery Connect and opened project `MVP`.
+
+Current blocker:
+
+- The project has no Android app yet.
+- The Add app form in the project services area defaults to Web/Harmony-style
+  app creation and does not allow selecting Android.
+- The Apps and atomic services section redirects to `Identity verification`.
+- Therefore the account must complete Huawei identity verification before
+  `com.perform.training` can be registered as an Android app.
+
+After verification:
+
+1. Create Android app `PERFORM` with package `com.perform.training`.
+2. Add the current debug SHA-1/SHA-256 fingerprints from
+   `docs/huawei-health-setup.md`.
+3. Enable Health Kit and Account Kit.
+4. Download `agconnect-services.json`.
+5. Install it with `scripts/install-huawei-agconnect.sh`.
+6. Rebuild Android and test Huawei Health Kit authorization.

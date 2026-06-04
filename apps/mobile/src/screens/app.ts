@@ -8050,6 +8050,13 @@ function renderWatchSettingsPanel(
           </button>
           </div>
         ` : ""}
+        ${canSync ? `
+          <div class="watch-settings-actions">
+            <button class="secondary-action" data-health-connect-sync data-health-connect-date="${escapeHtml(date)}" type="button" ${state.isBusy ? "disabled" : ""}>
+              Проверить Health Connect
+            </button>
+          </div>
+        ` : ""}
         ${isDirectWatchRuntime() ? "" : renderHealthConnectDiagnostics(summary, true)}
         ${canSync && SHOW_DIRECT_WATCH_DIAGNOSTICS && isDirectWatchRuntime() ? renderDirectWatchDiagnostics(state, date) : ""}
       </div>

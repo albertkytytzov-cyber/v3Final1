@@ -7,19 +7,21 @@ This project reads Huawei Health data through the Android app. Do not collect or
 
 Required Huawei/AppGallery setup:
 
-1. Create or open the Android app in AppGallery Connect with package name `com.perform.training`.
-2. Add the signing certificate fingerprint that matches the Android build used for testing or release.
-3. Enable Health Kit and Account Kit for the app.
-4. Apply for the read permissions used by the app:
+1. Complete Huawei developer identity verification for the account. AppGallery
+   Connect does not allow creating an Android app until this step is done.
+2. Create or open the Android app in AppGallery Connect with package name `com.perform.training`.
+3. Add the signing certificate fingerprint that matches the Android build used for testing or release.
+4. Enable Health Kit and Account Kit for the app.
+5. Apply for the read permissions used by the app:
    - sleep
    - heart rate
    - activity
    - activity records
    - distance
    - calories
-5. Download `agconnect-services.json` from AppGallery Connect.
-6. Put the file at `apps/mobile/android/app/agconnect-services.json`.
-7. Build and sync the mobile app.
+6. Download `agconnect-services.json` from AppGallery Connect.
+7. Put the file at `apps/mobile/android/app/agconnect-services.json`.
+8. Build and sync the mobile app.
 
 Current Android identity for the local test build:
 
@@ -76,5 +78,14 @@ Current Huawei Android implementation:
   Health Connect can be used as a fallback probe. PERFORM accepts
   `com.huawei.health` as a supported Health Connect source and shows whether
   Huawei-origin records are present in diagnostics.
+
+AppGallery Connect check on 2026-06-04:
+
+- The Huawei account can open project `MVP`.
+- The project has no Android app yet.
+- App creation is blocked by the `Identity verification` page.
+- Until identity verification is completed, `com.perform.training` cannot be
+  registered in AppGallery Connect and `agconnect-services.json` cannot be
+  downloaded.
 
 The app reads only daily summaries requested by the athlete from the device. Synced summaries are sent to the platform API under the authenticated athlete account.
