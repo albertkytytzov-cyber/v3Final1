@@ -104,6 +104,8 @@ Current production version setup:
   - `Guideline 2.1(a)`: verified the production review account login against
     `https://185.195.185.67.sslip.io/api/v1` and reset the App Review account
     password locally in `.codex-local/ios/app-review.env`.
+    The review coach account must also have demo athletes linked; otherwise
+    App Review can log in but sees an empty coach workspace.
 - The uploaded archive is still iPhone-only: `UIDeviceFamily = [1]`.
 - Release mode: manual release after App Review approval.
 - Pricing: free in all countries and regions.
