@@ -98,6 +98,10 @@ Current production version setup:
 - App Review submission: sent on `2026-06-04 00:35` with submission ID
   `74cd5191-5c95-4cf1-b033-90df3c3c3696`.
 - App Review status at follow-up check: rejected with unresolved issues.
+- App Review follow-up on `2026-06-06 00:39 Europe/Bucharest`: review
+  sign-in data was updated in App Store Connect, a reply was posted to Apple,
+  and iOS version `1.0 (5)` was resubmitted. Current App Store Connect status:
+  waiting for review.
 - Rejection fixes:
   - `Guideline 2.3.8`: replaced the placeholder-looking iOS app icon with a
     finalized opaque 1024x1024 RGB icon.
