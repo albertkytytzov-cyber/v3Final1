@@ -10,6 +10,7 @@ export type PlanningStudioView =
   | "advanced"
   | "auto-weekly"
   | "calendar"
+  | "constructor"
   | "season"
   | "mesocycle"
   | "preparation"

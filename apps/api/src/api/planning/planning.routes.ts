@@ -1,5 +1,9 @@
 import type { FastifyInstance } from "fastify";
 import {
+  buildConstructorTemplatePayload,
+  buildPerformConstructorDraft,
+} from "@training-platform/shared";
+import {
   autoAssignMicrocycle,
   assignPlan,
   createPlanTemplate,
@@ -20,6 +24,7 @@ import type { ApiGuards, HttpErrorFactory } from "../guards";
 import {
   parseAssignedPlanBody,
   parseAutoAssignMicrocycleBody,
+  parseConstructorDraftBody,
   parsePlanningAthleteDateQuery,
   parsePlanTemplateBody,
   parseTemplatePackQuery,
@@ -95,6 +100,33 @@ export function registerPlanningRoutes(
       athleteId: query.athleteId,
       startDate: query.startDate ?? new Date().toISOString().slice(0, 10),
     });
+  });
+
+  app.post("/api/v1/plans/constructor/draft", async (request) => {
+    const user = await dependencies.guards.requireUser(request);
+
+    if (user.role !== "coach" && user.role !== "admin") {
+      throw dependencies.httpError(403, "Only coach or admin accounts can build constructor drafts");
+    }
+
+    let body;
+    try {
+      body = parseConstructorDraftBody(request.body);
+    } catch (error) {
+      throw dependencies.httpError(400, (error as Error).message);
+    }
+
+    await dependencies.guards.assertAthleteAccess(user, body.athlete.athleteId);
+
+    const draft = buildPerformConstructorDraft(body);
+
+    return {
+      draft,
+      templatePayload: buildConstructorTemplatePayload(
+        draft,
+        `PERFORM Constructor • ${body.competition.name}`,
+      ),
+    };
   });
 
   app.post("/api/v1/plans/templates", async (request) => {

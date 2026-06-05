@@ -15,6 +15,12 @@ import {
   type CompetitionReviewOverview,
   type CompetitionResultPayload,
   type CompetitionSummary,
+  type ConstructorCompetitionLevel,
+  type ConstructorCompetitionPriority,
+  type ConstructorDraft,
+  type ConstructorGoalType,
+  type ConstructorInput,
+  type ConstructorPhase,
   type CreateCompetitionPayload,
   type CreateCompetitionPlanPayload,
   type CreateMesocyclePayload,
@@ -81,6 +87,8 @@ import {
   type ReadinessSubmissionPayload,
   type DeleteCompetitionsPayload,
   type DeleteCompetitionsResponse,
+  buildConstructorTemplatePayload,
+  buildPerformConstructorDraft,
   estimateTrainingActualLoad,
   estimateTrainingBlockLoad,
   estimateTrainingBlocksLoad,
@@ -184,6 +192,75 @@ const mobileAppDownloadUrl =
 const SHOW_OFFLINE_CENTER_NAV = false;
 const DISPLAY_TIME_ZONE = "Europe/Sofia";
 type CoachPeriodPresetDays = 7 | 15 | 30;
+type ConstructorDraftResponse = {
+  draft: ConstructorDraft;
+  templatePayload: PlanTemplatePayload;
+};
+
+type ConstructorFormState = {
+  competitionPlanId: string;
+  competitionName: string;
+  competitionLevel: ConstructorCompetitionLevel;
+  competitionPriority: ConstructorCompetitionPriority;
+  startDate: string;
+  weighInDate: string;
+  weightClass: string;
+  currentPhase: ConstructorPhase;
+  cycleLengthDays: ConstructorInput["context"]["cycleLengthDays"];
+  sessionsPerWeek: number;
+  goals: ConstructorGoalType[];
+  sprint10mSec: string;
+  sprint20mSec: string;
+  verticalJumpCm: string;
+  legsLmeScore: string;
+  techniqueQualityScore: string;
+  aerobicRecoveryScore: string;
+  readinessScore: string;
+  sleepHours: string;
+  restingHr: string;
+  bodyWeightKg: string;
+  weightTargetKg: string;
+  painLevel: string;
+  fatigueLevel: string;
+  coachComment: string;
+  noHeavyStrength: boolean;
+  noHighGlycolytic: boolean;
+  weightCutActive: boolean;
+  injuryCaution: boolean;
+  travelFatigue: boolean;
+};
+
+const CONSTRUCTOR_GOAL_OPTIONS: ConstructorGoalType[] = [
+  "speed_first_action",
+  "legs_lme",
+  "arms_grip",
+  "aerobic_base",
+  "anaerobic_power",
+  "max_strength",
+  "speed_strength",
+  "fatigue_skill",
+  "wrestling_contact_density",
+  "weight_management",
+  "taper_quality",
+  "recovery",
+];
+
+const CONSTRUCTOR_PHASE_OPTIONS: ConstructorPhase[] = [
+  "base",
+  "development",
+  "special_preparation",
+  "taper",
+  "start_window",
+  "recovery",
+];
+
+const CONSTRUCTOR_CYCLE_LENGTH_OPTIONS: Array<ConstructorInput["context"]["cycleLengthDays"]> = [
+  7,
+  10,
+  14,
+  21,
+  30,
+];
 
 function getDateInputValue(date = new Date()) {
   return date.toISOString().slice(0, 10);
@@ -219,6 +296,178 @@ function getCoachPeriodRangeDays(periodStart: string, periodEnd: string) {
   }
 
   return diffDays + 1;
+}
+
+function createDefaultConstructorForm(): ConstructorFormState {
+  const startDate = shiftDateInputValue(getDateInputValue(), 21);
+
+  return {
+    competitionPlanId: "",
+    competitionName: "Главный старт",
+    competitionLevel: "continental",
+    competitionPriority: "A",
+    startDate,
+    weighInDate: shiftDateInputValue(startDate, -1),
+    weightClass: "",
+    currentPhase: "special_preparation",
+    cycleLengthDays: 21,
+    sessionsPerWeek: 6,
+    goals: ["speed_first_action", "legs_lme", "fatigue_skill", "taper_quality"],
+    sprint10mSec: "",
+    sprint20mSec: "",
+    verticalJumpCm: "",
+    legsLmeScore: "",
+    techniqueQualityScore: "",
+    aerobicRecoveryScore: "",
+    readinessScore: "",
+    sleepHours: "",
+    restingHr: "",
+    bodyWeightKg: "",
+    weightTargetKg: "",
+    painLevel: "",
+    fatigueLevel: "",
+    coachComment: "",
+    noHeavyStrength: false,
+    noHighGlycolytic: false,
+    weightCutActive: false,
+    injuryCaution: false,
+    travelFatigue: false,
+  };
+}
+
+function parseConstructorNumber(value: string) {
+  const normalized = value.trim().replace(",", ".");
+  const parsed = Number(normalized);
+
+  return normalized && Number.isFinite(parsed) ? parsed : null;
+}
+
+function splitConstructorText(value: string) {
+  return value
+    .split(/[,\n;]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function deriveConstructorPhaseByCompetitionDays(daysToCompetition: number | null): ConstructorPhase {
+  if (daysToCompetition === null) {
+    return "special_preparation";
+  }
+
+  if (daysToCompetition < 0) {
+    return "recovery";
+  }
+
+  if (daysToCompetition <= 3) {
+    return "start_window";
+  }
+
+  if (daysToCompetition <= 14) {
+    return "taper";
+  }
+
+  if (daysToCompetition <= 30) {
+    return "special_preparation";
+  }
+
+  if (daysToCompetition <= 60) {
+    return "development";
+  }
+
+  return "base";
+}
+
+function deriveConstructorCycleLengthByCompetitionDays(
+  daysToCompetition: number | null,
+): ConstructorInput["context"]["cycleLengthDays"] {
+  if (daysToCompetition === null || daysToCompetition > 30) {
+    return 30;
+  }
+
+  if (daysToCompetition <= 7) {
+    return 7;
+  }
+
+  if (daysToCompetition <= 10) {
+    return 10;
+  }
+
+  if (daysToCompetition <= 14) {
+    return 14;
+  }
+
+  if (daysToCompetition <= 21) {
+    return 21;
+  }
+
+  return 30;
+}
+
+function compareConstructorCompetitionPlans(
+  left: CompetitionPlanSummary,
+  right: CompetitionPlanSummary,
+) {
+  const today = getDateInputValue();
+  const leftFuture = left.competitionStartDate >= today;
+  const rightFuture = right.competitionStartDate >= today;
+
+  if (leftFuture !== rightFuture) {
+    return leftFuture ? -1 : 1;
+  }
+
+  const leftPriorityRank = left.priority === "A" ? 0 : left.priority === "B" ? 1 : 2;
+  const rightPriorityRank = right.priority === "A" ? 0 : right.priority === "B" ? 1 : 2;
+
+  if (leftFuture) {
+    const dateDiff = left.competitionStartDate.localeCompare(right.competitionStartDate);
+
+    if (dateDiff !== 0) {
+      return dateDiff;
+    }
+
+    return leftPriorityRank - rightPriorityRank;
+  }
+
+  const dateDiff = right.competitionStartDate.localeCompare(left.competitionStartDate);
+
+  if (dateDiff !== 0) {
+    return dateDiff;
+  }
+
+  return leftPriorityRank - rightPriorityRank;
+}
+
+function getNearestConstructorCompetitionPlan(plans: CompetitionPlanSummary[]) {
+  return [...plans].sort(compareConstructorCompetitionPlans)[0] ?? null;
+}
+
+function applyConstructorCompetitionPlanToConstructorForm(
+  current: ConstructorFormState,
+  plan: CompetitionPlanSummary,
+  weightClassFallback = "",
+): ConstructorFormState {
+  const daysToCompetition = diffDateInputDays(getDateInputValue(), plan.competitionStartDate);
+
+  return {
+    ...current,
+    competitionPlanId: plan.id,
+    competitionName: plan.competitionTitle,
+    competitionPriority: plan.priority as ConstructorCompetitionPriority,
+    startDate: plan.competitionStartDate,
+    weighInDate: shiftDateInputValue(plan.competitionStartDate, -1),
+    weightClass: current.weightClass || weightClassFallback,
+    currentPhase: deriveConstructorPhaseByCompetitionDays(daysToCompetition),
+    cycleLengthDays: deriveConstructorCycleLengthByCompetitionDays(daysToCompetition),
+    bodyWeightKg:
+      plan.currentWeight !== null && plan.currentWeight !== undefined
+        ? String(plan.currentWeight)
+        : current.bodyWeightKg,
+    weightTargetKg:
+      plan.targetWeight !== null && plan.targetWeight !== undefined
+        ? String(plan.targetWeight)
+        : current.weightTargetKg,
+    weightCutActive: current.weightCutActive || plan.weightCutRequired,
+  };
 }
 
 function deriveAthletePreparationPhase(daysToCompetition: number | null): PreparationPhase | null {
@@ -8889,6 +9138,14 @@ export function PageClient({
   const [planningView, setPlanningView] = useState<PlanningStudioView>(
     previewState?.planningView ?? "weekly",
   );
+  const [constructorForm, setConstructorForm] = useState<ConstructorFormState>(
+    createDefaultConstructorForm,
+  );
+  const [constructorDraft, setConstructorDraft] = useState<ConstructorDraft | null>(null);
+  const [constructorTemplatePayload, setConstructorTemplatePayload] =
+    useState<PlanTemplatePayload | null>(null);
+  const [constructorBusy, setConstructorBusy] = useState(false);
+  const [constructorMessage, setConstructorMessage] = useState("");
   const [seasonDisplayMode, setSeasonDisplayMode] =
     useState<SeasonDisplayMode>("hybrid");
   const [seasonEditorMode, setSeasonEditorMode] = useState<SeasonEditorMode>(
@@ -13332,6 +13589,316 @@ export function PageClient({
   const visibleCompetitionPlans = competitionPlans.filter(
     (plan) => !selectedAthleteId || plan.athleteId === selectedAthleteId,
   );
+  const visibleConstructorCompetitionPlans = [...visibleCompetitionPlans].sort(
+    compareConstructorCompetitionPlans,
+  );
+  const visibleConstructorCompetitionPlanKey = visibleConstructorCompetitionPlans
+    .map((plan) => `${plan.id}:${plan.competitionStartDate}:${plan.priority}:${plan.updatedAt}`)
+    .join("|");
+  const selectedConstructorCompetitionPlan =
+    visibleConstructorCompetitionPlans.find((plan) => plan.id === constructorForm.competitionPlanId) ??
+    null;
+  const selectedConstructorCompetition = selectedConstructorCompetitionPlan
+    ? competitions.find((competition) => competition.id === selectedConstructorCompetitionPlan.competitionId) ??
+      null
+    : null;
+  useEffect(() => {
+    if (!selectedCoachAthlete) {
+      return;
+    }
+
+    setConstructorForm((current) => ({
+      ...current,
+      weightClass: current.weightClass || selectedCoachAthlete.weightClass || "",
+      bodyWeightKg:
+        current.bodyWeightKg ||
+        (selectedCoachAthlete.currentWeightKg !== null
+          ? String(selectedCoachAthlete.currentWeightKg)
+          : selectedCoachAthlete.baselineWeightKg !== null
+            ? String(selectedCoachAthlete.baselineWeightKg)
+            : ""),
+      weightTargetKg:
+        current.weightTargetKg ||
+        (selectedCoachAthlete.currentWeightKg !== null
+          ? String(selectedCoachAthlete.currentWeightKg)
+          : ""),
+      restingHr:
+        current.restingHr ||
+        (selectedCoachAthlete.baselineRestingHr !== null
+          ? String(selectedCoachAthlete.baselineRestingHr)
+          : ""),
+      readinessScore:
+        current.readinessScore ||
+        (selectedCoachAthlete.latestReadiness ? String(selectedCoachAthlete.latestReadiness.score) : ""),
+    }));
+  }, [
+    selectedCoachAthlete?.athleteId,
+    selectedCoachAthlete?.baselineRestingHr,
+    selectedCoachAthlete?.baselineWeightKg,
+    selectedCoachAthlete?.currentWeightKg,
+    selectedCoachAthlete?.latestReadiness,
+    selectedCoachAthlete?.weightClass,
+  ]);
+  useEffect(() => {
+    if (!selectedCoachAthlete || visibleConstructorCompetitionPlans.length === 0) {
+      return;
+    }
+
+    const nearestPlan = getNearestConstructorCompetitionPlan(visibleConstructorCompetitionPlans);
+
+    if (!nearestPlan) {
+      return;
+    }
+
+    setConstructorForm((current) => {
+      if (current.competitionPlanId || current.competitionName.trim() !== "Главный старт") {
+        return current;
+      }
+
+      return applyConstructorCompetitionPlanToConstructorForm(
+        current,
+        nearestPlan,
+        selectedCoachAthlete.weightClass || "",
+      );
+    });
+  }, [
+    selectedCoachAthlete?.athleteId,
+    selectedCoachAthlete?.weightClass,
+    visibleConstructorCompetitionPlanKey,
+  ]);
+
+  function handleConstructorCompetitionPlanChange(planId: string) {
+    if (!planId) {
+      setConstructorForm((current) => ({
+        ...current,
+        competitionPlanId: "",
+      }));
+      return;
+    }
+
+    const plan = visibleConstructorCompetitionPlans.find((item) => item.id === planId);
+
+    if (!plan) {
+      return;
+    }
+
+    setConstructorForm((current) =>
+      applyConstructorCompetitionPlanToConstructorForm(
+        current,
+        plan,
+        selectedCoachAthlete?.weightClass || "",
+      ),
+    );
+  }
+
+  function buildConstructorInputFromForm(): ConstructorInput | null {
+    if (!selectedCoachAthlete) {
+      setConstructorMessage(
+        copyFor(language, {
+          en: "Select an athlete before building the preparation draft.",
+          ru: "Выберите спортсмена перед сборкой черновика подготовки.",
+          bg: "Изберете спортист преди черновата на подготовката.",
+        }),
+      );
+      return null;
+    }
+
+    const bodyWeight =
+      parseConstructorNumber(constructorForm.bodyWeightKg) ??
+      selectedCoachAthlete.currentWeightKg ??
+      selectedCoachAthlete.baselineWeightKg ??
+      70;
+    const targetWeight =
+      parseConstructorNumber(constructorForm.weightTargetKg) ??
+      selectedCoachAthlete.currentWeightKg ??
+      bodyWeight;
+    const restingHr =
+      parseConstructorNumber(constructorForm.restingHr) ?? selectedCoachAthlete.baselineRestingHr;
+    const readinessScore =
+      parseConstructorNumber(constructorForm.readinessScore) ??
+      selectedCoachAthlete.latestReadiness?.score ??
+      null;
+    const goals = constructorForm.goals.length
+      ? constructorForm.goals
+      : (["speed_first_action", "fatigue_skill"] satisfies ConstructorGoalType[]);
+    const effectiveStartDate =
+      selectedConstructorCompetitionPlan?.competitionStartDate ?? constructorForm.startDate;
+    const effectiveDaysToCompetition = diffDateInputDays(getDateInputValue(), effectiveStartDate);
+    const effectiveCurrentPhase = selectedConstructorCompetitionPlan
+      ? deriveConstructorPhaseByCompetitionDays(effectiveDaysToCompetition)
+      : constructorForm.currentPhase;
+    const effectiveCycleLengthDays = selectedConstructorCompetitionPlan
+      ? deriveConstructorCycleLengthByCompetitionDays(effectiveDaysToCompetition)
+      : constructorForm.cycleLengthDays;
+
+    return {
+      competition: {
+        name: constructorForm.competitionName.trim() || "Главный старт",
+        level: selectedConstructorCompetition?.level ?? constructorForm.competitionLevel,
+        priority: selectedConstructorCompetitionPlan?.priority ?? constructorForm.competitionPriority,
+        startDate: effectiveStartDate,
+        weighInDate:
+          constructorForm.weighInDate || shiftDateInputValue(effectiveStartDate, -1),
+        weightClass: constructorForm.weightClass.trim() || selectedCoachAthlete.weightClass || "",
+        expectedBoutCount: selectedConstructorCompetitionPlan?.expectedMatches ?? null,
+        location: selectedConstructorCompetition?.location || null,
+        timezone: DISPLAY_TIME_ZONE,
+        travelRequired: constructorForm.travelFatigue,
+        climateContext: null,
+      },
+      athlete: {
+        athleteId: selectedCoachAthlete.athleteId,
+        fullName: selectedCoachAthlete.fullName,
+        age: null,
+        sex: "unknown",
+        trainingAgeYears: selectedCoachAthlete.wrestlingExperienceYears,
+        weightCurrentKg: bodyWeight,
+        weightTargetKg: targetWeight,
+        baselineRestingHr: selectedCoachAthlete.baselineRestingHr,
+        strengths: splitConstructorText(selectedCoachAthlete.strengths),
+        weaknesses: splitConstructorText(selectedCoachAthlete.weaknesses),
+        injuryHistory: splitConstructorText(selectedCoachAthlete.injuriesOrRestrictions),
+        painZones: splitConstructorText(selectedCoachAthlete.injuriesOrRestrictions),
+      },
+      context: {
+        currentPhase: effectiveCurrentPhase,
+        cycleLengthDays: effectiveCycleLengthDays,
+        sessionsPerWeek: Math.max(1, Math.min(14, Number(constructorForm.sessionsPerWeek) || 6)),
+        sessionsPerDay: 1,
+      },
+      goals: goals.map((goalType, index) => ({
+        goalType,
+        priority: index + 1,
+        reason: null,
+      })),
+      tests: {
+        sprint10mSec: parseConstructorNumber(constructorForm.sprint10mSec),
+        sprint20mSec: parseConstructorNumber(constructorForm.sprint20mSec),
+        verticalJumpCm: parseConstructorNumber(constructorForm.verticalJumpCm),
+        legsLmeScore: parseConstructorNumber(constructorForm.legsLmeScore),
+        techniqueQualityScore: parseConstructorNumber(constructorForm.techniqueQualityScore),
+        aerobicRecoveryScore: parseConstructorNumber(constructorForm.aerobicRecoveryScore),
+      },
+      state: {
+        readinessScore,
+        sleepHours: parseConstructorNumber(constructorForm.sleepHours),
+        restingHr,
+        bodyWeightKg: bodyWeight,
+        painLevel: parseConstructorNumber(constructorForm.painLevel),
+        fatigueLevel: parseConstructorNumber(constructorForm.fatigueLevel),
+        deviceDataConfidence: "medium",
+        coachComment: constructorForm.coachComment.trim() || null,
+      },
+      constraints: {
+        noHeavyStrength: constructorForm.noHeavyStrength,
+        noHighGlycolytic: constructorForm.noHighGlycolytic,
+        weightCutActive: constructorForm.weightCutActive,
+        injuryCaution: constructorForm.injuryCaution,
+        travelFatigue: constructorForm.travelFatigue,
+      },
+    };
+  }
+
+  async function handleBuildConstructorDraft() {
+    const input = buildConstructorInputFromForm();
+
+    if (!input) {
+      return;
+    }
+
+    setConstructorBusy(true);
+    setConstructorMessage("");
+    setErrorMessage("");
+
+    try {
+      if (isPreviewMode) {
+        const draft = buildPerformConstructorDraft(input);
+        const templatePayload = buildConstructorTemplatePayload(
+          draft,
+          `${input.athlete.fullName} · ${input.competition.name} · ${input.context.cycleLengthDays} дней`,
+        );
+
+        setConstructorDraft(draft);
+        setConstructorTemplatePayload(templatePayload);
+        setConstructorMessage(
+          copyFor(language, {
+            en: "Preview draft built locally. Real coach mode will use the server API.",
+            ru: "Preview-черновик собран локально. В рабочем режиме тренера используется серверный API.",
+            bg: "Preview черновата е създадена локално. В реален режим се използва API.",
+          }),
+        );
+        return;
+      }
+
+      const response = await apiRequest<ConstructorDraftResponse>("/plans/constructor/draft", {
+        method: "POST",
+        body: JSON.stringify(input),
+      });
+
+      setConstructorDraft(response.draft);
+      setConstructorTemplatePayload(response.templatePayload);
+      setConstructorMessage(
+        copyFor(language, {
+          en: "Draft built. Review the logic, then save it as a template if it fits.",
+          ru: "Черновик собран. Проверьте логику и сохраните как шаблон, если подходит.",
+          bg: "Черновата е готова. Прегледайте логиката и я запазете като шаблон, ако пасва.",
+        }),
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setConstructorMessage(message);
+      setErrorMessage(message);
+    } finally {
+      setConstructorBusy(false);
+    }
+  }
+
+  async function handleSaveConstructorTemplate() {
+    if (!constructorTemplatePayload) {
+      setConstructorMessage(
+        copyFor(language, {
+          en: "Build the draft before saving it as a template.",
+          ru: "Сначала соберите черновик, затем сохраните его как шаблон.",
+          bg: "Първо създайте чернова, после я запазете като шаблон.",
+        }),
+      );
+      return;
+    }
+
+    setConstructorBusy(true);
+    setConstructorMessage("");
+    setErrorMessage("");
+
+    try {
+      const template = await createPlanTemplateFromDraft(constructorTemplatePayload, {
+        clearImportedDraft: false,
+      });
+
+      setPlanningView("templates");
+      setTemplatePlanningTab("library");
+      setConstructorMessage(
+        copyFor(language, {
+          en: `Template saved: ${template.name}.`,
+          ru: `Шаблон сохранен: ${template.name}.`,
+          bg: `Шаблонът е запазен: ${template.name}.`,
+        }),
+      );
+      setStatusMessage(
+        copyFor(language, {
+          en: `Constructor template saved: ${template.name}.`,
+          ru: `Шаблон конструктора сохранен: ${template.name}.`,
+          bg: `Шаблонът от конструктора е запазен: ${template.name}.`,
+        }),
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setConstructorMessage(message);
+      setErrorMessage(message);
+    } finally {
+      setConstructorBusy(false);
+    }
+  }
+
   const activeMesocycleAthleteId = mesocycleForm.athleteId || selectedAthleteId;
   const visibleMesocycles = [...mesocycles]
     .filter(
@@ -14243,6 +14810,15 @@ export function PageClient({
             : "Templates",
     },
     {
+      id: "constructor",
+      label:
+        language === "ru"
+          ? "Конструктор"
+          : language === "bg"
+            ? "Конструктор"
+            : "Constructor",
+    },
+    {
       id: "calendar",
       label:
         language === "ru"
@@ -14275,6 +14851,99 @@ export function PageClient({
     planningView === "auto-weekly" ||
     planningView === "preparation" ||
     planningView === "mesocycle";
+  const constructorGoalLabel = (goal: ConstructorGoalType) =>
+    (
+      {
+        speed_first_action: copyFor(language, { en: "First action speed", ru: "Скорость первого действия", bg: "Скорост на първото действие" }),
+        legs_lme: copyFor(language, { en: "Leg local endurance", ru: "ЛМВ ног", bg: "ЛМВ крака" }),
+        arms_grip: copyFor(language, { en: "Arms and grip", ru: "Руки и захват", bg: "Ръце и хват" }),
+        aerobic_base: copyFor(language, { en: "Aerobic base", ru: "Аэробная база", bg: "Аеробна база" }),
+        anaerobic_power: copyFor(language, { en: "Anaerobic power", ru: "Анаэробная мощность", bg: "Анаеробна мощност" }),
+        max_strength: copyFor(language, { en: "Max strength", ru: "Максимальная сила", bg: "Максимална сила" }),
+        speed_strength: copyFor(language, { en: "Speed strength", ru: "Скоростная сила", bg: "Скоростна сила" }),
+        fatigue_skill: copyFor(language, { en: "Technique under fatigue", ru: "Техника под утомлением", bg: "Техника под умора" }),
+        wrestling_contact_density: copyFor(language, { en: "Contact density", ru: "Плотность борьбы", bg: "Контактна плътност" }),
+        weight_management: copyFor(language, { en: "Weight management", ru: "Вес и сгонка", bg: "Тегло и контрол" }),
+        taper_quality: copyFor(language, { en: "Taper quality", ru: "Качество подводки", bg: "Качество на подводката" }),
+        recovery: copyFor(language, { en: "Recovery", ru: "Восстановление", bg: "Възстановяване" }),
+      } satisfies Record<ConstructorGoalType, string>
+    )[goal];
+  const constructorPhaseLabel = (phase: ConstructorPhase) =>
+    (
+      {
+        base: copyFor(language, { en: "Base", ru: "База", bg: "База" }),
+        development: copyFor(language, { en: "Development", ru: "Развитие", bg: "Развитие" }),
+        special_preparation: copyFor(language, { en: "Special preparation", ru: "Специальная подготовка", bg: "Специална подготовка" }),
+        taper: copyFor(language, { en: "Taper", ru: "Подводка", bg: "Подводка" }),
+        start_window: copyFor(language, { en: "Start window", ru: "Окно старта", bg: "Стартов прозорец" }),
+        recovery: copyFor(language, { en: "Recovery", ru: "Восстановление", bg: "Възстановяване" }),
+      } satisfies Record<ConstructorPhase, string>
+    )[phase];
+  const constructorEffectiveCompetitionStartDate =
+    selectedConstructorCompetitionPlan?.competitionStartDate ?? constructorForm.startDate;
+  const constructorDaysToCompetition = diffDateInputDays(
+    getDateInputValue(),
+    constructorEffectiveCompetitionStartDate,
+  );
+  const constructorRecommendedPhase = deriveConstructorPhaseByCompetitionDays(
+    constructorDaysToCompetition,
+  );
+  const constructorRecommendedCycleLength = deriveConstructorCycleLengthByCompetitionDays(
+    constructorDaysToCompetition,
+  );
+  const constructorCalendarSourceText = selectedConstructorCompetitionPlan
+    ? `${selectedConstructorCompetitionPlan.competitionTitle} · ${selectedConstructorCompetitionPlan.priority} · ${selectedConstructorCompetitionPlan.competitionStartDate}`
+    : copyFor(language, {
+        en: "Manual competition date",
+        ru: "Ручная дата старта",
+        bg: "Ръчна дата на старт",
+      });
+  const constructorCompetitionLocationText =
+    selectedConstructorCompetition?.location ||
+    selectedConstructorCompetitionPlan?.competitionFormat ||
+    "-";
+  const constructorCompetitionWeightText = selectedConstructorCompetitionPlan
+    ? `${formatKgValue(
+        selectedConstructorCompetitionPlan.currentWeight ??
+          selectedCoachAthlete?.currentWeightKg ??
+          null,
+      )} -> ${formatKgValue(
+        selectedConstructorCompetitionPlan.targetWeight ??
+          selectedCoachAthlete?.currentWeightKg ??
+          null,
+      )}`
+    : `${constructorForm.bodyWeightKg || "-"} -> ${constructorForm.weightTargetKg || "-"}`;
+  const constructorPhaseRecommendationText =
+    constructorDaysToCompetition === null
+      ? copyFor(language, {
+          en: "Set a start date so PERFORM can recommend the preparation phase.",
+          ru: "Укажите дату старта, чтобы PERFORM рекомендовал фазу подготовки.",
+          bg: "Задайте дата на старта, за да PERFORM препоръча фаза.",
+        })
+      : constructorDaysToCompetition < 0
+        ? copyFor(language, {
+            en: "The competition has passed; recovery and analysis are the priority.",
+            ru: "Соревнование уже прошло: приоритет восстановление и разбор.",
+            bg: "Състезанието е минало: приоритет са възстановяване и анализ.",
+          })
+        : copyFor(language, {
+            en: `Recommended phase: ${constructorPhaseLabel(
+              constructorRecommendedPhase,
+            )}. Start is in ${constructorDaysToCompetition} day(s), draft cycle ${constructorRecommendedCycleLength} day(s).`,
+            ru: `Рекомендуемая фаза: ${constructorPhaseLabel(
+              constructorRecommendedPhase,
+            )}. До старта ${constructorDaysToCompetition} дн., черновой цикл ${constructorRecommendedCycleLength} дн.`,
+            bg: `Препоръчана фаза: ${constructorPhaseLabel(
+              constructorRecommendedPhase,
+            )}. До старта ${constructorDaysToCompetition} дни, цикъл ${constructorRecommendedCycleLength} дни.`,
+          });
+  const constructorConfidenceLabel = constructorDraft
+    ? ({
+        high: copyFor(language, { en: "High", ru: "Высокая", bg: "Висока" }),
+        medium: copyFor(language, { en: "Medium", ru: "Средняя", bg: "Средна" }),
+        low: copyFor(language, { en: "Low", ru: "Низкая", bg: "Ниска" }),
+      } satisfies Record<ConstructorDraft["confidence"], string>)[constructorDraft.confidence]
+    : "-";
   const topOverviewItems = [
     {
       label: t("athlete"),
@@ -15136,6 +15805,12 @@ export function PageClient({
               ru: "Настройте период: цель, даты, фазу, главные старты и нагрузку по неделям.",
         bg: "Настройте периода: цел, дати, фаза, основни стартове и седмично натоварване.",
             })
+          : planningView === "constructor"
+            ? copyFor(language, {
+                en: "Enter the competition context, tests, goals, and constraints; PERFORM builds an editable cycle draft.",
+                ru: "Введите контекст старта, тесты, цели и ограничения; PERFORM соберёт редактируемый черновик цикла.",
+                bg: "Въведете контекст, тестове, цели и ограничения; PERFORM ще изгради редактируема чернова.",
+              })
           : planningView === "templates"
             ? copyFor(language, {
                 en: "Keep reusable days, weeks, and full plans here. Edit first, assign only when needed.",
@@ -20152,6 +20827,687 @@ export function PageClient({
                   </button>
                 ))}
               </div>
+            ) : null}
+
+            {planningView === "constructor" ? (
+              <section className="planning-constructor-workspace">
+                <div className="constructor-panel constructor-input-panel">
+                  <div className="summary-topline">
+                    <strong>
+                      {copyFor(language, {
+                        en: "1. Start calendar",
+                        ru: "1. Календарь старта",
+                        bg: "1. Календар на старта",
+                      })}
+                    </strong>
+                    <span>{selectedCoachAthlete?.fullName ?? ui("selectAthlete")}</span>
+                  </div>
+                  <div
+                    className={`constructor-calendar-source ${
+                      selectedConstructorCompetitionPlan ? "is-linked" : "is-empty"
+                    }`}
+                  >
+                    <div className="constructor-calendar-source-head">
+                      <div>
+                        <span className="field-caption">
+                          {copyFor(language, {
+                            en: "Competition calendar",
+                            ru: "Соревнование из календаря",
+                            bg: "Състезание от календара",
+                          })}
+                        </span>
+                        <strong>
+                          {selectedConstructorCompetitionPlan?.competitionTitle ??
+                            copyFor(language, {
+                              en: "No calendar start selected",
+                              ru: "Старт из календаря не выбран",
+                              bg: "Няма избран старт от календара",
+                            })}
+                        </strong>
+                      </div>
+                      <span className="constructor-source-badge">
+                        {selectedConstructorCompetitionPlan
+                          ? copyFor(language, {
+                              en: "source of truth",
+                              ru: "источник правды",
+                              bg: "източник",
+                            })
+                          : copyFor(language, {
+                              en: "fallback",
+                              ru: "резерв",
+                              bg: "резерв",
+                            })}
+                      </span>
+                    </div>
+
+                    <label className="constructor-source-select">
+                      <span>
+                        {copyFor(language, {
+                          en: "Use start",
+                          ru: "Использовать старт",
+                          bg: "Използвай старт",
+                        })}
+                      </span>
+                      <select
+                        value={constructorForm.competitionPlanId}
+                        onChange={(event) => handleConstructorCompetitionPlanChange(event.target.value)}
+                      >
+                        <option value="">
+                          {copyFor(language, {
+                            en: "Manual reserve mode",
+                            ru: "Резервный ручной режим",
+                            bg: "Ръчен резервен режим",
+                          })}
+                        </option>
+                        {visibleConstructorCompetitionPlans.map((plan) => (
+                          <option key={plan.id} value={plan.id}>
+                            {plan.competitionStartDate} · {plan.priority} · {plan.competitionTitle}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    {selectedConstructorCompetitionPlan ? (
+                      <>
+                        <div className="constructor-source-grid">
+                          <article>
+                            <span>
+                              {copyFor(language, { en: "Start date", ru: "Дата старта", bg: "Дата старт" })}
+                            </span>
+                            <strong>{selectedConstructorCompetitionPlan.competitionStartDate}</strong>
+                          </article>
+                          <article>
+                            <span>
+                              {copyFor(language, { en: "Days left", ru: "Осталось", bg: "Остава" })}
+                            </span>
+                            <strong>
+                              {constructorDaysToCompetition !== null
+                                ? `${constructorDaysToCompetition} ${copyFor(language, {
+                                    en: "days",
+                                    ru: "дней",
+                                    bg: "дни",
+                                  })}`
+                                : "-"}
+                            </strong>
+                          </article>
+                          <article>
+                            <span>
+                              {copyFor(language, { en: "Priority", ru: "Приоритет", bg: "Приоритет" })}
+                            </span>
+                            <strong>{selectedConstructorCompetitionPlan.priority}</strong>
+                          </article>
+                          <article>
+                            <span>
+                              {copyFor(language, { en: "Weight", ru: "Вес", bg: "Тегло" })}
+                            </span>
+                            <strong>{constructorCompetitionWeightText}</strong>
+                          </article>
+                          <article>
+                            <span>
+                              {copyFor(language, { en: "Weigh-in", ru: "Взвешивание", bg: "Кантар" })}
+                            </span>
+                            <strong>{shiftDateInputValue(selectedConstructorCompetitionPlan.competitionStartDate, -1)}</strong>
+                          </article>
+                          <article>
+                            <span>
+                              {copyFor(language, { en: "Location", ru: "Локация", bg: "Локация" })}
+                            </span>
+                            <strong>{constructorCompetitionLocationText}</strong>
+                          </article>
+                        </div>
+                        <div className="constructor-auto-strip">
+                          <article>
+                            <span>
+                              {copyFor(language, { en: "Auto phase", ru: "Автофаза", bg: "Авто фаза" })}
+                            </span>
+                            <strong>{constructorPhaseLabel(constructorRecommendedPhase)}</strong>
+                          </article>
+                          <article>
+                            <span>
+                              {copyFor(language, { en: "Draft cycle", ru: "Черновой цикл", bg: "Чернови цикъл" })}
+                            </span>
+                            <strong>
+                              {constructorRecommendedCycleLength}{" "}
+                              {copyFor(language, { en: "days", ru: "дней", bg: "дни" })}
+                            </strong>
+                          </article>
+                          <label>
+                            <span>
+                              {copyFor(language, {
+                                en: "Sessions/week",
+                                ru: "Тренировок в неделю",
+                                bg: "Сесии/седмица",
+                              })}
+                            </span>
+                            <input
+                              min={1}
+                              max={14}
+                              type="number"
+                              value={constructorForm.sessionsPerWeek}
+                              onChange={(event) =>
+                                setConstructorForm((current) => ({
+                                  ...current,
+                                  sessionsPerWeek: Number(event.target.value),
+                                }))
+                              }
+                            />
+                          </label>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="constructor-empty-calendar">
+                        <strong>
+                          {copyFor(language, {
+                            en: "Add the competition to the calendar first.",
+                            ru: "Сначала добавьте старт в календарь.",
+                            bg: "Първо добавете старта в календара.",
+                          })}
+                        </strong>
+                        <p>
+                          {copyFor(language, {
+                            en: "The constructor can work manually, but the correct workflow is to anchor preparation to an athlete competition plan.",
+                            ru: "Конструктор может работать вручную, но правильный сценарий — строить подготовку от старта спортсмена в календаре.",
+                            bg: "Конструкторът може да работи ръчно, но правилният сценарий е подготовка от старт в календара.",
+                          })}
+                        </p>
+                      </div>
+                    )}
+
+                    <div className="constructor-source-actions">
+                      <button
+                        className="secondary-button"
+                        onClick={() => setPlanningView("season")}
+                        type="button"
+                      >
+                        {copyFor(language, {
+                          en: "Open season starts",
+                          ru: "Открыть календарь стартов",
+                          bg: "Отвори стартовете",
+                        })}
+                      </button>
+                      <button
+                        className="secondary-button"
+                        onClick={() => setPlanningView("calendar")}
+                        type="button"
+                      >
+                        {copyFor(language, {
+                          en: "Open calendar",
+                          ru: "Открыть общий календарь",
+                          bg: "Отвори календар",
+                        })}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="constructor-competition-hint">
+                    <article>
+                      <span>
+                        {copyFor(language, { en: "Calendar anchor", ru: "Календарный ориентир", bg: "Календарен ориентир" })}
+                      </span>
+                      <strong>{constructorCalendarSourceText}</strong>
+                    </article>
+                    <article>
+                      <span>
+                        {copyFor(language, { en: "Days to start", ru: "До старта", bg: "До старт" })}
+                      </span>
+                      <strong>
+                        {constructorDaysToCompetition !== null ? constructorDaysToCompetition : "-"}
+                      </strong>
+                    </article>
+                    <article>
+                      <span>
+                        {copyFor(language, { en: "Recommended phase", ru: "Рекомендация фазы", bg: "Препоръчана фаза" })}
+                      </span>
+                      <strong>{constructorPhaseLabel(constructorRecommendedPhase)}</strong>
+                    </article>
+                    <p>{constructorPhaseRecommendationText}</p>
+                  </div>
+
+                  <details
+                    className="constructor-manual-fallback"
+                    open={!selectedConstructorCompetitionPlan}
+                  >
+                    <summary>
+                      {copyFor(language, {
+                        en: "Reserve manual start fields",
+                        ru: "Резервный ручной ввод старта",
+                        bg: "Резервни ръчни полета",
+                      })}
+                    </summary>
+                    <div className="constructor-form-grid constructor-manual-grid">
+                      <label>
+                        <span>
+                          {copyFor(language, { en: "Competition", ru: "Старт", bg: "Състезание" })}
+                        </span>
+                        <input
+                          value={constructorForm.competitionName}
+                          onChange={(event) =>
+                            setConstructorForm((current) => ({
+                              ...current,
+                              competitionName: event.target.value,
+                            }))
+                          }
+                        />
+                      </label>
+                      <label>
+                        <span>
+                          {copyFor(language, { en: "Start date", ru: "Дата старта", bg: "Дата старт" })}
+                        </span>
+                        <input
+                          type="date"
+                          value={constructorForm.startDate}
+                          onChange={(event) =>
+                            setConstructorForm((current) => ({
+                              ...current,
+                              competitionPlanId:
+                                current.competitionPlanId &&
+                                event.target.value ===
+                                  selectedConstructorCompetitionPlan?.competitionStartDate
+                                  ? current.competitionPlanId
+                                  : "",
+                              startDate: event.target.value,
+                              weighInDate: current.weighInDate || shiftDateInputValue(event.target.value, -1),
+                              currentPhase: deriveConstructorPhaseByCompetitionDays(
+                                diffDateInputDays(getDateInputValue(), event.target.value),
+                              ),
+                              cycleLengthDays: deriveConstructorCycleLengthByCompetitionDays(
+                                diffDateInputDays(getDateInputValue(), event.target.value),
+                              ),
+                            }))
+                          }
+                        />
+                      </label>
+                      <label>
+                        <span>
+                          {copyFor(language, { en: "Weigh-in", ru: "Взвешивание", bg: "Кантар" })}
+                        </span>
+                        <input
+                          type="date"
+                          value={constructorForm.weighInDate}
+                          onChange={(event) =>
+                            setConstructorForm((current) => ({
+                              ...current,
+                              weighInDate: event.target.value,
+                            }))
+                          }
+                        />
+                      </label>
+                      <label>
+                        <span>{copyFor(language, { en: "Level", ru: "Уровень", bg: "Ниво" })}</span>
+                        <select
+                          value={constructorForm.competitionLevel}
+                          onChange={(event) =>
+                            setConstructorForm((current) => ({
+                              ...current,
+                              competitionLevel: event.target.value as ConstructorCompetitionLevel,
+                            }))
+                          }
+                        >
+                          {(["local", "national", "continental", "world", "olympics"] as const).map((level) => (
+                            <option key={level} value={level}>
+                              {level}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label>
+                        <span>
+                          {copyFor(language, { en: "Priority", ru: "Приоритет", bg: "Приоритет" })}
+                        </span>
+                        <select
+                          value={constructorForm.competitionPriority}
+                          onChange={(event) =>
+                            setConstructorForm((current) => ({
+                              ...current,
+                              competitionPriority: event.target.value as ConstructorCompetitionPriority,
+                            }))
+                          }
+                        >
+                          {(["A", "B", "C"] as const).map((priority) => (
+                            <option key={priority} value={priority}>
+                              {priority}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label>
+                        <span>
+                          {copyFor(language, { en: "Weight class", ru: "Весовая категория", bg: "Категория" })}
+                        </span>
+                        <input
+                          value={constructorForm.weightClass}
+                          onChange={(event) =>
+                            setConstructorForm((current) => ({
+                              ...current,
+                              weightClass: event.target.value,
+                            }))
+                          }
+                        />
+                      </label>
+                      <label>
+                        <span>{copyFor(language, { en: "Phase", ru: "Фаза", bg: "Фаза" })}</span>
+                        <select
+                          value={constructorForm.currentPhase}
+                          onChange={(event) =>
+                            setConstructorForm((current) => ({
+                              ...current,
+                              currentPhase: event.target.value as ConstructorPhase,
+                            }))
+                          }
+                        >
+                          {CONSTRUCTOR_PHASE_OPTIONS.map((phase) => (
+                            <option key={phase} value={phase}>
+                              {constructorPhaseLabel(phase)}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label>
+                        <span>{copyFor(language, { en: "Cycle", ru: "Цикл", bg: "Цикъл" })}</span>
+                        <select
+                          value={constructorForm.cycleLengthDays}
+                          onChange={(event) =>
+                            setConstructorForm((current) => ({
+                              ...current,
+                              cycleLengthDays: Number(event.target.value) as ConstructorInput["context"]["cycleLengthDays"],
+                            }))
+                          }
+                        >
+                          {CONSTRUCTOR_CYCLE_LENGTH_OPTIONS.map((days) => (
+                            <option key={days} value={days}>
+                              {days} {copyFor(language, { en: "days", ru: "дней", bg: "дни" })}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label>
+                        <span>
+                          {copyFor(language, { en: "Sessions/week", ru: "Тренировок в неделю", bg: "Сесии/седмица" })}
+                        </span>
+                        <input
+                          min={1}
+                          max={14}
+                          type="number"
+                          value={constructorForm.sessionsPerWeek}
+                          onChange={(event) =>
+                            setConstructorForm((current) => ({
+                              ...current,
+                              sessionsPerWeek: Number(event.target.value),
+                            }))
+                          }
+                        />
+                      </label>
+                    </div>
+                  </details>
+
+                  <div className="constructor-goal-picker">
+                    <span className="field-caption">
+                      {copyFor(language, { en: "Goals", ru: "Цели цикла", bg: "Цели" })}
+                    </span>
+                    <div className="constructor-chip-grid">
+                      {CONSTRUCTOR_GOAL_OPTIONS.map((goal) => {
+                        const active = constructorForm.goals.includes(goal);
+
+                        return (
+                          <button
+                            className={active ? "constructor-chip is-active" : "constructor-chip"}
+                            key={goal}
+                            onClick={() =>
+                              setConstructorForm((current) => ({
+                                ...current,
+                                goals: current.goals.includes(goal)
+                                  ? current.goals.filter((item) => item !== goal)
+                                  : [...current.goals, goal],
+                              }))
+                            }
+                            type="button"
+                          >
+                            {constructorGoalLabel(goal)}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="constructor-form-grid constructor-test-grid">
+                    {[
+                      ["sprint10mSec", "10 м, сек"],
+                      ["sprint20mSec", "20 м, сек"],
+                      ["verticalJumpCm", "Прыжок, см"],
+                      ["legsLmeScore", "ЛМВ ног"],
+                      ["techniqueQualityScore", "Качество техники"],
+                      ["aerobicRecoveryScore", "Аэробное восстановление"],
+                      ["readinessScore", "Готовность"],
+                      ["sleepHours", "Сон, ч"],
+                      ["restingHr", "Пульс покоя"],
+                      ["bodyWeightKg", "Вес сейчас"],
+                      ["weightTargetKg", "Целевой вес"],
+                      ["painLevel", "Боль 0-5"],
+                      ["fatigueLevel", "Усталость 0-5"],
+                    ].map(([key, label]) => (
+                      <label key={key}>
+                        <span>{label}</span>
+                        <input
+                          inputMode="decimal"
+                          value={constructorForm[key as keyof ConstructorFormState] as string}
+                          onChange={(event) =>
+                            setConstructorForm((current) => ({
+                              ...current,
+                              [key]: event.target.value,
+                            }))
+                          }
+                        />
+                      </label>
+                    ))}
+                  </div>
+
+                  <label className="constructor-comment-field">
+                    <span>
+                      {copyFor(language, { en: "Coach context", ru: "Комментарий тренера", bg: "Контекст от треньора" })}
+                    </span>
+                    <textarea
+                      value={constructorForm.coachComment}
+                      onChange={(event) =>
+                        setConstructorForm((current) => ({
+                          ...current,
+                          coachComment: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+
+                  <div className="constructor-checkbox-grid">
+                    {[
+                      ["noHeavyStrength", "Без тяжелой силы"],
+                      ["noHighGlycolytic", "Без высокой гликолитики"],
+                      ["weightCutActive", "Идет сгонка"],
+                      ["injuryCaution", "Осторожно по травме"],
+                      ["travelFatigue", "Есть переезд/усталость"],
+                    ].map(([key, label]) => (
+                      <label key={key}>
+                        <input
+                          checked={Boolean(constructorForm[key as keyof ConstructorFormState])}
+                          type="checkbox"
+                          onChange={(event) =>
+                            setConstructorForm((current) => ({
+                              ...current,
+                              [key]: event.target.checked,
+                            }))
+                          }
+                        />
+                        <span>{label}</span>
+                      </label>
+                    ))}
+                  </div>
+
+                  <button
+                    className="primary-button"
+                    disabled={constructorBusy || !selectedCoachAthlete}
+                    onClick={handleBuildConstructorDraft}
+                    type="button"
+                  >
+                    {constructorBusy
+                      ? ui("loading")
+                      : copyFor(language, { en: "Build draft", ru: "Собрать черновик", bg: "Създай чернова" })}
+                  </button>
+                  {constructorMessage ? <p className="muted-copy">{constructorMessage}</p> : null}
+                </div>
+
+                <div className="constructor-panel constructor-understood-panel">
+                  <div className="summary-topline">
+                    <strong>
+                      {copyFor(language, {
+                        en: "2. What PERFORM understood",
+                        ru: "2. Что система поняла",
+                        bg: "2. Какво разбра системата",
+                      })}
+                    </strong>
+                    <span>
+                      {copyFor(language, { en: "Confidence", ru: "Уверенность", bg: "Увереност" })}:{" "}
+                      {constructorConfidenceLabel}
+                    </span>
+                  </div>
+                  <div className="constructor-calendar-summary">
+                    <span>
+                      {copyFor(language, {
+                        en: "Competition timing",
+                        ru: "Календарь старта",
+                        bg: "Календар на старта",
+                      })}
+                    </span>
+                    <strong>{constructorCalendarSourceText}</strong>
+                    <p>{constructorPhaseRecommendationText}</p>
+                  </div>
+                  {constructorDraft ? (
+                    <>
+                      <div className="constructor-decision-card">
+                        <strong>{constructorDraft.understood.mainTask}</strong>
+                        <p>{constructorDraft.understood.interpretation}</p>
+                        <small>{constructorDraft.understood.limitation}</small>
+                      </div>
+                      <div className="constructor-mini-grid">
+                        <article>
+                          <span>{copyFor(language, { en: "Cards", ru: "Методики", bg: "Методики" })}</span>
+                          <strong>{constructorDraft.selectedCards.length}</strong>
+                          <p>
+                            {constructorDraft.selectedCards.map((card) => card.title).join(", ") ||
+                              ui("notGenerated")}
+                          </p>
+                        </article>
+                        <article>
+                          <span>{copyFor(language, { en: "Missing", ru: "Не хватает", bg: "Липсва" })}</span>
+                          <strong>{constructorDraft.missingData.length}</strong>
+                          <p>
+                            {constructorDraft.missingData[0]?.message ??
+                              copyFor(language, { en: "Enough data for a draft.", ru: "Данных достаточно для черновика.", bg: "Данните стигат за чернова." })}
+                          </p>
+                        </article>
+                        <article>
+                          <span>{copyFor(language, { en: "Risks", ru: "Риски", bg: "Рискове" })}</span>
+                          <strong>{constructorDraft.riskFlags.length}</strong>
+                          <p>
+                            {constructorDraft.riskFlags[0]?.message ??
+                              copyFor(language, { en: "No critical risks detected.", ru: "Критичных рисков не найдено.", bg: "Няма критични рискове." })}
+                          </p>
+                        </article>
+                      </div>
+                      <div className="constructor-explanation-list">
+                        <div>
+                          <span>{copyFor(language, { en: "Decision", ru: "Решение", bg: "Решение" })}</span>
+                          <p>{constructorDraft.explanation.mainDecision}</p>
+                        </div>
+                        <div>
+                          <span>{copyFor(language, { en: "Why now", ru: "Почему сейчас", bg: "Защо сега" })}</span>
+                          <p>{constructorDraft.explanation.whyNow}</p>
+                        </div>
+                        <div>
+                          <span>{copyFor(language, { en: "Evidence", ru: "Доказательная база", bg: "Доказателства" })}</span>
+                          <p>{constructorDraft.explanation.evidenceSummary}</p>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <p className="placeholder-copy">
+                      {copyFor(language, {
+                        en: "Fill the inputs and build a draft. This panel will show the interpreted task, missing data, risks, and evidence logic.",
+                        ru: "Заполните вводные и соберите черновик. Здесь появятся задача, нехватка данных, риски и методическая логика.",
+                        bg: "Попълнете входните данни и създайте чернова. Тук ще се появят задачата, липсите, рисковете и методическата логика.",
+                      })}
+                    </p>
+                  )}
+                </div>
+
+                <div className="constructor-panel constructor-draft-panel">
+                  <div className="summary-topline">
+                    <strong>
+                      {copyFor(language, {
+                        en: "3. Draft plan",
+                        ru: "3. Draft-план",
+                        bg: "3. Чернова план",
+                      })}
+                    </strong>
+                    <span>
+                      {constructorDraft
+                        ? `${constructorDraft.plan.cycleLengthDays} ${copyFor(language, { en: "days", ru: "дней", bg: "дни" })}`
+                        : ui("notGenerated")}
+                    </span>
+                  </div>
+                  {constructorDraft ? (
+                    <>
+                      <div className="constructor-week-list">
+                        {constructorDraft.plan.weeks.map((week) => (
+                          <article className="constructor-week-card" key={`${week.weekNumber}-${week.title}`}>
+                            <div className="summary-topline">
+                              <strong>{week.title}</strong>
+                              <span>{constructorPhaseLabel(week.phase)}</span>
+                            </div>
+                            <p>{week.mainIntent}</p>
+                            <div className="constructor-day-list">
+                              {week.days.map((day) => (
+                                <div className="constructor-day-row" key={`${week.weekNumber}-${day.dayLabel}-${day.dayIntent}`}>
+                                  <div>
+                                    <strong>{day.dayLabel}</strong>
+                                    <span>{day.dayIntent}</span>
+                                  </div>
+                                  <small>{day.readinessGate}</small>
+                                  <ul>
+                                    {day.blocks.map((block) => (
+                                      <li key={`${day.dayLabel}-${block.name}`}>
+                                        <span>{block.name}</span>
+                                        <strong>{block.volume}</strong>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              ))}
+                            </div>
+                          </article>
+                        ))}
+                      </div>
+                      <button
+                        className="primary-button"
+                        disabled={constructorBusy || !constructorTemplatePayload}
+                        onClick={handleSaveConstructorTemplate}
+                        type="button"
+                      >
+                        {copyFor(language, {
+                          en: "Save as template",
+                          ru: "Сохранить как шаблон",
+                          bg: "Запази като шаблон",
+                        })}
+                      </button>
+                    </>
+                  ) : (
+                    <p className="placeholder-copy">
+                      {copyFor(language, {
+                        en: "The draft will appear here after generation. It is saved only after the coach confirms it.",
+                        ru: "Черновик появится здесь после генерации. Он сохранится только после подтверждения тренера.",
+                        bg: "Черновата ще се появи тук след генериране. Запазва се само след потвърждение.",
+                      })}
+                    </p>
+                  )}
+                </div>
+              </section>
             ) : null}
 
             {planningView === "advanced" ? (

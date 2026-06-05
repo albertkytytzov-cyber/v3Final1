@@ -1,0 +1,140 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://perform.local/schemas/perform-constructor.schema.json",
+  "title": "PERFORM Constructor Input",
+  "type": "object",
+  "required": ["competition", "athlete", "context", "goals", "state"],
+  "additionalProperties": false,
+  "properties": {
+    "competition": {
+      "type": "object",
+      "required": ["name", "level", "priority", "startDate", "weighInDate", "weightClass"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "level": {
+          "type": "string",
+          "enum": ["local", "national", "continental", "world", "olympics"]
+        },
+        "priority": { "type": "string", "enum": ["A", "B", "C"] },
+        "startDate": { "type": "string", "format": "date" },
+        "weighInDate": { "type": "string", "format": "date" },
+        "weightClass": { "type": "string", "minLength": 1 },
+        "expectedBoutCount": { "type": ["integer", "null"], "minimum": 1, "maximum": 12 },
+        "location": { "type": ["string", "null"] },
+        "timezone": { "type": ["string", "null"] },
+        "travelRequired": { "type": "boolean", "default": false },
+        "climateContext": { "type": ["string", "null"] }
+      }
+    },
+    "athlete": {
+      "type": "object",
+      "required": ["athleteId", "fullName", "sex", "weightCurrentKg", "weightTargetKg"],
+      "additionalProperties": false,
+      "properties": {
+        "athleteId": { "type": "string", "minLength": 1 },
+        "fullName": { "type": "string", "minLength": 1 },
+        "age": { "type": ["integer", "null"], "minimum": 8, "maximum": 70 },
+        "sex": { "type": "string", "enum": ["female", "male", "other", "unknown"] },
+        "trainingAgeYears": { "type": ["number", "null"], "minimum": 0 },
+        "weightCurrentKg": { "type": "number", "minimum": 20 },
+        "weightTargetKg": { "type": "number", "minimum": 20 },
+        "baselineRestingHr": { "type": ["number", "null"], "minimum": 30, "maximum": 120 },
+        "strengths": { "type": "array", "items": { "type": "string" } },
+        "weaknesses": { "type": "array", "items": { "type": "string" } },
+        "injuryHistory": { "type": "array", "items": { "type": "string" } },
+        "painZones": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "context": {
+      "type": "object",
+      "required": ["currentPhase", "cycleLengthDays", "sessionsPerWeek"],
+      "additionalProperties": false,
+      "properties": {
+        "currentPhase": {
+          "type": "string",
+          "enum": ["base", "development", "special_preparation", "taper", "start_window", "recovery"]
+        },
+        "cycleLengthDays": { "type": "integer", "enum": [7, 10, 14, 21, 30] },
+        "sessionsPerWeek": { "type": "integer", "minimum": 1, "maximum": 14 },
+        "sessionsPerDay": { "type": "integer", "minimum": 1, "maximum": 3, "default": 1 },
+        "availableTrainingDays": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] }
+        }
+      }
+    },
+    "goals": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 4,
+      "items": {
+        "type": "object",
+        "required": ["goalType", "priority"],
+        "additionalProperties": false,
+        "properties": {
+          "goalType": {
+            "type": "string",
+            "enum": [
+              "speed_first_action",
+              "legs_lme",
+              "arms_grip",
+              "aerobic_base",
+              "anaerobic_power",
+              "max_strength",
+              "speed_strength",
+              "fatigue_skill",
+              "wrestling_contact_density",
+              "weight_management",
+              "taper_quality",
+              "recovery"
+            ]
+          },
+          "priority": { "type": "integer", "minimum": 1, "maximum": 4 },
+          "reason": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "tests": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sprint10mSec": { "type": ["number", "null"], "minimum": 0.5, "maximum": 5 },
+        "sprint20mSec": { "type": ["number", "null"], "minimum": 1, "maximum": 8 },
+        "verticalJumpCm": { "type": ["number", "null"], "minimum": 0, "maximum": 120 },
+        "medicineBallThrowM": { "type": ["number", "null"], "minimum": 0, "maximum": 30 },
+        "gripLeftKg": { "type": ["number", "null"], "minimum": 0, "maximum": 120 },
+        "gripRightKg": { "type": ["number", "null"], "minimum": 0, "maximum": 120 },
+        "legsLmeScore": { "type": ["number", "null"], "minimum": 1, "maximum": 5 },
+        "techniqueQualityScore": { "type": ["number", "null"], "minimum": 1, "maximum": 5 },
+        "aerobicRecoveryScore": { "type": ["number", "null"], "minimum": 1, "maximum": 5 }
+      }
+    },
+    "state": {
+      "type": "object",
+      "required": ["readinessScore", "sleepHours", "restingHr", "bodyWeightKg"],
+      "additionalProperties": false,
+      "properties": {
+        "readinessScore": { "type": ["number", "null"], "minimum": 0, "maximum": 100 },
+        "sleepHours": { "type": ["number", "null"], "minimum": 0, "maximum": 16 },
+        "restingHr": { "type": ["number", "null"], "minimum": 30, "maximum": 140 },
+        "bodyWeightKg": { "type": "number", "minimum": 20 },
+        "painLevel": { "type": ["number", "null"], "minimum": 0, "maximum": 5 },
+        "fatigueLevel": { "type": ["number", "null"], "minimum": 0, "maximum": 5 },
+        "deviceDataConfidence": { "type": "string", "enum": ["high", "medium", "low", "none"] },
+        "coachComment": { "type": ["string", "null"] }
+      }
+    },
+    "constraints": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "noHeavyStrength": { "type": "boolean", "default": false },
+        "noHighGlycolytic": { "type": "boolean", "default": false },
+        "weightCutActive": { "type": "boolean", "default": false },
+        "injuryCaution": { "type": "boolean", "default": false },
+        "travelFatigue": { "type": "boolean", "default": false }
+      }
+    }
+  }
+}

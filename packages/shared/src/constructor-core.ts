@@ -1,0 +1,1703 @@
+export type ConstructorCompetitionLevel =
+  | "local"
+  | "national"
+  | "continental"
+  | "world"
+  | "olympics";
+
+export type ConstructorCompetitionPriority = "A" | "B" | "C";
+
+export type ConstructorPhase =
+  | "base"
+  | "development"
+  | "special_preparation"
+  | "taper"
+  | "start_window"
+  | "recovery";
+
+export type ConstructorGoalType =
+  | "speed_first_action"
+  | "legs_lme"
+  | "arms_grip"
+  | "aerobic_base"
+  | "anaerobic_power"
+  | "max_strength"
+  | "speed_strength"
+  | "fatigue_skill"
+  | "wrestling_contact_density"
+  | "weight_management"
+  | "taper_quality"
+  | "recovery";
+
+export type ConstructorConfidence = "high" | "medium" | "low";
+
+export type ConstructorEvidenceLevel = "A" | "B" | "C" | "B/C" | "A/B" | "A/B/C";
+
+export type ConstructorOperationalEvidenceType =
+  | "direct_training_intervention"
+  | "position_stand"
+  | "sport_policy"
+  | "transfer_grappling_evidence"
+  | "coach_school"
+  | "internal_validation";
+
+export type ConstructorBlockType =
+  | "technical"
+  | "speed"
+  | "strength"
+  | "CNS_high"
+  | "metabolic"
+  | "conditioning"
+  | "recovery"
+  | "mobility"
+  | "activation";
+
+export type ConstructorLoadLevel = "low" | "medium" | "high" | "taper" | "recovery";
+
+export type ConstructorMissingDataCode =
+  | "speed_tests"
+  | "jump_or_power_test"
+  | "grip_tests"
+  | "legs_lme_test"
+  | "technique_quality_score"
+  | "aerobic_recovery_test"
+  | "readiness"
+  | "sleep"
+  | "resting_hr"
+  | "weight_plan"
+  | "coach_comment";
+
+export type ConstructorRiskCode =
+  | "competition_close"
+  | "weight_gap"
+  | "weight_cut_active"
+  | "low_readiness"
+  | "low_sleep"
+  | "rhr_above_baseline"
+  | "pain_or_injury"
+  | "heavy_legs_sprint_conflict"
+  | "glycolytic_recovery_conflict"
+  | "missing_key_tests"
+  | "device_data_low_confidence"
+  | "travel_fatigue";
+
+export interface ConstructorCompetitionInput {
+  name: string;
+  level: ConstructorCompetitionLevel;
+  priority: ConstructorCompetitionPriority;
+  startDate: string;
+  weighInDate: string;
+  weightClass: string;
+  expectedBoutCount?: number | null;
+  location?: string | null;
+  timezone?: string | null;
+  travelRequired?: boolean;
+  climateContext?: string | null;
+}
+
+export interface ConstructorAthleteInput {
+  athleteId: string;
+  fullName: string;
+  age?: number | null;
+  sex: "female" | "male" | "other" | "unknown";
+  trainingAgeYears?: number | null;
+  weightCurrentKg: number;
+  weightTargetKg: number;
+  baselineRestingHr?: number | null;
+  strengths?: string[];
+  weaknesses?: string[];
+  injuryHistory?: string[];
+  painZones?: string[];
+}
+
+export interface ConstructorContextInput {
+  currentPhase: ConstructorPhase;
+  cycleLengthDays: 7 | 10 | 14 | 21 | 30;
+  sessionsPerWeek: number;
+  sessionsPerDay?: number;
+  availableTrainingDays?: Array<"mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun">;
+}
+
+export interface ConstructorGoalInput {
+  goalType: ConstructorGoalType;
+  priority: number;
+  reason?: string | null;
+}
+
+export interface ConstructorTestInput {
+  sprint10mSec?: number | null;
+  sprint20mSec?: number | null;
+  verticalJumpCm?: number | null;
+  medicineBallThrowM?: number | null;
+  gripLeftKg?: number | null;
+  gripRightKg?: number | null;
+  legsLmeScore?: number | null;
+  techniqueQualityScore?: number | null;
+  aerobicRecoveryScore?: number | null;
+}
+
+export interface ConstructorStateInput {
+  readinessScore: number | null;
+  sleepHours: number | null;
+  restingHr: number | null;
+  bodyWeightKg: number;
+  painLevel?: number | null;
+  fatigueLevel?: number | null;
+  deviceDataConfidence?: "high" | "medium" | "low" | "none";
+  coachComment?: string | null;
+}
+
+export interface ConstructorConstraintsInput {
+  noHeavyStrength?: boolean;
+  noHighGlycolytic?: boolean;
+  weightCutActive?: boolean;
+  injuryCaution?: boolean;
+  travelFatigue?: boolean;
+}
+
+export interface ConstructorInput {
+  competition: ConstructorCompetitionInput;
+  athlete: ConstructorAthleteInput;
+  context: ConstructorContextInput;
+  goals: ConstructorGoalInput[];
+  tests?: ConstructorTestInput;
+  state: ConstructorStateInput;
+  constraints?: ConstructorConstraintsInput;
+}
+
+export interface ConstructorPlanBlock {
+  name: string;
+  type: ConstructorBlockType;
+  targetQuality: ConstructorGoalType | "general";
+  volume: string;
+  localLoadZones: string[];
+  energySystem: string;
+  riskFlags: ConstructorRiskCode[];
+  evidenceRefs: string[];
+  coachEditable: boolean;
+}
+
+export interface ConstructorPlanDay {
+  dayLabel: string;
+  dayIntent: string;
+  loadLevel: ConstructorLoadLevel;
+  readinessGate: string;
+  blocks: ConstructorPlanBlock[];
+}
+
+export interface ConstructorPlanWeek {
+  weekNumber: number;
+  title: string;
+  phase: ConstructorPhase;
+  mainIntent: string;
+  days: ConstructorPlanDay[];
+}
+
+export interface ConstructorTemplateCard {
+  id: string;
+  title: string;
+  durationDays: 7 | 10 | 14 | 21 | 30;
+  primaryGoals: ConstructorGoalType[];
+  allowedPhases: ConstructorPhase[];
+  evidenceLevel: ConstructorEvidenceLevel;
+  operationalEvidenceTypes: ConstructorOperationalEvidenceType[];
+  requiredData: ConstructorMissingDataCode[];
+  rationale: string;
+  weeks: ConstructorPlanWeek[];
+}
+
+export interface ConstructorRiskFlag {
+  code: ConstructorRiskCode;
+  level: "info" | "warning" | "critical";
+  message: string;
+}
+
+export interface ConstructorMissingData {
+  code: ConstructorMissingDataCode;
+  requiredFor: ConstructorGoalType | "plan";
+  message: string;
+}
+
+export interface ConstructorDraft {
+  confidence: ConstructorConfidence;
+  understood: {
+    mainTask: string;
+    interpretation: string;
+    limitation: string;
+  };
+  missingData: ConstructorMissingData[];
+  riskFlags: ConstructorRiskFlag[];
+  selectedCards: Array<{
+    id: string;
+    title: string;
+    rationale: string;
+  }>;
+  plan: {
+    cycleLengthDays: number;
+    weeks: ConstructorPlanWeek[];
+  };
+  explanation: {
+    mainDecision: string;
+    whyNow: string;
+    testsImpact: string;
+    riskImpact: string;
+    evidenceSummary: string;
+    coachCanEdit: string[];
+  };
+}
+
+export const CONSTRUCTOR_GOAL_REQUIRED_DATA: Record<
+  ConstructorGoalType,
+  ConstructorMissingDataCode[]
+> = {
+  speed_first_action: ["speed_tests"],
+  legs_lme: ["legs_lme_test"],
+  arms_grip: ["grip_tests"],
+  aerobic_base: ["aerobic_recovery_test"],
+  anaerobic_power: ["speed_tests", "readiness"],
+  max_strength: ["jump_or_power_test"],
+  speed_strength: ["speed_tests", "jump_or_power_test"],
+  fatigue_skill: ["technique_quality_score"],
+  wrestling_contact_density: ["coach_comment"],
+  weight_management: ["weight_plan"],
+  taper_quality: ["readiness", "sleep", "resting_hr"],
+  recovery: ["readiness", "sleep", "resting_hr"],
+};
+
+function block(
+  name: string,
+  type: ConstructorBlockType,
+  targetQuality: ConstructorPlanBlock["targetQuality"],
+  volume: string,
+  localLoadZones: string[],
+  energySystem: string,
+  evidenceRefs: string[],
+  riskFlags: ConstructorRiskCode[] = [],
+): ConstructorPlanBlock {
+  return {
+    name,
+    type,
+    targetQuality,
+    volume,
+    localLoadZones,
+    energySystem,
+    riskFlags,
+    evidenceRefs,
+    coachEditable: true,
+  };
+}
+
+function day(
+  dayLabel: string,
+  dayIntent: string,
+  loadLevel: ConstructorLoadLevel,
+  readinessGate: string,
+  blocks: ConstructorPlanBlock[],
+): ConstructorPlanDay {
+  return {
+    dayLabel,
+    dayIntent,
+    loadLevel,
+    readinessGate,
+    blocks,
+  };
+}
+
+export const CONSTRUCTOR_TEMPLATE_CARDS: ConstructorTemplateCard[] = [
+  {
+    id: "pre_competition_21",
+    title: "Подготовка к старту 21 день",
+    durationDays: 21,
+    primaryGoals: ["speed_first_action", "fatigue_skill", "taper_quality"],
+    allowedPhases: ["special_preparation", "taper"],
+    evidenceLevel: "A/B/C",
+    operationalEvidenceTypes: ["position_stand", "coach_school", "internal_validation"],
+    requiredData: ["speed_tests", "readiness", "sleep", "resting_hr", "weight_plan"],
+    rationale:
+      "21 день позволяет соединить короткое развитие качества, перенос в борьбу и предсоревновательную подводку.",
+    weeks: [
+      {
+        weekNumber: 1,
+        title: "Неделя 1: вход в развитие",
+        phase: "special_preparation",
+        mainIntent: "Короткое развитие скорости и локальной устойчивости без накопления случайной усталости.",
+        days: [
+          day("ПН", "ЛМВ ног и контроль качества", "medium", "readiness >= 60, боль ног <= 2/5", [
+            block(
+              "ЛМВ ног",
+              "metabolic",
+              "legs_lme",
+              "4-6 подходов / 20-30 сек / без отказа",
+              ["ноги", "таз", "корпус"],
+              "локальный метаболический стресс",
+              ["BFR/KAATSU evidence", "PERFORM Evidence Matrix"],
+              ["heavy_legs_sprint_conflict"],
+            ),
+          ]),
+          day("СР", "Скорость первого действия", "medium", "сон >= 7 ч, RHR без роста", [
+            block(
+              "Скорость 10-20 м",
+              "speed",
+              "speed_first_action",
+              "6-8 повторов / полный отдых",
+              ["ноги"],
+              "CNS / alactic",
+              ["Chinese SSIT wrestler evidence", "speed profile"],
+            ),
+          ]),
+          day("ПТ", "Борьба без скрытой гликолитики", "medium", "readiness >= 65", [
+            block(
+              "Техника и короткие раунды",
+              "technical",
+              "fatigue_skill",
+              "3-4 раунда / качество выше объёма",
+              ["общее", "контакт"],
+              "специальная борьба",
+              ["Europe plan analysis", "wrestling temporal structure"],
+            ),
+          ]),
+          day("ВС", "Восстановление и вес", "recovery", "обязательная проверка веса/сна", [
+            block(
+              "Восстановительный контроль",
+              "recovery",
+              "recovery",
+              "сон / вес / мобилити 15-20 мин",
+              ["общее"],
+              "recovery",
+              ["ACSM hydration", "NCAA weight management"],
+            ),
+          ]),
+        ],
+      },
+      {
+        weekNumber: 2,
+        title: "Неделя 2: перенос в специальную работу",
+        phase: "special_preparation",
+        mainIntent: "Перенести скорость и ноги в технические действия, не добирая лишний объём.",
+        days: [
+          day("ПН", "Входы в ноги под контролем качества", "medium", "нет боли колена/таза", [
+            block(
+              "Входы в ноги",
+              "technical",
+              "fatigue_skill",
+              "20-30 мин / качество 1-5",
+              ["ноги", "таз"],
+              "technical",
+              ["motor learning", "PERFORM coach quality score"],
+            ),
+          ]),
+          day("СР", "Короткая скорость", "medium", "RHR без роста", [
+            block(
+              "Спринт + реакция",
+              "speed",
+              "speed_first_action",
+              "5-7 повторов / полный отдых",
+              ["ноги"],
+              "CNS / alactic",
+              ["speed profile"],
+            ),
+          ]),
+          day("ПТ", "Раунды и анализ качества", "high", "readiness >= 70, сон нормальный", [
+            block(
+              "Раунды борьбы",
+              "technical",
+              "wrestling_contact_density",
+              "4-5 раундов / контроль качества",
+              ["контакт", "общее"],
+              "mixed wrestling",
+              ["UWW model", "wrestling temporal structure"],
+              ["glycolytic_recovery_conflict"],
+            ),
+          ]),
+          day("ВС", "Снижение остаточной усталости", "recovery", "обязательный контроль сна", [
+            block(
+              "Аэробное восстановление",
+              "conditioning",
+              "recovery",
+              "20-30 мин / Z1-Z2",
+              ["общее"],
+              "aerobic recovery",
+              ["sleep consensus", "load consensus"],
+            ),
+          ]),
+        ],
+      },
+      {
+        weekNumber: 3,
+        title: "Неделя 3: подводка",
+        phase: "taper",
+        mainIntent: "Снизить общий объём, сохранить скорость, вес и свежесть.",
+        days: [
+          day("ПН", "Техника качества", "low", "без локальной боли", [
+            block(
+              "Техника без утомления",
+              "technical",
+              "taper_quality",
+              "25-35 мин / качество",
+              ["общее"],
+              "technical",
+              ["taper logic", "Europe plan analysis"],
+            ),
+          ]),
+          day("СР", "Скорость коротко", "taper", "сон >= 7 ч", [
+            block(
+              "Короткие ускорения",
+              "speed",
+              "speed_first_action",
+              "4-5 повторов / 90-95%",
+              ["ноги"],
+              "CNS / alactic",
+              ["taper logic"],
+            ),
+          ]),
+          day("ПТ", "Вес и свежесть", "recovery", "без добора объёма", [
+            block(
+              "Контроль веса и восстановление",
+              "recovery",
+              "weight_management",
+              "сон / вес / мобилити",
+              ["общее"],
+              "recovery",
+              ["NCAA weight management", "ACSM hydration"],
+            ),
+          ]),
+        ],
+      },
+    ],
+  },
+  {
+    id: "speed_first_action_14",
+    title: "Скорость первого действия 14 дней",
+    durationDays: 14,
+    primaryGoals: ["speed_first_action"],
+    allowedPhases: ["development", "special_preparation"],
+    evidenceLevel: "A/B",
+    operationalEvidenceTypes: ["direct_training_intervention", "position_stand"],
+    requiredData: ["speed_tests", "jump_or_power_test", "readiness", "sleep"],
+    rationale:
+      "Короткий скоростной блок строится только при наличии исходных тестов 10/20 м и контроля восстановления.",
+    weeks: [
+      {
+        weekNumber: 1,
+        title: "Неделя 1: вход в скорость",
+        phase: "development",
+        mainIntent: "Качество ускорения без утомления.",
+        days: [
+          day("ПН", "Скорость 10 м", "medium", "полный отдых между повторами", [
+            block("10 м старт", "speed", "speed_first_action", "6-8 повторов", ["ноги"], "CNS", [
+              "Chinese SSIT wrestler evidence",
+            ]),
+          ]),
+          day("СР", "Реакция и первый шаг", "medium", "техника не должна падать", [
+            block("Реакция + первый шаг", "speed", "speed_first_action", "6-10 стартов", ["ноги"], "CNS", [
+              "speed profile",
+            ]),
+          ]),
+          day("ПТ", "Технический перенос", "low", "качество выше объёма", [
+            block("Входы после сигнала", "technical", "fatigue_skill", "20 мин", ["ноги", "таз"], "technical", [
+              "PERFORM coach quality score",
+            ]),
+          ]),
+        ],
+      },
+      {
+        weekNumber: 2,
+        title: "Неделя 2: закрепление",
+        phase: "special_preparation",
+        mainIntent: "Меньше объёма, больше качества и переноса.",
+        days: [
+          day("ПН", "20 м коротко", "medium", "без тяжёлых ног накануне", [
+            block("20 м ускорение", "speed", "speed_first_action", "5-6 повторов", ["ноги"], "CNS", [
+              "speed profile",
+            ]),
+          ]),
+          day("СР", "Скорость в борьбе", "medium", "контроль качества", [
+            block("Входы в темпе", "technical", "fatigue_skill", "20-25 мин", ["ноги", "таз"], "technical", [
+              "wrestling transfer",
+            ]),
+          ]),
+          day("ПТ", "Тест 10/20 м", "low", "без добора", [
+            block("Контроль скорости", "activation", "speed_first_action", "тест / 3-4 попытки", ["ноги"], "test", [
+              "internal_validation",
+            ]),
+          ]),
+        ],
+      },
+    ],
+  },
+  {
+    id: "legs_lme_21",
+    title: "ЛМВ ног 21 день",
+    durationDays: 21,
+    primaryGoals: ["legs_lme"],
+    allowedPhases: ["base", "development", "special_preparation"],
+    evidenceLevel: "B/C",
+    operationalEvidenceTypes: ["position_stand", "coach_school", "internal_validation"],
+    requiredData: ["legs_lme_test", "readiness", "sleep", "resting_hr"],
+    rationale:
+      "ЛМВ ног ставится как локальный стимул с обязательным контролем техники входов и боли в колене/тазу/спине.",
+    weeks: [
+      {
+        weekNumber: 1,
+        title: "Неделя 1: ввод",
+        phase: "development",
+        mainIntent: "Ввести локальную нагрузку без разрушения техники.",
+        days: [
+          day("ПН", "ЛМВ ног ввод", "medium", "боль <= 2/5", [
+            block("Статодинамика ног", "metabolic", "legs_lme", "4x20 сек", ["ноги"], "local metabolic", [
+              "BFR/KAATSU position stand",
+              "Seluyanov coach school",
+            ]),
+          ]),
+          day("СР", "Техника лёгкая", "low", "качество 4/5+", [
+            block("Входы без утомления", "technical", "fatigue_skill", "20 мин", ["ноги", "таз"], "technical", [
+              "motor learning",
+            ]),
+          ]),
+          day("ПТ", "ЛМВ ног повтор", "medium", "RHR без роста", [
+            block("Статодинамика ног", "metabolic", "legs_lme", "5x20 сек", ["ноги"], "local metabolic", [
+              "BFR/KAATSU position stand",
+            ]),
+          ]),
+        ],
+      },
+    ],
+  },
+  {
+    id: "arms_grip_21",
+    title: "Руки и хват 21 день",
+    durationDays: 21,
+    primaryGoals: ["arms_grip"],
+    allowedPhases: ["base", "development", "special_preparation"],
+    evidenceLevel: "B/C",
+    operationalEvidenceTypes: ["transfer_grappling_evidence", "coach_school"],
+    requiredData: ["grip_tests", "readiness", "sleep"],
+    rationale:
+      "Хват и руки развиваются отдельно от тяжёлого партера/клинча, чтобы не перегрузить локти и плечи.",
+    weeks: [
+      {
+        weekNumber: 1,
+        title: "Неделя 1: ввод хвата",
+        phase: "development",
+        mainIntent: "Развить локальную устойчивость рук без потери качества контакта.",
+        days: [
+          day("ПН", "Хват ввод", "medium", "локти/плечи без боли", [
+            block("Вис / полотенца / удержание", "strength", "arms_grip", "4-5 подходов", ["предплечья", "плечи"], "local strength endurance", [
+              "judo grip evidence",
+            ]),
+          ]),
+          day("СР", "Техника захвата", "low", "без отказа", [
+            block("Захват и позиция", "technical", "arms_grip", "20-25 мин", ["руки", "контакт"], "technical", [
+              "grappling transfer evidence",
+            ]),
+          ]),
+        ],
+      },
+    ],
+  },
+  {
+    id: "taper_10",
+    title: "Предсоревновательная подводка 10 дней",
+    durationDays: 10,
+    primaryGoals: ["taper_quality", "weight_management"],
+    allowedPhases: ["taper", "start_window"],
+    evidenceLevel: "A/B/C",
+    operationalEvidenceTypes: ["position_stand", "sport_policy", "coach_school"],
+    requiredData: ["readiness", "sleep", "resting_hr", "weight_plan"],
+    rationale:
+      "Подводка снижает объём, сохраняет скорость и качество, а вес контролируется без добора интенсивности.",
+    weeks: [
+      {
+        weekNumber: 1,
+        title: "10 дней до старта",
+        phase: "taper",
+        mainIntent: "Сохранить скорость и свежесть.",
+        days: [
+          day("Д-10", "Техника качества", "low", "без добора", [
+            block("Техника", "technical", "taper_quality", "30 мин", ["общее"], "technical", [
+              "taper logic",
+            ]),
+          ]),
+          day("Д-7", "Скорость коротко", "taper", "сон нормальный", [
+            block("Ускорения", "speed", "speed_first_action", "4-5 повторов", ["ноги"], "CNS", [
+              "taper logic",
+            ]),
+          ]),
+          day("Д-3", "Вес и свежесть", "recovery", "без интенсивности", [
+            block("Контроль веса", "recovery", "weight_management", "сон / вес / мобилити", ["общее"], "recovery", [
+              "NCAA weight management",
+            ]),
+          ]),
+        ],
+      },
+    ],
+  },
+  {
+    id: "recovery_7",
+    title: "Восстановительный микроцикл 7 дней",
+    durationDays: 7,
+    primaryGoals: ["recovery"],
+    allowedPhases: ["recovery", "base", "development", "special_preparation"],
+    evidenceLevel: "A/B",
+    operationalEvidenceTypes: ["position_stand", "internal_validation"],
+    requiredData: ["readiness", "sleep", "resting_hr"],
+    rationale:
+      "Восстановительный микроцикл нужен после перегруза, старта, плохого сна или роста пульса покоя.",
+    weeks: [
+      {
+        weekNumber: 1,
+        title: "Неделя восстановления",
+        phase: "recovery",
+        mainIntent: "Снять накопленную усталость и вернуть готовность.",
+        days: [
+          day("ПН", "Мобилити и лёгкая техника", "recovery", "без боли", [
+            block("Мобилити", "mobility", "recovery", "20 мин", ["общее"], "recovery", [
+              "sleep/load consensus",
+            ]),
+          ]),
+          day("СР", "Аэробное восстановление", "low", "Z1-Z2", [
+            block("Лёгкая аэробная", "conditioning", "recovery", "20-30 мин", ["общее"], "aerobic recovery", [
+              "load consensus",
+            ]),
+          ]),
+          day("ПТ", "Контроль готовности", "recovery", "обновить readiness/RHR", [
+            block("Контроль", "activation", "recovery", "тест самочувствия", ["общее"], "monitoring", [
+              "internal_validation",
+            ]),
+          ]),
+        ],
+      },
+    ],
+  },
+];
+
+function parseDate(value: string) {
+  const date = new Date(`${value}T00:00:00.000Z`);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function daysBetween(startDate: string, endDate: string) {
+  const start = parseDate(startDate);
+  const end = parseDate(endDate);
+
+  if (!start || !end) {
+    return null;
+  }
+
+  return Math.round((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000));
+}
+
+function hasValue(value: unknown) {
+  return value !== null && value !== undefined && value !== "";
+}
+
+function hasRequiredData(input: ConstructorInput, code: ConstructorMissingDataCode) {
+  const tests = input.tests ?? {};
+
+  switch (code) {
+    case "speed_tests":
+      return hasValue(tests.sprint10mSec) && hasValue(tests.sprint20mSec);
+    case "jump_or_power_test":
+      return hasValue(tests.verticalJumpCm) || hasValue(tests.medicineBallThrowM);
+    case "grip_tests":
+      return hasValue(tests.gripLeftKg) || hasValue(tests.gripRightKg);
+    case "legs_lme_test":
+      return hasValue(tests.legsLmeScore);
+    case "technique_quality_score":
+      return hasValue(tests.techniqueQualityScore);
+    case "aerobic_recovery_test":
+      return hasValue(tests.aerobicRecoveryScore);
+    case "readiness":
+      return hasValue(input.state.readinessScore);
+    case "sleep":
+      return hasValue(input.state.sleepHours);
+    case "resting_hr":
+      return hasValue(input.state.restingHr);
+    case "weight_plan":
+      return input.athlete.weightTargetKg > 0 && input.athlete.weightCurrentKg > 0;
+    case "coach_comment":
+      return Boolean(input.state.coachComment?.trim());
+    default:
+      return false;
+  }
+}
+
+function missingDataMessage(code: ConstructorMissingDataCode) {
+  const messages: Record<ConstructorMissingDataCode, string> = {
+    speed_tests: "Для скоростного блока нужны 10 м и 20 м.",
+    jump_or_power_test: "Для вывода по взрыву нужен прыжок или бросок медбола.",
+    grip_tests: "Для блока рук/хвата нужен тест хвата.",
+    legs_lme_test: "Для ЛМВ ног нужна исходная оценка локальной выносливости.",
+    technique_quality_score: "Для техники под утомлением нужна оценка качества тренером.",
+    aerobic_recovery_test: "Для аэробной базы нужен тест восстановления или аэробный показатель.",
+    readiness: "Для безопасного плана нужна готовность.",
+    sleep: "Для оценки восстановления нужны данные сна.",
+    resting_hr: "Для оценки восстановления нужен пульс покоя.",
+    weight_plan: "Для контроля веса нужен текущий и целевой вес.",
+    coach_comment: "Для контактной/технической плотности нужен комментарий тренера.",
+  };
+
+  return messages[code];
+}
+
+function collectMissingData(input: ConstructorInput) {
+  const missing = new Map<ConstructorMissingDataCode, ConstructorMissingData>();
+
+  for (const goal of input.goals) {
+    for (const code of CONSTRUCTOR_GOAL_REQUIRED_DATA[goal.goalType]) {
+      if (!hasRequiredData(input, code)) {
+        missing.set(code, {
+          code,
+          requiredFor: goal.goalType,
+          message: missingDataMessage(code),
+        });
+      }
+    }
+  }
+
+  for (const code of ["readiness", "sleep", "resting_hr"] as const) {
+    if (!hasRequiredData(input, code)) {
+      missing.set(code, {
+        code,
+        requiredFor: "plan",
+        message: missingDataMessage(code),
+      });
+    }
+  }
+
+  return Array.from(missing.values());
+}
+
+function collectRiskFlags(input: ConstructorInput, missingData: ConstructorMissingData[]) {
+  const risks: ConstructorRiskFlag[] = [];
+  const today = new Date().toISOString().slice(0, 10);
+  const daysToStart = daysBetween(today, input.competition.startDate);
+  const weightGap = Number((input.athlete.weightCurrentKg - input.athlete.weightTargetKg).toFixed(1));
+  const baselineRhr = input.athlete.baselineRestingHr;
+  const rhr = input.state.restingHr;
+
+  if (daysToStart !== null && daysToStart <= 14) {
+    risks.push({
+      code: "competition_close",
+      level: daysToStart <= 7 ? "critical" : "warning",
+      message: "Старт близко: развитие качества ограничено, приоритет свежесть, вес и техника.",
+    });
+  }
+
+  if (weightGap > 0.8) {
+    risks.push({
+      code: "weight_gap",
+      level: weightGap > 1.5 ? "critical" : "warning",
+      message: `Вес выше цели на ${weightGap} кг: нельзя добирать интенсивность без плана снижения веса.`,
+    });
+  }
+
+  if (input.constraints?.weightCutActive) {
+    risks.push({
+      code: "weight_cut_active",
+      level: "warning",
+      message: "Активная сгонка веса: гликолитика и плотный контакт требуют подтверждения тренера.",
+    });
+  }
+
+  if (input.state.readinessScore !== null && input.state.readinessScore < 60) {
+    risks.push({
+      code: "low_readiness",
+      level: "warning",
+      message: "Готовность ниже 60: новый развивающий стимул ограничен.",
+    });
+  }
+
+  if (input.state.sleepHours !== null && input.state.sleepHours < 6.5) {
+    risks.push({
+      code: "low_sleep",
+      level: "warning",
+      message: "Сон ниже 6.5 ч: высокоинтенсивные блоки требуют снижения.",
+    });
+  }
+
+  if (baselineRhr && rhr && rhr - baselineRhr >= 6) {
+    risks.push({
+      code: "rhr_above_baseline",
+      level: "warning",
+      message: "Пульс покоя выше baseline: нужен контроль восстановления.",
+    });
+  }
+
+  if (
+    input.constraints?.injuryCaution ||
+    (input.state.painLevel !== null && input.state.painLevel !== undefined && input.state.painLevel >= 3) ||
+    (input.athlete.painZones?.length ?? 0) > 0
+  ) {
+    risks.push({
+      code: "pain_or_injury",
+      level: "warning",
+      message: "Есть боль или ограничение: нагрузка на эту зону требует замены или подтверждения.",
+    });
+  }
+
+  if (missingData.length > 0) {
+    risks.push({
+      code: "missing_key_tests",
+      level: missingData.length >= 3 ? "warning" : "info",
+      message: "Не хватает ключевых данных: план строится с пониженной уверенностью.",
+    });
+  }
+
+  if (
+    input.state.deviceDataConfidence === "low" ||
+    input.state.deviceDataConfidence === "none"
+  ) {
+    risks.push({
+      code: "device_data_low_confidence",
+      level: "info",
+      message: "Данные устройства неполные: вывод по восстановлению ограничен.",
+    });
+  }
+
+  if (input.constraints?.travelFatigue || input.competition.travelRequired) {
+    risks.push({
+      code: "travel_fatigue",
+      level: "info",
+      message: "Есть фактор дороги/смены режима: нужна поправка на восстановление.",
+    });
+  }
+
+  return risks;
+}
+
+function deriveConfidence(
+  missingData: ConstructorMissingData[],
+  riskFlags: ConstructorRiskFlag[],
+): ConstructorConfidence {
+  const criticalRisk = riskFlags.some((risk) => risk.level === "critical");
+
+  if (criticalRisk || missingData.length >= 4) {
+    return "low";
+  }
+
+  if (missingData.length > 0 || riskFlags.some((risk) => risk.level === "warning")) {
+    return "medium";
+  }
+
+  return "high";
+}
+
+function primaryGoal(input: ConstructorInput) {
+  return [...input.goals].sort((a, b) => a.priority - b.priority)[0]?.goalType ?? "recovery";
+}
+
+function goalLabel(goal: ConstructorGoalType) {
+  const labels: Record<ConstructorGoalType, string> = {
+    speed_first_action: "скорость первого действия",
+    legs_lme: "локальная выносливость ног",
+    arms_grip: "руки и хват",
+    aerobic_base: "аэробная база",
+    anaerobic_power: "анаэробная мощность",
+    max_strength: "максимальная сила",
+    speed_strength: "скоростно-силовая работа",
+    fatigue_skill: "техника под утомлением",
+    wrestling_contact_density: "плотность борьбы",
+    weight_management: "контроль веса",
+    taper_quality: "подводка",
+    recovery: "восстановление",
+  };
+
+  return labels[goal];
+}
+
+function normalizePhaseForCycle(input: ConstructorInput): ConstructorPhase {
+  if (input.context.currentPhase === "development" && input.context.cycleLengthDays <= 30) {
+    return "special_preparation";
+  }
+
+  return input.context.currentPhase;
+}
+
+function selectTemplateCards(input: ConstructorInput, riskFlags: ConstructorRiskFlag[]) {
+  const goalSet = new Set(input.goals.map((goal) => goal.goalType));
+  const closeCompetition = riskFlags.some((risk) => risk.code === "competition_close");
+  const effectivePhase = normalizePhaseForCycle(input);
+
+  if (effectivePhase === "start_window" || closeCompetition) {
+    return CONSTRUCTOR_TEMPLATE_CARDS.filter((card) => card.id === "taper_10");
+  }
+
+  if (effectivePhase === "recovery") {
+    return CONSTRUCTOR_TEMPLATE_CARDS.filter((card) => card.id === "recovery_7");
+  }
+
+  const candidates = CONSTRUCTOR_TEMPLATE_CARDS.filter(
+    (card) =>
+      card.allowedPhases.includes(effectivePhase) &&
+      card.durationDays <= input.context.cycleLengthDays &&
+      card.primaryGoals.some((goal) => goalSet.has(goal)),
+  );
+
+  if (candidates.length > 0) {
+    return candidates.slice(0, 2);
+  }
+
+  return CONSTRUCTOR_TEMPLATE_CARDS.filter((card) => card.id === "recovery_7");
+}
+
+const STANDARD_WEEKDAY_LABELS = ["ПН", "ВТ", "СР", "ЧТ", "ПТ", "СБ", "ВС"];
+const TRAINING_DAY_LABELS: Record<
+  NonNullable<ConstructorContextInput["availableTrainingDays"]>[number],
+  string
+> = {
+  mon: "ПН",
+  tue: "ВТ",
+  wed: "СР",
+  thu: "ЧТ",
+  fri: "ПТ",
+  sat: "СБ",
+  sun: "ВС",
+};
+
+function standardWeekLabelPool(input: ConstructorInput) {
+  if (input.context.availableTrainingDays && input.context.availableTrainingDays.length > 0) {
+    return input.context.availableTrainingDays.map((dayCode) => TRAINING_DAY_LABELS[dayCode]);
+  }
+
+  return STANDARD_WEEKDAY_LABELS.slice(0, 6);
+}
+
+function taperWeekLabelPool(
+  input: ConstructorInput,
+  weekIndex: number,
+  calendarDaysInWeek: number,
+) {
+  const firstDayFromStart = Math.max(1, input.context.cycleLengthDays - weekIndex * 7);
+
+  return Array.from({ length: calendarDaysInWeek }, (_, index) => `Д-${firstDayFromStart - index}`).filter(
+    (label) => !label.endsWith("-0"),
+  );
+}
+
+function weekPhaseFromCalendar(
+  input: ConstructorInput,
+  _sourcePhase: ConstructorPhase,
+  weekIndex: number,
+): ConstructorPhase {
+  if (input.context.currentPhase === "recovery") {
+    return "recovery";
+  }
+
+  const daysToStartAtWeekStart = Math.max(1, input.context.cycleLengthDays - weekIndex * 7);
+
+  if (input.context.currentPhase === "start_window" || daysToStartAtWeekStart <= 3) {
+    return "start_window";
+  }
+
+  if (input.context.currentPhase === "taper" || daysToStartAtWeekStart <= 10) {
+    return "taper";
+  }
+
+  if (input.context.currentPhase === "base" && daysToStartAtWeekStart > 45) {
+    return "base";
+  }
+
+  if (input.context.currentPhase === "development" && daysToStartAtWeekStart > 30) {
+    return "development";
+  }
+
+  return "special_preparation";
+}
+
+function targetSessionsForWeek(
+  input: ConstructorInput,
+  phase: ConstructorPhase,
+  calendarDaysInWeek: number,
+) {
+  const availableDays =
+    input.context.availableTrainingDays && input.context.availableTrainingDays.length > 0
+      ? input.context.availableTrainingDays.length
+      : 6;
+  const requestedSessions = Math.max(1, Math.min(14, Math.round(input.context.sessionsPerWeek || 1)));
+  const requestedTrainingDays = Math.min(requestedSessions, availableDays, calendarDaysInWeek);
+
+  if (phase === "start_window") {
+    return Math.min(requestedTrainingDays, 3);
+  }
+
+  if (phase === "recovery") {
+    return Math.min(requestedTrainingDays, 4);
+  }
+
+  if (phase === "taper") {
+    return Math.min(requestedTrainingDays, Math.min(5, calendarDaysInWeek));
+  }
+
+  return Math.min(requestedTrainingDays, calendarDaysInWeek);
+}
+
+function supportDayLabel(labelPool: string[], usedLabels: Set<string>, index: number) {
+  return labelPool.find((label) => !usedLabels.has(label)) ?? `День ${index + 1}`;
+}
+
+function labelPoolForWeek(
+  input: ConstructorInput,
+  phase: ConstructorPhase,
+  weekIndex: number,
+  calendarDaysInWeek: number,
+) {
+  if (phase === "taper" || phase === "start_window") {
+    return taperWeekLabelPool(input, weekIndex, calendarDaysInWeek);
+  }
+
+  return standardWeekLabelPool(input).slice(0, calendarDaysInWeek);
+}
+
+function sortPlanDaysByLabel(days: ConstructorPlanDay[], labelPool: string[]) {
+  return [...days].sort((a, b) => {
+    const indexA = labelPool.indexOf(a.dayLabel);
+    const indexB = labelPool.indexOf(b.dayLabel);
+
+    if (indexA === -1 && indexB === -1) {
+      return 0;
+    }
+
+    if (indexA === -1) {
+      return 1;
+    }
+
+    if (indexB === -1) {
+      return -1;
+    }
+
+    return indexA - indexB;
+  });
+}
+
+function hasBlockTarget(dayPlan: ConstructorPlanDay, target: ConstructorPlanBlock["targetQuality"]) {
+  return dayPlan.blocks.some((planBlock) => planBlock.targetQuality === target);
+}
+
+function hasBlockType(dayPlan: ConstructorPlanDay, type: ConstructorBlockType) {
+  return dayPlan.blocks.some((planBlock) => planBlock.type === type);
+}
+
+function withCompetitionTaperStructure(
+  dayPlan: ConstructorPlanDay,
+  phase: ConstructorPhase,
+): ConstructorPlanDay {
+  if (phase !== "taper" && phase !== "start_window") {
+    return dayPlan;
+  }
+
+  const hasSpeed = hasBlockTarget(dayPlan, "speed_first_action") || hasBlockType(dayPlan, "speed");
+  const hasWeight = hasBlockTarget(dayPlan, "weight_management");
+  const hasTechnical =
+    hasBlockType(dayPlan, "technical") ||
+    hasBlockTarget(dayPlan, "fatigue_skill") ||
+    hasBlockTarget(dayPlan, "taper_quality") ||
+    hasBlockTarget(dayPlan, "wrestling_contact_density");
+  const hasWrestlingTransfer =
+    hasBlockTarget(dayPlan, "fatigue_skill") || hasBlockTarget(dayPlan, "wrestling_contact_density");
+  const blocks: ConstructorPlanBlock[] = [];
+
+  if (!hasTechnical && !hasSpeed) {
+    blocks.push(
+      block(
+        "Техника борьбы и тактические ситуации",
+        "technical",
+        "fatigue_skill",
+        phase === "start_window"
+          ? "15-20 мин / стойка, входы, защита, партер / без утомления"
+          : "25-35 мин / стойка, входы, защита, партер / качество выше объёма",
+        ["ноги", "таз", "контакт", "корпус"],
+        "technical freshness",
+        ["taper logic", "Europe plan analysis", "motor learning"],
+      ),
+    );
+  }
+
+  if (hasTechnical && !hasWrestlingTransfer && !hasSpeed && !hasWeight) {
+    blocks.push(
+      block(
+        "Борцовские ситуации без утомления",
+        "technical",
+        "fatigue_skill",
+        phase === "start_window"
+          ? "10-15 мин / стойка-партер / без борьбы в утомление"
+          : "15-20 мин / стойка, входы, защита, партер",
+        ["ноги", "таз", "контакт"],
+        "technical freshness",
+        ["taper logic", "Europe plan analysis", "motor learning"],
+      ),
+    );
+  }
+
+  blocks.push(...dayPlan.blocks);
+
+  if (hasSpeed && !hasBlockTarget(dayPlan, "fatigue_skill")) {
+    blocks.unshift(
+      block(
+        "Борцовский перенос скорости",
+        "technical",
+        "fatigue_skill",
+        phase === "start_window"
+          ? "10-15 мин / первое действие из стойки / без добора"
+          : "15-20 мин / первое действие, входы, выход из захвата",
+        ["ноги", "таз", "контакт"],
+        "technical transfer",
+        ["taper logic", "wrestling transfer", "PERFORM coach quality score"],
+      ),
+    );
+  }
+
+  if (!hasWeight) {
+    blocks.push(
+      block(
+        "Контроль веса, сна и свежести",
+        "recovery",
+        "weight_management",
+        "5-10 мин / вес, сон, самочувствие, мобилити",
+        ["общее"],
+        "recovery",
+        ["NCAA weight management", "ACSM hydration", "sleep consensus"],
+      ),
+    );
+  }
+
+  return {
+    ...dayPlan,
+    dayIntent: hasSpeed
+      ? "Техника борьбы + короткая скоростная активация"
+      : hasWeight
+        ? "Лёгкая техника, вес и свежесть"
+        : dayPlan.dayIntent,
+    readinessGate:
+      phase === "start_window"
+        ? "без утомления, без добора объёма, вес и сон под контролем"
+        : dayPlan.readinessGate,
+    blocks,
+  };
+}
+
+function supportDayForPhase(
+  phase: ConstructorPhase,
+  label: string,
+  goalTypes: ConstructorGoalType[],
+  slotIndex: number,
+) {
+  const supportGoal = goalTypes[slotIndex % Math.max(1, goalTypes.length)] ?? "recovery";
+
+  if (phase === "taper") {
+    if (supportGoal === "weight_management") {
+      return day(label, "Вес, сон и восстановление", "recovery", "без интенсивности", [
+        block(
+          "Контроль веса и восстановления",
+          "recovery",
+          "weight_management",
+          "сон / вес / мобилити 15-20 мин",
+          ["общее"],
+          "recovery",
+          ["NCAA weight management", "ACSM hydration"],
+        ),
+      ]);
+    }
+
+    if (supportGoal === "speed_first_action" || supportGoal === "speed_strength") {
+      return day(label, "Короткая активация скорости", "taper", "сон нормальный, полный отдых", [
+        block(
+          "Короткие ускорения",
+          "speed",
+          "speed_first_action",
+          "3-5 повторов / 90-95% / полный отдых",
+          ["ноги"],
+          "CNS / alactic",
+          ["taper logic", "speed profile"],
+        ),
+      ]);
+    }
+
+    if (supportGoal === "wrestling_contact_density" || supportGoal === "fatigue_skill") {
+      return day(label, "Техника борьбы без накопления усталости", "low", "качество выше объёма, RPE <= 4", [
+        block(
+          "Техника и входы без утомления",
+          "technical",
+          "fatigue_skill",
+          "20-30 мин / точность / без добора",
+          ["ноги", "таз", "контакт"],
+          "technical freshness",
+          ["taper logic", "Europe plan analysis", "motor learning"],
+        ),
+      ]);
+    }
+
+    return day(label, "Качество подводки", "low", "качество выше объёма, RPE <= 4", [
+      block(
+        "Техника без сопротивления",
+        "technical",
+        "taper_quality",
+        "20-30 мин / точность / без добора",
+        ["общее"],
+        "technical freshness",
+        ["taper logic", "Europe plan analysis"],
+      ),
+    ]);
+  }
+
+  if (phase === "start_window") {
+    if (supportGoal === "weight_management") {
+      return day(label, "Вес и свежесть", "recovery", "без добора", [
+        block(
+          "Контроль веса",
+          "recovery",
+          "weight_management",
+          "сон / вес / мобилити",
+          ["общее"],
+          "recovery",
+          ["NCAA weight management"],
+        ),
+      ]);
+    }
+
+    return day(label, "Стартовая активация", "taper", "очень коротко, без усталости", [
+      block(
+        "Активация перед стартом",
+        "activation",
+        supportGoal === "speed_first_action" ? "speed_first_action" : "taper_quality",
+        "10-15 мин / скорость ощущений",
+        ["общее"],
+        "activation",
+        ["taper logic"],
+      ),
+    ]);
+  }
+
+  if (phase === "recovery") {
+    const variants = [
+      day(label, "Мобилити и лёгкая техника", "recovery", "без боли", [
+        block("Мобилити", "mobility", "recovery", "20 мин", ["общее"], "recovery", [
+          "sleep/load consensus",
+        ]),
+      ]),
+      day(label, "Аэробное восстановление", "low", "Z1-Z2", [
+        block("Лёгкая аэробная", "conditioning", "recovery", "20-30 мин", ["общее"], "aerobic recovery", [
+          "load consensus",
+        ]),
+      ]),
+    ];
+
+    return variants[slotIndex % variants.length];
+  }
+
+  switch (supportGoal) {
+    case "speed_first_action":
+      return day(label, "Скорость первого действия", "medium", "полный отдых между повторами", [
+        block("Старт 10-20 м", "speed", "speed_first_action", "5-8 повторов / полный отдых", ["ноги"], "CNS / alactic", [
+          "Chinese SSIT wrestler evidence",
+          "speed profile",
+        ]),
+      ]);
+    case "speed_strength":
+      return day(label, "Скоростно-силовая работа", "medium", "без отказа, качество выше веса", [
+        block("Прыжки / броски / ускорение", "CNS_high", "speed_strength", "4-6 серий / полный отдых", ["ноги", "корпус"], "CNS / power", [
+          "speed-strength evidence",
+        ]),
+      ]);
+    case "max_strength":
+      return day(label, "Силовая база без добора", "medium", "без отказа и без тяжёлых ног перед скоростью", [
+        block("Силовая работа", "strength", "max_strength", "3-5 подходов / RPE 6-7", ["ноги", "корпус"], "strength", [
+          "strength training evidence",
+        ]),
+      ]);
+    case "legs_lme":
+      return day(label, "Локальная выносливость ног", "medium", "не доводить до отказа", [
+        block(
+          "ЛМВ ног",
+          "metabolic",
+          "legs_lme",
+          "3-5 подходов / 20-30 сек / без отказа",
+          ["ноги", "таз", "корпус"],
+          "local metabolic",
+          ["BFR/KAATSU evidence", "PERFORM Evidence Matrix"],
+          ["heavy_legs_sprint_conflict"],
+        ),
+      ]);
+    case "arms_grip":
+      return day(label, "Руки и хват", "medium", "локти/плечи без боли", [
+        block("Хват и удержание", "strength", "arms_grip", "4-5 подходов / без отказа", ["предплечья", "плечи"], "local strength endurance", [
+          "grappling transfer evidence",
+        ]),
+      ]);
+    case "wrestling_contact_density":
+      return day(label, "Плотность борьбы", "high", "readiness >= 70, сон нормальный", [
+        block(
+          "Короткие раунды и контакт",
+          "technical",
+          "wrestling_contact_density",
+          "3-5 раундов / контроль качества",
+          ["контакт", "общее"],
+          "mixed wrestling",
+          ["UWW model", "wrestling temporal structure"],
+          ["glycolytic_recovery_conflict"],
+        ),
+      ]);
+    case "fatigue_skill":
+      return day(label, "Техника под утомлением", "medium", "качество техники не ниже 4/5", [
+        block(
+          "Технический перенос",
+          "technical",
+          "fatigue_skill",
+          "20-30 мин / качество выше объёма",
+          ["ноги", "таз", "контакт"],
+          "technical transfer",
+          ["motor learning", "PERFORM coach quality score"],
+        ),
+      ]);
+    case "anaerobic_power":
+      return day(label, "Анаэробная мощность", "high", "readiness >= 70, без активной сгонки", [
+        block(
+          "Интервальная работа",
+          "metabolic",
+          "anaerobic_power",
+          "4-6 отрезков / полный контроль качества",
+          ["ноги", "корпус"],
+          "glycolytic",
+          ["wrestling temporal structure"],
+          ["glycolytic_recovery_conflict"],
+        ),
+      ]);
+    case "aerobic_base":
+      return day(label, "Аэробная база и восстановление", "low", "Z1-Z2, без накопления усталости", [
+        block("Лёгкая аэробная", "conditioning", "aerobic_base", "25-35 мин / Z1-Z2", ["общее"], "aerobic recovery", [
+          "load consensus",
+        ]),
+      ]);
+    case "weight_management":
+      return day(label, "Вес и восстановление", "recovery", "обязательная проверка веса/сна", [
+        block(
+          "Контроль веса и восстановления",
+          "recovery",
+          "weight_management",
+          "сон / вес / мобилити 15-20 мин",
+          ["общее"],
+          "recovery",
+          ["NCAA weight management", "ACSM hydration"],
+        ),
+      ]);
+    case "taper_quality":
+      return day(label, "Техника качества", "low", "без добора объёма", [
+        block("Техника без утомления", "technical", "taper_quality", "25-35 мин / качество", ["общее"], "technical", [
+          "taper logic",
+          "Europe plan analysis",
+        ]),
+      ]);
+    case "recovery":
+    default:
+      return day(label, "Аэробная поддержка и восстановление", "low", "Z1-Z2, без накопления усталости", [
+        block(
+          "Аэробная поддержка",
+          "conditioning",
+          "aerobic_base",
+          "25-35 мин / Z1-Z2",
+          ["общее"],
+          "aerobic recovery",
+          ["load consensus", "sleep consensus"],
+        ),
+      ]);
+  }
+}
+
+function normalizeWeekDensity(
+  week: ConstructorPlanWeek,
+  input: ConstructorInput,
+  weekIndex: number,
+  weekCount: number,
+  goalTypes: ConstructorGoalType[],
+) {
+  const calendarDaysRemaining = Math.max(1, input.context.cycleLengthDays - weekIndex * 7);
+  const calendarDaysInWeek = Math.min(7, calendarDaysRemaining);
+  const phase = weekPhaseFromCalendar(input, week.phase, weekIndex);
+  const targetDayCount = targetSessionsForWeek(input, phase, calendarDaysInWeek);
+  const labelPool = labelPoolForWeek(input, phase, weekIndex, calendarDaysInWeek);
+  const days = week.days.slice(0, targetDayCount).map((planDay, index) => ({
+    ...planDay,
+    dayLabel: labelPool[index] ?? planDay.dayLabel,
+  }));
+  const usedLabels = new Set(days.map((planDay) => planDay.dayLabel));
+  let supportIndex = 0;
+
+  while (days.length < targetDayCount) {
+    const label = supportDayLabel(labelPool, usedLabels, days.length);
+    usedLabels.add(label);
+    days.push(supportDayForPhase(phase, label, goalTypes, supportIndex));
+    supportIndex += 1;
+  }
+  const normalizedDays = days.map((planDay) => withCompetitionTaperStructure(planDay, phase));
+
+  return {
+    ...week,
+    phase,
+    title: titleForCalendarPhase(week, phase),
+    mainIntent: mainIntentForCalendarPhase(week, phase),
+    days: sortPlanDaysByLabel(normalizedDays, labelPool),
+  };
+}
+
+function titleForCalendarPhase(week: ConstructorPlanWeek, phase: ConstructorPhase) {
+  if (phase === "taper" || phase === "start_window") {
+    return `Неделя ${week.weekNumber}: ${phase === "start_window" ? "стартовое окно" : "подводка к старту"}`;
+  }
+
+  if (phase === week.phase) {
+    return week.title;
+  }
+
+  if (phase === "recovery") {
+    return `Неделя ${week.weekNumber}: восстановление`;
+  }
+
+  if (phase === "special_preparation") {
+    return `Неделя ${week.weekNumber}: специальная подготовка`;
+  }
+
+  if (phase === "development") {
+    return `Неделя ${week.weekNumber}: развитие качества`;
+  }
+
+  return `Неделя ${week.weekNumber}: базовая подготовка`;
+}
+
+function mainIntentForCalendarPhase(week: ConstructorPlanWeek, phase: ConstructorPhase) {
+  if (phase === week.phase) {
+    return week.mainIntent;
+  }
+
+  if (phase === "taper" || phase === "start_window") {
+    return "Снизить общий объём, сохранить скорость, свежесть, вес и качество.";
+  }
+
+  if (phase === "recovery") {
+    return "Снять накопленную усталость и вернуть готовность.";
+  }
+
+  if (phase === "special_preparation") {
+    return "Перенести выбранные качества в борьбу и техническое качество без случайного добора объёма.";
+  }
+
+  if (phase === "development") {
+    return "Развить выбранные качества с контролем восстановления и исходных тестов.";
+  }
+
+  return "Подготовить базу для дальнейшего развития качеств.";
+}
+
+function buildFallbackWeek(
+  input: ConstructorInput,
+  weekNumber: number,
+  phase: ConstructorPhase,
+): ConstructorPlanWeek {
+  return {
+    weekNumber,
+    title:
+      phase === "taper"
+        ? `Неделя ${weekNumber}: подводка к старту`
+        : `Неделя ${weekNumber}: рабочая структура`,
+    phase,
+    mainIntent:
+      phase === "taper"
+        ? "Сохранить скорость, свежесть, вес и качество без добора объёма."
+        : "Заполнить неделю рабочими днями под выбранные цели и текущие ограничения.",
+    days: [],
+  };
+}
+
+function mergeWeeks(
+  cards: ConstructorTemplateCard[],
+  input: ConstructorInput,
+  goalTypes: ConstructorGoalType[],
+) {
+  const weeks: ConstructorPlanWeek[] = [];
+  const weekCount = Math.max(1, Math.ceil(input.context.cycleLengthDays / 7));
+
+  for (let weekIndex = 0; weekIndex < weekCount; weekIndex += 1) {
+    const calendarPhase = weekPhaseFromCalendar(input, input.context.currentPhase, weekIndex);
+    const sourceWeek = pickSourceWeekForPhase(cards, calendarPhase, weekIndex);
+    const week = sourceWeek
+      ? {
+          ...sourceWeek,
+          weekNumber: weekIndex + 1,
+      }
+      : buildFallbackWeek(input, weekIndex + 1, calendarPhase);
+
+    weeks.push(normalizeWeekDensity(week, input, weekIndex, weekCount, goalTypes));
+  }
+
+  return weeks;
+}
+
+function pickSourceWeekForPhase(
+  cards: ConstructorTemplateCard[],
+  phase: ConstructorPhase,
+  weekIndex: number,
+) {
+  const sourceWeeks = cards.flatMap((card) => card.weeks);
+  const phaseWeeks = sourceWeeks.filter((week) => {
+    if (phase === "taper" || phase === "start_window") {
+      return week.phase === "taper";
+    }
+
+    if (phase === "recovery") {
+      return week.phase === "recovery";
+    }
+
+    if (phase === "base") {
+      return week.phase === "base" || week.phase === "development";
+    }
+
+    if (phase === "development") {
+      return week.phase === "development" || week.phase === "special_preparation";
+    }
+
+    return week.phase === "special_preparation" || week.phase === "development";
+  });
+
+  if (phaseWeeks.length > 0) {
+    return phaseWeeks[weekIndex % phaseWeeks.length];
+  }
+
+  if (phase === "taper" || phase === "start_window" || phase === "recovery") {
+    return undefined;
+  }
+
+  return sourceWeeks[weekIndex % Math.max(1, sourceWeeks.length)];
+}
+
+export function buildPerformConstructorDraft(input: ConstructorInput): ConstructorDraft {
+  const effectivePhase = normalizePhaseForCycle(input);
+  const effectiveInput =
+    effectivePhase === input.context.currentPhase
+      ? input
+      : {
+          ...input,
+          context: {
+            ...input.context,
+            currentPhase: effectivePhase,
+          },
+        };
+  const missingData = collectMissingData(input);
+  const riskFlags = collectRiskFlags(input, missingData);
+  const confidence = deriveConfidence(missingData, riskFlags);
+  const goal = primaryGoal(input);
+  const goalTypes =
+    [...input.goals].sort((a, b) => a.priority - b.priority).map((item) => item.goalType) ??
+    [goal];
+  const selectedCards = selectTemplateCards(effectiveInput, riskFlags);
+  const weeks = mergeWeeks(selectedCards, effectiveInput, goalTypes.length > 0 ? goalTypes : [goal]);
+  const weightGap = Number((input.athlete.weightCurrentKg - input.athlete.weightTargetKg).toFixed(1));
+  const riskText = riskFlags.length
+    ? riskFlags.map((risk) => risk.message).join(" ")
+    : "Критичных ограничений по введённым данным нет.";
+
+  return {
+    confidence,
+    understood: {
+      mainTask: `Главная задача: ${goalLabel(goal)}.`,
+      interpretation:
+        confidence === "low"
+          ? "Система видит цель, но данных недостаточно для уверенного развивающего плана."
+          : `Система может построить черновик под цель "${goalLabel(goal)}" с учетом фазы ${effectivePhase}.`,
+      limitation:
+        weightGap > 0
+          ? `Вес выше цели на ${weightGap} кг: план должен учитывать вес и восстановление.`
+          : "Ограничения по весу не являются главным фактором по текущим вводным.",
+    },
+    missingData,
+    riskFlags,
+    selectedCards: selectedCards.map((card) => ({
+      id: card.id,
+      title: card.title,
+      rationale: card.rationale,
+    })),
+    plan: {
+      cycleLengthDays: input.context.cycleLengthDays,
+      weeks,
+    },
+    explanation: {
+      mainDecision: `Черновик строится вокруг цели "${goalLabel(goal)}" и текущей фазы ${effectivePhase}.`,
+      whyNow:
+        effectivePhase === "taper" || effectivePhase === "start_window"
+          ? "Старт близко, поэтому развитие качества заменяется подводкой, свежестью и контролем веса."
+          : "Срок позволяет развивать качество, но нагрузка ограничивается readiness, сном, RHR и весом.",
+      testsImpact:
+        missingData.length > 0
+          ? `Не хватает данных: ${missingData.map((item) => item.code).join(", ")}. Уверенность снижена.`
+          : "Ключевые тесты под выбранные цели есть, план можно строить увереннее.",
+      riskImpact: riskText,
+      evidenceSummary: selectedCards
+        .flatMap((card) => card.operationalEvidenceTypes)
+        .filter((value, index, values) => values.indexOf(value) === index)
+        .join(", "),
+      coachCanEdit: [
+        "цели и приоритеты",
+        "длительность цикла",
+        "объём каждого блока",
+        "расположение дней",
+        "общий комментарий",
+        "замены при риске",
+      ],
+    },
+  };
+}
+
+export function buildConstructorTemplatePayload(
+  draft: ConstructorDraft,
+  name = "PERFORM Constructor Draft",
+) {
+  return {
+    name,
+    description: draft.explanation.mainDecision,
+    sportType: "wrestling",
+    phaseFocus: null,
+    competitionPriorityFocus: null,
+    templateGoal: draft.understood.mainTask,
+    microcycleType: "constructor-draft",
+    competitionSpecific: true,
+    blocks: [],
+    days: draft.plan.weeks.flatMap((week) =>
+      week.days.map((planDay, index) => ({
+        label: `${week.title} / ${planDay.dayLabel}`,
+        notes: `${planDay.dayIntent}. ${planDay.readinessGate}`,
+        orderIndex: (week.weekNumber - 1) * 7 + index,
+        sessions: [
+          {
+            name: planDay.dayIntent,
+            notes: planDay.readinessGate,
+            orderIndex: 0,
+            executionMode: "by_blocks" as const,
+            deviceLinkMode: "block" as const,
+            blocks: planDay.blocks.map((planBlock) => ({
+              name: planBlock.name,
+              rowKind: "exercise" as const,
+              blockType: planBlock.type,
+              blockPriority: planDay.loadLevel === "high" ? 4 : 2,
+              isMandatory: planDay.loadLevel !== "recovery",
+              removePriorityYellow: 3,
+              removePriorityRed: 5,
+              reductionPercentYellow: 20,
+              reductionPercentRed: 50,
+              targetDurationMinutes: null,
+              targetRpe:
+                planDay.loadLevel === "high"
+                  ? 8
+                  : planDay.loadLevel === "medium"
+                    ? 6
+                    : planDay.loadLevel === "low" || planDay.loadLevel === "taper"
+                      ? 4
+                      : 2,
+              targetSets: null,
+              targetReps: null,
+              notes: `${planBlock.volume}. ${planBlock.energySystem}. Evidence: ${planBlock.evidenceRefs.join(", ")}`,
+              exercises: [],
+            })),
+          },
+        ],
+      })),
+    ),
+  };
+}

@@ -6,6 +6,7 @@ import {
 import type {
   AssignedPlanPayload,
   AutoAssignMicrocyclePayload,
+  ConstructorInput,
   PlanBlockInput,
   PlanDayInput,
   PlanExerciseInput,
@@ -214,5 +215,31 @@ export function parseTemplatePackQuery(
   return {
     athleteId,
     startDate: typeof startDate === "string" && startDate ? startDate : undefined,
+  };
+}
+
+export function parseConstructorDraftBody(body: unknown): ConstructorInput {
+  const payload = (body ?? {}) as Partial<ConstructorInput>;
+
+  if (!payload.competition || !payload.athlete || !payload.context || !payload.state) {
+    throw new Error("competition, athlete, context and state are required");
+  }
+
+  if (!Array.isArray(payload.goals) || payload.goals.length === 0) {
+    throw new Error("At least one constructor goal is required");
+  }
+
+  if (!payload.athlete.athleteId) {
+    throw new Error("athlete.athleteId is required");
+  }
+
+  return {
+    competition: payload.competition,
+    athlete: payload.athlete,
+    context: payload.context,
+    goals: payload.goals,
+    tests: payload.tests ?? {},
+    state: payload.state,
+    constraints: payload.constraints ?? {},
   };
 }
