@@ -185,6 +185,25 @@ export interface ConstructorPlanBlock {
   riskFlags: ConstructorRiskCode[];
   evidenceRefs: string[];
   coachEditable: boolean;
+  exercises?: ConstructorPlanExercise[];
+}
+
+export interface ConstructorPlanExercise {
+  name: string;
+  targetSets: number | null;
+  targetReps: number | null;
+  targetWeightKg: number | null;
+  targetDurationMinutes: number | null;
+  targetRpe: number | null;
+  notes: string;
+  displayOrder?: number;
+}
+
+export interface ConstructorPlanSession {
+  name: string;
+  notes: string;
+  orderIndex: number;
+  blocks: ConstructorPlanBlock[];
 }
 
 export interface ConstructorPlanDay {
@@ -193,6 +212,7 @@ export interface ConstructorPlanDay {
   loadLevel: ConstructorLoadLevel;
   readinessGate: string;
   blocks: ConstructorPlanBlock[];
+  sessions?: ConstructorPlanSession[];
 }
 
 export interface ConstructorPlanWeek {
@@ -244,6 +264,7 @@ export interface ConstructorDraft {
   }>;
   plan: {
     cycleLengthDays: number;
+    sessionsPerDay: number;
     weeks: ConstructorPlanWeek[];
   };
   explanation: {
@@ -1150,6 +1171,7 @@ function clonePlanBlock(planBlock: ConstructorPlanBlock): ConstructorPlanBlock {
     localLoadZones: [...planBlock.localLoadZones],
     riskFlags: [...planBlock.riskFlags],
     evidenceRefs: [...planBlock.evidenceRefs],
+    exercises: planBlock.exercises?.map((exercise) => ({ ...exercise })),
   };
 }
 
@@ -1157,6 +1179,10 @@ function clonePlanDay(planDay: ConstructorPlanDay): ConstructorPlanDay {
   return {
     ...planDay,
     blocks: planDay.blocks.map(clonePlanBlock),
+    sessions: planDay.sessions?.map((session) => ({
+      ...session,
+      blocks: session.blocks.map(clonePlanBlock),
+    })),
   };
 }
 
@@ -1250,6 +1276,334 @@ function cooldownBlockForDay(dayPlan: ConstructorPlanDay, phase: ConstructorPhas
   );
 }
 
+function constructorExercise(
+  name: string,
+  notes: string,
+  values: Partial<ConstructorPlanExercise> = {},
+): ConstructorPlanExercise {
+  return {
+    name,
+    targetSets: values.targetSets ?? null,
+    targetReps: values.targetReps ?? null,
+    targetWeightKg: values.targetWeightKg ?? null,
+    targetDurationMinutes: values.targetDurationMinutes ?? null,
+    targetRpe: values.targetRpe ?? null,
+    notes,
+    displayOrder: values.displayOrder,
+  };
+}
+
+function concreteVolumeForBlock(planBlock: ConstructorPlanBlock) {
+  if (isSessionWarmupBlock(planBlock)) {
+    return "10-15 мин: мобилизация 5 мин + стойка/перемещения 5-7 мин + 2-3 коротких включения";
+  }
+
+  if (isSessionCooldownBlock(planBlock)) {
+    return "8-15 мин: Z1/дыхание 5-8 мин + мобилити 5 мин + контроль веса/самочувствия";
+  }
+
+  switch (planBlock.targetQuality) {
+    case "speed_first_action":
+      return "6-8 стартов 10-20 м + 4-6 входов по сигналу / отдых 90-120 сек / без добора";
+    case "legs_lme":
+      return "3 упражнения: 2-3 подхода по 20-25 сек / отдых 60-90 сек / без отказа";
+    case "arms_grip":
+      return "3 упражнения: 3 подхода / 20-40 сек удержания или 15-25 м переноски / без боли";
+    case "aerobic_base":
+      return "25-35 мин Z1-Z2 + 6-8 мин мобилити / разговорный темп";
+    case "anaerobic_power":
+      return "4-6 отрезков 20/40 или 30/30 / RPE 7-8 / стоп при падении качества";
+    case "max_strength":
+      return "2-3 упражнения: 3 подхода по 3-5 повторов / RPE 6-7 / без отказа";
+    case "speed_strength":
+      return "3 упражнения: 4-5 серий по 3-5 взрывных повторов / полный отдых";
+    case "fatigue_skill":
+      return "3 серии по 6-8 мин: стойка, входы, защита/спрол, партер / качество техники >= 4/5";
+    case "wrestling_contact_density":
+      return "2-3 цикла 3 мин + 30 сек + 3 мин / пауза 4-6 мин / контакт под контролем";
+    case "weight_management":
+      return "5-10 мин: вес, сон, пульс покоя, самочувствие, комментарий тренера";
+    case "taper_quality":
+      return "20-30 мин: техника без утомления + 2-4 коротких включения / RPE <= 4";
+    case "recovery":
+      return "15-30 мин восстановления: Z1, дыхание, мобилити, локальный сброс";
+    case "general":
+    default:
+      return planBlock.volume;
+  }
+}
+
+function concreteExercisesForBlock(planBlock: ConstructorPlanBlock): ConstructorPlanExercise[] {
+  if (planBlock.exercises?.length) {
+    return planBlock.exercises.map((exercise, index) => ({
+      ...exercise,
+      displayOrder: exercise.displayOrder ?? index,
+    }));
+  }
+
+  if (isSessionWarmupBlock(planBlock)) {
+    return [
+      constructorExercise("Суставная мобилизация", "шея, плечи, таз, колени, голеностоп", {
+        targetDurationMinutes: 5,
+        targetRpe: 2,
+        displayOrder: 0,
+      }),
+      constructorExercise("Стойка и перемещения", "борцовская стойка, смена уровня, шаги, развороты", {
+        targetDurationMinutes: 5,
+        targetRpe: 3,
+        displayOrder: 1,
+      }),
+      constructorExercise("Короткие включения", "2-3 ускорения/входа без утомления", {
+        targetSets: 3,
+        targetReps: 1,
+        targetRpe: 4,
+        displayOrder: 2,
+      }),
+    ];
+  }
+
+  if (isSessionCooldownBlock(planBlock)) {
+    return [
+      constructorExercise("Z1 или ходьба", "снизить пульс, дыхание ровное", {
+        targetDurationMinutes: 6,
+        targetRpe: 2,
+        displayOrder: 0,
+      }),
+      constructorExercise("Мобилити и дыхание", "таз, спина, плечи, предплечья", {
+        targetDurationMinutes: 6,
+        targetRpe: 1,
+        displayOrder: 1,
+      }),
+      constructorExercise("Контроль состояния", "вес, сон, пульс покоя, боль/жёсткость", {
+        targetDurationMinutes: 3,
+        targetRpe: 1,
+        displayOrder: 2,
+      }),
+    ];
+  }
+
+  switch (planBlock.targetQuality) {
+    case "speed_first_action":
+      return [
+        constructorExercise("Старт из стойки 10 м", "6 повторов, отдых 90-120 сек, качество выше скорости", {
+          targetSets: 6,
+          targetReps: 1,
+          targetRpe: 6,
+          displayOrder: 0,
+        }),
+        constructorExercise("Вход в ногу по сигналу", "4-6 входов, полный возврат, без добора", {
+          targetSets: 3,
+          targetReps: 2,
+          targetRpe: 5,
+          displayOrder: 1,
+        }),
+      ];
+    case "legs_lme":
+      return [
+        constructorExercise("Статодинамический присед", "2-3 подхода по 20-25 сек, без отказа", {
+          targetSets: 3,
+          targetDurationMinutes: 1,
+          targetRpe: 6,
+          displayOrder: 0,
+        }),
+        constructorExercise("Сплит-присед / выпад", "2 подхода на сторону по 20 сек", {
+          targetSets: 2,
+          targetDurationMinutes: 1,
+          targetRpe: 6,
+          displayOrder: 1,
+        }),
+        constructorExercise("Проходы в ноги после локальной работы", "3 серии по 4 входа, техника не ниже 4/5", {
+          targetSets: 3,
+          targetReps: 4,
+          targetRpe: 5,
+          displayOrder: 2,
+        }),
+      ];
+    case "arms_grip":
+      return [
+        constructorExercise("Канат без ног / тяга каната", "3 подхода по 15-25 сек", {
+          targetSets: 3,
+          targetDurationMinutes: 1,
+          targetRpe: 6,
+          displayOrder: 0,
+        }),
+        constructorExercise("Вис на полотенцах", "3 удержания по 20-30 сек", {
+          targetSets: 3,
+          targetDurationMinutes: 1,
+          targetRpe: 6,
+          displayOrder: 1,
+        }),
+        constructorExercise("Фермерская ходьба", "3 прохода по 20-25 м, корпус стабилен", {
+          targetSets: 3,
+          targetReps: 1,
+          targetRpe: 5,
+          displayOrder: 2,
+        }),
+      ];
+    case "aerobic_base":
+      return [
+        constructorExercise("Кросс / велосипед / ходьба Z1-Z2", "25-35 мин, разговорный темп", {
+          targetDurationMinutes: 30,
+          targetRpe: 3,
+          displayOrder: 0,
+        }),
+        constructorExercise("Мобилити после аэробной", "таз, голеностоп, спина", {
+          targetDurationMinutes: 8,
+          targetRpe: 2,
+          displayOrder: 1,
+        }),
+      ];
+    case "anaerobic_power":
+      return [
+        constructorExercise("Интервалы 20/40", "4-6 отрезков, стоп при падении качества", {
+          targetSets: 6,
+          targetReps: 1,
+          targetRpe: 8,
+          displayOrder: 0,
+        }),
+        constructorExercise("Резина -> проход -> клинч", "4 серии, 20 сек работа / 40 сек отдых", {
+          targetSets: 4,
+          targetReps: 1,
+          targetRpe: 7,
+          displayOrder: 1,
+        }),
+      ];
+    case "max_strength":
+      return [
+        constructorExercise("Присед / тяга вариант", "3x3-5, RPE 6-7, без отказа", {
+          targetSets: 3,
+          targetReps: 5,
+          targetRpe: 7,
+          displayOrder: 0,
+        }),
+        constructorExercise("Тяга корпуса / подтягивание", "3x4-6, чистая техника", {
+          targetSets: 3,
+          targetReps: 6,
+          targetRpe: 6,
+          displayOrder: 1,
+        }),
+      ];
+    case "speed_strength":
+      return [
+        constructorExercise("Прыжки / медбол", "4 серии по 3-5 взрывных повторов", {
+          targetSets: 4,
+          targetReps: 5,
+          targetRpe: 6,
+          displayOrder: 0,
+        }),
+        constructorExercise("Взрывной вход с резиной", "4 серии по 3 входа, полный отдых", {
+          targetSets: 4,
+          targetReps: 3,
+          targetRpe: 6,
+          displayOrder: 1,
+        }),
+      ];
+    case "fatigue_skill":
+      return [
+        constructorExercise("Входы в ноги под контролем", "3 серии по 6-8 мин, качество >= 4/5", {
+          targetSets: 3,
+          targetDurationMinutes: 7,
+          targetRpe: 5,
+          displayOrder: 0,
+        }),
+        constructorExercise("Защита/спрол после входа", "3 серии по 4-6 повторов", {
+          targetSets: 3,
+          targetReps: 6,
+          targetRpe: 5,
+          displayOrder: 1,
+        }),
+        constructorExercise("Ситуация стойка -> партер", "2 серии по 5 мин, без силовой рубки в подводке", {
+          targetSets: 2,
+          targetDurationMinutes: 5,
+          targetRpe: 5,
+          displayOrder: 2,
+        }),
+      ];
+    case "wrestling_contact_density":
+      return [
+        constructorExercise("Цикл 3 мин + 30 сек + 3 мин", "2 цикла, второй период 85-90%, качество техники", {
+          targetSets: 2,
+          targetDurationMinutes: 7,
+          targetRpe: 8,
+          displayOrder: 0,
+        }),
+        constructorExercise("Клинч/давление", "3 отрезка по 60-90 сек, без потери стойки", {
+          targetSets: 3,
+          targetDurationMinutes: 2,
+          targetRpe: 7,
+          displayOrder: 1,
+        }),
+      ];
+    case "weight_management":
+      return [
+        constructorExercise("Вес + самочувствие", "зафиксировать вес, жажду, аппетит, настроение", {
+          targetDurationMinutes: 3,
+          targetRpe: 1,
+          displayOrder: 0,
+        }),
+        constructorExercise("Сон + пульс покоя", "сверить с baseline и readiness", {
+          targetDurationMinutes: 3,
+          targetRpe: 1,
+          displayOrder: 1,
+        }),
+      ];
+    case "taper_quality":
+      return [
+        constructorExercise("Техника без сопротивления", "15-20 мин, точность, без утомления", {
+          targetDurationMinutes: 20,
+          targetRpe: 3,
+          displayOrder: 0,
+        }),
+        constructorExercise("Короткие входы", "2-4 включения, ощущение резкости, полный отдых", {
+          targetSets: 4,
+          targetReps: 1,
+          targetRpe: 4,
+          displayOrder: 1,
+        }),
+      ];
+    case "recovery":
+      return [
+        constructorExercise("Активное восстановление", "15-25 мин Z1 или прогулка", {
+          targetDurationMinutes: 20,
+          targetRpe: 2,
+          displayOrder: 0,
+        }),
+        constructorExercise("Мобилити локальных зон", "ноги, таз, спина, предплечья", {
+          targetDurationMinutes: 10,
+          targetRpe: 1,
+          displayOrder: 1,
+        }),
+      ];
+    case "general":
+    default:
+      if (planBlock.type === "activation") {
+        return [
+          constructorExercise("Активация и специальные движения", "коротко, без накопления усталости", {
+            targetDurationMinutes: 10,
+            targetRpe: 3,
+            displayOrder: 0,
+          }),
+        ];
+      }
+
+      return [
+        constructorExercise(planBlock.name, "выполнить по объёму блока, тренер может уточнить вручную", {
+          targetDurationMinutes: planBlock.type === "technical" ? 20 : null,
+          targetRpe: 4,
+          displayOrder: 0,
+        }),
+      ];
+  }
+}
+
+function withConcreteBlockDetails(planBlock: ConstructorPlanBlock): ConstructorPlanBlock {
+  return {
+    ...planBlock,
+    volume: concreteVolumeForBlock(planBlock),
+    exercises: concreteExercisesForBlock(planBlock),
+  };
+}
+
 function withTrainingSessionFrame(
   dayPlan: ConstructorPlanDay,
   phase: ConstructorPhase,
@@ -1267,7 +1621,139 @@ function withTrainingSessionFrame(
     dayIntent: dayPlan.dayIntent.includes("разминка")
       ? dayPlan.dayIntent
       : `${dayPlan.dayIntent} / разминка -> основная работа -> заминка`,
-    blocks: [warmupBlockForDay(dayPlan, phase), ...blocks, cooldownBlockForDay(dayPlan, phase)],
+    blocks: [
+      warmupBlockForDay(dayPlan, phase),
+      ...blocks,
+      cooldownBlockForDay(dayPlan, phase),
+    ].map(withConcreteBlockDetails),
+  };
+}
+
+function stripSessionFrameBlocks(blocks: ConstructorPlanBlock[]) {
+  return blocks.filter((planBlock) => !isSessionWarmupBlock(planBlock) && !isSessionCooldownBlock(planBlock));
+}
+
+function technicalEveningSupportBlock(phase: ConstructorPhase) {
+  return withConcreteBlockDetails(
+    block(
+      phase === "taper" || phase === "start_window"
+        ? "Вечерняя техника качества"
+        : "Вечерний технический перенос",
+      "technical",
+      phase === "taper" || phase === "start_window" ? "taper_quality" : "fatigue_skill",
+      phase === "taper" || phase === "start_window"
+        ? "15-20 мин / техника без сопротивления / вес и сон под контролем"
+        : "20-30 мин / входы, защита, стойка-партер / качество >= 4/5",
+      ["ноги", "таз", "контакт"],
+      phase === "taper" || phase === "start_window" ? "technical freshness" : "technical transfer",
+      ["Europe plan analysis", "motor learning", "wrestling transfer"],
+    ),
+  );
+}
+
+function shouldPreferMorningBlock(planBlock: ConstructorPlanBlock) {
+  return (
+    ["speed", "strength", "CNS_high", "metabolic", "conditioning"].includes(planBlock.type) ||
+    ["speed_first_action", "legs_lme", "arms_grip", "anaerobic_power", "max_strength", "speed_strength"].includes(
+      String(planBlock.targetQuality),
+    )
+  );
+}
+
+function createConstructorSession(
+  name: string,
+  notes: string,
+  orderIndex: number,
+  mainBlocks: ConstructorPlanBlock[],
+  dayPlan: ConstructorPlanDay,
+  phase: ConstructorPhase,
+): ConstructorPlanSession {
+  const framedBlocks = [
+    warmupBlockForDay(dayPlan, phase),
+    ...mainBlocks,
+    cooldownBlockForDay(dayPlan, phase),
+  ].map(withConcreteBlockDetails);
+
+  return {
+    name,
+    notes,
+    orderIndex,
+    blocks: framedBlocks,
+  };
+}
+
+function withConstructorDaySessions(
+  dayPlan: ConstructorPlanDay,
+  phase: ConstructorPhase,
+  requestedSessionsPerDay: number,
+): ConstructorPlanDay {
+  const concreteBlocks = dayPlan.blocks.map(withConcreteBlockDetails);
+
+  if (!needsTrainingSessionFrame({ ...dayPlan, blocks: concreteBlocks })) {
+    return {
+      ...dayPlan,
+      blocks: concreteBlocks,
+      sessions: [
+        {
+          name: "Служебный контроль",
+          notes: dayPlan.readinessGate,
+          orderIndex: 0,
+          blocks: concreteBlocks,
+        },
+      ],
+    };
+  }
+
+  const sessionsPerDay = Math.max(1, Math.min(2, Math.round(requestedSessionsPerDay || 1)));
+  const mainBlocks = stripSessionFrameBlocks(concreteBlocks);
+
+  if (sessionsPerDay < 2) {
+    return {
+      ...dayPlan,
+      blocks: concreteBlocks,
+      sessions: [
+        {
+          name: "Основная тренировка",
+          notes: dayPlan.readinessGate,
+          orderIndex: 0,
+          blocks: concreteBlocks,
+        },
+      ],
+    };
+  }
+
+  const morningBlocks: ConstructorPlanBlock[] = [];
+  const eveningBlocks: ConstructorPlanBlock[] = [];
+
+  for (const planBlock of mainBlocks) {
+    if (
+      shouldPreferMorningBlock(planBlock) ||
+      (planBlock.targetQuality === "fatigue_skill" && morningBlocks.some(shouldPreferMorningBlock))
+    ) {
+      morningBlocks.push(planBlock);
+    } else {
+      eveningBlocks.push(planBlock);
+    }
+  }
+
+  if (morningBlocks.length === 0 && eveningBlocks.length > 0) {
+    morningBlocks.push(eveningBlocks.shift() as ConstructorPlanBlock);
+  }
+
+  if (eveningBlocks.every((planBlock) => !isActiveTrainingBlock(planBlock))) {
+    eveningBlocks.unshift(technicalEveningSupportBlock(phase));
+  }
+
+  return {
+    ...dayPlan,
+    blocks: [
+      ...createConstructorSession("УТРО", dayPlan.readinessGate, 0, morningBlocks, dayPlan, phase).blocks,
+      ...createConstructorSession("ВЕЧЕР", dayPlan.readinessGate, 1, eveningBlocks, dayPlan, phase).blocks,
+    ],
+    sessions: [
+      createConstructorSession("УТРО", dayPlan.readinessGate, 0, morningBlocks, dayPlan, phase),
+      createConstructorSession("ВЕЧЕР", dayPlan.readinessGate, 1, eveningBlocks, dayPlan, phase),
+    ],
   };
 }
 
@@ -1914,7 +2400,10 @@ function normalizeWeekDensity(
   const balancedDays = normalizeDevelopmentWeekBalance(days, phase, goalTypes);
   const normalizedDays = balancedDays
     .map((planDay) => withCompetitionTaperStructure(planDay, phase))
-    .map((planDay) => withTrainingSessionFrame(planDay, phase));
+    .map((planDay) => withTrainingSessionFrame(planDay, phase))
+    .map((planDay) =>
+      withConstructorDaySessions(planDay, phase, input.context.sessionsPerDay ?? 1),
+    );
 
   return {
     ...week,
@@ -2130,6 +2619,7 @@ export function buildPerformConstructorDraft(input: ConstructorInput): Construct
     })),
     plan: {
       cycleLengthDays: input.context.cycleLengthDays,
+      sessionsPerDay: Math.max(1, Math.min(2, Math.round(input.context.sessionsPerDay ?? 1))),
       weeks,
     },
     explanation: {
@@ -2178,14 +2668,22 @@ export function buildConstructorTemplatePayload(
         label: `${week.title} / ${planDay.dayLabel}`,
         notes: `${planDay.dayIntent}. ${planDay.readinessGate}`,
         orderIndex: (week.weekNumber - 1) * 7 + index,
-        sessions: [
-          {
-            name: planDay.dayIntent,
-            notes: planDay.readinessGate,
-            orderIndex: 0,
+        sessions: (planDay.sessions?.length
+          ? planDay.sessions
+          : [
+              {
+                name: planDay.dayIntent,
+                notes: planDay.readinessGate,
+                orderIndex: 0,
+                blocks: planDay.blocks,
+              },
+            ]).map((session, sessionIndex) => ({
+            name: session.name,
+            notes: session.notes,
+            orderIndex: session.orderIndex ?? sessionIndex,
             executionMode: "by_blocks" as const,
             deviceLinkMode: "block" as const,
-            blocks: planDay.blocks.map((planBlock) => ({
+            blocks: session.blocks.map((planBlock) => ({
               name: planBlock.name,
               rowKind: "exercise" as const,
               blockType: planBlock.type,
@@ -2207,10 +2705,9 @@ export function buildConstructorTemplatePayload(
               targetSets: null,
               targetReps: null,
               notes: `${planBlock.volume}. ${planBlock.energySystem}. Evidence: ${planBlock.evidenceRefs.join(", ")}`,
-              exercises: [],
+              exercises: planBlock.exercises ?? [],
             })),
-          },
-        ],
+          })),
       })),
     ),
   };

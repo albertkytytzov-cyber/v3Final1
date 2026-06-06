@@ -36,13 +36,35 @@ function activeTrainingDays(draft) {
   );
 }
 
-function hasSingleSessionFrame(day) {
+function activeTrainingSessions(draft) {
+  return draft.plan.weeks.flatMap((week) =>
+    week.days.flatMap((day) =>
+      (day.sessions ?? [{ name: day.dayIntent, blocks: day.blocks }]).filter((session) =>
+        session.blocks.some(isActiveTrainingBlock),
+      ),
+    ),
+  );
+}
+
+function hasSessionFrame(session) {
   return (
-    day.blocks.length >= 3 &&
-    isWarmupBlock(day.blocks[0]) &&
-    isCooldownBlock(day.blocks[day.blocks.length - 1]) &&
-    day.blocks.filter(isWarmupBlock).length === 1 &&
-    day.blocks.filter(isCooldownBlock).length === 1
+    session.blocks.length >= 3 &&
+    isWarmupBlock(session.blocks[0]) &&
+    isCooldownBlock(session.blocks[session.blocks.length - 1]) &&
+    session.blocks.filter(isWarmupBlock).length === 1 &&
+    session.blocks.filter(isCooldownBlock).length === 1
+  );
+}
+
+function activeTemplateSessions(payload) {
+  return payload.days.flatMap((day) =>
+    day.sessions.filter((session) =>
+      session.blocks.some((block) => {
+        if (/разминк|заминк/i.test(block.name)) return false;
+        if (block.name === "Контроль веса, сна и свежести" || block.name === "Контроль веса") return false;
+        return block.blockType !== "recovery";
+      }),
+    ),
   );
 }
 
@@ -208,6 +230,8 @@ const monthSpeedDays = monthWorkingWeeks.flatMap((week) =>
   week.days.filter((day) => day.blocks.some((block) => block.targetQuality === "speed_first_action")),
 );
 const monthActiveTrainingDays = activeTrainingDays(monthDraft);
+const monthActiveTrainingSessions = activeTrainingSessions(monthDraft);
+const monthTemplateActiveSessions = activeTemplateSessions(monthPayload);
 const europeCase23Input = {
   ...europePreparationInput,
   context: {
@@ -219,6 +243,9 @@ const europeCase23Input = {
 const europeCase23Draft = buildPerformConstructorDraft(europeCase23Input);
 const europeCase23Titles = europeCase23Draft.plan.weeks.map((week) => week.title);
 const europeCase23ActiveTrainingDays = activeTrainingDays(europeCase23Draft);
+const europeCase23ActiveTrainingSessions = activeTrainingSessions(europeCase23Draft);
+const europeCase23Payload = buildConstructorTemplatePayload(europeCase23Draft, "Europe case 23");
+const europeCase23TemplateActiveSessions = activeTemplateSessions(europeCase23Payload);
 const monthInputWithWrongDevelopmentPhase = {
   ...monthPreparationInput,
   context: {
@@ -377,12 +404,29 @@ assert(
   `23-day Europe case should preserve entry/main/integration/taper phases: ${europeCase23Titles.join(" | ")}`,
 );
 assert(
-  europeCase23ActiveTrainingDays.length > 0 && europeCase23ActiveTrainingDays.every(hasSingleSessionFrame),
-  "Every active day in the 23-day Europe case must be structured as warm-up -> main work -> cool-down",
+  europeCase23ActiveTrainingDays.length > 0 &&
+    europeCase23ActiveTrainingSessions.every(hasSessionFrame),
+  "Every active session in the 23-day Europe case must be structured as warm-up -> main work -> cool-down",
 );
 assert(
-  monthActiveTrainingDays.length > 0 && monthActiveTrainingDays.every(hasSingleSessionFrame),
-  "Every active day in the 30-day constructor draft must be structured as warm-up -> main work -> cool-down",
+  monthActiveTrainingDays.length > 0 && monthActiveTrainingSessions.every(hasSessionFrame),
+  "Every active session in the 30-day constructor draft must be structured as warm-up -> main work -> cool-down",
+);
+assert(
+  europeCase23ActiveTrainingDays.every((day) => (day.sessions?.length ?? 0) >= 2),
+  "Europe-case active days should be split into morning/evening sessions",
+);
+assert(
+  monthActiveTrainingDays.every((day) => (day.sessions?.length ?? 0) >= 2),
+  "30-day active days should be split into morning/evening sessions",
+);
+assert(
+  europeCase23TemplateActiveSessions.every((session) => session.blocks.every((block) => block.exercises?.length > 0)),
+  "Europe-case template payload should include concrete exercises for every block",
+);
+assert(
+  monthTemplateActiveSessions.every((session) => session.blocks.every((block) => block.exercises?.length > 0)),
+  "30-day template payload should include concrete exercises for every block",
 );
 assert(
   !monthWrongPhasePhases.includes("development"),
@@ -429,7 +473,9 @@ console.log(
       monthWorkingWeekRecoveryCoverage,
       europeCase23Titles,
       europeCase23StructuredDays: europeCase23ActiveTrainingDays.length,
+      europeCase23StructuredSessions: europeCase23ActiveTrainingSessions.length,
       monthStructuredDays: monthActiveTrainingDays.length,
+      monthStructuredSessions: monthActiveTrainingSessions.length,
       monthWrongPhasePhases,
       localQualitiesTaperTargets: Array.from(localQualitiesTaperTargets),
       competitionWeekActivationDays: competitionWeekActivationDays.map((day) => ({

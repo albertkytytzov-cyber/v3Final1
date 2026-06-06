@@ -5874,6 +5874,20 @@ td {
   align-items: baseline;
 }
 
+.constructor-day-row > .constructor-session-preview {
+  display: grid;
+  gap: 8px;
+  align-items: stretch;
+  padding: 10px;
+  border: 1px solid rgba(20, 184, 166, 0.16);
+  border-radius: 12px;
+  background: rgba(240, 253, 250, 0.54);
+}
+
+.constructor-session-preview .summary-topline {
+  align-items: baseline;
+}
+
 .constructor-day-row ul {
   display: grid;
   gap: 6px;
@@ -5892,6 +5906,14 @@ td {
 
 .constructor-day-row li strong {
   text-align: right;
+}
+
+.constructor-day-row li small {
+  grid-column: 1 / -1;
+  margin: -2px 0 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.35;
 }
 
 .planning-template-tabs {

@@ -208,6 +208,7 @@ type ConstructorFormState = {
   currentPhase: ConstructorPhase;
   cycleLengthDays: ConstructorInput["context"]["cycleLengthDays"];
   sessionsPerWeek: number;
+  sessionsPerDay: number;
   goals: ConstructorGoalType[];
   sprint10mSec: string;
   sprint20mSec: string;
@@ -312,6 +313,7 @@ function createDefaultConstructorForm(): ConstructorFormState {
     currentPhase: "special_preparation",
     cycleLengthDays: 21,
     sessionsPerWeek: 6,
+    sessionsPerDay: 2,
     goals: ["speed_first_action", "legs_lme", "fatigue_skill", "taper_quality"],
     sprint10mSec: "",
     sprint20mSec: "",
@@ -13764,7 +13766,7 @@ export function PageClient({
         currentPhase: effectiveCurrentPhase,
         cycleLengthDays: effectiveCycleLengthDays,
         sessionsPerWeek: Math.max(1, Math.min(14, Number(constructorForm.sessionsPerWeek) || 6)),
-        sessionsPerDay: 1,
+        sessionsPerDay: Math.max(1, Math.min(2, Number(constructorForm.sessionsPerDay) || 2)),
       },
       goals: goals.map((goalType, index) => ({
         goalType,
@@ -20992,6 +20994,27 @@ export function PageClient({
                               }
                             />
                           </label>
+                          <label>
+                            <span>
+                              {copyFor(language, {
+                                en: "Sessions/day",
+                                ru: "Тренировок в день",
+                                bg: "Сесии/ден",
+                              })}
+                            </span>
+                            <input
+                              min={1}
+                              max={2}
+                              type="number"
+                              value={constructorForm.sessionsPerDay}
+                              onChange={(event) =>
+                                setConstructorForm((current) => ({
+                                  ...current,
+                                  sessionsPerDay: Number(event.target.value),
+                                }))
+                              }
+                            />
+                          </label>
                         </div>
                       </>
                     ) : (
@@ -21237,6 +21260,23 @@ export function PageClient({
                           }
                         />
                       </label>
+                      <label>
+                        <span>
+                          {copyFor(language, { en: "Sessions/day", ru: "Тренировок в день", bg: "Сесии/ден" })}
+                        </span>
+                        <input
+                          min={1}
+                          max={2}
+                          type="number"
+                          value={constructorForm.sessionsPerDay}
+                          onChange={(event) =>
+                            setConstructorForm((current) => ({
+                              ...current,
+                              sessionsPerDay: Number(event.target.value),
+                            }))
+                          }
+                        />
+                      </label>
                     </div>
                   </details>
 
@@ -21470,14 +21510,54 @@ export function PageClient({
                                     <span>{day.dayIntent}</span>
                                   </div>
                                   <small>{day.readinessGate}</small>
-                                  <ul>
-                                    {day.blocks.map((block) => (
-                                      <li key={`${day.dayLabel}-${block.name}`}>
-                                        <span>{block.name}</span>
-                                        <strong>{block.volume}</strong>
-                                      </li>
-                                    ))}
-                                  </ul>
+                                  {(day.sessions?.length
+                                    ? day.sessions
+                                    : [
+                                        {
+                                          name: day.dayIntent,
+                                          notes: day.readinessGate,
+                                          orderIndex: 0,
+                                          blocks: day.blocks,
+                                        },
+                                      ]).map((session) => (
+                                    <div className="constructor-session-preview" key={`${day.dayLabel}-${session.name}`}>
+                                      <div className="summary-topline">
+                                        <strong>{session.name}</strong>
+                                        <span>{session.notes}</span>
+                                      </div>
+                                      <ul>
+                                        {session.blocks.map((block) => (
+                                          <li key={`${day.dayLabel}-${session.name}-${block.name}`}>
+                                            <span>{block.name}</span>
+                                            <strong>{block.volume}</strong>
+                                            {block.exercises?.length ? (
+                                              <small>
+                                                {block.exercises
+                                                  .slice(0, 3)
+                                                  .map((exercise) => {
+                                                    const details = [
+                                                      exercise.targetSets ? `${exercise.targetSets} сер.` : "",
+                                                      exercise.targetReps ? `${exercise.targetReps} повт.` : "",
+                                                      exercise.targetDurationMinutes
+                                                        ? `${exercise.targetDurationMinutes} мин`
+                                                        : "",
+                                                      exercise.targetRpe ? `RPE ${exercise.targetRpe}` : "",
+                                                    ]
+                                                      .filter(Boolean)
+                                                      .join(" / ");
+
+                                                    return details
+                                                      ? `${exercise.name} (${details})`
+                                                      : exercise.name;
+                                                  })
+                                                  .join("; ")}
+                                              </small>
+                                            ) : null}
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  ))}
                                 </div>
                               ))}
                             </div>
