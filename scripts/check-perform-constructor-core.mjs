@@ -10,6 +10,42 @@ function assert(condition, message) {
   }
 }
 
+function isWarmupBlock(block) {
+  return /разминк/i.test(block.name);
+}
+
+function isCooldownBlock(block) {
+  return /заминк/i.test(block.name);
+}
+
+function isActiveTrainingBlock(block) {
+  if (isWarmupBlock(block) || isCooldownBlock(block)) {
+    return false;
+  }
+
+  if (block.targetQuality === "weight_management") {
+    return false;
+  }
+
+  return block.type !== "recovery" || block.targetQuality !== "recovery";
+}
+
+function activeTrainingDays(draft) {
+  return draft.plan.weeks.flatMap((week) =>
+    week.days.filter((day) => day.blocks.some(isActiveTrainingBlock)),
+  );
+}
+
+function hasSingleSessionFrame(day) {
+  return (
+    day.blocks.length >= 3 &&
+    isWarmupBlock(day.blocks[0]) &&
+    isCooldownBlock(day.blocks[day.blocks.length - 1]) &&
+    day.blocks.filter(isWarmupBlock).length === 1 &&
+    day.blocks.filter(isCooldownBlock).length === 1
+  );
+}
+
 const europePreparationInput = {
   competition: {
     name: "Чемпионат Европы",
@@ -171,6 +207,7 @@ const monthWorkingWeekRecoveryCoverage = monthWorkingWeeks.map((week) =>
 const monthSpeedDays = monthWorkingWeeks.flatMap((week) =>
   week.days.filter((day) => day.blocks.some((block) => block.targetQuality === "speed_first_action")),
 );
+const monthActiveTrainingDays = activeTrainingDays(monthDraft);
 const europeCase23Input = {
   ...europePreparationInput,
   context: {
@@ -181,6 +218,7 @@ const europeCase23Input = {
 };
 const europeCase23Draft = buildPerformConstructorDraft(europeCase23Input);
 const europeCase23Titles = europeCase23Draft.plan.weeks.map((week) => week.title);
+const europeCase23ActiveTrainingDays = activeTrainingDays(europeCase23Draft);
 const monthInputWithWrongDevelopmentPhase = {
   ...monthPreparationInput,
   context: {
@@ -339,6 +377,14 @@ assert(
   `23-day Europe case should preserve entry/main/integration/taper phases: ${europeCase23Titles.join(" | ")}`,
 );
 assert(
+  europeCase23ActiveTrainingDays.length > 0 && europeCase23ActiveTrainingDays.every(hasSingleSessionFrame),
+  "Every active day in the 23-day Europe case must be structured as warm-up -> main work -> cool-down",
+);
+assert(
+  monthActiveTrainingDays.length > 0 && monthActiveTrainingDays.every(hasSingleSessionFrame),
+  "Every active day in the 30-day constructor draft must be structured as warm-up -> main work -> cool-down",
+);
+assert(
   !monthWrongPhasePhases.includes("development"),
   `30-day competition cycle must not be treated as development: ${monthWrongPhasePhases.join(", ")}`,
 );
@@ -382,6 +428,8 @@ console.log(
       monthWorkingWeekSpeedDayCounts,
       monthWorkingWeekRecoveryCoverage,
       europeCase23Titles,
+      europeCase23StructuredDays: europeCase23ActiveTrainingDays.length,
+      monthStructuredDays: monthActiveTrainingDays.length,
       monthWrongPhasePhases,
       localQualitiesTaperTargets: Array.from(localQualitiesTaperTargets),
       competitionWeekActivationDays: competitionWeekActivationDays.map((day) => ({

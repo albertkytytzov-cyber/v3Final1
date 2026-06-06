@@ -1188,6 +1188,89 @@ function hasWrestlingSpecificWork(dayPlan: ConstructorPlanDay) {
   );
 }
 
+function isSessionWarmupBlock(planBlock: ConstructorPlanBlock) {
+  return /разминк/i.test(planBlock.name);
+}
+
+function isSessionCooldownBlock(planBlock: ConstructorPlanBlock) {
+  return /заминк/i.test(planBlock.name);
+}
+
+function isActiveTrainingBlock(planBlock: ConstructorPlanBlock) {
+  if (isSessionWarmupBlock(planBlock) || isSessionCooldownBlock(planBlock)) {
+    return false;
+  }
+
+  if (planBlock.targetQuality === "weight_management") {
+    return false;
+  }
+
+  return planBlock.type !== "recovery" || planBlock.targetQuality !== "recovery";
+}
+
+function needsTrainingSessionFrame(dayPlan: ConstructorPlanDay) {
+  return dayPlan.blocks.some(isActiveTrainingBlock);
+}
+
+function warmupBlockForDay(dayPlan: ConstructorPlanDay, phase: ConstructorPhase) {
+  const isTaperLike = phase === "taper" || phase === "start_window" || dayPlan.loadLevel === "taper";
+  const isHighLoad = dayPlan.loadLevel === "high" || dayPlan.loadLevel === "medium";
+
+  return block(
+    "Разминка",
+    "activation",
+    "general",
+    isTaperLike
+      ? "8-10 мин / мягкая мобилизация, стойка, 2-3 коротких включения без утомления"
+      : isHighLoad
+        ? "10-15 мин / суставная мобилизация, Z1, специальные движения, вход в стойку"
+        : "8-12 мин / мобилизация, лёгкое движение, подготовка к технике",
+    ["общее"],
+    isTaperLike ? "activation / readiness" : "warm-up / neuromuscular preparation",
+    ["Europe plan analysis", "warm-up standard", "motor learning"],
+  );
+}
+
+function cooldownBlockForDay(dayPlan: ConstructorPlanDay, phase: ConstructorPhase) {
+  const isTaperLike = phase === "taper" || phase === "start_window" || dayPlan.loadLevel === "taper";
+  const isHighLoad = dayPlan.loadLevel === "high" || dayPlan.loadLevel === "medium";
+
+  return block(
+    "Заминка",
+    "recovery",
+    "recovery",
+    isTaperLike
+      ? "8-10 мин / дыхание, мобилити, вес, сон и самочувствие"
+      : isHighLoad
+        ? "10-15 мин / Z1, дыхание, мобилити, локальный сброс"
+        : "8-12 мин / лёгкая мобилити, дыхание, контроль самочувствия",
+    ["общее"],
+    "cool-down / recovery",
+    ["Europe plan analysis", "recovery consensus", "sleep/load consensus"],
+  );
+}
+
+function withTrainingSessionFrame(
+  dayPlan: ConstructorPlanDay,
+  phase: ConstructorPhase,
+): ConstructorPlanDay {
+  if (!needsTrainingSessionFrame(dayPlan)) {
+    return dayPlan;
+  }
+
+  const blocks = dayPlan.blocks.filter(
+    (planBlock) => !isSessionWarmupBlock(planBlock) && !isSessionCooldownBlock(planBlock),
+  );
+
+  return {
+    ...dayPlan,
+    dayIntent: dayPlan.dayIntent.includes("разминка")
+      ? dayPlan.dayIntent
+      : `${dayPlan.dayIntent} / разминка -> основная работа -> заминка`,
+    blocks: [warmupBlockForDay(dayPlan, phase), ...blocks, cooldownBlockForDay(dayPlan, phase)],
+  };
+}
+
 function speedToWrestlingTransferBlock(phase: ConstructorPhase) {
   return block(
     "Борцовский перенос скорости",
@@ -1829,7 +1912,9 @@ function normalizeWeekDensity(
     supportIndex += 1;
   }
   const balancedDays = normalizeDevelopmentWeekBalance(days, phase, goalTypes);
-  const normalizedDays = balancedDays.map((planDay) => withCompetitionTaperStructure(planDay, phase));
+  const normalizedDays = balancedDays
+    .map((planDay) => withCompetitionTaperStructure(planDay, phase))
+    .map((planDay) => withTrainingSessionFrame(planDay, phase));
 
   return {
     ...week,
