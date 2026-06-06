@@ -56,6 +56,28 @@ function hasSessionFrame(session) {
   );
 }
 
+function sessionMainBlocks(session) {
+  return session.blocks.filter((block) => !isWarmupBlock(block) && !isCooldownBlock(block));
+}
+
+function sessionHasTechnicalWrestling(session) {
+  return sessionMainBlocks(session).some(
+    (block) =>
+      block.type === "technical" ||
+      ["fatigue_skill", "wrestling_contact_density", "taper_quality"].includes(String(block.targetQuality)),
+  );
+}
+
+function sessionHasPhysicalSupport(session) {
+  return sessionMainBlocks(session).some(
+    (block) =>
+      ["strength", "metabolic", "conditioning", "CNS_high", "activation"].includes(String(block.type)) ||
+      ["legs_lme", "arms_grip", "max_strength", "speed_strength", "anaerobic_power", "aerobic_base"].includes(
+        String(block.targetQuality),
+      ),
+  );
+}
+
 function activeTemplateSessions(payload) {
   return payload.days.flatMap((day) =>
     day.sessions.filter((session) =>
@@ -232,6 +254,22 @@ const monthSpeedDays = monthWorkingWeeks.flatMap((week) =>
 const monthActiveTrainingDays = activeTrainingDays(monthDraft);
 const monthActiveTrainingSessions = activeTrainingSessions(monthDraft);
 const monthTemplateActiveSessions = activeTemplateSessions(monthPayload);
+const monthActiveTrainingDaysWithSessions = monthDraft.plan.weeks.flatMap((week) =>
+  week.days.filter((day) => (day.sessions ?? []).some((session) => session.blocks.some(isActiveTrainingBlock))),
+);
+const monthHasMorningTechniqueEveningPhysical = monthActiveTrainingDaysWithSessions.some((day) => {
+  const morning = day.sessions?.find((session) => session.name === "УТРО");
+  const evening = day.sessions?.find((session) => session.name === "ВЕЧЕР");
+  return Boolean(morning && evening && sessionHasTechnicalWrestling(morning) && sessionHasPhysicalSupport(evening));
+});
+const monthHasMorningPhysicalEveningWrestling = monthActiveTrainingDaysWithSessions.some((day) => {
+  const morning = day.sessions?.find((session) => session.name === "УТРО");
+  const evening = day.sessions?.find((session) => session.name === "ВЕЧЕР");
+  return Boolean(morning && evening && sessionHasPhysicalSupport(morning) && sessionHasTechnicalWrestling(evening));
+});
+const monthAnaerobicDays = monthDraft.plan.weeks.flatMap((week) =>
+  week.days.filter((day) => day.blocks.some((block) => block.targetQuality === "anaerobic_power")),
+);
 const europeCase23Input = {
   ...europePreparationInput,
   context: {
@@ -300,7 +338,12 @@ const competitionWeekDraft = buildPerformConstructorDraft(competitionWeekInput);
 const competitionWeekActivationDays = competitionWeekDraft.plan.weeks
   .flatMap((week) => week.days.map((day) => ({ ...day, phase: week.phase })))
   .filter((day) =>
-    day.blocks.some((block) => block.type === "activation" || /активац/i.test(`${block.name} ${block.volume}`)),
+    day.blocks.some(
+      (block) =>
+        !isWarmupBlock(block) &&
+        !isCooldownBlock(block) &&
+        (block.type === "activation" || /активац/i.test(`${block.name} ${block.volume}`)),
+    ),
   );
 const competitionWeekBlocks = competitionWeekDraft.plan.weeks.flatMap((week) =>
   week.days.flatMap((day) => day.blocks),
@@ -377,7 +420,19 @@ assert(
     .every((week) => week.days.every((day) => !day.dayLabel.startsWith("Д-"))),
   "First three weeks of a 30-day cycle should use weekday labels, not pre-start day labels",
 );
-assert(monthTargets.has("speed_first_action"), "30-day cycle should include speed_first_action blocks");
+assert(
+  monthDraft.plan.weeks.some((week) =>
+    week.days.some((day) =>
+      day.blocks.some(
+        (block) =>
+          block.type === "activation" ||
+          block.targetQuality === "taper_quality" ||
+          /резк|активац|первого действия|включен/i.test(`${block.name} ${block.volume}`),
+      ),
+    ),
+  ),
+  "30-day cycle should include competition-safe speed/first-action activation, not developing speed work",
+);
 assert(monthTargets.has("wrestling_contact_density"), "30-day cycle should include wrestling_contact_density blocks");
 assert(monthTargets.has("fatigue_skill"), "30-day cycle should include fatigue_skill blocks");
 assert(monthTargets.has("weight_management"), "30-day cycle should include weight_management blocks");
@@ -427,6 +482,24 @@ assert(
 assert(
   monthTemplateActiveSessions.every((session) => session.blocks.every((block) => block.exercises?.length > 0)),
   "30-day template payload should include concrete exercises for every block",
+);
+assert(
+  monthActiveTrainingDaysWithSessions.every((day) =>
+    (day.sessions ?? []).some(sessionHasTechnicalWrestling),
+  ),
+  "Every active day in the 30-day Europe constructor case must include wrestling technique/contact, not only OFP/SFP",
+);
+assert(
+  monthHasMorningTechniqueEveningPhysical,
+  "30-day Europe constructor case should include days with morning technique and evening OFP/SFP support",
+);
+assert(
+  monthHasMorningPhysicalEveningWrestling,
+  "30-day Europe constructor case should include days with morning OFP/SFP support and evening wrestling/technique",
+);
+assert(
+  monthAnaerobicDays.every((day) => (day.sessions ?? []).some(sessionHasTechnicalWrestling)),
+  "Anaerobic/interval days must include wrestling technique/transfer in the same day",
 );
 assert(
   !monthWrongPhasePhases.includes("development"),

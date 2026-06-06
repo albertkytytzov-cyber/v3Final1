@@ -186,6 +186,7 @@ export interface ConstructorPlanBlock {
   evidenceRefs: string[];
   coachEditable: boolean;
   exercises?: ConstructorPlanExercise[];
+  volumeLocked?: boolean;
 }
 
 export interface ConstructorPlanExercise {
@@ -315,6 +316,13 @@ function block(
     riskFlags,
     evidenceRefs,
     coachEditable: true,
+  };
+}
+
+function lockedVolumeBlock(planBlock: ConstructorPlanBlock): ConstructorPlanBlock {
+  return {
+    ...planBlock,
+    volumeLocked: true,
   };
 }
 
@@ -1294,6 +1302,10 @@ function constructorExercise(
 }
 
 function concreteVolumeForBlock(planBlock: ConstructorPlanBlock) {
+  if (planBlock.volumeLocked) {
+    return planBlock.volume;
+  }
+
   if (isSessionWarmupBlock(planBlock)) {
     return "10-15 мин: мобилизация 5 мин + стойка/перемещения 5-7 мин + 2-3 коротких включения";
   }
@@ -1687,6 +1699,27 @@ function withConstructorDaySessions(
   phase: ConstructorPhase,
   requestedSessionsPerDay: number,
 ): ConstructorPlanDay {
+  const sessionsPerDay = Math.max(1, Math.min(2, Math.round(requestedSessionsPerDay || 1)));
+
+  if (dayPlan.sessions?.length && sessionsPerDay >= 2 && needsTrainingSessionFrame(dayPlan)) {
+    const framedSessions = dayPlan.sessions.map((session, index) =>
+      createConstructorSession(
+        session.name,
+        session.notes || dayPlan.readinessGate,
+        session.orderIndex ?? index,
+        stripSessionFrameBlocks(session.blocks.map(withConcreteBlockDetails)),
+        dayPlan,
+        phase,
+      ),
+    );
+
+    return {
+      ...dayPlan,
+      blocks: framedSessions.flatMap((session) => session.blocks),
+      sessions: framedSessions,
+    };
+  }
+
   const concreteBlocks = dayPlan.blocks.map(withConcreteBlockDetails);
 
   if (!needsTrainingSessionFrame({ ...dayPlan, blocks: concreteBlocks })) {
@@ -1704,7 +1737,6 @@ function withConstructorDaySessions(
     };
   }
 
-  const sessionsPerDay = Math.max(1, Math.min(2, Math.round(requestedSessionsPerDay || 1)));
   const mainBlocks = stripSessionFrameBlocks(concreteBlocks);
 
   if (sessionsPerDay < 2) {
@@ -2371,6 +2403,497 @@ function supportDayForPhase(
   }
 }
 
+function isMajorCompetitionConstructorCase(input: ConstructorInput) {
+  return (
+    isMajorCompetition(input) &&
+    input.context.cycleLengthDays <= 30 &&
+    normalizePhaseForCycle(input) !== "recovery"
+  );
+}
+
+function dayWithExplicitSessions(
+  dayLabel: string,
+  dayIntent: string,
+  loadLevel: ConstructorLoadLevel,
+  readinessGate: string,
+  morningBlocks: ConstructorPlanBlock[],
+  eveningBlocks: ConstructorPlanBlock[],
+): ConstructorPlanDay {
+  return {
+    dayLabel,
+    dayIntent,
+    loadLevel,
+    readinessGate,
+    blocks: [...morningBlocks, ...eveningBlocks],
+    sessions: [
+      {
+        name: "УТРО",
+        notes: readinessGate,
+        orderIndex: 0,
+        blocks: morningBlocks,
+      },
+      {
+        name: "ВЕЧЕР",
+        notes: readinessGate,
+        orderIndex: 1,
+        blocks: eveningBlocks,
+      },
+    ],
+  };
+}
+
+function techniqueBaseBlock(volume = "25-35 мин / стойка, входы, защита, партер / качество >= 4/5") {
+  return lockedVolumeBlock(
+    block(
+      "Техника борьбы",
+      "technical",
+      "fatigue_skill",
+      volume,
+      ["ноги", "таз", "контакт", "корпус"],
+      "technical / motor control",
+      ["Europe plan analysis", "motor learning", "wrestling transfer"],
+    ),
+  );
+}
+
+function technicalTempoBlock(volume = "20 мин техника в темпе + 3-4 короткие ситуации / без развала стойки") {
+  return lockedVolumeBlock(
+    block(
+      "Техника в темпе",
+      "technical",
+      "fatigue_skill",
+      volume,
+      ["ноги", "таз", "контакт"],
+      "technical tempo",
+      ["Europe plan analysis", "technical_under_fatigue", "motor learning"],
+    ),
+  );
+}
+
+function wrestlingRoundBlock(
+  name = "Соревновательные циклы борьбы",
+  volume = "2 цикла 3 мин + 30 сек + 3 мин / пауза 4-6 мин / качество техники",
+) {
+  return lockedVolumeBlock(
+    block(
+      name,
+      "technical",
+      "wrestling_contact_density",
+      volume,
+      ["контакт", "ноги", "таз", "корпус"],
+      "mixed wrestling / competition model",
+      ["Europe plan analysis", "wrestling temporal structure", "UWW model"],
+      ["glycolytic_recovery_conflict"],
+    ),
+  );
+}
+
+function sfpLegsMaintenanceBlock(volume = "2-3 упражнения / 2-3 подхода по 20-25 сек / без отказа") {
+  return lockedVolumeBlock(
+    block(
+      "СФП ног поддерживающе",
+      "metabolic",
+      "legs_lme",
+      volume,
+      ["ноги", "таз", "корпус"],
+      "local maintenance",
+      ["Europe plan analysis", "BFR/KAATSU evidence", "Seluyanov coach school"],
+      ["heavy_legs_sprint_conflict"],
+    ),
+  );
+}
+
+function gripUpperMaintenanceBlock(volume = "канат/полотенца/тяга: 3 упражнения по 2-3 подхода / без боли") {
+  return lockedVolumeBlock(
+    block(
+      "Руки, верх и хват поддерживающе",
+      "strength",
+      "arms_grip",
+      volume,
+      ["предплечья", "плечи", "спина", "контакт"],
+      "local strength endurance maintenance",
+      ["Europe plan analysis", "grappling transfer evidence", "PERFORM Evidence Matrix"],
+    ),
+  );
+}
+
+function strengthToneBlock(volume = "2 упражнения / 2-3 подхода по 3-5 повторов / RPE 5-6 / без отказа") {
+  return lockedVolumeBlock(
+    block(
+      "Силовой тонус без добора",
+      "strength",
+      "max_strength",
+      volume,
+      ["ноги", "корпус", "спина"],
+      "strength maintenance",
+      ["Europe plan analysis", "strength training evidence", "taper risk control"],
+    ),
+  );
+}
+
+function finishPowerBlock(volume = "4x20/40: резина -> проход -> клинч/давление -> защита/спрол / без дожима") {
+  return lockedVolumeBlock(
+    block(
+      "Финишная мощность в борцовском действии",
+      "metabolic",
+      "anaerobic_power",
+      volume,
+      ["ноги", "таз", "контакт", "корпус"],
+      "special glycolytic / late-round power",
+      ["Europe plan analysis", "technical_under_fatigue", "glycolytic_intervals"],
+      ["glycolytic_recovery_conflict"],
+    ),
+  );
+}
+
+function speedActivationBlock(volume = "4-6 коротких включений 10-20 м или вход по сигналу / полный отдых / без развития") {
+  return lockedVolumeBlock(
+    block(
+      "Короткая скоростная активация",
+      "activation",
+      "taper_quality",
+      volume,
+      ["ноги", "таз"],
+      "alactic activation",
+      ["Europe plan analysis", "taper logic", "speed profile"],
+    ),
+  );
+}
+
+function weightRecoveryControlBlock(volume = "вес, сон, пульс покоя, самочувствие, жесткость / 5-10 мин") {
+  return lockedVolumeBlock(
+    block(
+      "Контроль веса и восстановления",
+      "recovery",
+      "weight_management",
+      volume,
+      ["общее"],
+      "recovery / monitoring",
+      ["Europe plan analysis", "NCAA weight management", "sleep consensus"],
+    ),
+  );
+}
+
+function aerobicRecoveryBlock(volume = "20-30 мин Z1-Z2 / разговорный темп / без накопления усталости") {
+  return lockedVolumeBlock(
+    block(
+      "Аэробное восстановление",
+      "conditioning",
+      "aerobic_base",
+      volume,
+      ["общее"],
+      "aerobic recovery",
+      ["Europe plan analysis", "load consensus", "sleep consensus"],
+    ),
+  );
+}
+
+function europeEntryBlockDay(label: string, slotIndex: number) {
+  const variants = [
+    () =>
+      dayWithExplicitSessions(
+        label,
+        "Техника утром, СФП ног вечером",
+        "medium",
+        "качество техники >= 4/5, ноги без боли",
+        [techniqueBaseBlock("30 мин: стойка, входы, защита, партер / без силовой рубки")],
+        [sfpLegsMaintenanceBlock(), physicalToWrestlingTransferBlock("legs_lme")],
+      ),
+    () =>
+      dayWithExplicitSessions(
+        label,
+        "ОФП/аэробная поддержка утром, техника вечером",
+        "low",
+        "Z1-Z2, без накопления усталости",
+        [aerobicRecoveryBlock(), weightRecoveryControlBlock()],
+        [techniqueBaseBlock("25-30 мин: входы, выход из захвата, стойка-партер / качество выше объёма")],
+      ),
+    () =>
+      dayWithExplicitSessions(
+        label,
+        "СФП утром, технический перенос вечером",
+        "medium",
+        "без отказа, техника после СФП не ниже 4/5",
+        [sfpLegsMaintenanceBlock("3 упражнения / 2 подхода по 20 сек / без отказа"), strengthToneBlock()],
+        [technicalTempoBlock("20-25 мин: входы после локальной работы + защита/спрол")],
+      ),
+    () =>
+      dayWithExplicitSessions(
+        label,
+        "Техника и хват",
+        "medium",
+        "локти/плечи без боли, хват не добивать",
+        [techniqueBaseBlock("25-30 мин: захват, позиция, вход из контакта")],
+        [gripUpperMaintenanceBlock(), physicalToWrestlingTransferBlock("arms_grip")],
+      ),
+    () =>
+      dayWithExplicitSessions(
+        label,
+        "Борцовская скорость без развития объёма",
+        "medium",
+        "полный отдых, качество первого действия",
+        [speedActivationBlock("5-6 включений: первый шаг, вход по сигналу / полный отдых")],
+        [technicalTempoBlock("20 мин: первое действие -> развитие атаки -> выход из контакта")],
+      ),
+    () =>
+      dayWithExplicitSessions(
+        label,
+        "Восстановление и лёгкая техника",
+        "recovery",
+        "снять остаточную усталость, сверить вес и сон",
+        [aerobicRecoveryBlock("20-25 мин Z1-Z2 + мобилити")],
+        [techniqueBaseBlock("15-20 мин лёгкая техника без сопротивления"), weightRecoveryControlBlock()],
+      ),
+  ];
+
+  return variants[slotIndex % variants.length]();
+}
+
+function europeMainSpecificDay(label: string, slotIndex: number) {
+  const variants = [
+    () =>
+      dayWithExplicitSessions(
+        label,
+        "СФП/силовой тонус утром, борьба вечером",
+        "high",
+        "readiness >= 70, сон нормальный, без боли ног",
+        [strengthToneBlock("присед/тяга вариант: 2-3x3-5 RPE 6 / без отказа"), sfpLegsMaintenanceBlock()],
+        [wrestlingRoundBlock("Борьба в соревновательном темпе", "2 цикла 3 мин + 30 сек + 3 мин / качество входов")],
+      ),
+    () =>
+      dayWithExplicitSessions(
+        label,
+        "Техника утром, финишная мощность вечером",
+        "high",
+        "качество стойки не падает, стоп при развале техники",
+        [technicalTempoBlock("25 мин: техника в темпе, входы и защита без закисления")],
+        [finishPowerBlock(), physicalToWrestlingTransferBlock("anaerobic_power")],
+      ),
+    () =>
+      dayWithExplicitSessions(
+        label,
+        "Восстановительный контроль внутри плотного блока",
+        "low",
+        "вес, сон, RHR, жесткость обязательны",
+        [aerobicRecoveryBlock("20 мин Z1-Z2 / локальный сброс")],
+        [techniqueBaseBlock("20 мин лёгкая техника, стойка-партер без силовой борьбы"), weightRecoveryControlBlock()],
+      ),
+    () =>
+      dayWithExplicitSessions(
+        label,
+        "Соревновательная структура 2x3",
+        "high",
+        "readiness >= 70, без активной сгонки",
+        [techniqueBaseBlock("20 мин: техническая настройка перед раундами")],
+        [wrestlingRoundBlock("2x3 с паузой 30 сек", "2 цикла 3 мин + 30 сек + 3 мин / пауза 4-6 мин")],
+      ),
+    () =>
+      dayWithExplicitSessions(
+        label,
+        "Турнирная плотность",
+        "high",
+        "после дня обязателен восстановительный контроль",
+        [technicalTempoBlock("20 мин: входы, клинч, защита/спрол")],
+        [wrestlingRoundBlock("3 встречи в соревновательном формате", "3 встречи: 3 мин + 30 сек + 3 мин / без лишнего добора")],
+      ),
+    () =>
+      dayWithExplicitSessions(
+        label,
+        "Сброс после плотной борьбы",
+        "recovery",
+        "не добавлять объём, восстановить ноги и ЦНС",
+        [aerobicRecoveryBlock("20-30 мин Z1-Z2 / прогулка или велосипед")],
+        [techniqueBaseBlock("15-20 мин лёгкая техника без сопротивления"), weightRecoveryControlBlock()],
+      ),
+  ];
+
+  return variants[slotIndex % variants.length]();
+}
+
+function europeIntegrationDay(label: string, slotIndex: number) {
+  const variants = [
+    () =>
+      dayWithExplicitSessions(
+        label,
+        "Лёгкая техника утром, борьба без силовой вечером",
+        "low",
+        "качество выше объёма, без силовой борьбы",
+        [techniqueBaseBlock("25-30 мин: точность входов, защита, партер / RPE <= 4")],
+        [wrestlingRoundBlock("Одна встреча без силовой борьбы", "1 встреча 3 мин + 30 сек + 3 мин / скорость и дистанция")],
+      ),
+    () =>
+      dayWithExplicitSessions(
+        label,
+        "Восстановление утром, тактика вечером",
+        "recovery",
+        "сон, вес и RHR важнее добора",
+        [aerobicRecoveryBlock("20 мин Z1-Z2 + мобилити")],
+        [techniqueBaseBlock("20-25 мин: тактические ситуации, выход из захвата"), weightRecoveryControlBlock()],
+      ),
+    () =>
+      dayWithExplicitSessions(
+        label,
+        "Короткая резкость и технический перенос",
+        "taper",
+        "полный отдых, без закисления",
+        [speedActivationBlock("3-5 коротких включений / первый шаг и вход по сигналу")],
+        [
+          technicalTempoBlock("15-20 мин: первое действие -> защита -> партер / без добора"),
+          weightRecoveryControlBlock(),
+        ],
+      ),
+    () =>
+      dayWithExplicitSessions(
+        label,
+        "Две сессии борьбы без силовой рубки",
+        "low",
+        "две короткие сессии, не создавать локальный долг",
+        [wrestlingRoundBlock("Утренняя встреча без силовой борьбы", "1 встреча 3 мин + 30 сек + 3 мин / дистанция и скорость")],
+        [wrestlingRoundBlock("Вечерняя встреча без силовой борьбы", "1 встреча 3 мин + 30 сек + 3 мин / качество входов")],
+      ),
+    () =>
+      dayWithExplicitSessions(
+        label,
+        "Вес, сон и свежесть",
+        "recovery",
+        "не добавлять нагрузку при снижении готовности",
+        [aerobicRecoveryBlock("15-20 мин Z1 или прогулка")],
+        [weightRecoveryControlBlock(), techniqueBaseBlock("10-15 мин лёгкая техника")],
+      ),
+    () =>
+      dayWithExplicitSessions(
+        label,
+        "Техническая уверенность",
+        "low",
+        "сохранить ощущение скорости, без добора",
+        [techniqueBaseBlock("20-25 мин: любимые атаки, защита, контроль позиции")],
+        [speedActivationBlock("2-3 коротких включения / только ощущение резкости"), weightRecoveryControlBlock()],
+      ),
+  ];
+
+  return variants[slotIndex % variants.length]();
+}
+
+function europeTaperPeakDay(label: string, slotIndex: number) {
+  const variants = [
+    () =>
+      dayWithExplicitSessions(
+        label,
+        "Качество техники и вес",
+        "taper",
+        "RPE <= 4, вес и сон под контролем",
+        [techniqueBaseBlock("20-25 мин техника без утомления / точность"), speedActivationBlock("2-4 включения")],
+        [weightRecoveryControlBlock(), aerobicRecoveryBlock("15-20 мин Z1")],
+      ),
+    () =>
+      dayWithExplicitSessions(
+        label,
+        "Суперкомпенсация без добора",
+        "taper",
+        "не развивать, только сохранить резкость",
+        [speedActivationBlock("3 коротких входа по сигналу / полный отдых")],
+        [techniqueBaseBlock("15-20 мин лёгкая техника, стойка-партер"), weightRecoveryControlBlock()],
+      ),
+    () =>
+      dayWithExplicitSessions(
+        label,
+        "Дорога/режим/восстановление",
+        "recovery",
+        "учесть дорогу, воду, сон, вес",
+        [aerobicRecoveryBlock("прогулка 15-20 мин или мобилити")],
+        [weightRecoveryControlBlock("вес, вода, сон, RHR, самочувствие / без тренировки в утомление")],
+      ),
+    () =>
+      dayWithExplicitSessions(
+        label,
+        "Предстартовая техническая настройка",
+        "taper",
+        "коротко, уверенно, без силовой борьбы",
+        [techniqueBaseBlock("15-20 мин: ключевые входы, защита, выход из контакта")],
+        [speedActivationBlock("2-3 включения / ощущение резкости"), weightRecoveryControlBlock()],
+      ),
+    () =>
+      dayWithExplicitSessions(
+        label,
+        "Тонкая настройка веса и свежести",
+        "recovery",
+        "не добирать объём, питание и сон важнее",
+        [weightRecoveryControlBlock()],
+        [techniqueBaseBlock("10-15 мин очень лёгкая техника, если готовность нормальная")],
+      ),
+  ];
+
+  return variants[slotIndex % variants.length]();
+}
+
+function europeStartWindowDay(label: string, slotIndex: number) {
+  const variants = [
+    () =>
+      dayWithExplicitSessions(
+        label,
+        "Предстартовая активация",
+        "taper",
+        "очень коротко, без усталости",
+        [techniqueBaseBlock("10-15 мин: ключевые действия, стойка, выход из захвата")],
+        [speedActivationBlock("2-3 коротких включения / полный отдых"), weightRecoveryControlBlock()],
+      ),
+    () =>
+      dayWithExplicitSessions(
+        label,
+        "Взвешивание, вес и восстановление",
+        "recovery",
+        "вес, вода, сон, без тренировочного добора",
+        [weightRecoveryControlBlock("вес, вода, самочувствие, RHR / 5-10 мин")],
+        [techniqueBaseBlock("5-10 мин лёгкая техника только при хорошей готовности")],
+      ),
+    () =>
+      dayWithExplicitSessions(
+        label,
+        "Стартовый день",
+        "taper",
+        "только активация и работа между схватками",
+        [speedActivationBlock("предстартовая активация 5-8 мин / без утомления")],
+        [
+          techniqueBaseBlock("работа между схватками: дыхание, настройка, ключевые действия"),
+          weightRecoveryControlBlock("вес, вода, самочувствие, восстановление между схватками"),
+        ],
+      ),
+  ];
+
+  return variants[slotIndex % variants.length]();
+}
+
+function europeCompetitionDayForStage(
+  stage: ConstructorCalendarStage,
+  label: string,
+  slotIndex: number,
+) {
+  switch (stage) {
+    case "main_specific_microcycle":
+      return europeMainSpecificDay(label, slotIndex);
+    case "competition_integration":
+      return europeIntegrationDay(label, slotIndex);
+    case "taper_peak":
+      return europeTaperPeakDay(label, slotIndex);
+    case "start_window":
+      return europeStartWindowDay(label, slotIndex);
+    case "entry_block":
+    default:
+      return europeEntryBlockDay(label, slotIndex);
+  }
+}
+
+function europeCompetitionDaysForWeek(
+  stage: ConstructorCalendarStage,
+  targetDayCount: number,
+  labelPool: string[],
+) {
+  return Array.from({ length: targetDayCount }, (_, index) => {
+    const label = labelPool[index] ?? `День ${index + 1}`;
+    return europeCompetitionDayForStage(stage, label, index);
+  });
+}
+
 function normalizeWeekDensity(
   week: ConstructorPlanWeek,
   input: ConstructorInput,
@@ -2384,6 +2907,10 @@ function normalizeWeekDensity(
   const phase = phaseForCalendarStage(calendarStage);
   const targetDayCount = targetSessionsForWeek(input, phase, calendarDaysInWeek);
   const labelPool = labelPoolForWeek(input, phase, weekIndex, calendarDaysInWeek);
+  const isEuropeCase = isMajorCompetitionConstructorCase(input);
+  const europeCaseDays = isEuropeCase
+    ? europeCompetitionDaysForWeek(calendarStage, targetDayCount, labelPool)
+    : null;
   const days = week.days.slice(0, targetDayCount).map((planDay, index) => ({
     ...clonePlanDay(planDay),
     dayLabel: labelPool[index] ?? planDay.dayLabel,
@@ -2391,13 +2918,16 @@ function normalizeWeekDensity(
   const usedLabels = new Set(days.map((planDay) => planDay.dayLabel));
   let supportIndex = 0;
 
-  while (days.length < targetDayCount) {
+  while (!isEuropeCase && days.length < targetDayCount) {
     const label = supportDayLabel(labelPool, usedLabels, days.length);
     usedLabels.add(label);
     days.push(clonePlanDay(supportDayForPhase(phase, label, goalTypes, supportIndex)));
     supportIndex += 1;
   }
-  const balancedDays = normalizeDevelopmentWeekBalance(days, phase, goalTypes);
+  const plannedDays = europeCaseDays ?? days;
+  const balancedDays = isEuropeCase
+    ? plannedDays
+    : normalizeDevelopmentWeekBalance(plannedDays, phase, goalTypes);
   const normalizedDays = balancedDays
     .map((planDay) => withCompetitionTaperStructure(planDay, phase))
     .map((planDay) => withTrainingSessionFrame(planDay, phase))
