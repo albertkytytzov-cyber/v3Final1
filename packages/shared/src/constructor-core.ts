@@ -15,6 +15,16 @@ export type ConstructorPhase =
   | "start_window"
   | "recovery";
 
+type ConstructorCalendarStage =
+  | "base"
+  | "development"
+  | "entry_block"
+  | "main_specific_microcycle"
+  | "competition_integration"
+  | "taper_peak"
+  | "start_window"
+  | "recovery";
+
 export type ConstructorGoalType =
   | "speed_first_action"
   | "legs_lme"
@@ -914,6 +924,13 @@ function normalizePhaseForCycle(input: ConstructorInput): ConstructorPhase {
   return input.context.currentPhase;
 }
 
+function isMajorCompetition(input: ConstructorInput) {
+  return (
+    input.competition.priority === "A" ||
+    ["continental", "world", "olympics"].includes(input.competition.level)
+  );
+}
+
 function selectTemplateCards(input: ConstructorInput, riskFlags: ConstructorRiskFlag[]) {
   const goalSet = new Set(input.goals.map((goal) => goal.goalType));
   const closeCompetition = riskFlags.some((risk) => risk.code === "competition_close");
@@ -968,11 +985,82 @@ function taperWeekLabelPool(
   weekIndex: number,
   calendarDaysInWeek: number,
 ) {
-  const firstDayFromStart = Math.max(1, input.context.cycleLengthDays - weekIndex * 7);
+  const firstDayFromStart = daysToStartAtWeekStart(input, weekIndex);
 
   return Array.from({ length: calendarDaysInWeek }, (_, index) => `Д-${firstDayFromStart - index}`).filter(
     (label) => !label.endsWith("-0"),
   );
+}
+
+function daysToStartAtWeekStart(input: ConstructorInput, weekIndex: number) {
+  return Math.max(1, input.context.cycleLengthDays - weekIndex * 7);
+}
+
+function calendarStageFromWeek(input: ConstructorInput, weekIndex: number): ConstructorCalendarStage {
+  const effectivePhase = normalizePhaseForCycle(input);
+  const daysToStartAtWeekStartValue = daysToStartAtWeekStart(input, weekIndex);
+
+  if (effectivePhase === "recovery") {
+    return "recovery";
+  }
+
+  if (effectivePhase === "start_window" || daysToStartAtWeekStartValue <= 3) {
+    return "start_window";
+  }
+
+  if (effectivePhase === "taper") {
+    return "taper_peak";
+  }
+
+  if (isMajorCompetition(input) && input.context.cycleLengthDays <= 30) {
+    if (daysToStartAtWeekStartValue <= 4) {
+      return "taper_peak";
+    }
+
+    if (daysToStartAtWeekStartValue <= 11) {
+      return "competition_integration";
+    }
+
+    if (daysToStartAtWeekStartValue <= 18) {
+      return "main_specific_microcycle";
+    }
+
+    return "entry_block";
+  }
+
+  if (effectivePhase === "base" && daysToStartAtWeekStartValue > 45) {
+    return "base";
+  }
+
+  if (input.context.currentPhase === "development" && daysToStartAtWeekStartValue > 30) {
+    return "development";
+  }
+
+  if (daysToStartAtWeekStartValue <= 10) {
+    return "taper_peak";
+  }
+
+  return "entry_block";
+}
+
+function phaseForCalendarStage(stage: ConstructorCalendarStage): ConstructorPhase {
+  switch (stage) {
+    case "base":
+      return "base";
+    case "development":
+      return "development";
+    case "competition_integration":
+    case "taper_peak":
+      return "taper";
+    case "start_window":
+      return "start_window";
+    case "recovery":
+      return "recovery";
+    case "entry_block":
+    case "main_specific_microcycle":
+    default:
+      return "special_preparation";
+  }
 }
 
 function weekPhaseFromCalendar(
@@ -980,29 +1068,7 @@ function weekPhaseFromCalendar(
   _sourcePhase: ConstructorPhase,
   weekIndex: number,
 ): ConstructorPhase {
-  if (input.context.currentPhase === "recovery") {
-    return "recovery";
-  }
-
-  const daysToStartAtWeekStart = Math.max(1, input.context.cycleLengthDays - weekIndex * 7);
-
-  if (input.context.currentPhase === "start_window" || daysToStartAtWeekStart <= 3) {
-    return "start_window";
-  }
-
-  if (input.context.currentPhase === "taper" || daysToStartAtWeekStart <= 10) {
-    return "taper";
-  }
-
-  if (input.context.currentPhase === "base" && daysToStartAtWeekStart > 45) {
-    return "base";
-  }
-
-  if (input.context.currentPhase === "development" && daysToStartAtWeekStart > 30) {
-    return "development";
-  }
-
-  return "special_preparation";
+  return phaseForCalendarStage(calendarStageFromWeek(input, weekIndex));
 }
 
 function targetSessionsForWeek(
@@ -1078,6 +1144,339 @@ function hasBlockType(dayPlan: ConstructorPlanDay, type: ConstructorBlockType) {
   return dayPlan.blocks.some((planBlock) => planBlock.type === type);
 }
 
+function clonePlanBlock(planBlock: ConstructorPlanBlock): ConstructorPlanBlock {
+  return {
+    ...planBlock,
+    localLoadZones: [...planBlock.localLoadZones],
+    riskFlags: [...planBlock.riskFlags],
+    evidenceRefs: [...planBlock.evidenceRefs],
+  };
+}
+
+function clonePlanDay(planDay: ConstructorPlanDay): ConstructorPlanDay {
+  return {
+    ...planDay,
+    blocks: planDay.blocks.map(clonePlanBlock),
+  };
+}
+
+function isDevelopmentPhase(phase: ConstructorPhase) {
+  return phase === "base" || phase === "development" || phase === "special_preparation";
+}
+
+function isSpecialSupportPhase(phase: ConstructorPhase) {
+  return phase === "special_preparation";
+}
+
+function hasAnyTarget(dayPlan: ConstructorPlanDay, targets: ConstructorPlanBlock["targetQuality"][]) {
+  return targets.some((target) => hasBlockTarget(dayPlan, target));
+}
+
+function hasRecoverySupport(dayPlan: ConstructorPlanDay) {
+  return (
+    hasAnyTarget(dayPlan, ["recovery", "aerobic_base", "weight_management"]) ||
+    hasBlockType(dayPlan, "conditioning") ||
+    hasBlockType(dayPlan, "recovery") ||
+    hasBlockType(dayPlan, "mobility")
+  );
+}
+
+function hasWrestlingSpecificWork(dayPlan: ConstructorPlanDay) {
+  return (
+    hasAnyTarget(dayPlan, ["fatigue_skill", "wrestling_contact_density", "taper_quality"]) ||
+    hasBlockType(dayPlan, "technical")
+  );
+}
+
+function speedToWrestlingTransferBlock(phase: ConstructorPhase) {
+  return block(
+    "Борцовский перенос скорости",
+    "technical",
+    "fatigue_skill",
+    phase === "special_preparation"
+      ? "15-20 мин / первое действие, входы, выход из захвата"
+      : "10-15 мин / первое действие из стойки / без добора",
+    ["ноги", "таз", "контакт"],
+    "technical transfer",
+    ["wrestling transfer", "PERFORM coach quality score", "motor learning"],
+  );
+}
+
+function normalizeMaintenanceBlockForPhase(
+  planBlock: ConstructorPlanBlock,
+  phase: ConstructorPhase,
+): ConstructorPlanBlock {
+  const normalized = clonePlanBlock(planBlock);
+
+  if (phase === "taper" || phase === "start_window") {
+    if (normalized.targetQuality === "speed_first_action" || normalized.type === "speed") {
+      return {
+        ...normalized,
+        name: "Нейромышечная активация первого действия",
+        type: "activation",
+        targetQuality: "taper_quality",
+        volume:
+          phase === "start_window"
+            ? "5-8 мин / 2-3 коротких включения / без развития утомления"
+            : "8-12 мин / 2-4 коротких включения / полный отдых",
+        energySystem: "activation / supercompensation",
+        riskFlags: [],
+        evidenceRefs: ["taper logic", "supercompensation", "Europe plan analysis"],
+      };
+    }
+
+    return normalized;
+  }
+
+  if (!isSpecialSupportPhase(phase)) {
+    return normalized;
+  }
+
+  switch (normalized.targetQuality) {
+    case "speed_first_action":
+      return {
+        ...normalized,
+        name: "Поддержание скорости первого действия",
+        type: "activation",
+        volume: "3-5 качественных повторов / полный отдых / без добора объёма",
+        energySystem: "alactic maintenance",
+        evidenceRefs: ["speed profile", "wrestling transfer", "Europe plan analysis"],
+      };
+    case "legs_lme":
+      return {
+        ...normalized,
+        name: "Поддержание СФП ног",
+        volume: "2-4 подхода / 15-25 сек / без отказа",
+        energySystem: "local maintenance",
+        evidenceRefs: ["BFR/KAATSU evidence", "PERFORM Evidence Matrix", "taper risk control"],
+      };
+    case "arms_grip":
+      return {
+        ...normalized,
+        name: "Поддержание рук и хвата",
+        volume: "2-4 подхода / без отказа / локти и плечи без боли",
+        energySystem: "local strength endurance maintenance",
+        evidenceRefs: ["grappling transfer evidence", "PERFORM Evidence Matrix"],
+      };
+    case "max_strength":
+    case "speed_strength":
+      return {
+        ...normalized,
+        name: "Поддержание силового тонуса",
+        volume: "2-3 подхода / RPE 5-6 / без тяжёлых ног",
+        energySystem: "strength maintenance",
+        evidenceRefs: ["strength training evidence", "taper risk control"],
+      };
+    case "anaerobic_power":
+      return {
+        ...normalized,
+        name: "Специальная плотность без добора",
+        volume: "2-4 коротких отрезка / качество выше объёма / без накопления лактата",
+        energySystem: "special maintenance",
+        riskFlags: ["glycolytic_recovery_conflict"],
+        evidenceRefs: ["wrestling temporal structure", "Europe plan analysis"],
+      };
+    default:
+      return normalized;
+  }
+}
+
+function physicalToWrestlingTransferBlock(target: ConstructorPlanBlock["targetQuality"]) {
+  const volume =
+    target === "legs_lme"
+      ? "12-18 мин / входы в ноги после локальной работы / качество выше объёма"
+      : target === "arms_grip"
+        ? "12-18 мин / захват, удержание, выход из контакта / без боли"
+        : "12-18 мин / перенос усилия в стойку и партер";
+
+  return block(
+    "Технический перенос после ОФП/СФП",
+    "technical",
+    "fatigue_skill",
+    volume,
+    ["ноги", "таз", "контакт", "корпус"],
+    "technical transfer",
+    ["PERFORM Evidence Matrix", "Europe plan analysis", "motor learning"],
+  );
+}
+
+function weeklyWeightRecoveryDay(label: string) {
+  return day(label, "Восстановление, вес и контроль состояния", "recovery", "сон, вес, RHR, боль и самочувствие", [
+    block(
+      "Контроль веса, сна и восстановления",
+      "recovery",
+      "weight_management",
+      "10-15 мин / вес, сон, RHR, самочувствие",
+      ["общее"],
+      "recovery",
+      ["NCAA weight management", "ACSM hydration", "sleep consensus"],
+    ),
+    block(
+      "Аэробная поддержка",
+      "conditioning",
+      "aerobic_base",
+      "20-30 мин / Z1-Z2 / без накопления усталости",
+      ["общее"],
+      "aerobic recovery",
+      ["load consensus", "wrestling physiology"],
+    ),
+  ]);
+}
+
+function enhanceDevelopmentDayTransfers(dayPlan: ConstructorPlanDay, phase: ConstructorPhase) {
+  if (!isDevelopmentPhase(phase)) {
+    return dayPlan;
+  }
+
+  const blocks = dayPlan.blocks.map((planBlock) => normalizeMaintenanceBlockForPhase(planBlock, phase));
+  const hasSpeed = blocks.some(
+    (planBlock) => planBlock.targetQuality === "speed_first_action" || planBlock.type === "speed",
+  );
+  const hasPhysicalDevelopment = blocks.some((planBlock) =>
+    [
+      "legs_lme",
+      "arms_grip",
+      "max_strength",
+      "speed_strength",
+      "anaerobic_power",
+    ].includes(String(planBlock.targetQuality)),
+  );
+  const hasTransfer = blocks.some((planBlock) =>
+    ["fatigue_skill", "wrestling_contact_density"].includes(String(planBlock.targetQuality)),
+  );
+
+  if (hasSpeed && !hasTransfer) {
+    blocks.unshift(speedToWrestlingTransferBlock(phase));
+  }
+
+  if (hasPhysicalDevelopment && !hasTransfer && !hasSpeed) {
+    const firstPhysicalTarget =
+      blocks.find((planBlock) =>
+        [
+          "legs_lme",
+          "arms_grip",
+          "max_strength",
+          "speed_strength",
+          "anaerobic_power",
+        ].includes(String(planBlock.targetQuality)),
+      )?.targetQuality ?? "general";
+
+    blocks.push(physicalToWrestlingTransferBlock(firstPhysicalTarget));
+  }
+
+  return {
+    ...dayPlan,
+    dayIntent:
+      hasSpeed && !hasTransfer
+        ? `${dayPlan.dayIntent} + борцовский перенос`
+        : hasPhysicalDevelopment && !hasTransfer
+          ? `${dayPlan.dayIntent} + технический перенос`
+          : dayPlan.dayIntent,
+    blocks,
+  };
+}
+
+function dayTargetCounts(days: ConstructorPlanDay[]) {
+  const counts = new Map<ConstructorPlanBlock["targetQuality"], number>();
+
+  for (const dayPlan of days) {
+    for (const planBlock of dayPlan.blocks) {
+      counts.set(planBlock.targetQuality, (counts.get(planBlock.targetQuality) ?? 0) + 1);
+    }
+  }
+
+  return counts;
+}
+
+function findReplaceableDevelopmentDayIndex(days: ConstructorPlanDay[]) {
+  const counts = dayTargetCounts(days);
+  const speedIndexes = days
+    .map((dayPlan, index) => ({ dayPlan, index }))
+    .filter(({ dayPlan }) => hasBlockTarget(dayPlan, "speed_first_action"));
+
+  if (speedIndexes.length > 2) {
+    return speedIndexes[speedIndexes.length - 1]?.index ?? -1;
+  }
+
+  for (let index = days.length - 1; index >= 0; index -= 1) {
+    const dayPlan = days[index];
+
+    if (hasRecoverySupport(dayPlan)) {
+      continue;
+    }
+
+    if (dayPlan.blocks.some((planBlock) => (counts.get(planBlock.targetQuality) ?? 0) > 1)) {
+      return index;
+    }
+  }
+
+  return days.length > 0 ? days.length - 1 : -1;
+}
+
+function normalizeDevelopmentWeekBalance(
+  days: ConstructorPlanDay[],
+  phase: ConstructorPhase,
+  goalTypes: ConstructorGoalType[],
+) {
+  if (!isDevelopmentPhase(phase) || days.length === 0) {
+    return days;
+  }
+
+  let balancedDays = days.map((dayPlan) => enhanceDevelopmentDayTransfers(dayPlan, phase));
+  const needsWeightControl = goalTypes.includes("weight_management") || goalTypes.includes("taper_quality");
+  const hasWeeklyRecovery = balancedDays.some(hasRecoverySupport);
+  const hasWeeklyWeight = balancedDays.some((dayPlan) => hasBlockTarget(dayPlan, "weight_management"));
+
+  if (!hasWeeklyRecovery || (needsWeightControl && !hasWeeklyWeight)) {
+    const replaceIndex = findReplaceableDevelopmentDayIndex(balancedDays);
+    const label = balancedDays[replaceIndex]?.dayLabel ?? `День ${balancedDays.length}`;
+
+    if (replaceIndex >= 0) {
+      balancedDays = balancedDays.map((dayPlan, index) =>
+        index === replaceIndex ? weeklyWeightRecoveryDay(label) : dayPlan,
+      );
+    } else {
+      balancedDays.push(weeklyWeightRecoveryDay(label));
+    }
+  }
+
+  const speedDayIndexes = balancedDays
+    .map((dayPlan, index) => ({ dayPlan, index }))
+    .filter(({ dayPlan }) => hasBlockTarget(dayPlan, "speed_first_action"));
+
+  if (speedDayIndexes.length > 2) {
+    const extraSpeedIndexes = new Set(speedDayIndexes.slice(2).map(({ index }) => index));
+    balancedDays = balancedDays.map((dayPlan, index) =>
+      extraSpeedIndexes.has(index)
+        ? day(dayPlan.dayLabel, "Техника борьбы и восстановление после скорости", "low", "качество выше объёма", [
+            block(
+              "Техника борьбы без добора",
+              "technical",
+              "fatigue_skill",
+              "25-35 мин / стойка, входы, партер / RPE <= 4",
+              ["ноги", "таз", "контакт"],
+              "technical freshness",
+              ["motor learning", "Europe plan analysis"],
+            ),
+          ])
+        : dayPlan,
+    );
+  }
+
+  if (!balancedDays.some(hasWrestlingSpecificWork)) {
+    balancedDays = balancedDays.map((dayPlan, index) =>
+      index === 0
+        ? {
+            ...dayPlan,
+            blocks: [speedToWrestlingTransferBlock(phase), ...dayPlan.blocks],
+          }
+        : dayPlan,
+    );
+  }
+
+  return balancedDays;
+}
+
 function withCompetitionTaperStructure(
   dayPlan: ConstructorPlanDay,
   phase: ConstructorPhase,
@@ -1129,7 +1528,7 @@ function withCompetitionTaperStructure(
     );
   }
 
-  blocks.push(...dayPlan.blocks);
+  blocks.push(...dayPlan.blocks.map((planBlock) => normalizeMaintenanceBlockForPhase(planBlock, phase)));
 
   if (hasSpeed && !hasBlockTarget(dayPlan, "fatigue_skill")) {
     blocks.unshift(
@@ -1200,15 +1599,15 @@ function supportDayForPhase(
     }
 
     if (supportGoal === "speed_first_action" || supportGoal === "speed_strength") {
-      return day(label, "Короткая активация скорости", "taper", "сон нормальный, полный отдых", [
+      return day(label, "Поддерживающая активация первого действия", "taper", "сон нормальный, полный отдых", [
         block(
-          "Короткие ускорения",
-          "speed",
-          "speed_first_action",
-          "3-5 повторов / 90-95% / полный отдых",
-          ["ноги"],
-          "CNS / alactic",
-          ["taper logic", "speed profile"],
+          "Нейромышечная активация первого действия",
+          "activation",
+          "taper_quality",
+          "8-12 мин / 2-4 коротких включения / без развития утомления",
+          ["ноги", "таз", "контакт"],
+          "activation / supercompensation",
+          ["taper logic", "supercompensation", "Europe plan analysis"],
         ),
       ]);
     }
@@ -1255,11 +1654,11 @@ function supportDayForPhase(
       ]);
     }
 
-    return day(label, "Стартовая активация", "taper", "очень коротко, без усталости", [
+    return day(label, "Стартовая свежесть", "taper", "очень коротко, без усталости", [
       block(
         "Активация перед стартом",
         "activation",
-        supportGoal === "speed_first_action" ? "speed_first_action" : "taper_quality",
+        "taper_quality",
         "10-15 мин / скорость ощущений",
         ["общее"],
         "activation",
@@ -1412,11 +1811,12 @@ function normalizeWeekDensity(
 ) {
   const calendarDaysRemaining = Math.max(1, input.context.cycleLengthDays - weekIndex * 7);
   const calendarDaysInWeek = Math.min(7, calendarDaysRemaining);
-  const phase = weekPhaseFromCalendar(input, week.phase, weekIndex);
+  const calendarStage = calendarStageFromWeek(input, weekIndex);
+  const phase = phaseForCalendarStage(calendarStage);
   const targetDayCount = targetSessionsForWeek(input, phase, calendarDaysInWeek);
   const labelPool = labelPoolForWeek(input, phase, weekIndex, calendarDaysInWeek);
   const days = week.days.slice(0, targetDayCount).map((planDay, index) => ({
-    ...planDay,
+    ...clonePlanDay(planDay),
     dayLabel: labelPool[index] ?? planDay.dayLabel,
   }));
   const usedLabels = new Set(days.map((planDay) => planDay.dayLabel));
@@ -1425,24 +1825,43 @@ function normalizeWeekDensity(
   while (days.length < targetDayCount) {
     const label = supportDayLabel(labelPool, usedLabels, days.length);
     usedLabels.add(label);
-    days.push(supportDayForPhase(phase, label, goalTypes, supportIndex));
+    days.push(clonePlanDay(supportDayForPhase(phase, label, goalTypes, supportIndex)));
     supportIndex += 1;
   }
-  const normalizedDays = days.map((planDay) => withCompetitionTaperStructure(planDay, phase));
+  const balancedDays = normalizeDevelopmentWeekBalance(days, phase, goalTypes);
+  const normalizedDays = balancedDays.map((planDay) => withCompetitionTaperStructure(planDay, phase));
 
   return {
     ...week,
     phase,
-    title: titleForCalendarPhase(week, phase),
-    mainIntent: mainIntentForCalendarPhase(week, phase),
+    title: titleForCalendarStage(week, calendarStage),
+    mainIntent: mainIntentForCalendarStage(week, calendarStage),
     days: sortPlanDaysByLabel(normalizedDays, labelPool),
   };
 }
 
-function titleForCalendarPhase(week: ConstructorPlanWeek, phase: ConstructorPhase) {
-  if (phase === "taper" || phase === "start_window") {
-    return `Неделя ${week.weekNumber}: ${phase === "start_window" ? "стартовое окно" : "подводка к старту"}`;
+function titleForCalendarStage(week: ConstructorPlanWeek, stage: ConstructorCalendarStage) {
+  if (stage === "entry_block") {
+    return `Неделя ${week.weekNumber}: вход в предсоревновательный блок`;
   }
+
+  if (stage === "main_specific_microcycle") {
+    return `Неделя ${week.weekNumber}: основной специальный микроцикл`;
+  }
+
+  if (stage === "competition_integration") {
+    return `Неделя ${week.weekNumber}: интеграция и снижение объёма`;
+  }
+
+  if (stage === "start_window") {
+    return `Неделя ${week.weekNumber}: стартовое окно`;
+  }
+
+  if (stage === "taper_peak") {
+    return `Неделя ${week.weekNumber}: подводка и пик`;
+  }
+
+  const phase = phaseForCalendarStage(stage);
 
   if (phase === week.phase) {
     return week.title;
@@ -1452,10 +1871,6 @@ function titleForCalendarPhase(week: ConstructorPlanWeek, phase: ConstructorPhas
     return `Неделя ${week.weekNumber}: восстановление`;
   }
 
-  if (phase === "special_preparation") {
-    return `Неделя ${week.weekNumber}: специальная подготовка`;
-  }
-
   if (phase === "development") {
     return `Неделя ${week.weekNumber}: развитие качества`;
   }
@@ -1463,21 +1878,35 @@ function titleForCalendarPhase(week: ConstructorPlanWeek, phase: ConstructorPhas
   return `Неделя ${week.weekNumber}: базовая подготовка`;
 }
 
-function mainIntentForCalendarPhase(week: ConstructorPlanWeek, phase: ConstructorPhase) {
+function mainIntentForCalendarStage(week: ConstructorPlanWeek, stage: ConstructorCalendarStage) {
+  if (stage === "entry_block") {
+    return "Ввести организм в предсоревновательный блок без резкого перегруза: Z2/ОФП/СФП, сила и хват только с контролем восстановления.";
+  }
+
+  if (stage === "main_specific_microcycle") {
+    return "Дать главный специальный стимул: борьба, 2x3, контактная плотность, финишная способность и перенос силы в борьбу под ежедневным контролем.";
+  }
+
+  if (stage === "competition_integration") {
+    return "Перевести работу в соревновательную свежесть: меньше объёма, больше качества техники, восстановление, вес, сон и готовность.";
+  }
+
+  if (stage === "taper_peak") {
+    return "Снять остаточную усталость, вывести организм в пик, сохранить короткую резкость, вес, сон и уверенность перед стартом.";
+  }
+
+  if (stage === "start_window") {
+    return "Сохранить свежесть, вес, сон и уверенность в ключевых технических действиях без добора нагрузки.";
+  }
+
+  const phase = phaseForCalendarStage(stage);
+
   if (phase === week.phase) {
     return week.mainIntent;
   }
 
-  if (phase === "taper" || phase === "start_window") {
-    return "Снизить общий объём, сохранить скорость, свежесть, вес и качество.";
-  }
-
   if (phase === "recovery") {
     return "Снять накопленную усталость и вернуть готовность.";
-  }
-
-  if (phase === "special_preparation") {
-    return "Перенести выбранные качества в борьбу и техническое качество без случайного добора объёма.";
   }
 
   if (phase === "development") {
