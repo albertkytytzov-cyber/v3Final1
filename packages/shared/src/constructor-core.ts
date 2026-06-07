@@ -39,6 +39,13 @@ export type ConstructorGoalType =
   | "taper_quality"
   | "recovery";
 
+export type ConstructorGoalMode =
+  | "development"
+  | "maintenance"
+  | "transfer"
+  | "activation"
+  | "recovery";
+
 export type ConstructorConfidence = "high" | "medium" | "low";
 
 export type ConstructorEvidenceLevel = "A" | "B" | "C" | "B/C" | "A/B" | "A/B/C";
@@ -131,6 +138,7 @@ export interface ConstructorContextInput {
 export interface ConstructorGoalInput {
   goalType: ConstructorGoalType;
   priority: number;
+  mode?: ConstructorGoalMode;
   reason?: string | null;
 }
 
@@ -256,6 +264,22 @@ export interface ConstructorDraft {
     interpretation: string;
     limitation: string;
   };
+  focusPlan: {
+    title: string;
+    developmentAllowed: boolean;
+    items: Array<{
+      goalType: ConstructorGoalType;
+      mode: ConstructorGoalMode;
+      label: string;
+      reason: string;
+    }>;
+    phaseMap: Array<{
+      range: string;
+      phase: ConstructorPhase;
+      title: string;
+      intent: string;
+    }>;
+  };
   missingData: ConstructorMissingData[];
   riskFlags: ConstructorRiskFlag[];
   selectedCards: Array<{
@@ -353,13 +377,13 @@ export const CONSTRUCTOR_TEMPLATE_CARDS: ConstructorTemplateCard[] = [
     operationalEvidenceTypes: ["position_stand", "coach_school", "internal_validation"],
     requiredData: ["speed_tests", "readiness", "sleep", "resting_hr", "weight_plan"],
     rationale:
-      "21 день позволяет соединить короткое развитие качества, перенос в борьбу и предсоревновательную подводку.",
+      "21 день позволяет сохранить специальные качества, перенести их в борьбу и выполнить предсоревновательную подводку.",
     weeks: [
       {
         weekNumber: 1,
-        title: "Неделя 1: вход в развитие",
+        title: "Неделя 1: вход в специальный блок",
         phase: "special_preparation",
-        mainIntent: "Короткое развитие скорости и локальной устойчивости без накопления случайной усталости.",
+        mainIntent: "Поддержать скорость и локальную устойчивость через борцовский перенос без накопления случайной усталости.",
         days: [
           day("ПН", "ЛМВ ног и контроль качества", "medium", "readiness >= 60, боль ног <= 2/5", [
             block(
@@ -943,6 +967,29 @@ function goalLabel(goal: ConstructorGoalType) {
   };
 
   return labels[goal];
+}
+
+function competitionSafeGoalLabel(goal: ConstructorGoalType) {
+  const labels: Record<ConstructorGoalType, string> = {
+    speed_first_action: "поддержание резкости первого действия",
+    legs_lme: "поддержание СФП ног",
+    arms_grip: "поддержание рук и хвата",
+    aerobic_base: "аэробная разгрузка и восстановление",
+    anaerobic_power: "борцовская финишная мощность без добора",
+    max_strength: "поддержание силового тонуса",
+    speed_strength: "поддержание скоростно-силового тонуса",
+    fatigue_skill: "специальная борцовская работа",
+    wrestling_contact_density: "соревновательная модель борьбы",
+    weight_management: "контроль веса",
+    taper_quality: "качество подводки",
+    recovery: "восстановление и суперкомпенсация",
+  };
+
+  return labels[goal];
+}
+
+function goalLabelForInput(goal: ConstructorGoalType, input: ConstructorInput) {
+  return isMajorCompetitionConstructorCase(input) ? competitionSafeGoalLabel(goal) : goalLabel(goal);
 }
 
 function normalizePhaseForCycle(input: ConstructorInput): ConstructorPhase {
@@ -2513,9 +2560,10 @@ function defaultGoalTypesForCompetitionCase(
             : [
                 "fatigue_skill",
                 "wrestling_contact_density",
+                "legs_lme",
                 "weight_management",
-                "taper_quality",
                 "recovery",
+                "taper_quality",
               ];
 
   for (const goalType of requestedGoalTypes) {
@@ -2527,6 +2575,145 @@ function defaultGoalTypesForCompetitionCase(
   return recommended;
 }
 
+function goalModeForInput(goalType: ConstructorGoalType, input: ConstructorInput): ConstructorGoalMode {
+  if (!isMajorCompetitionConstructorCase(input)) {
+    return "development";
+  }
+
+  switch (goalType) {
+    case "speed_first_action":
+    case "speed_strength":
+      return "activation";
+    case "legs_lme":
+    case "arms_grip":
+    case "aerobic_base":
+    case "anaerobic_power":
+    case "max_strength":
+      return "maintenance";
+    case "fatigue_skill":
+    case "wrestling_contact_density":
+      return "transfer";
+    case "weight_management":
+    case "recovery":
+      return "recovery";
+    case "taper_quality":
+    default:
+      return "activation";
+  }
+}
+
+function buildCompetitionFocusPlan(input: ConstructorInput, goalTypes: ConstructorGoalType[]) {
+  const isCompetitionPrep = isMajorCompetitionConstructorCase(input);
+
+  if (!isCompetitionPrep) {
+    return {
+      title: "Фокус подготовки",
+      developmentAllowed: true,
+      items: goalTypes.map((goalType, index) => ({
+        goalType,
+        mode: "development" as ConstructorGoalMode,
+        label: goalLabel(goalType),
+        reason: index === 0 ? "главная выбранная цель тренера" : "дополнительная выбранная цель",
+      })),
+      phaseMap: [],
+    };
+  }
+
+  const requested = new Set(goalTypes);
+  const baseItems: Array<{
+    goalType: ConstructorGoalType;
+    mode: ConstructorGoalMode;
+    label: string;
+    reason: string;
+  }> = [
+    {
+      goalType: "fatigue_skill",
+      mode: "transfer",
+      label: "специальная борцовская работа",
+      reason: "ядро активных дней: техника, ситуации и перенос СФП в борьбу",
+    },
+    {
+      goalType: "wrestling_contact_density",
+      mode: "transfer",
+      label: "соревновательная модель",
+      reason: "моделирование 3 мин + 30 сек + 3 мин и турнирной плотности",
+    },
+    {
+      goalType: "legs_lme",
+      mode: "maintenance",
+      label: "поддержание СФП",
+      reason: "короткие локальные блоки без отказа и только с переносом в входы/проходы",
+    },
+    {
+      goalType: "weight_management",
+      mode: "recovery",
+      label: "контроль веса",
+      reason: "вес, сон, пульс покоя и самочувствие влияют на допустимую нагрузку",
+    },
+    {
+      goalType: "recovery",
+      mode: "recovery",
+      label: "восстановление и суперкомпенсация",
+      reason: "половинчатые дни, смена обстановки и снятие накопленного напряжения",
+    },
+    {
+      goalType: "taper_quality",
+      mode: "activation",
+      label: "качество подводки",
+      reason: "сохранить свежесть, резкость и уверенность без развития утомления",
+    },
+  ];
+
+  const extraItems = goalTypes
+    .filter((goalType) => !baseItems.some((item) => item.goalType === goalType))
+    .map((goalType) => ({
+      goalType,
+      mode: goalModeForInput(goalType, input),
+      label: competitionSafeGoalLabel(goalType),
+      reason: requested.has(goalType)
+        ? "выбрано тренером, но в последние 30 дней трактуется как безопасный предсоревновательный режим"
+        : "добавлено системой как поддерживающий контекст",
+    }));
+
+  return {
+    title: "Фокус специальной предсоревновательной подготовки",
+    developmentAllowed: false,
+    items: [...baseItems, ...extraItems],
+    phaseMap: [
+      {
+        range: "Д-30...Д-24",
+        phase: "special_preparation" as ConstructorPhase,
+        title: "вход в специальный блок",
+        intent: "СФП поддерживающе, техника и восстановление без резкого перегруза",
+      },
+      {
+        range: "Д-23...Д-17",
+        phase: "special_preparation" as ConstructorPhase,
+        title: "основной специальный микроцикл",
+        intent: "борьба, соревновательная модель, финишная способность и ежедневный контроль",
+      },
+      {
+        range: "Д-16...Д-10",
+        phase: "taper" as ConstructorPhase,
+        title: "интеграция и снижение объёма",
+        intent: "меньше объёма, больше качества, техника без силовой рубки",
+      },
+      {
+        range: "Д-9...Д-5",
+        phase: "taper" as ConstructorPhase,
+        title: "подводка, свежесть, вес",
+        intent: "суперкомпенсация, вес, сон, короткая активация",
+      },
+      {
+        range: "Д-4...старт",
+        phase: "start_window" as ConstructorPhase,
+        title: "дорога, взвешивание, активация, пик",
+        intent: "без добора нагрузки, только свежесть и ключевые действия",
+      },
+    ],
+  };
+}
+
 function goalsFromTypes(goalTypes: ConstructorGoalType[], input: ConstructorInput): ConstructorGoalInput[] {
   return goalTypes.map((goalType, index) => {
     const requested = input.goals.find((goal) => goal.goalType === goalType);
@@ -2534,10 +2721,11 @@ function goalsFromTypes(goalTypes: ConstructorGoalType[], input: ConstructorInpu
     return {
       goalType,
       priority: index + 1,
+      mode: requested?.mode ?? goalModeForInput(goalType, input),
       reason:
         requested?.reason ??
         (isMajorCompetitionConstructorCase(input)
-          ? "автовыбор для главного старта по остаточным дням"
+          ? "автовыбор фокуса для главного старта по остаточным дням"
           : null),
     };
   });
@@ -3372,6 +3560,7 @@ export function buildPerformConstructorDraft(input: ConstructorInput): Construct
   const selectedCards = selectTemplateCards(planningInput, riskFlags);
   const weeks = mergeWeeks(selectedCards, planningInput, goalTypes.length > 0 ? goalTypes : [goal]);
   const weightGap = Number((input.athlete.weightCurrentKg - input.athlete.weightTargetKg).toFixed(1));
+  const focusPlan = buildCompetitionFocusPlan(planningInput, goalTypes);
   const riskText = riskFlags.length
     ? riskFlags.map((risk) => risk.message).join(" ")
     : "Критичных ограничений по введённым данным нет.";
@@ -3379,13 +3568,15 @@ export function buildPerformConstructorDraft(input: ConstructorInput): Construct
   return {
     confidence,
     understood: {
-      mainTask: `Главная задача: ${goalLabel(goal)}.`,
+      mainTask: isMajorCompetitionConstructorCase(planningInput)
+        ? "Главная задача: специальная предсоревновательная подготовка."
+        : `Главная задача: ${goalLabel(goal)}.`,
       interpretation:
         confidence === "low"
           ? "Система видит цель, но данных недостаточно для уверенного развивающего плана."
           : isMajorCompetitionConstructorCase(planningInput)
-            ? `Система выбрала предсоревновательный набор целей для главного старта: ${goalTypes
-                .map(goalLabel)
+            ? `Система выбрала фокус главного старта без развития: ${focusPlan.items
+                .map((item) => item.label)
                 .join(", ")}.`
             : `Система может построить черновик под цель "${goalLabel(goal)}" с учетом фазы ${effectivePhase}.`,
       limitation:
@@ -3393,6 +3584,7 @@ export function buildPerformConstructorDraft(input: ConstructorInput): Construct
           ? `Вес выше цели на ${weightGap} кг: план должен учитывать вес и восстановление.`
           : "Ограничения по весу не являются главным фактором по текущим вводным.",
     },
+    focusPlan,
     missingData,
     riskFlags,
     selectedCards: selectedCards.map((card) => ({
@@ -3406,7 +3598,9 @@ export function buildPerformConstructorDraft(input: ConstructorInput): Construct
       weeks,
     },
     explanation: {
-      mainDecision: `Черновик строится вокруг цели "${goalLabel(goal)}" и текущей фазы ${effectivePhase}.`,
+      mainDecision: isMajorCompetitionConstructorCase(planningInput)
+        ? `Черновик строится вокруг фазы ${effectivePhase}: развитие запрещено, скорость/ЛМВ/сила работают как поддержание, перенос, активация и восстановление.`
+        : `Черновик строится вокруг цели "${goalLabelForInput(goal, planningInput)}" и текущей фазы ${effectivePhase}.`,
       whyNow:
         isMajorCompetitionConstructorCase(planningInput)
           ? "До главного старта 30 дней или меньше: развитие заменяется предсоревновательной моделью с борьбой, техникой, разгрузкой, весом и подводкой."

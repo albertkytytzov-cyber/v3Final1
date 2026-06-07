@@ -18,6 +18,7 @@ import {
   type ConstructorCompetitionLevel,
   type ConstructorCompetitionPriority,
   type ConstructorDraft,
+  type ConstructorGoalMode,
   type ConstructorGoalType,
   type ConstructorInput,
   type ConstructorPhase,
@@ -246,6 +247,15 @@ const CONSTRUCTOR_GOAL_OPTIONS: ConstructorGoalType[] = [
   "recovery",
 ];
 
+const CONSTRUCTOR_MAIN_START_FOCUS_OPTIONS: ConstructorGoalType[] = [
+  "fatigue_skill",
+  "wrestling_contact_density",
+  "legs_lme",
+  "weight_management",
+  "recovery",
+  "taper_quality",
+];
+
 const CONSTRUCTOR_PHASE_OPTIONS: ConstructorPhase[] = [
   "base",
   "development",
@@ -314,7 +324,7 @@ function createDefaultConstructorForm(): ConstructorFormState {
     cycleLengthDays: 21,
     sessionsPerWeek: 6,
     sessionsPerDay: 2,
-    goals: ["speed_first_action", "legs_lme", "fatigue_skill", "taper_quality"],
+    goals: CONSTRUCTOR_MAIN_START_FOCUS_OPTIONS,
     sprint10mSec: "",
     sprint20mSec: "",
     verticalJumpCm: "",
@@ -377,6 +387,55 @@ function deriveConstructorPhaseByCompetitionDays(daysToCompetition: number | nul
   }
 
   return "base";
+}
+
+function isConstructorMajorStartWindow(
+  daysToCompetition: number | null,
+  priority: ConstructorCompetitionPriority,
+  level: ConstructorCompetitionLevel,
+) {
+  return (
+    daysToCompetition !== null &&
+    daysToCompetition >= 0 &&
+    daysToCompetition <= 30 &&
+    (priority === "A" || ["continental", "world", "olympics"].includes(level))
+  );
+}
+
+function deriveConstructorGoalsByCompetitionContext(
+  daysToCompetition: number | null,
+  priority: ConstructorCompetitionPriority,
+  level: ConstructorCompetitionLevel,
+  currentGoals: ConstructorGoalType[],
+) {
+  if (!isConstructorMajorStartWindow(daysToCompetition, priority, level)) {
+    return currentGoals.length ? currentGoals : (["speed_first_action", "fatigue_skill"] as ConstructorGoalType[]);
+  }
+
+  const appendCoachExtras = (recommended: ConstructorGoalType[]) => [
+    ...recommended,
+    ...currentGoals.filter((goal) => !recommended.includes(goal)),
+  ];
+
+  if (daysToCompetition !== null && daysToCompetition <= 7) {
+    return appendCoachExtras(["taper_quality", "weight_management", "recovery", "fatigue_skill"]);
+  }
+
+  if (daysToCompetition !== null && daysToCompetition <= 14) {
+    return appendCoachExtras(["fatigue_skill", "taper_quality", "weight_management", "recovery"]);
+  }
+
+  if (daysToCompetition !== null && daysToCompetition <= 23) {
+    return appendCoachExtras([
+      "wrestling_contact_density",
+      "fatigue_skill",
+      "weight_management",
+      "recovery",
+      "taper_quality",
+    ]);
+  }
+
+  return appendCoachExtras(CONSTRUCTOR_MAIN_START_FOCUS_OPTIONS);
 }
 
 function deriveConstructorCycleLengthByCompetitionDays(
@@ -447,19 +506,28 @@ function applyConstructorCompetitionPlanToConstructorForm(
   current: ConstructorFormState,
   plan: CompetitionPlanSummary,
   weightClassFallback = "",
+  competitionLevel: ConstructorCompetitionLevel = "continental",
 ): ConstructorFormState {
   const daysToCompetition = diffDateInputDays(getDateInputValue(), plan.competitionStartDate);
+  const priority = plan.priority as ConstructorCompetitionPriority;
 
   return {
     ...current,
     competitionPlanId: plan.id,
     competitionName: plan.competitionTitle,
-    competitionPriority: plan.priority as ConstructorCompetitionPriority,
+    competitionLevel,
+    competitionPriority: priority,
     startDate: plan.competitionStartDate,
     weighInDate: shiftDateInputValue(plan.competitionStartDate, -1),
     weightClass: current.weightClass || weightClassFallback,
     currentPhase: deriveConstructorPhaseByCompetitionDays(daysToCompetition),
     cycleLengthDays: deriveConstructorCycleLengthByCompetitionDays(daysToCompetition),
+    goals: deriveConstructorGoalsByCompetitionContext(
+      daysToCompetition,
+      priority,
+      competitionLevel,
+      current.goals,
+    ),
     bodyWeightKg:
       plan.currentWeight !== null && plan.currentWeight !== undefined
         ? String(plan.currentWeight)
@@ -13656,14 +13724,18 @@ export function PageClient({
       if (current.competitionPlanId || current.competitionName.trim() !== "Главный старт") {
         return current;
       }
+      const competition =
+        competitions.find((item) => item.id === nearestPlan.competitionId) ?? null;
 
       return applyConstructorCompetitionPlanToConstructorForm(
         current,
         nearestPlan,
         selectedCoachAthlete.weightClass || "",
+        competition?.level ?? current.competitionLevel,
       );
     });
   }, [
+    competitions,
     selectedCoachAthlete?.athleteId,
     selectedCoachAthlete?.weightClass,
     visibleConstructorCompetitionPlanKey,
@@ -13683,12 +13755,14 @@ export function PageClient({
     if (!plan) {
       return;
     }
+    const competition = competitions.find((item) => item.id === plan.competitionId) ?? null;
 
     setConstructorForm((current) =>
       applyConstructorCompetitionPlanToConstructorForm(
         current,
         plan,
         selectedCoachAthlete?.weightClass || "",
+        competition?.level ?? current.competitionLevel,
       ),
     );
   }
@@ -13720,12 +13794,19 @@ export function PageClient({
       parseConstructorNumber(constructorForm.readinessScore) ??
       selectedCoachAthlete.latestReadiness?.score ??
       null;
-    const goals = constructorForm.goals.length
-      ? constructorForm.goals
-      : (["speed_first_action", "fatigue_skill"] satisfies ConstructorGoalType[]);
     const effectiveStartDate =
       selectedConstructorCompetitionPlan?.competitionStartDate ?? constructorForm.startDate;
     const effectiveDaysToCompetition = diffDateInputDays(getDateInputValue(), effectiveStartDate);
+    const effectiveCompetitionLevel =
+      selectedConstructorCompetition?.level ?? constructorForm.competitionLevel;
+    const effectiveCompetitionPriority =
+      selectedConstructorCompetitionPlan?.priority ?? constructorForm.competitionPriority;
+    const goals = deriveConstructorGoalsByCompetitionContext(
+      effectiveDaysToCompetition,
+      effectiveCompetitionPriority,
+      effectiveCompetitionLevel,
+      constructorForm.goals,
+    );
     const effectiveCurrentPhase = selectedConstructorCompetitionPlan
       ? deriveConstructorPhaseByCompetitionDays(effectiveDaysToCompetition)
       : constructorForm.currentPhase;
@@ -13736,8 +13817,8 @@ export function PageClient({
     return {
       competition: {
         name: constructorForm.competitionName.trim() || "Главный старт",
-        level: selectedConstructorCompetition?.level ?? constructorForm.competitionLevel,
-        priority: selectedConstructorCompetitionPlan?.priority ?? constructorForm.competitionPriority,
+        level: effectiveCompetitionLevel,
+        priority: effectiveCompetitionPriority,
         startDate: effectiveStartDate,
         weighInDate:
           constructorForm.weighInDate || shiftDateInputValue(effectiveStartDate, -1),
@@ -14853,23 +14934,85 @@ export function PageClient({
     planningView === "auto-weekly" ||
     planningView === "preparation" ||
     planningView === "mesocycle";
+  const constructorEffectiveCompetitionStartDate =
+    selectedConstructorCompetitionPlan?.competitionStartDate ?? constructorForm.startDate;
+  const constructorDaysToCompetition = diffDateInputDays(
+    getDateInputValue(),
+    constructorEffectiveCompetitionStartDate,
+  );
+  const constructorIsMajorStartWindow = isConstructorMajorStartWindow(
+    constructorDaysToCompetition,
+    selectedConstructorCompetitionPlan?.priority ?? constructorForm.competitionPriority,
+    selectedConstructorCompetition?.level ?? constructorForm.competitionLevel,
+  );
+  const constructorGoalOptions = constructorIsMajorStartWindow
+    ? CONSTRUCTOR_MAIN_START_FOCUS_OPTIONS
+    : CONSTRUCTOR_GOAL_OPTIONS;
   const constructorGoalLabel = (goal: ConstructorGoalType) =>
+    constructorIsMajorStartWindow
+      ? (
+          {
+            speed_first_action: copyFor(language, { en: "First-action sharpness", ru: "Резкость первого действия", bg: "Острота на първото действие" }),
+            legs_lme: copyFor(language, { en: "Leg SPP support", ru: "Поддержание СФП ног", bg: "Поддържане на СФП крака" }),
+            arms_grip: copyFor(language, { en: "Arms and grip support", ru: "Поддержание рук и хвата", bg: "Поддържане на ръце и хват" }),
+            aerobic_base: copyFor(language, { en: "Aerobic unload", ru: "Аэробная разгрузка", bg: "Аеробно разтоварване" }),
+            anaerobic_power: copyFor(language, { en: "Finish power transfer", ru: "Финишная мощность без добора", bg: "Финална мощност без добавяне" }),
+            max_strength: copyFor(language, { en: "Strength tone", ru: "Силовой тонус", bg: "Силов тонус" }),
+            speed_strength: copyFor(language, { en: "Speed-strength tone", ru: "Скоростно-силовой тонус", bg: "Скоростно-силов тонус" }),
+            fatigue_skill: copyFor(language, { en: "Specific wrestling work", ru: "Специальная борцовская работа", bg: "Специфична борцова работа" }),
+            wrestling_contact_density: copyFor(language, { en: "Competition model", ru: "Соревновательная модель", bg: "Състезателен модел" }),
+            weight_management: copyFor(language, { en: "Weight control", ru: "Контроль веса", bg: "Контрол на теглото" }),
+            taper_quality: copyFor(language, { en: "Taper quality", ru: "Качество подводки", bg: "Качество на подводката" }),
+            recovery: copyFor(language, { en: "Recovery and supercompensation", ru: "Восстановление и суперкомпенсация", bg: "Възстановяване и суперкомпенсация" }),
+          } satisfies Record<ConstructorGoalType, string>
+        )[goal]
+      : (
+          {
+            speed_first_action: copyFor(language, { en: "First action speed", ru: "Скорость первого действия", bg: "Скорост на първото действие" }),
+            legs_lme: copyFor(language, { en: "Leg local endurance", ru: "ЛМВ ног", bg: "ЛМВ крака" }),
+            arms_grip: copyFor(language, { en: "Arms and grip", ru: "Руки и захват", bg: "Ръце и хват" }),
+            aerobic_base: copyFor(language, { en: "Aerobic base", ru: "Аэробная база", bg: "Аеробна база" }),
+            anaerobic_power: copyFor(language, { en: "Anaerobic power", ru: "Анаэробная мощность", bg: "Анаеробна мощност" }),
+            max_strength: copyFor(language, { en: "Max strength", ru: "Максимальная сила", bg: "Максимална сила" }),
+            speed_strength: copyFor(language, { en: "Speed strength", ru: "Скоростная сила", bg: "Скоростна сила" }),
+            fatigue_skill: copyFor(language, { en: "Technique under fatigue", ru: "Техника под утомлением", bg: "Техника под умора" }),
+            wrestling_contact_density: copyFor(language, { en: "Contact density", ru: "Плотность борьбы", bg: "Контактна плътност" }),
+            weight_management: copyFor(language, { en: "Weight management", ru: "Вес и сгонка", bg: "Тегло и контрол" }),
+            taper_quality: copyFor(language, { en: "Taper quality", ru: "Качество подводки", bg: "Качество на подводката" }),
+            recovery: copyFor(language, { en: "Recovery", ru: "Восстановление", bg: "Възстановяване" }),
+          } satisfies Record<ConstructorGoalType, string>
+        )[goal];
+  const constructorGoalModeForGoal = (goal: ConstructorGoalType): ConstructorGoalMode => {
+    if (!constructorIsMajorStartWindow) {
+      return "development";
+    }
+
+    if (["speed_first_action", "speed_strength", "taper_quality"].includes(goal)) {
+      return "activation";
+    }
+
+    if (
+      ["legs_lme", "arms_grip", "aerobic_base", "anaerobic_power", "max_strength"].includes(goal)
+    ) {
+      return "maintenance";
+    }
+
+    if (["fatigue_skill", "wrestling_contact_density"].includes(goal)) {
+      return "transfer";
+    }
+
+    return "recovery";
+  };
+  const constructorGoalModeLabel = (mode: ConstructorGoalMode) =>
     (
       {
-        speed_first_action: copyFor(language, { en: "First action speed", ru: "Скорость первого действия", bg: "Скорост на първото действие" }),
-        legs_lme: copyFor(language, { en: "Leg local endurance", ru: "ЛМВ ног", bg: "ЛМВ крака" }),
-        arms_grip: copyFor(language, { en: "Arms and grip", ru: "Руки и захват", bg: "Ръце и хват" }),
-        aerobic_base: copyFor(language, { en: "Aerobic base", ru: "Аэробная база", bg: "Аеробна база" }),
-        anaerobic_power: copyFor(language, { en: "Anaerobic power", ru: "Анаэробная мощность", bg: "Анаеробна мощност" }),
-        max_strength: copyFor(language, { en: "Max strength", ru: "Максимальная сила", bg: "Максимална сила" }),
-        speed_strength: copyFor(language, { en: "Speed strength", ru: "Скоростная сила", bg: "Скоростна сила" }),
-        fatigue_skill: copyFor(language, { en: "Technique under fatigue", ru: "Техника под утомлением", bg: "Техника под умора" }),
-        wrestling_contact_density: copyFor(language, { en: "Contact density", ru: "Плотность борьбы", bg: "Контактна плътност" }),
-        weight_management: copyFor(language, { en: "Weight management", ru: "Вес и сгонка", bg: "Тегло и контрол" }),
-        taper_quality: copyFor(language, { en: "Taper quality", ru: "Качество подводки", bg: "Качество на подводката" }),
-        recovery: copyFor(language, { en: "Recovery", ru: "Восстановление", bg: "Възстановяване" }),
-      } satisfies Record<ConstructorGoalType, string>
-    )[goal];
+        development: copyFor(language, { en: "development", ru: "развитие", bg: "развитие" }),
+        maintenance: copyFor(language, { en: "maintenance", ru: "поддержание", bg: "поддържане" }),
+        transfer: copyFor(language, { en: "transfer", ru: "перенос", bg: "пренос" }),
+        activation: copyFor(language, { en: "activation", ru: "активация", bg: "активация" }),
+        recovery: copyFor(language, { en: "recovery", ru: "восстановление", bg: "възстановяване" }),
+      } satisfies Record<ConstructorGoalMode, string>
+    )[mode];
   const constructorPhaseLabel = (phase: ConstructorPhase) =>
     (
       {
@@ -14881,12 +15024,6 @@ export function PageClient({
         recovery: copyFor(language, { en: "Recovery", ru: "Восстановление", bg: "Възстановяване" }),
       } satisfies Record<ConstructorPhase, string>
     )[phase];
-  const constructorEffectiveCompetitionStartDate =
-    selectedConstructorCompetitionPlan?.competitionStartDate ?? constructorForm.startDate;
-  const constructorDaysToCompetition = diffDateInputDays(
-    getDateInputValue(),
-    constructorEffectiveCompetitionStartDate,
-  );
   const constructorRecommendedPhase = deriveConstructorPhaseByCompetitionDays(
     constructorDaysToCompetition,
   );
@@ -21282,11 +21419,12 @@ export function PageClient({
 
                   <div className="constructor-goal-picker">
                     <span className="field-caption">
-                      {copyFor(language, { en: "Goals", ru: "Цели цикла", bg: "Цели" })}
+                      {copyFor(language, { en: "Preparation focus", ru: "Фокус подготовки", bg: "Фокус на подготовката" })}
                     </span>
                     <div className="constructor-chip-grid">
-                      {CONSTRUCTOR_GOAL_OPTIONS.map((goal) => {
+                      {constructorGoalOptions.map((goal) => {
                         const active = constructorForm.goals.includes(goal);
+                        const mode = constructorGoalModeForGoal(goal);
 
                         return (
                           <button
@@ -21302,7 +21440,8 @@ export function PageClient({
                             }
                             type="button"
                           >
-                            {constructorGoalLabel(goal)}
+                            <span>{constructorGoalLabel(goal)}</span>
+                            <small>{constructorGoalModeLabel(mode)}</small>
                           </button>
                         );
                       })}
@@ -21424,6 +21563,35 @@ export function PageClient({
                         <strong>{constructorDraft.understood.mainTask}</strong>
                         <p>{constructorDraft.understood.interpretation}</p>
                         <small>{constructorDraft.understood.limitation}</small>
+                      </div>
+                      <div className="constructor-focus-card">
+                        <div className="summary-topline">
+                          <strong>{constructorDraft.focusPlan.title}</strong>
+                          <span>
+                            {constructorDraft.focusPlan.developmentAllowed
+                              ? copyFor(language, { en: "Development allowed", ru: "Развитие разрешено", bg: "Развитието е разрешено" })
+                              : copyFor(language, { en: "No development load", ru: "Развитие запрещено", bg: "Без развиващо натоварване" })}
+                          </span>
+                        </div>
+                        <div className="constructor-focus-list">
+                          {constructorDraft.focusPlan.items.map((item) => (
+                            <span key={`${item.goalType}-${item.mode}`}>
+                              <strong>{item.label}</strong>
+                              <small>{constructorGoalModeLabel(item.mode)}</small>
+                            </span>
+                          ))}
+                        </div>
+                        {constructorDraft.focusPlan.phaseMap.length ? (
+                          <div className="constructor-phase-map">
+                            {constructorDraft.focusPlan.phaseMap.map((phase) => (
+                              <article key={`${phase.range}-${phase.title}`}>
+                                <span>{phase.range}</span>
+                                <strong>{phase.title}</strong>
+                                <small>{phase.intent}</small>
+                              </article>
+                            ))}
+                          </div>
+                        ) : null}
                       </div>
                       <div className="constructor-mini-grid">
                         <article>

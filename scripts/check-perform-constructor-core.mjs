@@ -234,6 +234,7 @@ const monthDraft = buildPerformConstructorDraft(monthPreparationInput);
 const monthPayload = buildConstructorTemplatePayload(monthDraft, "Month constructor test");
 const monthPhases = monthDraft.plan.weeks.map((week) => week.phase);
 const monthTitles = monthDraft.plan.weeks.map((week) => week.title);
+const monthFocus = monthDraft.focusPlan;
 const monthTargets = new Set(
   monthDraft.plan.weeks.flatMap((week) =>
     week.days.flatMap((day) => day.blocks.map((block) => block.targetQuality)),
@@ -422,6 +423,40 @@ assert(
   "Close taper generated days should not duplicate day labels",
 );
 assert(monthPayload.days.length >= 20, `30-day cycle should build a full preparation draft, got ${monthPayload.days.length}`);
+assert(monthFocus.developmentAllowed === false, "30-day major start focus must forbid development");
+assert(
+  monthFocus.items.every((item) => item.mode !== "development"),
+  `30-day major start must not expose development focus modes: ${monthFocus.items
+    .map((item) => `${item.label}:${item.mode}`)
+    .join(", ")}`,
+);
+for (const expectedFocus of [
+  "специальная борцовская работа",
+  "соревновательная модель",
+  "поддержание СФП",
+  "контроль веса",
+  "восстановление и суперкомпенсация",
+  "качество подводки",
+]) {
+  assert(
+    monthFocus.items.some((item) => item.label === expectedFocus),
+    `30-day major start focus should include "${expectedFocus}"`,
+  );
+}
+assert(
+  monthFocus.phaseMap.length === 5 &&
+    monthFocus.phaseMap[0]?.range === "Д-30...Д-24" &&
+    monthFocus.phaseMap[monthFocus.phaseMap.length - 1]?.range === "Д-4...старт",
+  "30-day major start focus should expose the agreed five-step phase map",
+);
+assert(
+  !/скорость первого действия/i.test(monthDraft.understood.interpretation),
+  `30-day major start interpretation should not use old development-speed wording: ${monthDraft.understood.interpretation}`,
+);
+assert(
+  monthDraft.explanation.mainDecision.includes("развитие запрещено"),
+  "30-day major start decision should say that development is forbidden",
+);
 assert(
   monthTitles[0]?.includes("вход в предсоревновательный блок"),
   `30-day cycle should start from the Europe-case entry block, got: ${monthTitles.join(" | ")}`,
@@ -591,6 +626,14 @@ console.log(
       monthTitles,
       monthWorkingWeekSpeedDayCounts,
       monthWorkingWeekRecoveryCoverage,
+      monthFocus: {
+        developmentAllowed: monthFocus.developmentAllowed,
+        items: monthFocus.items.map((item) => ({
+          label: item.label,
+          mode: item.mode,
+        })),
+        phaseMap: monthFocus.phaseMap.map((phase) => phase.range),
+      },
       europeCase23Titles,
       europeCase23StructuredDays: europeCase23ActiveTrainingDays.length,
       europeCase23StructuredSessions: europeCase23ActiveTrainingSessions.length,
