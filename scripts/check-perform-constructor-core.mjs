@@ -46,6 +46,10 @@ function activeTrainingSessions(draft) {
   );
 }
 
+function sessionCount(day) {
+  return day.sessions?.length ?? 0;
+}
+
 function hasSessionFrame(session) {
   return (
     session.blocks.length >= 3 &&
@@ -257,6 +261,10 @@ const monthTemplateActiveSessions = activeTemplateSessions(monthPayload);
 const monthActiveTrainingDaysWithSessions = monthDraft.plan.weeks.flatMap((week) =>
   week.days.filter((day) => (day.sessions ?? []).some((session) => session.blocks.some(isActiveTrainingBlock))),
 );
+const monthHalfDays = monthActiveTrainingDaysWithSessions.filter((day) => sessionCount(day) === 1);
+const monthOverloadedSixDayWeeks = monthDraft.plan.weeks.filter(
+  (week) => week.days.length >= 6 && week.days.every((day) => sessionCount(day) >= 2),
+);
 const monthHasMorningTechniqueEveningPhysical = monthActiveTrainingDaysWithSessions.some((day) => {
   const morning = day.sessions?.find((session) => session.name === "УТРО");
   const evening = day.sessions?.find((session) => session.name === "ВЕЧЕР");
@@ -284,6 +292,9 @@ const europeCase23ActiveTrainingDays = activeTrainingDays(europeCase23Draft);
 const europeCase23ActiveTrainingSessions = activeTrainingSessions(europeCase23Draft);
 const europeCase23Payload = buildConstructorTemplatePayload(europeCase23Draft, "Europe case 23");
 const europeCase23TemplateActiveSessions = activeTemplateSessions(europeCase23Payload);
+const europeCase23HalfDays = europeCase23Draft.plan.weeks.flatMap((week) =>
+  week.days.filter((day) => sessionCount(day) === 1),
+);
 const monthInputWithWrongDevelopmentPhase = {
   ...monthPreparationInput,
   context: {
@@ -293,6 +304,22 @@ const monthInputWithWrongDevelopmentPhase = {
 };
 const monthWrongPhaseDraft = buildPerformConstructorDraft(monthInputWithWrongDevelopmentPhase);
 const monthWrongPhasePhases = monthWrongPhaseDraft.plan.weeks.map((week) => week.phase);
+const monthAutoGoalInput = {
+  ...monthPreparationInput,
+  goals: [
+    {
+      goalType: "speed_first_action",
+      priority: 1,
+      reason: "тренер выбрал только скорость, система должна добрать предсоревновательную логику",
+    },
+  ],
+};
+const monthAutoGoalDraft = buildPerformConstructorDraft(monthAutoGoalInput);
+const monthAutoGoalTargets = new Set(
+  monthAutoGoalDraft.plan.weeks.flatMap((week) =>
+    week.days.flatMap((day) => day.blocks.map((block) => block.targetQuality)),
+  ),
+);
 
 const localQualitiesInput = {
   ...europePreparationInput,
@@ -468,12 +495,15 @@ assert(
   "Every active session in the 30-day constructor draft must be structured as warm-up -> main work -> cool-down",
 );
 assert(
-  europeCase23ActiveTrainingDays.every((day) => (day.sessions?.length ?? 0) >= 2),
-  "Europe-case active days should be split into morning/evening sessions",
+  europeCase23ActiveTrainingDays.every((day) => [1, 2].includes(sessionCount(day))) &&
+    europeCase23HalfDays.length >= 3,
+  "Europe-case active days should follow full/half rhythm: two-session days plus planned half-days",
 );
 assert(
-  monthActiveTrainingDays.every((day) => (day.sessions?.length ?? 0) >= 2),
-  "30-day active days should be split into morning/evening sessions",
+  monthActiveTrainingDays.every((day) => [1, 2].includes(sessionCount(day))) &&
+    monthHalfDays.length >= 4 &&
+    monthOverloadedSixDayWeeks.length === 0,
+  "30-day active days should follow full/half rhythm, not six overloaded two-session days",
 );
 assert(
   europeCase23TemplateActiveSessions.every((session) => session.blocks.every((block) => block.exercises?.length > 0)),
@@ -508,6 +538,14 @@ assert(
 assert(
   monthWrongPhaseDraft.explanation.mainDecision.includes("special_preparation"),
   "30-day competition cycle should normalize development input to special_preparation in the decision text",
+);
+assert(
+  monthAutoGoalTargets.has("wrestling_contact_density") &&
+    monthAutoGoalTargets.has("fatigue_skill") &&
+    monthAutoGoalTargets.has("weight_management") &&
+    monthAutoGoalTargets.has("taper_quality") &&
+    monthAutoGoalTargets.has("recovery"),
+  "30-day major competition constructor should auto-select wrestling, technique, weight, taper and recovery goals",
 );
 assert(localQualitiesLastWeek.phase === "taper", "Local qualities 21-day cycle should end with taper");
 assert(
