@@ -5407,6 +5407,7 @@ function renderDeviceHealthCard(
         <strong>${escapeHtml(status.statusLabel)}</strong>
         <span>${escapeHtml(formatDeviceHealthActionText(summary, canSync))}</span>
       </div>
+      ${renderAppleHealthDisclosure(summary, "full")}
       <div class="today-indicators-grid">
         ${renderTodayIndicator(
           "Сон",
@@ -5478,6 +5479,7 @@ function renderCompactDeviceHealthCard(
         <strong>${escapeHtml(formatCompactDeviceHealthStatus(summary))}</strong>
         <span>${escapeHtml(formatCompactDeviceHealthHint(summary, canSync))}</span>
       </div>
+      ${renderAppleHealthDisclosure(summary, "compact")}
       <div class="today-indicators-grid device-health-compact-grid">
         ${renderTodayIndicator(
           "Сон",
@@ -5558,6 +5560,7 @@ function renderWatchesScreen(state: MobileAppState) {
 
   return `
     ${renderWatchParametersCard(summary, heartRateSamples, state, date)}
+    ${renderAppleHealthDisclosure(summary, "watch")}
     ${renderWatchWorkoutSummaryCard(todayWorkouts, recentWorkouts, date)}
     ${renderWatchSettingsEntryCard(state, summary)}
   `;
@@ -10062,8 +10065,38 @@ function formatDeviceHealthCardTitle(summary: DeviceHealthDailySummary | null) {
   }
 
   return summary?.provider === "apple-health" || isAppleHealthRuntime()
-    ? "Данные здоровья"
+    ? "Apple Health / HealthKit"
     : "Данные устройства";
+}
+
+function shouldShowAppleHealthDisclosure(summary: DeviceHealthDailySummary | null) {
+  return summary?.provider === "apple-health" || isAppleHealthRuntime();
+}
+
+function renderAppleHealthDisclosure(
+  summary: DeviceHealthDailySummary | null,
+  variant: "compact" | "full" | "watch",
+) {
+  if (!shouldShowAppleHealthDisclosure(summary)) {
+    return "";
+  }
+
+  const modifier = variant === "compact"
+    ? " is-compact"
+    : variant === "watch"
+      ? " is-watch"
+      : "";
+
+  return `
+    <section class="apple-health-disclosure${modifier}" aria-label="Apple Health и HealthKit">
+      <strong>Apple Health / HealthKit</strong>
+      <span>
+        PERFORM запрашивает только чтение сна, пульса, SpO₂ и тренировок из Apple Health.
+        Эти данные используются в готовности спортсмена, карточке дня и тренерском разборе.
+        PERFORM не ставит медицинские диагнозы и не заменяет консультацию врача.
+      </span>
+    </section>
+  `;
 }
 
 function formatReadinessDeviceHealthSyncLabel(summary: DeviceHealthDailySummary | null) {
