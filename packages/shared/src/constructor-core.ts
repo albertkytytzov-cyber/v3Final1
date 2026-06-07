@@ -988,6 +988,15 @@ function selectTemplateCards(input: ConstructorInput, riskFlags: ConstructorRisk
 }
 
 const STANDARD_WEEKDAY_LABELS = ["ПН", "ВТ", "СР", "ЧТ", "ПТ", "СБ", "ВС"];
+const UTC_DAY_TO_TRAINING_DAY: Record<number, NonNullable<ConstructorContextInput["availableTrainingDays"]>[number]> = {
+  0: "sun",
+  1: "mon",
+  2: "tue",
+  3: "wed",
+  4: "thu",
+  5: "fri",
+  6: "sat",
+};
 const TRAINING_DAY_LABELS: Record<
   NonNullable<ConstructorContextInput["availableTrainingDays"]>[number],
   string
@@ -1019,6 +1028,68 @@ function taperWeekLabelPool(
   return Array.from({ length: calendarDaysInWeek }, (_, index) => `Д-${firstDayFromStart - index}`).filter(
     (label) => !label.endsWith("-0"),
   );
+}
+
+function addUtcDays(date: Date, days: number) {
+  const result = new Date(date);
+  result.setUTCDate(result.getUTCDate() + days);
+  return result;
+}
+
+function formatPlanDate(date: Date) {
+  const day = String(date.getUTCDate()).padStart(2, "0");
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+
+  return `${day}.${month}`;
+}
+
+function calendarLabelForDate(date: Date) {
+  return `${STANDARD_WEEKDAY_LABELS[date.getUTCDay() === 0 ? 6 : date.getUTCDay() - 1]} ${formatPlanDate(date)}`;
+}
+
+function allowedTrainingDaySet(input: ConstructorInput) {
+  return new Set(input.context.availableTrainingDays?.length ? input.context.availableTrainingDays : [
+    "mon",
+    "tue",
+    "wed",
+    "thu",
+    "fri",
+    "sat",
+  ]);
+}
+
+function competitionPlanDate(input: ConstructorInput, dayIndex: number) {
+  const startDate = parseDate(input.competition.startDate);
+
+  if (!startDate) {
+    return null;
+  }
+
+  return addUtcDays(startDate, -input.context.cycleLengthDays + dayIndex);
+}
+
+function competitionCalendarLabelPool(
+  input: ConstructorInput,
+  weekIndex: number,
+  calendarDaysInWeek: number,
+) {
+  const allowedDays = allowedTrainingDaySet(input);
+
+  return Array.from({ length: calendarDaysInWeek }, (_, index) => {
+    const absoluteDayIndex = weekIndex * 7 + index;
+    const date = competitionPlanDate(input, absoluteDayIndex);
+    const daysToStart = Math.max(1, input.context.cycleLengthDays - absoluteDayIndex);
+
+    if (!date) {
+      return `Д-${daysToStart}`;
+    }
+
+    if (!allowedDays.has(UTC_DAY_TO_TRAINING_DAY[date.getUTCDay()])) {
+      return null;
+    }
+
+    return `Д-${daysToStart} / ${calendarLabelForDate(date)}`;
+  }).filter((label): label is string => Boolean(label));
 }
 
 function daysToStartAtWeekStart(input: ConstructorInput, weekIndex: number) {
@@ -1137,6 +1208,10 @@ function labelPoolForWeek(
   weekIndex: number,
   calendarDaysInWeek: number,
 ) {
+  if (isMajorCompetitionConstructorCase(input)) {
+    return competitionCalendarLabelPool(input, weekIndex, calendarDaysInWeek);
+  }
+
   if (phase === "taper" || phase === "start_window") {
     return taperWeekLabelPool(input, weekIndex, calendarDaysInWeek);
   }
@@ -2685,6 +2760,22 @@ function unloadingProcedureBlock(
   );
 }
 
+function environmentShiftRecoveryBlock(
+  volume = "кросс, прогулка, поход, велосипед или бассейн 30-45 мин / смена обстановки / Z1-Z2",
+) {
+  return lockedVolumeBlock(
+    block(
+      "Смена обстановки",
+      "conditioning",
+      "aerobic_base",
+      volume,
+      ["общее"],
+      "psychological recovery / aerobic unloading",
+      ["Europe plan analysis", "recovery consensus", "load consensus"],
+    ),
+  );
+}
+
 function europeHalfDay(label: string, stage: ConstructorCalendarStage, slotIndex: number) {
   const isDenseStage = stage === "main_specific_microcycle";
   const isTaperStage = stage === "competition_integration" || stage === "taper_peak" || stage === "start_window";
@@ -2693,14 +2784,16 @@ function europeHalfDay(label: string, stage: ConstructorCalendarStage, slotIndex
   if (isTaperStage) {
     return dayWithSingleSession(
       label,
-      isSaturday ? "Половинчатая суббота: свежесть, вес и восстановление" : "Половинчатый день: техника без добора",
+      isSaturday
+        ? "Половинчатая суббота: смена обстановки, вес и восстановление"
+        : "Половинчатый день: смена обстановки и восстановление",
       "recovery",
-      "одна короткая сессия, без второй тренировки",
+      "без ковра, без борьбы, без второй тренировки",
       [
-        techniqueBaseBlock(
+        environmentShiftRecoveryBlock(
           isSaturday
-            ? "10-15 мин лёгкая техника, если готовность нормальная"
-            : "15-20 мин: точность входов, защита, стойка-партер / RPE <= 3",
+            ? "прогулка/поход/велосипед 30-40 мин или бассейн / смена обстановки"
+            : "кросс Z1-Z2, прогулка, велосипед или бассейн 25-35 мин / не на ковре",
         ),
         weightRecoveryControlBlock(),
         unloadingProcedureBlock("сауна/мобилити/массаж 20-30 мин по состоянию, вес и сон под контролем"),
@@ -2711,16 +2804,15 @@ function europeHalfDay(label: string, stage: ConstructorCalendarStage, slotIndex
   return dayWithSingleSession(
     label,
     isSaturday
-      ? "Половинчатая суббота: сброс накопленной усталости"
-      : "Половинчатый день после двух рабочих дней",
+      ? "Половинчатая суббота: смена обстановки и сброс усталости"
+      : "Половинчатый день после двух рабочих дней: смена обстановки",
     isDenseStage ? "recovery" : "low",
-    "одна тренировка, восстановительные процедуры вместо второй сессии",
+    "без ковра, без борьбы, восстановительные процедуры вместо второй сессии",
     [
-      aerobicRecoveryBlock(isDenseStage ? "20-25 мин Z1-Z2 / локальный сброс после плотности" : "20 мин Z1-Z2"),
-      techniqueBaseBlock(
+      environmentShiftRecoveryBlock(
         isDenseStage
-          ? "15-20 мин лёгкая техника без силовой борьбы"
-          : "15-20 мин техника качества, без борьбы в утомление",
+          ? "прогулка/поход/велосипед 30-45 мин Z1-Z2 / психологический сброс после плотности"
+          : "кросс, прогулка, поход, велосипед или бассейн 30-40 мин / смена обстановки",
       ),
       weightRecoveryControlBlock(),
       unloadingProcedureBlock(),
@@ -3008,7 +3100,7 @@ function europeCompetitionDayForStage(
   label: string,
   slotIndex: number,
 ) {
-  if (slotIndex === 2 || slotIndex === 5) {
+  if (slotIndex === 2 || /\/\sСБ\s/.test(label)) {
     return europeHalfDay(label, stage, slotIndex);
   }
 
@@ -3049,9 +3141,12 @@ function normalizeWeekDensity(
   const calendarDaysInWeek = Math.min(7, calendarDaysRemaining);
   const calendarStage = calendarStageFromWeek(input, weekIndex);
   const phase = phaseForCalendarStage(calendarStage);
-  const targetDayCount = targetSessionsForWeek(input, phase, calendarDaysInWeek);
   const labelPool = labelPoolForWeek(input, phase, weekIndex, calendarDaysInWeek);
+  const rawTargetDayCount = targetSessionsForWeek(input, phase, calendarDaysInWeek);
   const isEuropeCase = isMajorCompetitionConstructorCase(input);
+  const targetDayCount = isEuropeCase
+    ? Math.min(rawTargetDayCount, Math.max(1, labelPool.length))
+    : rawTargetDayCount;
   const europeCaseDays = isEuropeCase
     ? europeCompetitionDaysForWeek(calendarStage, targetDayCount, labelPool)
     : null;

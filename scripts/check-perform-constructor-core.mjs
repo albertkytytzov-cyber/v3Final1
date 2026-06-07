@@ -262,6 +262,7 @@ const monthActiveTrainingDaysWithSessions = monthDraft.plan.weeks.flatMap((week)
   week.days.filter((day) => (day.sessions ?? []).some((session) => session.blocks.some(isActiveTrainingBlock))),
 );
 const monthHalfDays = monthActiveTrainingDaysWithSessions.filter((day) => sessionCount(day) === 1);
+const monthFullDays = monthActiveTrainingDaysWithSessions.filter((day) => sessionCount(day) >= 2);
 const monthOverloadedSixDayWeeks = monthDraft.plan.weeks.filter(
   (week) => week.days.length >= 6 && week.days.every((day) => sessionCount(day) >= 2),
 );
@@ -444,8 +445,12 @@ assert(
 assert(
   monthDraft.plan.weeks
     .slice(0, 3)
-    .every((week) => week.days.every((day) => !day.dayLabel.startsWith("Д-"))),
-  "First three weeks of a 30-day cycle should use weekday labels, not pre-start day labels",
+    .every((week) => week.days.every((day) => /Д-\d+\s\/\s[А-Я]{2}\s\d{2}\.\d{2}/.test(day.dayLabel))),
+  "30-day major competition cycle should use concrete calendar labels like D-30 / weekday date",
+);
+assert(
+  monthDraft.plan.weeks.every((week) => week.days.every((day) => !/\sВС\s/.test(day.dayLabel))),
+  "30-day major competition cycle should not create Sunday training days when Sunday is not available",
 );
 assert(
   monthDraft.plan.weeks.some((week) =>
@@ -514,10 +519,14 @@ assert(
   "30-day template payload should include concrete exercises for every block",
 );
 assert(
-  monthActiveTrainingDaysWithSessions.every((day) =>
+  monthFullDays.every((day) =>
     (day.sessions ?? []).some(sessionHasTechnicalWrestling),
   ),
-  "Every active day in the 30-day Europe constructor case must include wrestling technique/contact, not only OFP/SFP",
+  "Every full active day in the 30-day Europe constructor case must include wrestling technique/contact",
+);
+assert(
+  monthHalfDays.every((day) => !(day.sessions ?? []).some(sessionHasTechnicalWrestling)),
+  "Half-days in the 30-day Europe constructor case must be environment-shift recovery days without mat technique/contact",
 );
 assert(
   monthHasMorningTechniqueEveningPhysical,
