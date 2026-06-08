@@ -490,6 +490,74 @@ const europe28StrategyDraft = buildPerformConstructorDraft({
   ],
   seasonStrategy: europe28SeasonStrategy,
 });
+const fourDayStartStrategy = buildSeasonStrategySnapshot({
+  athleteId: "athlete-volga-demo",
+  currentDate: "2026-06-08",
+  season: {
+    id: "season-volga-2026",
+    athleteId: "athlete-volga-demo",
+    athleteName: "Volga Athlete",
+    olympicCycleId: "cycle-la-2028",
+    olympicCycleName: "LA 2028",
+    year: 2026,
+    name: "2026 · углублённая специальная подготовка",
+    goal: "Подготовка к ближайшему старту",
+    strategyType: "multi_peak",
+  },
+  olympicCycle: {
+    id: "cycle-la-2028",
+    name: "LA 2028",
+    startDate: "2025-01-01",
+    endDate: "2028-12-31",
+    targetEvent: "Olympic Games 2028",
+    description: "Олимпийский цикл",
+  },
+  targetCompetitionPlan: {
+    id: "plan-udlog-2026",
+    athleteId: "athlete-volga-demo",
+    seasonId: "season-volga-2026",
+    competitionId: "competition-udlog-2026",
+    competitionTitle: "Удлож",
+    competitionStartDate: "2026-06-12",
+    competitionEndDate: "2026-06-12",
+    priority: "A",
+    planType: "main",
+    peakRequired: true,
+    taperDays: 4,
+    weightCutRequired: false,
+    expectedMatches: 4,
+  },
+  targetCompetition: {
+    id: "competition-udlog-2026",
+    title: "Удлож",
+    startDate: "2026-06-12",
+    endDate: "2026-06-12",
+    level: "continental",
+    location: "Europe",
+  },
+});
+const fourDayStartDraft = buildPerformConstructorDraft({
+  ...competitionWeekInput,
+  competition: {
+    ...competitionWeekInput.competition,
+    name: "Удлож",
+    startDate: "2026-06-12",
+    weighInDate: "2026-06-11",
+  },
+  athlete: {
+    ...competitionWeekInput.athlete,
+    athleteId: "athlete-volga-demo",
+    fullName: "Volga Athlete",
+  },
+  context: {
+    ...competitionWeekInput.context,
+    currentPhase: "taper",
+    cycleLengthDays: 7,
+    sessionsPerWeek: 6,
+  },
+  seasonStrategy: fourDayStartStrategy,
+});
+const fourDayStartActiveDays = activeTrainingDays(fourDayStartDraft);
 
 assert(CONSTRUCTOR_TEMPLATE_CARDS.length >= 6, "Expected first constructor template cards");
 assert(draft.plan.weeks.length > 0, "Draft must contain plan weeks");
@@ -754,6 +822,31 @@ assert(
     .map((phase) => phase.range)
     .join(" | ")}`,
 );
+assert(fourDayStartStrategy.currentWindow.daysToStart === 4, "4-day start strategy must calculate exact days");
+assert(
+  fourDayStartStrategy.currentWindow.phase === "start_window",
+  `D-4 should be start_window, got ${fourDayStartStrategy.currentWindow.phase}`,
+);
+assert(
+  fourDayStartStrategy.currentWindow.cycleLengthDays === 4,
+  `4-day start strategy must keep exact 4-day length, got ${fourDayStartStrategy.currentWindow.cycleLengthDays}`,
+);
+assert(
+  fourDayStartDraft.plan.cycleLengthDays === 4,
+  `Constructor must not round 4 days to 7, got ${fourDayStartDraft.plan.cycleLengthDays}`,
+);
+assert(
+  fourDayStartDraft.plan.weeks.length === 1 &&
+    fourDayStartDraft.plan.weeks[0]?.phase === "start_window" &&
+    fourDayStartActiveDays.length === 4,
+  `4-day start draft should be one start-window week with four active calendar days, got weeks=${fourDayStartDraft.plan.weeks.length}, phase=${fourDayStartDraft.plan.weeks[0]?.phase}, days=${fourDayStartActiveDays.length}`,
+);
+assert(
+  fourDayStartDraft.focusPlan.phaseMap.map((phase) => phase.range).join("|") === "Д-4...старт",
+  `4-day start focus map should not expose 7/10/14 templates, got ${fourDayStartDraft.focusPlan.phaseMap
+    .map((phase) => phase.range)
+    .join(" | ")}`,
+);
 
 console.log(
   JSON.stringify(
@@ -796,6 +889,13 @@ console.log(
         cycleLengthDays: europe28StrategyDraft.plan.cycleLengthDays,
         forbiddenModes: europe28SeasonStrategy.constructorRules.forbiddenModes,
         phaseMap: europe28StrategyDraft.focusPlan.phaseMap.map((phase) => phase.range),
+      },
+      fourDayStartWindow: {
+        phase: fourDayStartStrategy.currentWindow.phase,
+        daysToStart: fourDayStartStrategy.currentWindow.daysToStart,
+        cycleLengthDays: fourDayStartDraft.plan.cycleLengthDays,
+        activeDays: fourDayStartActiveDays.length,
+        phaseMap: fourDayStartDraft.focusPlan.phaseMap.map((phase) => phase.range),
       },
     },
     null,

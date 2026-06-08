@@ -300,10 +300,10 @@ function phaseForTarget(
     };
   }
 
-  if (daysToStart <= 3) {
+  if (daysToStart <= 4) {
     return {
       phase: "start_window",
-      reason: "осталось 0-3 дня: стартовое окно, вес, сон и короткая активация",
+      reason: "осталось 0-4 дня: стартовое окно, вес, сон и короткая активация",
     };
   }
 
@@ -350,7 +350,7 @@ function cycleLengthForTarget(daysToStart: number | null) {
   }
 
   if (daysToStart <= 0) {
-    return 7;
+    return 1;
   }
 
   if (daysToStart <= 30) {

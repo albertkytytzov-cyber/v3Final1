@@ -1174,7 +1174,7 @@ function calendarStageFromWeek(input: ConstructorInput, weekIndex: number): Cons
     return "recovery";
   }
 
-  if (effectivePhase === "start_window" || daysToStartAtWeekStartValue <= 3) {
+  if (effectivePhase === "start_window" || daysToStartAtWeekStartValue <= 4) {
     return "start_window";
   }
 
@@ -1183,10 +1183,6 @@ function calendarStageFromWeek(input: ConstructorInput, weekIndex: number): Cons
   }
 
   if (isMajorCompetition(input) && input.context.cycleLengthDays <= 30) {
-    if (daysToStartAtWeekStartValue <= 4) {
-      return "taper_peak";
-    }
-
     if (daysToStartAtWeekStartValue <= 11) {
       return "competition_integration";
     }
@@ -1254,7 +1250,7 @@ function targetSessionsForWeek(
   const requestedTrainingDays = Math.min(requestedSessions, availableDays, calendarDaysInWeek);
 
   if (phase === "start_window") {
-    return Math.min(requestedTrainingDays, 3);
+    return requestedTrainingDays;
   }
 
   if (phase === "recovery") {

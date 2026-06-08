@@ -266,14 +266,6 @@ const CONSTRUCTOR_PHASE_OPTIONS: ConstructorPhase[] = [
   "recovery",
 ];
 
-const CONSTRUCTOR_CYCLE_LENGTH_OPTIONS: Array<ConstructorInput["context"]["cycleLengthDays"]> = [
-  7,
-  10,
-  14,
-  21,
-  30,
-];
-
 function getDateInputValue(date = new Date()) {
   return date.toISOString().slice(0, 10);
 }
@@ -371,7 +363,7 @@ function deriveConstructorPhaseByCompetitionDays(daysToCompetition: number | nul
     return "recovery";
   }
 
-  if (daysToCompetition <= 3) {
+  if (daysToCompetition <= 4) {
     return "start_window";
   }
 
@@ -446,23 +438,11 @@ function deriveConstructorCycleLengthByCompetitionDays(
     return 30;
   }
 
-  if (daysToCompetition <= 7) {
+  if (daysToCompetition < 0) {
     return 7;
   }
 
-  if (daysToCompetition <= 10) {
-    return 10;
-  }
-
-  if (daysToCompetition <= 14) {
-    return 14;
-  }
-
-  if (daysToCompetition <= 21) {
-    return 21;
-  }
-
-  return 30;
+  return Math.max(1, daysToCompetition);
 }
 
 function compareConstructorCompetitionPlans(
@@ -21679,22 +21659,19 @@ export function PageClient({
                         </select>
                       </label>
                       <label>
-                        <span>{copyFor(language, { en: "Cycle", ru: "Цикл", bg: "Цикъл" })}</span>
-                        <select
+                        <span>{copyFor(language, { en: "Draft days", ru: "Дней плана", bg: "Дни план" })}</span>
+                        <input
+                          min={1}
+                          max={120}
+                          type="number"
                           value={constructorForm.cycleLengthDays}
                           onChange={(event) =>
                             setConstructorForm((current) => ({
                               ...current,
-                              cycleLengthDays: Number(event.target.value) as ConstructorInput["context"]["cycleLengthDays"],
+                              cycleLengthDays: Math.max(1, Math.min(120, Number(event.target.value) || 1)),
                             }))
                           }
-                        >
-                          {CONSTRUCTOR_CYCLE_LENGTH_OPTIONS.map((days) => (
-                            <option key={days} value={days}>
-                              {days} {copyFor(language, { en: "days", ru: "дней", bg: "дни" })}
-                            </option>
-                          ))}
-                        </select>
+                        />
                       </label>
                       <label>
                         <span>
