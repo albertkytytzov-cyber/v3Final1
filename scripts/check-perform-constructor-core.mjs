@@ -1,6 +1,7 @@
 import {
   buildConstructorTemplatePayload,
   buildPerformConstructorDraft,
+  buildSeasonStrategySnapshot,
   CONSTRUCTOR_TEMPLATE_CARDS,
 } from "@training-platform/shared";
 
@@ -378,6 +379,118 @@ const competitionWeekBlocks = competitionWeekDraft.plan.weeks.flatMap((week) =>
   week.days.flatMap((day) => day.blocks),
 );
 
+const europe28SeasonStrategy = buildSeasonStrategySnapshot({
+  athleteId: "athlete-olga-demo",
+  currentDate: "2026-06-08",
+  season: {
+    id: "season-2026",
+    athleteId: "athlete-olga-demo",
+    athleteName: "Popova Olga",
+    olympicCycleId: "cycle-la-2028",
+    olympicCycleName: "LA 2028",
+    year: 2026,
+    name: "2026 · углублённая специальная подготовка",
+    goal: "Подготовка к Европе и миру внутри второго года олимпийского цикла",
+    strategyType: "multi_peak",
+  },
+  olympicCycle: {
+    id: "cycle-la-2028",
+    name: "LA 2028",
+    startDate: "2025-01-01",
+    endDate: "2028-12-31",
+    targetEvent: "Olympic Games 2028",
+    description: "Олимпийский цикл",
+  },
+  targetCompetitionPlan: {
+    id: "plan-europe-2026",
+    athleteId: "athlete-olga-demo",
+    seasonId: "season-2026",
+    seasonName: "2026 · углублённая специальная подготовка",
+    seasonYear: 2026,
+    competitionId: "competition-europe-2026",
+    competitionTitle: "Чемпионат Европы",
+    competitionStartDate: "2026-07-06",
+    competitionEndDate: "2026-07-07",
+    priority: "A",
+    planType: "main",
+    peakRequired: true,
+    taperDays: 10,
+    weightCutRequired: true,
+    targetWeight: 57,
+    currentWeight: 58.2,
+    expectedMatches: 4,
+    competitionFormat: "tournament",
+    prepStartDate: "2026-06-08",
+    prepEndDate: "2026-07-05",
+    notes: "Главный старт",
+  },
+  targetCompetition: {
+    id: "competition-europe-2026",
+    title: "Чемпионат Европы",
+    startDate: "2026-07-06",
+    endDate: "2026-07-07",
+    level: "continental",
+    location: "Europe",
+  },
+  competitionPlans: [
+    {
+      id: "plan-control-2026",
+      athleteId: "athlete-olga-demo",
+      seasonId: "season-2026",
+      competitionId: "competition-control-2026",
+      competitionTitle: "Контрольный старт",
+      competitionStartDate: "2026-05-20",
+      competitionEndDate: "2026-05-20",
+      priority: "C",
+      planType: "control",
+      peakRequired: false,
+      taperDays: 2,
+      weightCutRequired: false,
+    },
+    {
+      id: "plan-europe-2026",
+      athleteId: "athlete-olga-demo",
+      seasonId: "season-2026",
+      competitionId: "competition-europe-2026",
+      competitionTitle: "Чемпионат Европы",
+      competitionStartDate: "2026-07-06",
+      competitionEndDate: "2026-07-07",
+      priority: "A",
+      planType: "main",
+      peakRequired: true,
+      taperDays: 10,
+      weightCutRequired: true,
+    },
+  ],
+});
+const europe28StrategyDraft = buildPerformConstructorDraft({
+  ...monthPreparationInput,
+  competition: {
+    ...monthPreparationInput.competition,
+    name: "Чемпионат Европы",
+    startDate: "2026-07-06",
+    weighInDate: "2026-07-05",
+  },
+  athlete: {
+    ...monthPreparationInput.athlete,
+    athleteId: "athlete-olga-demo",
+    fullName: "Popova Olga",
+  },
+  context: {
+    ...monthPreparationInput.context,
+    currentPhase: "development",
+    cycleLengthDays: 30,
+  },
+  goals: [
+    {
+      goalType: "speed_first_action",
+      priority: 1,
+      reason: "тренер выбрал резкость, стратегия должна нормализовать режим",
+    },
+  ],
+  seasonStrategy: europe28SeasonStrategy,
+});
+
 assert(CONSTRUCTOR_TEMPLATE_CARDS.length >= 6, "Expected first constructor template cards");
 assert(draft.plan.weeks.length > 0, "Draft must contain plan weeks");
 assert(draft.selectedCards.length > 0, "Draft must select at least one template card");
@@ -610,6 +723,37 @@ assert(
   competitionWeekBlocks.every((block) => block.targetQuality !== "speed_first_action" && block.type !== "speed"),
   "Competition week must not contain developing speed blocks; speed is only short activation/taper quality",
 );
+assert(europe28SeasonStrategy.currentWindow.daysToStart === 28, "Season strategy must calculate exact 28 days to Europe");
+assert(
+  europe28SeasonStrategy.currentWindow.cycleLengthDays === 28,
+  `Season strategy must keep exact draft length for <=30 days, got ${europe28SeasonStrategy.currentWindow.cycleLengthDays}`,
+);
+assert(
+  europe28SeasonStrategy.olympicCycle.yearStage === "deep_special_preparation",
+  `2026 in a 2025-2028 Olympic cycle should be year 2 deep special preparation, got ${europe28SeasonStrategy.olympicCycle.yearStage}`,
+);
+assert(
+  europe28SeasonStrategy.constructorRules.forbiddenModes.includes("development"),
+  "Main A start inside 30 days must forbid development mode",
+);
+assert(
+  europe28StrategyDraft.plan.cycleLengthDays === 28,
+  `Constructor must build exact remaining days from season strategy, got ${europe28StrategyDraft.plan.cycleLengthDays}`,
+);
+assert(
+  europe28StrategyDraft.seasonStrategy?.currentWindow.cycleLengthDays === 28,
+  "Constructor draft should preserve the season strategy snapshot",
+);
+assert(
+  europe28StrategyDraft.focusPlan.developmentAllowed === false,
+  "Season strategy for Europe in 28 days must keep development forbidden",
+);
+assert(
+  europe28StrategyDraft.focusPlan.phaseMap[0]?.range === "Д-28...Д-24",
+  `28-day strategy must show an exact phase map start, got ${europe28StrategyDraft.focusPlan.phaseMap
+    .map((phase) => phase.range)
+    .join(" | ")}`,
+);
 
 console.log(
   JSON.stringify(
@@ -645,6 +789,14 @@ console.log(
         label: day.dayLabel,
         blocks: day.blocks.map((block) => block.targetQuality),
       })),
+      seasonStrategy28Days: {
+        yearStage: europe28SeasonStrategy.olympicCycle.yearStage,
+        phase: europe28SeasonStrategy.currentWindow.phase,
+        daysToStart: europe28SeasonStrategy.currentWindow.daysToStart,
+        cycleLengthDays: europe28StrategyDraft.plan.cycleLengthDays,
+        forbiddenModes: europe28SeasonStrategy.constructorRules.forbiddenModes,
+        phaseMap: europe28StrategyDraft.focusPlan.phaseMap.map((phase) => phase.range),
+      },
     },
     null,
     2,

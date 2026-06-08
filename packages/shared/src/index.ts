@@ -1,6 +1,7 @@
 export const PLATFORM_NAME = "PERFORM";
 
 export * from "./constructor-core";
+export * from "./season-strategy";
 
 export type UserRole = "coach" | "athlete" | "admin";
 export type ReadinessStatus = "green" | "yellow" | "red";

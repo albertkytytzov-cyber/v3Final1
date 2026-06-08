@@ -90,6 +90,7 @@ import {
   type DeleteCompetitionsResponse,
   buildConstructorTemplatePayload,
   buildPerformConstructorDraft,
+  buildSeasonStrategySnapshot,
   estimateTrainingActualLoad,
   estimateTrainingBlockLoad,
   estimateTrainingBlocksLoad,
@@ -13854,6 +13855,25 @@ export function PageClient({
     ? competitions.find((competition) => competition.id === selectedConstructorCompetitionPlan.competitionId) ??
       null
     : null;
+  const selectedConstructorSeason = selectedConstructorCompetitionPlan?.seasonId
+    ? seasons.find((season) => season.id === selectedConstructorCompetitionPlan.seasonId) ?? null
+    : null;
+  const selectedConstructorOlympicCycle = selectedConstructorSeason?.olympicCycleId
+    ? olympicCycles.find((cycle) => cycle.id === selectedConstructorSeason.olympicCycleId) ?? null
+    : null;
+  const constructorSeasonStrategySnapshot =
+    selectedCoachAthlete && (selectedConstructorCompetitionPlan || selectedConstructorCompetition)
+      ? buildSeasonStrategySnapshot({
+          athleteId: selectedCoachAthlete.athleteId,
+          currentDate: getDateInputValue(),
+          season: selectedConstructorSeason,
+          olympicCycle: selectedConstructorOlympicCycle,
+          targetCompetitionPlan: selectedConstructorCompetitionPlan,
+          targetCompetition: selectedConstructorCompetition,
+          competitionPlans: visibleCompetitionPlans,
+          competitions,
+        })
+      : null;
   useEffect(() => {
     if (!selectedCoachAthlete) {
       return;
@@ -13983,17 +14003,28 @@ export function PageClient({
       selectedConstructorCompetition?.level ?? constructorForm.competitionLevel;
     const effectiveCompetitionPriority =
       selectedConstructorCompetitionPlan?.priority ?? constructorForm.competitionPriority;
-    const goals = deriveConstructorGoalsByCompetitionContext(
+    const goalsByCompetitionContext = deriveConstructorGoalsByCompetitionContext(
       effectiveDaysToCompetition,
       effectiveCompetitionPriority,
       effectiveCompetitionLevel,
       constructorForm.goals,
     );
+    const seasonStrategyGoals = (constructorSeasonStrategySnapshot?.constructorRules.mandatoryFocus ?? []).filter(
+      (goal): goal is ConstructorGoalType => CONSTRUCTOR_GOAL_OPTIONS.includes(goal as ConstructorGoalType),
+    );
+    const goals = seasonStrategyGoals.length
+      ? [
+          ...seasonStrategyGoals,
+          ...goalsByCompetitionContext.filter((goal) => !seasonStrategyGoals.includes(goal)),
+        ]
+      : goalsByCompetitionContext;
     const effectiveCurrentPhase = selectedConstructorCompetitionPlan
-      ? deriveConstructorPhaseByCompetitionDays(effectiveDaysToCompetition)
+      ? constructorSeasonStrategySnapshot?.currentWindow.phase ??
+        deriveConstructorPhaseByCompetitionDays(effectiveDaysToCompetition)
       : constructorForm.currentPhase;
     const effectiveCycleLengthDays = selectedConstructorCompetitionPlan
-      ? deriveConstructorCycleLengthByCompetitionDays(effectiveDaysToCompetition)
+      ? constructorSeasonStrategySnapshot?.currentWindow.cycleLengthDays ??
+        deriveConstructorCycleLengthByCompetitionDays(effectiveDaysToCompetition)
       : constructorForm.cycleLengthDays;
 
     return {
@@ -14061,6 +14092,7 @@ export function PageClient({
         injuryCaution: constructorForm.injuryCaution,
         travelFatigue: constructorForm.travelFatigue,
       },
+      seasonStrategy: constructorSeasonStrategySnapshot,
     };
   }
 
@@ -15258,6 +15290,18 @@ export function PageClient({
               constructorRecommendedPhase,
             )}. До старта ${constructorDaysToCompetition} дни, цикъл ${constructorRecommendedCycleLength} дни.`,
           });
+  const constructorStrategySeasonLabel = constructorSeasonStrategySnapshot?.season.hasSeasonContext
+    ? `${constructorSeasonStrategySnapshot.season.name ?? "-"} · ${constructorSeasonStrategySnapshot.season.strategyType ?? "-"}`
+    : copyFor(language, {
+        en: "No season strategy linked",
+        ru: "Сезонная стратегия не связана",
+        bg: "Няма свързана сезонна стратегия",
+      });
+  const constructorStrategyTargetLabel = constructorSeasonStrategySnapshot?.targetCompetition.title
+    ? `${constructorSeasonStrategySnapshot.targetCompetition.title} · ${
+        constructorSeasonStrategySnapshot.targetCompetition.role ?? "-"
+      }`
+    : copyFor(language, { en: "No target start", ru: "Целевой старт не выбран", bg: "Няма целеви старт" });
   const constructorConfidenceLabel = constructorDraft
     ? ({
         high: copyFor(language, { en: "High", ru: "Высокая", bg: "Висока" }),
@@ -21372,6 +21416,103 @@ export function PageClient({
                         })}
                       </button>
                     </div>
+                  </div>
+
+                  <div className="constructor-strategy-snapshot">
+                    <div className="summary-topline">
+                      <strong>
+                        {copyFor(language, {
+                          en: "Season strategy",
+                          ru: "Стратегия сезона",
+                          bg: "Стратегия на сезона",
+                        })}
+                      </strong>
+                      <span>
+                        {constructorSeasonStrategySnapshot
+                          ? constructorSeasonStrategySnapshot.currentWindow.phase
+                          : copyFor(language, { en: "reserve", ru: "резерв", bg: "резерв" })}
+                      </span>
+                    </div>
+                    <div className="constructor-source-grid">
+                      <article>
+                        <span>
+                          {copyFor(language, { en: "Season", ru: "Сезон", bg: "Сезон" })}
+                        </span>
+                        <strong>{constructorStrategySeasonLabel}</strong>
+                      </article>
+                      <article>
+                        <span>
+                          {copyFor(language, { en: "Olympic year", ru: "Год цикла", bg: "Година от цикъла" })}
+                        </span>
+                        <strong>
+                          {constructorSeasonStrategySnapshot?.olympicCycle.yearStageLabel ??
+                            copyFor(language, { en: "Not set", ru: "Не задан", bg: "Не е зададен" })}
+                        </strong>
+                      </article>
+                      <article>
+                        <span>
+                          {copyFor(language, { en: "Target start", ru: "Целевой старт", bg: "Целеви старт" })}
+                        </span>
+                        <strong>{constructorStrategyTargetLabel}</strong>
+                      </article>
+                      <article>
+                        <span>
+                          {copyFor(language, { en: "Draft length", ru: "Длина плана", bg: "Дължина" })}
+                        </span>
+                        <strong>
+                          {constructorSeasonStrategySnapshot?.currentWindow.cycleLengthDays ??
+                            constructorRecommendedCycleLength}{" "}
+                          {copyFor(language, { en: "days", ru: "дней", bg: "дни" })}
+                        </strong>
+                      </article>
+                    </div>
+                    <p>
+                      {constructorSeasonStrategySnapshot?.currentWindow.phaseReason ??
+                        copyFor(language, {
+                          en: "PERFORM will use manual competition fields until the athlete has a linked season start.",
+                          ru: "PERFORM использует ручные поля старта, пока у спортсмена не связан сезонный старт.",
+                          bg: "PERFORM използва ръчните полета, докато няма свързан старт.",
+                        })}
+                    </p>
+                    {constructorSeasonStrategySnapshot ? (
+                      <>
+                        <div className="constructor-strategy-rule-row">
+                          <span>
+                            {copyFor(language, {
+                              en: "Weekly rhythm",
+                              ru: "Ритм недели",
+                              bg: "Ритъм на седмицата",
+                            })}
+                          </span>
+                          <strong>{constructorSeasonStrategySnapshot.constructorRules.weeklyRhythm}</strong>
+                        </div>
+                        <div className="constructor-focus-list">
+                          {constructorSeasonStrategySnapshot.constructorRules.allowedModes.map((mode) => (
+                            <span key={mode}>
+                              <strong>{constructorGoalModeLabel(mode)}</strong>
+                              <small>
+                                {copyFor(language, { en: "allowed", ru: "разрешено", bg: "разрешено" })}
+                              </small>
+                            </span>
+                          ))}
+                          {constructorSeasonStrategySnapshot.constructorRules.forbiddenModes.map((mode) => (
+                            <span className="is-muted" key={`blocked-${mode}`}>
+                              <strong>{constructorGoalModeLabel(mode)}</strong>
+                              <small>
+                                {copyFor(language, { en: "blocked", ru: "запрещено", bg: "забранено" })}
+                              </small>
+                            </span>
+                          ))}
+                        </div>
+                        {constructorSeasonStrategySnapshot.constructorRules.warnings.length ? (
+                          <ul className="constructor-strategy-warning-list">
+                            {constructorSeasonStrategySnapshot.constructorRules.warnings.map((warning) => (
+                              <li key={warning}>{warning}</li>
+                            ))}
+                          </ul>
+                        ) : null}
+                      </>
+                    ) : null}
                   </div>
 
                   <div className="constructor-competition-hint">

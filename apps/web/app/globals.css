@@ -5855,6 +5855,60 @@ td {
   padding: 12px;
 }
 
+.constructor-strategy-snapshot {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid rgba(15, 118, 110, 0.22);
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(236, 253, 245, 0.92), rgba(255, 255, 255, 0.94));
+}
+
+.constructor-strategy-snapshot > p {
+  margin: 0;
+  color: var(--muted);
+  font-weight: 760;
+  line-height: 1.42;
+}
+
+.constructor-strategy-rule-row {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid rgba(20, 184, 166, 0.18);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.74);
+}
+
+.constructor-strategy-rule-row span {
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.constructor-strategy-rule-row strong {
+  color: var(--ink);
+  font-size: 0.9rem;
+  line-height: 1.32;
+}
+
+.constructor-focus-list > span.is-muted {
+  border-color: rgba(244, 63, 94, 0.18);
+  background: rgba(255, 241, 242, 0.72);
+}
+
+.constructor-strategy-warning-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0 0 0 18px;
+  color: #8a4b13;
+  font-weight: 760;
+  line-height: 1.36;
+}
+
 .constructor-competition-hint {
   grid-template-columns: minmax(0, 1.3fr) minmax(88px, 0.45fr) minmax(0, 0.8fr);
 }

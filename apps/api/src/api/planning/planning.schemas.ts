@@ -241,5 +241,6 @@ export function parseConstructorDraftBody(body: unknown): ConstructorInput {
     tests: payload.tests ?? {},
     state: payload.state,
     constraints: payload.constraints ?? {},
+    seasonStrategy: payload.seasonStrategy ?? null,
   };
 }

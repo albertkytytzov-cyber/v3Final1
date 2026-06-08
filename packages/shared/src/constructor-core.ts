@@ -1,3 +1,5 @@
+import type { SeasonStrategySnapshot } from "./season-strategy";
+
 export type ConstructorCompetitionLevel =
   | "local"
   | "national"
@@ -129,7 +131,7 @@ export interface ConstructorAthleteInput {
 
 export interface ConstructorContextInput {
   currentPhase: ConstructorPhase;
-  cycleLengthDays: 7 | 10 | 14 | 21 | 30;
+  cycleLengthDays: number;
   sessionsPerWeek: number;
   sessionsPerDay?: number;
   availableTrainingDays?: Array<"mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun">;
@@ -181,6 +183,7 @@ export interface ConstructorInput {
   tests?: ConstructorTestInput;
   state: ConstructorStateInput;
   constraints?: ConstructorConstraintsInput;
+  seasonStrategy?: SeasonStrategySnapshot | null;
 }
 
 export interface ConstructorPlanBlock {
@@ -300,6 +303,7 @@ export interface ConstructorDraft {
     evidenceSummary: string;
     coachCanEdit: string[];
   };
+  seasonStrategy?: SeasonStrategySnapshot | null;
 }
 
 export const CONSTRUCTOR_GOAL_REQUIRED_DATA: Record<
@@ -319,6 +323,25 @@ export const CONSTRUCTOR_GOAL_REQUIRED_DATA: Record<
   taper_quality: ["readiness", "sleep", "resting_hr"],
   recovery: ["readiness", "sleep", "resting_hr"],
 };
+
+const CONSTRUCTOR_GOAL_TYPES: ConstructorGoalType[] = [
+  "speed_first_action",
+  "legs_lme",
+  "arms_grip",
+  "aerobic_base",
+  "anaerobic_power",
+  "max_strength",
+  "speed_strength",
+  "fatigue_skill",
+  "wrestling_contact_density",
+  "weight_management",
+  "taper_quality",
+  "recovery",
+];
+
+function isConstructorGoalType(value: string): value is ConstructorGoalType {
+  return CONSTRUCTOR_GOAL_TYPES.includes(value as ConstructorGoalType);
+}
 
 function block(
   name: string,
@@ -2602,6 +2625,56 @@ function goalModeForInput(goalType: ConstructorGoalType, input: ConstructorInput
   }
 }
 
+function competitionFocusPhaseMap(input: ConstructorInput) {
+  const days = Math.max(1, Math.round(input.context.cycleLengthDays));
+  const phaseMap: ConstructorDraft["focusPlan"]["phaseMap"] = [];
+
+  if (days >= 24) {
+    phaseMap.push({
+      range: `Д-${days}...Д-24`,
+      phase: "special_preparation",
+      title: "вход в специальный блок",
+      intent: "СФП поддерживающе, техника и восстановление без резкого перегруза",
+    });
+  }
+
+  if (days >= 17) {
+    phaseMap.push({
+      range: `Д-${Math.min(days, 23)}...Д-17`,
+      phase: "special_preparation",
+      title: "основной специальный микроцикл",
+      intent: "борьба, соревновательная модель, финишная способность и ежедневный контроль",
+    });
+  }
+
+  if (days >= 10) {
+    phaseMap.push({
+      range: `Д-${Math.min(days, 16)}...Д-10`,
+      phase: "taper",
+      title: "интеграция и снижение объёма",
+      intent: "меньше объёма, больше качества, техника без силовой рубки",
+    });
+  }
+
+  if (days >= 5) {
+    phaseMap.push({
+      range: `Д-${Math.min(days, 9)}...Д-5`,
+      phase: "taper",
+      title: "подводка, свежесть, вес",
+      intent: "суперкомпенсация, вес, сон, короткая активация",
+    });
+  }
+
+  phaseMap.push({
+    range: `Д-${Math.min(days, 4)}...старт`,
+    phase: "start_window",
+    title: "дорога, взвешивание, активация, пик",
+    intent: "без добора нагрузки, только свежесть и ключевые действия",
+  });
+
+  return phaseMap;
+}
+
 function buildCompetitionFocusPlan(input: ConstructorInput, goalTypes: ConstructorGoalType[]) {
   const isCompetitionPrep = isMajorCompetitionConstructorCase(input);
 
@@ -2679,38 +2752,7 @@ function buildCompetitionFocusPlan(input: ConstructorInput, goalTypes: Construct
     title: "Фокус специальной предсоревновательной подготовки",
     developmentAllowed: false,
     items: [...baseItems, ...extraItems],
-    phaseMap: [
-      {
-        range: "Д-30...Д-24",
-        phase: "special_preparation" as ConstructorPhase,
-        title: "вход в специальный блок",
-        intent: "СФП поддерживающе, техника и восстановление без резкого перегруза",
-      },
-      {
-        range: "Д-23...Д-17",
-        phase: "special_preparation" as ConstructorPhase,
-        title: "основной специальный микроцикл",
-        intent: "борьба, соревновательная модель, финишная способность и ежедневный контроль",
-      },
-      {
-        range: "Д-16...Д-10",
-        phase: "taper" as ConstructorPhase,
-        title: "интеграция и снижение объёма",
-        intent: "меньше объёма, больше качества, техника без силовой рубки",
-      },
-      {
-        range: "Д-9...Д-5",
-        phase: "taper" as ConstructorPhase,
-        title: "подводка, свежесть, вес",
-        intent: "суперкомпенсация, вес, сон, короткая активация",
-      },
-      {
-        range: "Д-4...старт",
-        phase: "start_window" as ConstructorPhase,
-        title: "дорога, взвешивание, активация, пик",
-        intent: "без добора нагрузки, только свежесть и ключевые действия",
-      },
-    ],
+    phaseMap: competitionFocusPhaseMap(input),
   };
 }
 
@@ -3528,24 +3570,73 @@ function pickSourceWeekForPhase(
   return sourceWeeks[weekIndex % Math.max(1, sourceWeeks.length)];
 }
 
+function applySeasonStrategyToConstructorInput(input: ConstructorInput): ConstructorInput {
+  const snapshot = input.seasonStrategy;
+
+  if (!snapshot) {
+    return input;
+  }
+
+  const mandatoryGoals = snapshot.constructorRules.mandatoryFocus.filter(isConstructorGoalType);
+  const currentGoals = input.goals
+    .sort((left, right) => left.priority - right.priority)
+    .map((goal) => goal.goalType);
+  const mergedGoalTypes = [
+    ...mandatoryGoals,
+    ...currentGoals.filter((goalType) => !mandatoryGoals.includes(goalType)),
+  ];
+  const goals =
+    mergedGoalTypes.length > 0
+      ? mergedGoalTypes.map((goalType, index) => {
+          const existing = input.goals.find((goal) => goal.goalType === goalType);
+
+          return {
+            goalType,
+            priority: index + 1,
+            mode: existing?.mode,
+            reason:
+              existing?.reason ??
+              (mandatoryGoals.includes(goalType)
+                ? "добавлено стратегией сезона и календарём стартов"
+                : null),
+          };
+        })
+      : input.goals;
+  const cycleLengthDays = Math.max(
+    1,
+    Math.round(snapshot.currentWindow.cycleLengthDays || input.context.cycleLengthDays),
+  );
+
+  return {
+    ...input,
+    context: {
+      ...input.context,
+      currentPhase: snapshot.currentWindow.phase,
+      cycleLengthDays,
+    },
+    goals,
+  };
+}
+
 export function buildPerformConstructorDraft(input: ConstructorInput): ConstructorDraft {
-  const effectivePhase = normalizePhaseForCycle(input);
+  const seasonAdjustedInput = applySeasonStrategyToConstructorInput(input);
+  const effectivePhase = normalizePhaseForCycle(seasonAdjustedInput);
   const effectiveInput =
-    effectivePhase === input.context.currentPhase
-      ? input
+    effectivePhase === seasonAdjustedInput.context.currentPhase
+      ? seasonAdjustedInput
       : {
-          ...input,
+          ...seasonAdjustedInput,
           context: {
-            ...input.context,
+            ...seasonAdjustedInput.context,
             currentPhase: effectivePhase,
           },
         };
-  const requestedGoalTypes = [...input.goals]
+  const requestedGoalTypes = [...seasonAdjustedInput.goals]
     .sort((a, b) => a.priority - b.priority)
     .map((item) => item.goalType);
   const goalTypes = defaultGoalTypesForCompetitionCase(
     effectiveInput,
-    requestedGoalTypes.length > 0 ? requestedGoalTypes : [primaryGoal(input)],
+    requestedGoalTypes.length > 0 ? requestedGoalTypes : [primaryGoal(seasonAdjustedInput)],
   );
   const planningInput = isMajorCompetitionConstructorCase(effectiveInput)
     ? {
@@ -3559,8 +3650,13 @@ export function buildPerformConstructorDraft(input: ConstructorInput): Construct
   const goal = goalTypes[0] ?? primaryGoal(planningInput);
   const selectedCards = selectTemplateCards(planningInput, riskFlags);
   const weeks = mergeWeeks(selectedCards, planningInput, goalTypes.length > 0 ? goalTypes : [goal]);
-  const weightGap = Number((input.athlete.weightCurrentKg - input.athlete.weightTargetKg).toFixed(1));
+  const weightGap = Number((planningInput.athlete.weightCurrentKg - planningInput.athlete.weightTargetKg).toFixed(1));
   const focusPlan = buildCompetitionFocusPlan(planningInput, goalTypes);
+  const strategyText = planningInput.seasonStrategy
+    ? ` Стратегия сезона: ${planningInput.seasonStrategy.olympicCycle.yearStageLabel}; ${
+        planningInput.seasonStrategy.season.strategyType ?? "без стратегии"
+      }; ${planningInput.seasonStrategy.currentWindow.phaseReason}.`
+    : "";
   const riskText = riskFlags.length
     ? riskFlags.map((risk) => risk.message).join(" ")
     : "Критичных ограничений по введённым данным нет.";
@@ -3577,7 +3673,7 @@ export function buildPerformConstructorDraft(input: ConstructorInput): Construct
           : isMajorCompetitionConstructorCase(planningInput)
             ? `Система выбрала фокус главного старта без развития: ${focusPlan.items
                 .map((item) => item.label)
-                .join(", ")}.`
+                .join(", ")}.${strategyText}`
             : `Система может построить черновик под цель "${goalLabel(goal)}" с учетом фазы ${effectivePhase}.`,
       limitation:
         weightGap > 0
@@ -3593,14 +3689,14 @@ export function buildPerformConstructorDraft(input: ConstructorInput): Construct
       rationale: card.rationale,
     })),
     plan: {
-      cycleLengthDays: input.context.cycleLengthDays,
-      sessionsPerDay: Math.max(1, Math.min(2, Math.round(input.context.sessionsPerDay ?? 1))),
+      cycleLengthDays: planningInput.context.cycleLengthDays,
+      sessionsPerDay: Math.max(1, Math.min(2, Math.round(planningInput.context.sessionsPerDay ?? 1))),
       weeks,
     },
     explanation: {
       mainDecision: isMajorCompetitionConstructorCase(planningInput)
-        ? `Черновик строится вокруг фазы ${effectivePhase}: развитие запрещено, скорость/ЛМВ/сила работают как поддержание, перенос, активация и восстановление.`
-        : `Черновик строится вокруг цели "${goalLabelForInput(goal, planningInput)}" и текущей фазы ${effectivePhase}.`,
+        ? `Черновик строится вокруг фазы ${effectivePhase}: развитие запрещено, скорость/ЛМВ/сила работают как поддержание, перенос, активация и восстановление.${strategyText}`
+        : `Черновик строится вокруг цели "${goalLabelForInput(goal, planningInput)}" и текущей фазы ${effectivePhase}.${strategyText}`,
       whyNow:
         isMajorCompetitionConstructorCase(planningInput)
           ? "До главного старта 30 дней или меньше: развитие заменяется предсоревновательной моделью с борьбой, техникой, разгрузкой, весом и подводкой."
@@ -3625,6 +3721,7 @@ export function buildPerformConstructorDraft(input: ConstructorInput): Construct
         "замены при риске",
       ],
     },
+    seasonStrategy: planningInput.seasonStrategy ?? null,
   };
 }
 
