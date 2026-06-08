@@ -1138,6 +1138,188 @@ function copyFor(language: Language, values: Record<Language, string>) {
   return values[language];
 }
 
+type CompetitionStartStatistics = {
+  bestPlace: number | null;
+  savedResults: number;
+  totalMatches: number;
+  totalStarts: number;
+  upcomingStarts: number;
+  weightDeltaKg: number | null;
+};
+
+function buildCompetitionStartStatistics(plans: CompetitionPlanSummary[]): CompetitionStartStatistics {
+  const resultPlans = plans.filter((plan) => plan.result);
+  const places = resultPlans
+    .map((plan) => plan.result?.finalPlace ?? null)
+    .filter((place): place is number => place !== null && place > 0);
+  const weighInPlans = resultPlans
+    .filter((plan) => plan.result?.weightAtWeighIn !== null)
+    .sort((left, right) => left.competitionStartDate.localeCompare(right.competitionStartDate));
+  const firstWeighIn = weighInPlans[0]?.result?.weightAtWeighIn ?? null;
+  const lastWeighIn = weighInPlans[weighInPlans.length - 1]?.result?.weightAtWeighIn ?? null;
+  const weightDeltaKg =
+    firstWeighIn !== null && lastWeighIn !== null && weighInPlans.length > 1
+      ? Math.round((lastWeighIn - firstWeighIn) * 10) / 10
+      : null;
+
+  return {
+    bestPlace: places.length > 0 ? Math.min(...places) : null,
+    savedResults: resultPlans.length,
+    totalMatches: resultPlans.reduce((total, plan) => total + (plan.result?.matchesCount ?? 0), 0),
+    totalStarts: plans.length,
+    upcomingStarts: plans.length - resultPlans.length,
+    weightDeltaKg,
+  };
+}
+
+function formatCompetitionWeightDelta(value: number | null) {
+  if (value === null) {
+    return "-";
+  }
+
+  const sign = value > 0 ? "+" : "";
+  return `${sign}${value} кг`;
+}
+
+function formatCompetitionResultLine(plan: CompetitionPlanSummary, language: Language) {
+  if (!plan.result) {
+    return copyFor(language, {
+      en: "result pending",
+      ru: "результат не внесён",
+      bg: "резултатът не е въведен",
+    });
+  }
+
+  const details = [
+    plan.result.finalPlace !== null
+      ? `${copyFor(language, { en: "place", ru: "место", bg: "място" })} ${plan.result.finalPlace}`
+      : null,
+    plan.result.matchesCount !== null
+      ? `${copyFor(language, { en: "matches", ru: "схватки", bg: "срещи" })} ${plan.result.matchesCount}`
+      : null,
+    plan.result.weightAtWeighIn !== null
+      ? `${copyFor(language, { en: "weigh-in", ru: "взвешивание", bg: "кантар" })} ${formatKgValue(
+          plan.result.weightAtWeighIn,
+        )}`
+      : null,
+    plan.result.weightAfter !== null
+      ? `${copyFor(language, { en: "after", ru: "после", bg: "след" })} ${formatKgValue(
+          plan.result.weightAfter,
+        )}`
+      : null,
+  ].filter(Boolean);
+
+  return details.length > 0
+    ? details.join(" / ")
+    : copyFor(language, {
+        en: "result saved without details",
+        ru: "результат сохранён без деталей",
+        bg: "резултатът е запазен без детайли",
+      });
+}
+
+function CompetitionStartStatsCard({
+  className = "",
+  emptyText,
+  language,
+  plans,
+  subtitle,
+  title,
+}: {
+  className?: string;
+  emptyText: string;
+  language: Language;
+  plans: CompetitionPlanSummary[];
+  subtitle: string;
+  title: string;
+}) {
+  const stats = buildCompetitionStartStatistics(plans);
+  const sortedPlans = [...plans].sort(
+    (left, right) =>
+      right.competitionStartDate.localeCompare(left.competitionStartDate) ||
+      right.createdAt.localeCompare(left.createdAt),
+  );
+
+  return (
+    <section className={`competition-start-stats ${className}`.trim()}>
+      <div className="summary-topline">
+        <div>
+          <strong>{title}</strong>
+          <span>{subtitle}</span>
+        </div>
+        <span>
+          {copyFor(language, { en: "starts", ru: "стартов", bg: "стартове" })}: {stats.totalStarts}
+        </span>
+      </div>
+
+      {plans.length === 0 ? (
+        <p className="placeholder-copy">{emptyText}</p>
+      ) : (
+        <>
+          <div className="competition-start-stats-metrics">
+            <article>
+              <span>{copyFor(language, { en: "Results", ru: "Результаты", bg: "Резултати" })}</span>
+              <strong>
+                {stats.savedResults}/{stats.totalStarts}
+              </strong>
+              <small>
+                {stats.upcomingStarts > 0
+                  ? copyFor(language, {
+                      en: `${stats.upcomingStarts} pending`,
+                      ru: `ожидает: ${stats.upcomingStarts}`,
+                      bg: `очакват: ${stats.upcomingStarts}`,
+                    })
+                  : copyFor(language, { en: "all closed", ru: "все закрыты", bg: "всички са затворени" })}
+              </small>
+            </article>
+            <article>
+              <span>{copyFor(language, { en: "Best place", ru: "Лучшее место", bg: "Най-добро място" })}</span>
+              <strong>{stats.bestPlace ?? "-"}</strong>
+              <small>
+                {copyFor(language, { en: "season result", ru: "итог стартов", bg: "резултат сезон" })}
+              </small>
+            </article>
+            <article>
+              <span>{copyFor(language, { en: "Matches", ru: "Схватки", bg: "Срещи" })}</span>
+              <strong>{stats.totalMatches || "-"}</strong>
+              <small>{copyFor(language, { en: "saved results", ru: "по внесённым результатам", bg: "по въведени" })}</small>
+            </article>
+            <article>
+              <span>{copyFor(language, { en: "Weigh-in trend", ru: "Динамика веса", bg: "Динамика тегло" })}</span>
+              <strong>{formatCompetitionWeightDelta(stats.weightDeltaKg)}</strong>
+              <small>{copyFor(language, { en: "from first to last start", ru: "от первого к последнему", bg: "от първи до последен" })}</small>
+            </article>
+          </div>
+
+          <div className="competition-start-stats-list">
+            {sortedPlans.map((plan) => (
+              <article
+                className={`competition-start-stats-row ${plan.result ? "has-result" : "is-pending"}`}
+                key={plan.id}
+              >
+                <div className="competition-start-stats-date">
+                  <strong>{plan.competitionStartDate}</strong>
+                  <span>{plan.priority}</span>
+                </div>
+                <div className="competition-start-stats-main">
+                  <strong>{plan.competitionTitle}</strong>
+                  <span>
+                    {plan.planType}
+                    {plan.seasonName ? ` / ${plan.seasonName}` : ""}
+                  </span>
+                  <p>{formatCompetitionResultLine(plan, language)}</p>
+                  {plan.result?.performanceNotes ? <small>{plan.result.performanceNotes}</small> : null}
+                  {plan.result?.coachNotes ? <small>{plan.result.coachNotes}</small> : null}
+                </div>
+              </article>
+            ))}
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
 function coachDiaryTargetKey(entry: Pick<
   CoachDiaryEntryPayload,
   "athleteId" | "assignedPlanId" | "entryDate" | "scope" | "assignedBlockIds" | "assignedExerciseIds"
@@ -18505,6 +18687,27 @@ export function PageClient({
                       </article>
                     </div>
 
+                    <CompetitionStartStatsCard
+                      className="coach-athlete-competition-stats"
+                      emptyText={copyFor(language, {
+                        en: "No competition starts are linked to this athlete yet.",
+                        ru: "У спортсмена пока нет привязанных стартов.",
+                        bg: "Все още няма свързани стартове за този спортист.",
+                      })}
+                      language={language}
+                      plans={visibleCompetitionPlans}
+                      subtitle={copyFor(language, {
+                        en: "Places, matches, weight and coach notes from saved competition results.",
+                        ru: "Места, схватки, вес и заметки тренера по внесённым результатам.",
+                        bg: "Места, срещи, тегло и бележки от въведените резултати.",
+                      })}
+                      title={copyFor(language, {
+                        en: "Competition statistics",
+                        ru: "Статистика стартов",
+                        bg: "Статистика стартове",
+                      })}
+                    />
+
                     <div className="coach-athlete-profile-strength">
                       <div className="summary-topline">
                         <strong>
@@ -19055,54 +19258,26 @@ export function PageClient({
                 ) : null}
 
                 {isCoachDashboardWorkspace && coachView === "competition" ? (
-                <div className="entry-summary">
-                  <div className="summary-topline">
-                    <strong>Competition review</strong>
-                    <span>
-                      {competitionReview
-                        ? `${competitionReview.seasons.length} season group(s)`
-                        : "not loaded"}
-                    </span>
-                  </div>
-                  {competitionReview &&
-                  (competitionReview.seasons.length > 0 ||
-                    competitionReview.unlinkedPlans.length > 0) ? (
-                    <>
-                      {competitionReview.seasons.length > 0 ? (
-                        <ul>
-                          {competitionReview.seasons.map((season) => (
-                            <li key={season.seasonId ?? `${season.seasonName}-${season.seasonYear ?? "na"}`}>
-                              {season.seasonYear ?? "-"} / {season.seasonName}:{" "}
-                              {season.plans
-                                .map((plan) =>
-                                  `${plan.competitionTitle} [${plan.priority}] -> ${
-                                    plan.result
-                                      ? `place ${plan.result.finalPlace ?? "-"}, matches ${
-                                          plan.result.matchesCount ?? "-"
-                                        }`
-                                      : "result pending"
-                                  }`,
-                                )
-                                .join("; ")}
-                            </li>
-                          ))}
-                        </ul>
-                      ) : null}
-                      {competitionReview.unlinkedPlans.length > 0 ? (
-                        <p>
-                          Unlinked plans:{" "}
-                          {competitionReview.unlinkedPlans
-                            .map((plan) => `${plan.competitionTitle} (${plan.priority})`)
-                            .join(", ")}
-                        </p>
-                      ) : null}
-                    </>
-                  ) : (
-                    <p className="placeholder-copy">
-                      No season/competition result chain exists yet for the selected athlete.
-                    </p>
-                  )}
-                </div>
+                <CompetitionStartStatsCard
+                  className="coach-dashboard-competition-stats"
+                  emptyText={copyFor(language, {
+                    en: "No season/competition result chain exists yet for the selected athlete.",
+                    ru: "По выбранному спортсмену пока нет стартов и результатов.",
+                    bg: "Все още няма стартове и резултати за избрания спортист.",
+                  })}
+                  language={language}
+                  plans={visibleCompetitionPlans}
+                  subtitle={copyFor(language, {
+                    en: "Season starts, actual results and notes in one view.",
+                    ru: "Старты сезона, фактические результаты и заметки в одном месте.",
+                    bg: "Сезонни стартове, резултати и бележки на едно място.",
+                  })}
+                  title={copyFor(language, {
+                    en: "Competition statistics",
+                    ru: "Статистика стартов",
+                    bg: "Статистика стартове",
+                  })}
+                />
                 ) : null}
 
                 {shouldRenderCoachReviewSurface ? (
@@ -23448,6 +23623,29 @@ export function PageClient({
                 );
               })}
             </div>
+            ) : null}
+
+            {planningView === "season" && seasonEditorMode === "starts" ? (
+            <CompetitionStartStatsCard
+              className="planning-main-form planning-season-start-statistics"
+              emptyText={copyFor(language, {
+                en: "No starts in this season yet. Add competitions to the season first.",
+                ru: "В этом сезоне пока нет стартов. Сначала добавьте соревнования в сезон.",
+                bg: "Все още няма стартове в този сезон. Първо добавете състезания към сезона.",
+              })}
+              language={language}
+              plans={visibleSeasonStarts}
+              subtitle={copyFor(language, {
+                en: "Current season: places, matches, weight trend and coach notes.",
+                ru: "Текущий сезон: места, схватки, динамика веса и заметки тренера.",
+                bg: "Текущ сезон: места, срещи, динамика тегло и бележки.",
+              })}
+              title={copyFor(language, {
+                en: "Start statistics",
+                ru: "Статистика стартов",
+                bg: "Статистика стартове",
+              })}
+            />
             ) : null}
 
             {planningView === "season" && seasonEditorMode === "plan" ? (

@@ -3140,6 +3140,121 @@ td {
   min-height: 1em;
 }
 
+.competition-start-stats {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(15, 118, 110, 0.14);
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.94), rgba(240, 253, 250, 0.72));
+  min-width: 0;
+}
+
+.competition-start-stats .summary-topline {
+  align-items: start;
+}
+
+.competition-start-stats .summary-topline > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.competition-start-stats .summary-topline span {
+  line-height: 1.35;
+}
+
+.competition-start-stats-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.competition-start-stats-metrics article {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  background: rgba(255, 255, 255, 0.76);
+  min-width: 0;
+}
+
+.competition-start-stats-metrics span,
+.competition-start-stats-metrics small,
+.competition-start-stats-row span,
+.competition-start-stats-row small {
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.competition-start-stats-metrics span {
+  color: var(--muted-strong);
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.competition-start-stats-metrics strong {
+  color: var(--text);
+  font-size: 1.1rem;
+  line-height: 1.1;
+}
+
+.competition-start-stats-list {
+  display: grid;
+  gap: 8px;
+}
+
+.competition-start-stats-row {
+  display: grid;
+  grid-template-columns: minmax(86px, 0.38fr) minmax(0, 1fr);
+  gap: 12px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  background: rgba(255, 255, 255, 0.8);
+  min-width: 0;
+}
+
+.competition-start-stats-row.has-result {
+  border-color: rgba(15, 118, 110, 0.2);
+  background: rgba(240, 253, 250, 0.72);
+}
+
+.competition-start-stats-date,
+.competition-start-stats-main {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.competition-start-stats-date strong,
+.competition-start-stats-main strong {
+  color: var(--text);
+  line-height: 1.22;
+  overflow-wrap: anywhere;
+}
+
+.competition-start-stats-date span {
+  width: fit-content;
+  min-width: 28px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(15, 118, 110, 0.12);
+  color: var(--accent-strong);
+  font-weight: 900;
+  text-align: center;
+}
+
+.competition-start-stats-main p {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.9rem;
+  line-height: 1.42;
+  overflow-wrap: anywhere;
+}
+
 .coach-athlete-profile-text-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -11126,6 +11241,7 @@ td {
   .coach-athlete-profile-grid,
   .coach-athlete-profile-text-grid,
   .coach-athlete-profile-form,
+  .competition-start-stats-metrics,
   .coach-dashboard-head,
   .coach-daily-strip-grid,
   .coach-dashboard-shell,
@@ -11162,6 +11278,10 @@ td {
   .offline-sync-shell,
   .offline-cache-grid {
     grid-template-columns: 1fr;
+  }
+
+  .competition-start-stats-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .planning-workgrid.planning-workgrid-templates {
@@ -11460,6 +11580,11 @@ td {
   .workspace-context,
   .stack {
     padding: 12px;
+  }
+
+  .competition-start-stats-metrics,
+  .competition-start-stats-row {
+    grid-template-columns: 1fr;
   }
 
   .topbar {
