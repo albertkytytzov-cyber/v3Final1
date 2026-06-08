@@ -635,7 +635,7 @@ assert(
   `30-day major start interpretation should not use old development-speed wording: ${monthDraft.understood.interpretation}`,
 );
 assert(
-  monthDraft.explanation.mainDecision.includes("развитие запрещено"),
+  /развитие запрещено/i.test(monthDraft.explanation.mainDecision),
   "30-day major start decision should say that development is forbidden",
 );
 assert(
@@ -761,7 +761,9 @@ assert(
   `30-day competition cycle must not be treated as development: ${monthWrongPhasePhases.join(", ")}`,
 );
 assert(
-  monthWrongPhaseDraft.explanation.mainDecision.includes("special_preparation"),
+  /специальная предсоревновательная подготовка|special_preparation/i.test(
+    monthWrongPhaseDraft.explanation.mainDecision,
+  ),
   "30-day competition cycle should normalize development input to special_preparation in the decision text",
 );
 assert(
@@ -847,6 +849,29 @@ assert(
     .map((phase) => phase.range)
     .join(" | ")}`,
 );
+assert(
+  fourDayStartDraft.confidence === "low",
+  `4-day start window should honestly show low confidence/critical close-start risk, got ${fourDayStartDraft.confidence}`,
+);
+assert(
+  /стартовое окно/i.test(fourDayStartDraft.understood.mainTask) &&
+    /стартовое окно/i.test(fourDayStartDraft.understood.interpretation),
+  `4-day start explanation must speak as start window, got: ${fourDayStartDraft.understood.mainTask} / ${fourDayStartDraft.understood.interpretation}`,
+);
+assert(
+  !/уверенного развивающего плана/i.test(fourDayStartDraft.understood.interpretation),
+  `4-day start explanation must not use old development-plan wording: ${fourDayStartDraft.understood.interpretation}`,
+);
+assert(
+  /Олимпийский цикл/i.test(fourDayStartDraft.understood.interpretation) &&
+    /до старта 4 дн/i.test(fourDayStartDraft.understood.interpretation),
+  `4-day start explanation must include season/cycle and exact days-to-start context: ${fourDayStartDraft.understood.interpretation}`,
+);
+assert(
+  /4 дн/i.test(fourDayStartDraft.explanation.whyNow) &&
+    /нельзя добирать объём/i.test(fourDayStartDraft.explanation.whyNow),
+  `4-day start whyNow should explain why load cannot be added: ${fourDayStartDraft.explanation.whyNow}`,
+);
 
 console.log(
   JSON.stringify(
@@ -891,6 +916,10 @@ console.log(
         phaseMap: europe28StrategyDraft.focusPlan.phaseMap.map((phase) => phase.range),
       },
       fourDayStartWindow: {
+        confidence: fourDayStartDraft.confidence,
+        mainTask: fourDayStartDraft.understood.mainTask,
+        interpretation: fourDayStartDraft.understood.interpretation,
+        whyNow: fourDayStartDraft.explanation.whyNow,
         phase: fourDayStartStrategy.currentWindow.phase,
         daysToStart: fourDayStartStrategy.currentWindow.daysToStart,
         cycleLengthDays: fourDayStartDraft.plan.cycleLengthDays,

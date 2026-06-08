@@ -2752,6 +2752,246 @@ function buildCompetitionFocusPlan(input: ConstructorInput, goalTypes: Construct
   };
 }
 
+function phaseDecisionLabel(phase: ConstructorPhase) {
+  const labels: Record<ConstructorPhase, string> = {
+    base: "базовая подготовка",
+    development: "развитие качеств",
+    special_preparation: "специальная предсоревновательная подготовка",
+    taper: "подводка и снижение объёма",
+    start_window: "стартовое окно",
+    recovery: "восстановление",
+  };
+
+  return labels[phase];
+}
+
+function strategyTypeLabel(strategyType: SeasonStrategySnapshot["season"]["strategyType"]) {
+  const labels: Record<string, string> = {
+    single_peak: "один главный пик",
+    double_peak: "два пика",
+    multi_peak: "мультипиковая стратегия",
+  };
+
+  return strategyType ? labels[strategyType] ?? strategyType : "стратегия сезона не задана";
+}
+
+function missingDataShortLabel(code: ConstructorMissingDataCode) {
+  const labels: Record<ConstructorMissingDataCode, string> = {
+    speed_tests: "тесты 10/20 м",
+    jump_or_power_test: "прыжок или мощность",
+    grip_tests: "тест хвата",
+    legs_lme_test: "тест ЛМВ ног",
+    technique_quality_score: "оценка техники",
+    aerobic_recovery_test: "аэробное восстановление",
+    readiness: "готовность",
+    sleep: "сон",
+    resting_hr: "пульс покоя",
+    weight_plan: "план веса",
+    coach_comment: "комментарий тренера",
+  };
+
+  return labels[code];
+}
+
+function missingDataSummary(missingData: ConstructorMissingData[]) {
+  if (missingData.length === 0) {
+    return "ключевые данные на месте";
+  }
+
+  return missingData
+    .map((item) => missingDataShortLabel(item.code))
+    .filter((value, index, values) => values.indexOf(value) === index)
+    .join(", ");
+}
+
+function riskShortLabel(code: ConstructorRiskCode) {
+  const labels: Record<ConstructorRiskCode, string> = {
+    competition_close: "близкий старт",
+    weight_gap: "вес выше цели",
+    weight_cut_active: "активная сгонка",
+    low_readiness: "низкая готовность",
+    low_sleep: "недостаточный сон",
+    rhr_above_baseline: "пульс покоя выше базы",
+    pain_or_injury: "боль или травматический риск",
+    heavy_legs_sprint_conflict: "конфликт ног и скорости",
+    glycolytic_recovery_conflict: "конфликт гликолитики и восстановления",
+    missing_key_tests: "нехватка ключевых данных",
+    device_data_low_confidence: "неполные данные устройства",
+    travel_fatigue: "дорога или смена режима",
+  };
+
+  return labels[code];
+}
+
+function confidenceReasonSummary(missingData: ConstructorMissingData[], riskFlags: ConstructorRiskFlag[]) {
+  if (missingData.length > 0) {
+    return `нехватки данных (${missingDataSummary(missingData)})`;
+  }
+
+  if (riskFlags.length > 0) {
+    return `близости старта и ограничений (${riskFlags
+      .map((risk) => riskShortLabel(risk.code))
+      .filter((value, index, values) => values.indexOf(value) === index)
+      .join(", ")})`;
+  }
+
+  return "осторожного режима стартового окна";
+}
+
+function sentenceWithPeriod(value: string) {
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return "";
+  }
+
+  return /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
+}
+
+function capitalizeSentence(value: string) {
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return "";
+  }
+
+  return `${trimmed.charAt(0).toUpperCase()}${trimmed.slice(1)}`;
+}
+
+function strategyDecisionSummary(snapshot: SeasonStrategySnapshot | null | undefined) {
+  if (!snapshot) {
+    return "";
+  }
+
+  const targetTitle = snapshot.targetCompetition.title ?? "выбранный старт";
+  const daysText =
+    snapshot.currentWindow.daysToStart !== null
+      ? `до старта ${snapshot.currentWindow.daysToStart} дн`
+      : "дата старта не определена";
+  const seasonText = snapshot.season.name
+    ? `Сезон: ${snapshot.season.name}, ${strategyTypeLabel(snapshot.season.strategyType)}.`
+    : `Сезон: ${strategyTypeLabel(snapshot.season.strategyType)}.`;
+
+  return `${seasonText} Олимпийский цикл: ${snapshot.olympicCycle.yearStageLabel}. Целевой старт: ${targetTitle}, ${daysText}. ${sentenceWithPeriod(capitalizeSentence(snapshot.currentWindow.phaseReason))}`;
+}
+
+function daysToStartForDecision(input: ConstructorInput) {
+  return input.seasonStrategy?.currentWindow.daysToStart ?? input.context.cycleLengthDays;
+}
+
+function buildUnderstoodMainTask(input: ConstructorInput, goal: ConstructorGoalType) {
+  if (!isMajorCompetitionConstructorCase(input)) {
+    return `Главная задача: ${goalLabel(goal)}.`;
+  }
+
+  if (input.context.currentPhase === "start_window") {
+    return "Главная задача: стартовое окно, свежесть и безопасная активация.";
+  }
+
+  if (input.context.currentPhase === "taper") {
+    return "Главная задача: подводка, снижение объёма и сохранение резкости.";
+  }
+
+  return "Главная задача: специальная предсоревновательная подготовка.";
+}
+
+function buildUnderstoodInterpretation(
+  input: ConstructorInput,
+  confidence: ConstructorConfidence,
+  focusPlan: ConstructorDraft["focusPlan"],
+  missingData: ConstructorMissingData[],
+  riskFlags: ConstructorRiskFlag[],
+  goal: ConstructorGoalType,
+  effectivePhase: ConstructorPhase,
+) {
+  const phaseLabel = phaseDecisionLabel(effectivePhase);
+
+  if (!isMajorCompetitionConstructorCase(input)) {
+    if (confidence === "low") {
+      return `Система видит цель, но не хватает данных (${missingDataSummary(
+        missingData,
+      )}) для уверенного выбора нагрузки. Черновик остаётся безопасным, а развивающие блоки требуют подтверждения тренера.`;
+    }
+
+    return `Система может построить черновик под цель "${goalLabel(goal)}" с учетом фазы ${phaseLabel}.`;
+  }
+
+  const focusText = focusPlan.items.map((item) => item.label).join(", ");
+  const strategyText = strategyDecisionSummary(input.seasonStrategy);
+  const confidenceText =
+    confidence === "low"
+      ? `Уверенность снижена не из-за цели, а из-за ${confidenceReasonSummary(
+          missingData,
+          riskFlags,
+        )}. Поэтому план строится осторожно: без добора нагрузки, с контролем свежести, веса и восстановления.`
+      : "Данных достаточно, чтобы собрать черновик в безопасной предсоревновательной логике.";
+
+  return `Система определила фазу: ${phaseLabel}. ${strategyText} Фокус: ${focusText}. ${confidenceText}`;
+}
+
+function buildUnderstoodLimitation(
+  input: ConstructorInput,
+  missingData: ConstructorMissingData[],
+  weightGap: number,
+  confidence: ConstructorConfidence,
+) {
+  const limitations: string[] = [];
+
+  if (confidence === "low" && missingData.length > 0) {
+    limitations.push(`Уверенность снижена: нужно уточнить ${missingDataSummary(missingData)}.`);
+  }
+
+  if (weightGap > 0) {
+    limitations.push(`Вес выше цели на ${weightGap} кг: план должен учитывать вес и восстановление.`);
+  }
+
+  if (isMajorCompetitionConstructorCase(input)) {
+    limitations.push("В этом окне нельзя добирать развитие: только поддержание, перенос, активация и восстановление.");
+  }
+
+  return limitations.length > 0
+    ? limitations.join(" ")
+    : "Ограничения по весу и восстановлению не являются главным фактором по текущим вводным.";
+}
+
+function buildMainDecisionText(input: ConstructorInput, goal: ConstructorGoalType, effectivePhase: ConstructorPhase) {
+  const strategyText = strategyDecisionSummary(input.seasonStrategy);
+
+  if (!isMajorCompetitionConstructorCase(input)) {
+    return `Черновик строится вокруг цели "${goalLabelForInput(goal, input)}" и текущей фазы ${phaseDecisionLabel(
+      effectivePhase,
+    )}.${strategyText ? ` ${strategyText}` : ""}`;
+  }
+
+  return `Черновик строится от календаря старта: ${input.context.cycleLengthDays} дн., фаза "${phaseDecisionLabel(
+    effectivePhase,
+  )}". Развитие запрещено; скорость/ЛМВ/сила работают как поддержание, перенос, активация и восстановление.${
+    strategyText ? ` ${strategyText}` : ""
+  }`;
+}
+
+function buildWhyNowText(input: ConstructorInput, effectivePhase: ConstructorPhase) {
+  if (!isMajorCompetitionConstructorCase(input)) {
+    if (effectivePhase === "taper" || effectivePhase === "start_window") {
+      return "Старт близко, поэтому развитие качества заменяется подводкой, свежестью и контролем веса.";
+    }
+
+    return "Срок позволяет развивать качество, но нагрузка ограничивается readiness, сном, RHR и весом.";
+  }
+
+  const daysToStart = daysToStartForDecision(input);
+
+  if (effectivePhase === "start_window") {
+    return `Осталось ${daysToStart} дн. до старта: это стартовое окно. Нельзя добирать объём; нужны сон, вес, вода, короткая активация и уверенность в ключевых действиях.`;
+  }
+
+  if (effectivePhase === "taper") {
+    return `Осталось ${daysToStart} дн. до старта: это подводка. Объём снижается, борьба остаётся качественной, активация короткая, восстановление и вес важнее добора нагрузки.`;
+  }
+
+  return `Осталось ${daysToStart} дн. до главного старта: это предсоревновательная подготовка. Развитие заменяется специальной борьбой, переносом СФП, разгрузкой, весом и подводкой.`;
+}
+
 function goalsFromTypes(goalTypes: ConstructorGoalType[], input: ConstructorInput): ConstructorGoalInput[] {
   return goalTypes.map((goalType, index) => {
     const requested = input.goals.find((goal) => goal.goalType === goalType);
@@ -3648,11 +3888,6 @@ export function buildPerformConstructorDraft(input: ConstructorInput): Construct
   const weeks = mergeWeeks(selectedCards, planningInput, goalTypes.length > 0 ? goalTypes : [goal]);
   const weightGap = Number((planningInput.athlete.weightCurrentKg - planningInput.athlete.weightTargetKg).toFixed(1));
   const focusPlan = buildCompetitionFocusPlan(planningInput, goalTypes);
-  const strategyText = planningInput.seasonStrategy
-    ? ` Стратегия сезона: ${planningInput.seasonStrategy.olympicCycle.yearStageLabel}; ${
-        planningInput.seasonStrategy.season.strategyType ?? "без стратегии"
-      }; ${planningInput.seasonStrategy.currentWindow.phaseReason}.`
-    : "";
   const riskText = riskFlags.length
     ? riskFlags.map((risk) => risk.message).join(" ")
     : "Критичных ограничений по введённым данным нет.";
@@ -3660,21 +3895,17 @@ export function buildPerformConstructorDraft(input: ConstructorInput): Construct
   return {
     confidence,
     understood: {
-      mainTask: isMajorCompetitionConstructorCase(planningInput)
-        ? "Главная задача: специальная предсоревновательная подготовка."
-        : `Главная задача: ${goalLabel(goal)}.`,
-      interpretation:
-        confidence === "low"
-          ? "Система видит цель, но данных недостаточно для уверенного развивающего плана."
-          : isMajorCompetitionConstructorCase(planningInput)
-            ? `Система выбрала фокус главного старта без развития: ${focusPlan.items
-                .map((item) => item.label)
-                .join(", ")}.${strategyText}`
-            : `Система может построить черновик под цель "${goalLabel(goal)}" с учетом фазы ${effectivePhase}.`,
-      limitation:
-        weightGap > 0
-          ? `Вес выше цели на ${weightGap} кг: план должен учитывать вес и восстановление.`
-          : "Ограничения по весу не являются главным фактором по текущим вводным.",
+      mainTask: buildUnderstoodMainTask(planningInput, goal),
+      interpretation: buildUnderstoodInterpretation(
+        planningInput,
+        confidence,
+        focusPlan,
+        missingData,
+        riskFlags,
+        goal,
+        effectivePhase,
+      ),
+      limitation: buildUnderstoodLimitation(planningInput, missingData, weightGap, confidence),
     },
     focusPlan,
     missingData,
@@ -3690,15 +3921,8 @@ export function buildPerformConstructorDraft(input: ConstructorInput): Construct
       weeks,
     },
     explanation: {
-      mainDecision: isMajorCompetitionConstructorCase(planningInput)
-        ? `Черновик строится вокруг фазы ${effectivePhase}: развитие запрещено, скорость/ЛМВ/сила работают как поддержание, перенос, активация и восстановление.${strategyText}`
-        : `Черновик строится вокруг цели "${goalLabelForInput(goal, planningInput)}" и текущей фазы ${effectivePhase}.${strategyText}`,
-      whyNow:
-        isMajorCompetitionConstructorCase(planningInput)
-          ? "До главного старта 30 дней или меньше: развитие заменяется предсоревновательной моделью с борьбой, техникой, разгрузкой, весом и подводкой."
-          : effectivePhase === "taper" || effectivePhase === "start_window"
-          ? "Старт близко, поэтому развитие качества заменяется подводкой, свежестью и контролем веса."
-          : "Срок позволяет развивать качество, но нагрузка ограничивается readiness, сном, RHR и весом.",
+      mainDecision: buildMainDecisionText(planningInput, goal, effectivePhase),
+      whyNow: buildWhyNowText(planningInput, effectivePhase),
       testsImpact:
         missingData.length > 0
           ? `Не хватает данных: ${missingData.map((item) => item.code).join(", ")}. Уверенность снижена.`
