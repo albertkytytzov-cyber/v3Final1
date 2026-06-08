@@ -23627,7 +23627,7 @@ export function PageClient({
 
             {planningView === "season" && seasonEditorMode === "starts" ? (
             <CompetitionStartStatsCard
-              className="planning-main-form planning-season-start-statistics"
+              className="wide-card planning-season-start-statistics"
               emptyText={copyFor(language, {
                 en: "No starts in this season yet. Add competitions to the season first.",
                 ru: "В этом сезоне пока нет стартов. Сначала добавьте соревнования в сезон.",

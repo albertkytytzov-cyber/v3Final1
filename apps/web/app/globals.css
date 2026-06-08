@@ -3150,6 +3150,12 @@ td {
   min-width: 0;
 }
 
+.coach-athlete-competition-stats,
+.coach-dashboard-competition-stats,
+.planning-season-start-statistics {
+  width: 100%;
+}
+
 .competition-start-stats .summary-topline {
   align-items: start;
 }
@@ -8959,6 +8965,11 @@ td {
   grid-row: 4;
 }
 
+.planning-workgrid-season > .planning-season-start-statistics {
+  grid-column: 1 / -1;
+  grid-row: 5;
+}
+
 .planning-workgrid-season > .planning-season-start-form,
 .planning-workgrid-season > .planning-season-start-list,
 .planning-workgrid-season > .planning-season-result-form,
@@ -8969,12 +8980,25 @@ td {
   top: auto;
 }
 
+.planning-workgrid-season > .planning-season-start-list {
+  grid-row: 6;
+}
+
 .planning-workgrid-season-timeline > .planning-season-start-form,
-.planning-workgrid-season-timeline > .planning-season-start-list,
 .planning-workgrid-season-timeline > .planning-season-result-form,
 .planning-workgrid-season-timeline > .planning-season-cycle-form {
   grid-column: 1 / -1;
   grid-row: 5;
+}
+
+.planning-workgrid-season-timeline > .planning-season-start-statistics {
+  grid-column: 1 / -1;
+  grid-row: 5;
+}
+
+.planning-workgrid-season-timeline > .planning-season-start-list {
+  grid-column: 1 / -1;
+  grid-row: 6;
 }
 
 .planning-workgrid-season > .auth-form,
@@ -11321,6 +11345,7 @@ td {
   .planning-workgrid-season > .planning-season-calendar-card,
   .planning-workgrid-season > .planning-season-timeline-card,
   .planning-workgrid-season > .planning-season-work-tabs,
+  .planning-workgrid-season > .planning-season-start-statistics,
   .planning-workgrid-season > .planning-season-start-form,
   .planning-workgrid-season > .planning-season-start-list,
   .planning-workgrid-season > .planning-season-result-form,
