@@ -2236,9 +2236,11 @@ function withCompetitionTaperStructure(
     hasBlockTarget(dayPlan, "wrestling_contact_density");
   const hasWrestlingTransfer =
     hasBlockTarget(dayPlan, "fatigue_skill") || hasBlockTarget(dayPlan, "wrestling_contact_density");
+  const keepTaperRecoveryOnly =
+    (phase === "start_window" || phase === "taper") && dayPlan.loadLevel === "recovery" && !hasSpeed;
   const blocks: ConstructorPlanBlock[] = [];
 
-  if (!hasTechnical && !hasSpeed) {
+  if (!keepTaperRecoveryOnly && !hasTechnical && !hasSpeed) {
     blocks.push(
       block(
         "Техника борьбы и тактические ситуации",
@@ -2254,7 +2256,7 @@ function withCompetitionTaperStructure(
     );
   }
 
-  if (hasTechnical && !hasWrestlingTransfer && !hasSpeed && !hasWeight) {
+  if (!keepTaperRecoveryOnly && hasTechnical && !hasWrestlingTransfer && !hasSpeed && !hasWeight) {
     blocks.push(
       block(
         "Борцовские ситуации без утомления",
@@ -2272,7 +2274,7 @@ function withCompetitionTaperStructure(
 
   blocks.push(...dayPlan.blocks.map((planBlock) => normalizeMaintenanceBlockForPhase(planBlock, phase)));
 
-  if (hasSpeed && !hasBlockTarget(dayPlan, "fatigue_skill")) {
+  if (!keepTaperRecoveryOnly && hasSpeed && !hasBlockTarget(dayPlan, "fatigue_skill")) {
     blocks.unshift(
       block(
         "Борцовский перенос скорости",
@@ -2307,7 +2309,9 @@ function withCompetitionTaperStructure(
     dayIntent: hasSpeed
       ? "Техника борьбы + короткая скоростная активация"
       : hasWeight
-        ? "Лёгкая техника, вес и свежесть"
+        ? keepTaperRecoveryOnly
+          ? "Вес, сон и восстановление без ковра"
+          : "Лёгкая техника, вес и свежесть"
         : dayPlan.dayIntent,
     readinessGate:
       phase === "start_window"
@@ -2552,6 +2556,46 @@ function isMajorCompetitionConstructorCase(input: ConstructorInput) {
   );
 }
 
+function blockedCompetitionGoalTypes(input: ConstructorInput): ConstructorGoalType[] {
+  const days = input.context.cycleLengthDays;
+
+  if (!isMajorCompetitionConstructorCase(input)) {
+    return [];
+  }
+
+  if (input.context.currentPhase === "start_window" || days <= 4) {
+    return [
+      "legs_lme",
+      "arms_grip",
+      "wrestling_contact_density",
+      "aerobic_base",
+      "anaerobic_power",
+      "max_strength",
+      "speed_strength",
+      "speed_first_action",
+    ];
+  }
+
+  if (input.context.currentPhase === "taper" || days <= 14) {
+    return ["legs_lme", "arms_grip", "anaerobic_power", "max_strength", "speed_strength"];
+  }
+
+  return [];
+}
+
+function filterBlockedCompetitionGoals(
+  input: ConstructorInput,
+  goalTypes: ConstructorGoalType[],
+) {
+  const blocked = blockedCompetitionGoalTypes(input);
+
+  if (blocked.length === 0) {
+    return goalTypes;
+  }
+
+  return goalTypes.filter((goalType) => !blocked.includes(goalType));
+}
+
 function defaultGoalTypesForCompetitionCase(
   input: ConstructorInput,
   requestedGoalTypes: ConstructorGoalType[],
@@ -2562,7 +2606,7 @@ function defaultGoalTypesForCompetitionCase(
 
   const days = input.context.cycleLengthDays;
   const recommended: ConstructorGoalType[] =
-    days <= 3
+    days <= 4
       ? ["taper_quality", "weight_management", "recovery"]
       : days <= 7
         ? ["taper_quality", "fatigue_skill", "weight_management", "recovery"]
@@ -2583,9 +2627,10 @@ function defaultGoalTypesForCompetitionCase(
                 "weight_management",
                 "recovery",
                 "taper_quality",
-              ];
+            ];
+  const safeRequestedGoalTypes = filterBlockedCompetitionGoals(input, requestedGoalTypes);
 
-  for (const goalType of requestedGoalTypes) {
+  for (const goalType of safeRequestedGoalTypes) {
     if (!recommended.includes(goalType)) {
       recommended.push(goalType);
     }
@@ -2689,52 +2734,91 @@ function buildCompetitionFocusPlan(input: ConstructorInput, goalTypes: Construct
   }
 
   const requested = new Set(goalTypes);
+  const days = input.context.cycleLengthDays;
+  const isStartWindow = input.context.currentPhase === "start_window" || days <= 4;
+  const isLateTaper = input.context.currentPhase === "taper" || days <= 14;
   const baseItems: Array<{
     goalType: ConstructorGoalType;
     mode: ConstructorGoalMode;
     label: string;
     reason: string;
-  }> = [
-    {
-      goalType: "fatigue_skill",
-      mode: "transfer",
-      label: "специальная борцовская работа",
-      reason: "ядро активных дней: техника, ситуации и перенос СФП в борьбу",
-    },
-    {
-      goalType: "wrestling_contact_density",
-      mode: "transfer",
-      label: "соревновательная модель",
-      reason: "моделирование 3 мин + 30 сек + 3 мин и турнирной плотности",
-    },
-    {
-      goalType: "legs_lme",
-      mode: "maintenance",
-      label: "поддержание СФП",
-      reason: "короткие локальные блоки без отказа и только с переносом в входы/проходы",
-    },
-    {
-      goalType: "weight_management",
-      mode: "recovery",
-      label: "контроль веса",
-      reason: "вес, сон, пульс покоя и самочувствие влияют на допустимую нагрузку",
-    },
-    {
-      goalType: "recovery",
-      mode: "recovery",
-      label: "восстановление и суперкомпенсация",
-      reason: "половинчатые дни, смена обстановки и снятие накопленного напряжения",
-    },
-    {
-      goalType: "taper_quality",
-      mode: "activation",
-      label: "качество подводки",
-      reason: "сохранить свежесть, резкость и уверенность без развития утомления",
-    },
-  ];
+  }> = isStartWindow
+    ? [
+        {
+          goalType: "taper_quality",
+          mode: "activation",
+          label: "короткая предстартовая активация",
+          reason: "2-3 включения и ключевые действия без накопления усталости",
+        },
+        {
+          goalType: "weight_management",
+          mode: "recovery",
+          label: "контроль веса",
+          reason: "вес, вода, питание и самочувствие важнее тренировочного добора",
+        },
+        {
+          goalType: "recovery",
+          mode: "recovery",
+          label: "сон и восстановление",
+          reason: "сохранить свежесть, снять накопленное напряжение, не добавлять ковёр каждый день",
+        },
+        {
+          goalType: "fatigue_skill",
+          mode: "transfer",
+          label: "техническая уверенность",
+          reason: "только лёгкие ключевые действия, без борьбы в утомление и без плотности",
+        },
+      ]
+    : [
+        {
+          goalType: "fatigue_skill",
+          mode: "transfer",
+          label: "специальная борцовская работа",
+          reason: "ядро активных дней: техника, ситуации и перенос СФП в борьбу",
+        },
+        ...(!isLateTaper
+          ? [
+              {
+                goalType: "wrestling_contact_density" as ConstructorGoalType,
+                mode: "transfer" as ConstructorGoalMode,
+                label: "соревновательная модель",
+                reason: "моделирование 3 мин + 30 сек + 3 мин и турнирной плотности",
+              },
+              {
+                goalType: "legs_lme" as ConstructorGoalType,
+                mode: "maintenance" as ConstructorGoalMode,
+                label: "поддержание СФП",
+                reason: "короткие локальные блоки без отказа и только с переносом в входы/проходы",
+              },
+            ]
+          : []),
+        {
+          goalType: "weight_management",
+          mode: "recovery",
+          label: "контроль веса",
+          reason: "вес, сон, пульс покоя и самочувствие влияют на допустимую нагрузку",
+        },
+        {
+          goalType: "recovery",
+          mode: "recovery",
+          label: "восстановление и суперкомпенсация",
+          reason: "половинчатые дни, смена обстановки и снятие накопленного напряжения",
+        },
+        {
+          goalType: "taper_quality",
+          mode: "activation",
+          label: "качество подводки",
+          reason: "сохранить свежесть, резкость и уверенность без развития утомления",
+        },
+      ];
+  const blockedGoalTypes = blockedCompetitionGoalTypes(input);
 
   const extraItems = goalTypes
-    .filter((goalType) => !baseItems.some((item) => item.goalType === goalType))
+    .filter(
+      (goalType) =>
+        !baseItems.some((item) => item.goalType === goalType) &&
+        !blockedGoalTypes.includes(goalType),
+    )
     .map((goalType) => ({
       goalType,
       mode: goalModeForInput(goalType, input),
@@ -3527,33 +3611,48 @@ function europeTaperPeakDay(label: string, slotIndex: number) {
 function europeStartWindowDay(label: string, slotIndex: number) {
   const variants = [
     () =>
-      dayWithExplicitSessions(
+      dayWithSingleSession(
         label,
-        "Предстартовая активация",
+        "Предстартовая активация без второй тренировки",
         "taper",
         "очень коротко, без усталости",
-        [techniqueBaseBlock("10-15 мин: ключевые действия, стойка, выход из захвата")],
-        [speedActivationBlock("2-3 коротких включения / полный отдых"), weightRecoveryControlBlock()],
+        [
+          techniqueBaseBlock("8-12 мин: 2-3 ключевых действия, стойка, выход из захвата / без борьбы"),
+          speedActivationBlock("2-3 коротких включения / полный отдых / остановить при тяжести"),
+          weightRecoveryControlBlock(),
+        ],
       ),
     () =>
-      dayWithExplicitSessions(
+      dayWithSingleSession(
         label,
         "Взвешивание, вес и восстановление",
         "recovery",
-        "вес, вода, сон, без тренировочного добора",
-        [weightRecoveryControlBlock("вес, вода, самочувствие, RHR / 5-10 мин")],
-        [techniqueBaseBlock("5-10 мин лёгкая техника только при хорошей готовности")],
+        "без ковра, вес, вода, сон, без тренировочного добора",
+        [
+          weightRecoveryControlBlock("вес, вода, самочувствие, RHR / 5-10 мин"),
+          aerobicRecoveryBlock("прогулка 10-20 мин или мобилити / только если помогает свежести"),
+        ],
       ),
     () =>
-      dayWithExplicitSessions(
+      dayWithSingleSession(
         label,
-        "Стартовый день",
+        "Техническая уверенность коротко",
         "taper",
-        "только активация и работа между схватками",
-        [speedActivationBlock("предстартовая активация 5-8 мин / без утомления")],
+        "коротко, без сопротивления, остановить при тяжести",
         [
-          techniqueBaseBlock("работа между схватками: дыхание, настройка, ключевые действия"),
-          weightRecoveryControlBlock("вес, вода, самочувствие, восстановление между схватками"),
+          techniqueBaseBlock("8-10 мин: любимые входы, защита, выход из контакта / без сопротивления"),
+          weightRecoveryControlBlock("вес, вода, самочувствие, восстановление / без добора"),
+        ],
+      ),
+    () =>
+      dayWithSingleSession(
+        label,
+        "Сон, режим и снятие напряжения",
+        "recovery",
+        "без ковра, без второй тренировки, сохранить свежесть",
+        [
+          weightRecoveryControlBlock("сон, вода, питание, вес, RHR, самочувствие / 5-10 мин"),
+          unloadingProcedureBlock("мобилити/дыхание/массаж 15-25 мин по состоянию"),
         ],
       ),
   ];
@@ -3814,12 +3913,15 @@ function applySeasonStrategyToConstructorInput(input: ConstructorInput): Constru
   }
 
   const mandatoryGoals = snapshot.constructorRules.mandatoryFocus.filter(isConstructorGoalType);
+  const blockedGoals = snapshot.constructorRules.blockedFocus.filter(isConstructorGoalType);
   const currentGoals = input.goals
     .sort((left, right) => left.priority - right.priority)
     .map((goal) => goal.goalType);
   const mergedGoalTypes = [
-    ...mandatoryGoals,
-    ...currentGoals.filter((goalType) => !mandatoryGoals.includes(goalType)),
+    ...mandatoryGoals.filter((goalType) => !blockedGoals.includes(goalType)),
+    ...currentGoals.filter(
+      (goalType) => !mandatoryGoals.includes(goalType) && !blockedGoals.includes(goalType),
+    ),
   ];
   const goals =
     mergedGoalTypes.length > 0

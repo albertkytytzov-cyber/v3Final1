@@ -257,6 +257,20 @@ const CONSTRUCTOR_MAIN_START_FOCUS_OPTIONS: ConstructorGoalType[] = [
   "taper_quality",
 ];
 
+const CONSTRUCTOR_TAPER_FOCUS_OPTIONS: ConstructorGoalType[] = [
+  "fatigue_skill",
+  "taper_quality",
+  "weight_management",
+  "recovery",
+];
+
+const CONSTRUCTOR_START_WINDOW_FOCUS_OPTIONS: ConstructorGoalType[] = [
+  "taper_quality",
+  "weight_management",
+  "recovery",
+  "fatigue_skill",
+];
+
 const CONSTRUCTOR_PHASE_OPTIONS: ConstructorPhase[] = [
   "base",
   "development",
@@ -407,15 +421,19 @@ function deriveConstructorGoalsByCompetitionContext(
 
   const appendCoachExtras = (recommended: ConstructorGoalType[]) => [
     ...recommended,
-    ...currentGoals.filter((goal) => !recommended.includes(goal)),
+    ...currentGoals.filter(
+      (goal) =>
+        !recommended.includes(goal) &&
+        !getConstructorBlockedGoalsByCompetitionContext(daysToCompetition, priority, level).includes(goal),
+    ),
   ];
 
-  if (daysToCompetition !== null && daysToCompetition <= 7) {
-    return appendCoachExtras(["taper_quality", "weight_management", "recovery", "fatigue_skill"]);
+  if (daysToCompetition !== null && daysToCompetition <= 4) {
+    return appendCoachExtras(CONSTRUCTOR_START_WINDOW_FOCUS_OPTIONS);
   }
 
   if (daysToCompetition !== null && daysToCompetition <= 14) {
-    return appendCoachExtras(["fatigue_skill", "taper_quality", "weight_management", "recovery"]);
+    return appendCoachExtras(CONSTRUCTOR_TAPER_FOCUS_OPTIONS);
   }
 
   if (daysToCompetition !== null && daysToCompetition <= 23) {
@@ -429,6 +447,61 @@ function deriveConstructorGoalsByCompetitionContext(
   }
 
   return appendCoachExtras(CONSTRUCTOR_MAIN_START_FOCUS_OPTIONS);
+}
+
+function getConstructorFocusOptionsByCompetitionContext(
+  daysToCompetition: number | null,
+  priority: ConstructorCompetitionPriority,
+  level: ConstructorCompetitionLevel,
+) {
+  if (!isConstructorMajorStartWindow(daysToCompetition, priority, level)) {
+    return CONSTRUCTOR_GOAL_OPTIONS;
+  }
+
+  if (daysToCompetition !== null && daysToCompetition <= 4) {
+    return CONSTRUCTOR_START_WINDOW_FOCUS_OPTIONS;
+  }
+
+  if (daysToCompetition !== null && daysToCompetition <= 14) {
+    return CONSTRUCTOR_TAPER_FOCUS_OPTIONS;
+  }
+
+  return CONSTRUCTOR_MAIN_START_FOCUS_OPTIONS;
+}
+
+function getConstructorBlockedGoalsByCompetitionContext(
+  daysToCompetition: number | null,
+  priority: ConstructorCompetitionPriority,
+  level: ConstructorCompetitionLevel,
+) {
+  if (!isConstructorMajorStartWindow(daysToCompetition, priority, level)) {
+    return [] as ConstructorGoalType[];
+  }
+
+  if (daysToCompetition !== null && daysToCompetition <= 4) {
+    return [
+      "legs_lme",
+      "arms_grip",
+      "wrestling_contact_density",
+      "aerobic_base",
+      "anaerobic_power",
+      "max_strength",
+      "speed_strength",
+      "speed_first_action",
+    ] as ConstructorGoalType[];
+  }
+
+  if (daysToCompetition !== null && daysToCompetition <= 14) {
+    return [
+      "legs_lme",
+      "arms_grip",
+      "anaerobic_power",
+      "max_strength",
+      "speed_strength",
+    ] as ConstructorGoalType[];
+  }
+
+  return [] as ConstructorGoalType[];
 }
 
 function deriveConstructorCycleLengthByCompetitionDays(
@@ -13992,10 +14065,15 @@ export function PageClient({
     const seasonStrategyGoals = (constructorSeasonStrategySnapshot?.constructorRules.mandatoryFocus ?? []).filter(
       (goal): goal is ConstructorGoalType => CONSTRUCTOR_GOAL_OPTIONS.includes(goal as ConstructorGoalType),
     );
+    const blockedSeasonStrategyGoals = (constructorSeasonStrategySnapshot?.constructorRules.blockedFocus ?? []).filter(
+      (goal): goal is ConstructorGoalType => CONSTRUCTOR_GOAL_OPTIONS.includes(goal as ConstructorGoalType),
+    );
     const goals = seasonStrategyGoals.length
       ? [
-          ...seasonStrategyGoals,
-          ...goalsByCompetitionContext.filter((goal) => !seasonStrategyGoals.includes(goal)),
+          ...seasonStrategyGoals.filter((goal) => !blockedSeasonStrategyGoals.includes(goal)),
+          ...goalsByCompetitionContext.filter(
+            (goal) => !seasonStrategyGoals.includes(goal) && !blockedSeasonStrategyGoals.includes(goal),
+          ),
         ]
       : goalsByCompetitionContext;
     const effectiveCurrentPhase = selectedConstructorCompetitionPlan
@@ -15139,9 +15217,11 @@ export function PageClient({
     selectedConstructorCompetitionPlan?.priority ?? constructorForm.competitionPriority,
     selectedConstructorCompetition?.level ?? constructorForm.competitionLevel,
   );
-  const constructorGoalOptions = constructorIsMajorStartWindow
-    ? CONSTRUCTOR_MAIN_START_FOCUS_OPTIONS
-    : CONSTRUCTOR_GOAL_OPTIONS;
+  const constructorGoalOptions = getConstructorFocusOptionsByCompetitionContext(
+    constructorDaysToCompetition,
+    selectedConstructorCompetitionPlan?.priority ?? constructorForm.competitionPriority,
+    selectedConstructorCompetition?.level ?? constructorForm.competitionLevel,
+  );
   const constructorGoalLabel = (goal: ConstructorGoalType) =>
     constructorIsMajorStartWindow
       ? (

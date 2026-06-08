@@ -73,6 +73,14 @@ function sessionHasTechnicalWrestling(session) {
   );
 }
 
+function sessionHasMatBlock(session) {
+  return sessionMainBlocks(session).some(
+    (block) =>
+      block.type === "technical" ||
+      /борьб|техник|стойк|партер|вход|захват/i.test(`${block.name} ${block.volume}`),
+  );
+}
+
 function sessionHasPhysicalSupport(session) {
   return sessionMainBlocks(session).some(
     (block) =>
@@ -264,6 +272,9 @@ const monthActiveTrainingDaysWithSessions = monthDraft.plan.weeks.flatMap((week)
   week.days.filter((day) => (day.sessions ?? []).some((session) => session.blocks.some(isActiveTrainingBlock))),
 );
 const monthHalfDays = monthActiveTrainingDaysWithSessions.filter((day) => sessionCount(day) === 1);
+const monthUnloadingHalfDays = monthHalfDays.filter((day) =>
+  /половинчат|смена обстановки|сброс усталости/i.test(day.dayIntent),
+);
 const monthFullDays = monthActiveTrainingDaysWithSessions.filter((day) => sessionCount(day) >= 2);
 const monthOverloadedSixDayWeeks = monthDraft.plan.weeks.filter(
   (week) => week.days.length >= 6 && week.days.every((day) => sessionCount(day) >= 2),
@@ -558,6 +569,13 @@ const fourDayStartDraft = buildPerformConstructorDraft({
   seasonStrategy: fourDayStartStrategy,
 });
 const fourDayStartActiveDays = activeTrainingDays(fourDayStartDraft);
+const fourDayStartDays = fourDayStartDraft.plan.weeks.flatMap((week) => week.days);
+const fourDayStartMatDays = fourDayStartDays.filter((day) =>
+  (day.sessions ?? []).some(sessionHasMatBlock),
+);
+const fourDayStartTargets = new Set(
+  fourDayStartDays.flatMap((day) => day.blocks.map((block) => block.targetQuality)),
+);
 
 assert(CONSTRUCTOR_TEMPLATE_CARDS.length >= 6, "Expected first constructor template cards");
 assert(draft.plan.weeks.length > 0, "Draft must contain plan weeks");
@@ -741,8 +759,15 @@ assert(
   "Every full active day in the 30-day Europe constructor case must include wrestling technique/contact",
 );
 assert(
-  monthHalfDays.every((day) => !(day.sessions ?? []).some(sessionHasTechnicalWrestling)),
-  "Half-days in the 30-day Europe constructor case must be environment-shift recovery days without mat technique/contact",
+  monthUnloadingHalfDays.length >= 3 &&
+    monthUnloadingHalfDays.every((day) => !(day.sessions ?? []).some(sessionHasTechnicalWrestling)),
+  `Half-days in the 30-day Europe constructor case must be environment-shift recovery days without mat technique/contact: ${monthUnloadingHalfDays
+    .map((day) =>
+      `${day.dayLabel}:${day.dayIntent}:${(day.sessions ?? [])
+        .flatMap((session) => sessionMainBlocks(session).map((block) => `${block.name}/${block.targetQuality}`))
+        .join(",")}`,
+    )
+    .join(" | ")}`,
 );
 assert(
   monthHasMorningTechniqueEveningPhysical,
@@ -840,8 +865,32 @@ assert(
 assert(
   fourDayStartDraft.plan.weeks.length === 1 &&
     fourDayStartDraft.plan.weeks[0]?.phase === "start_window" &&
-    fourDayStartActiveDays.length === 4,
-  `4-day start draft should be one start-window week with four active calendar days, got weeks=${fourDayStartDraft.plan.weeks.length}, phase=${fourDayStartDraft.plan.weeks[0]?.phase}, days=${fourDayStartActiveDays.length}`,
+    fourDayStartDays.length === 4,
+  `4-day start draft should be one start-window week with four calendar days, got weeks=${fourDayStartDraft.plan.weeks.length}, phase=${fourDayStartDraft.plan.weeks[0]?.phase}, days=${fourDayStartDays.length}`,
+);
+assert(
+  fourDayStartDays.every((day) => sessionCount(day) <= 1),
+  `4-day start window must not create 2 sessions per day: ${fourDayStartDays
+    .map((day) => `${day.dayLabel}:${sessionCount(day)}`)
+    .join(", ")}`,
+);
+assert(
+  fourDayStartMatDays.length <= 2,
+  `4-day start window must include recovery/no-mat days, got mat days: ${fourDayStartMatDays
+    .map((day) => day.dayLabel)
+    .join(", ")}`,
+);
+assert(
+  !fourDayStartTargets.has("legs_lme") && !fourDayStartTargets.has("wrestling_contact_density"),
+  `4-day start window must not include LME/contact-density targets: ${Array.from(fourDayStartTargets).join(", ")}`,
+);
+assert(
+  fourDayStartDraft.focusPlan.items.every(
+    (item) => item.goalType !== "legs_lme" && item.goalType !== "wrestling_contact_density",
+  ),
+  `4-day start focus must not auto-select LME/contact density: ${fourDayStartDraft.focusPlan.items
+    .map((item) => `${item.goalType}:${item.label}`)
+    .join(", ")}`,
 );
 assert(
   fourDayStartDraft.focusPlan.phaseMap.map((phase) => phase.range).join("|") === "Д-4...старт",
@@ -924,6 +973,13 @@ console.log(
         daysToStart: fourDayStartStrategy.currentWindow.daysToStart,
         cycleLengthDays: fourDayStartDraft.plan.cycleLengthDays,
         activeDays: fourDayStartActiveDays.length,
+        sessionCounts: fourDayStartDays.map((day) => ({
+          label: day.dayLabel,
+          sessions: sessionCount(day),
+        })),
+        matDays: fourDayStartMatDays.map((day) => day.dayLabel),
+        targets: Array.from(fourDayStartTargets),
+        focus: fourDayStartDraft.focusPlan.items.map((item) => item.goalType),
         phaseMap: fourDayStartDraft.focusPlan.phaseMap.map((phase) => phase.range),
       },
     },

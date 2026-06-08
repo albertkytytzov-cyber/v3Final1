@@ -382,7 +382,30 @@ function rulesForSnapshot(params: {
   let weeklyRhythm =
     "недельный ритм задаётся тренером: нагрузочные дни чередуются с восстановлением";
 
-  if (params.role === "main_peak" && params.daysToStart !== null && params.daysToStart <= 30) {
+  if (params.phase === "start_window") {
+    allowedModes = ["activation", "recovery", "transfer"];
+    forbiddenModes = ["development", "maintenance"];
+    mandatoryFocus = ["taper_quality", "weight_management", "recovery", "fatigue_skill"];
+    blockedFocus = [
+      "legs_lme",
+      "arms_grip",
+      "wrestling_contact_density",
+      "aerobic_base",
+      "anaerobic_power",
+      "max_strength",
+      "speed_strength",
+    ];
+    weeklyRhythm =
+      "стартовое окно: не больше одной короткой сессии в день, часть дней без ковра, приоритет вес, сон и свежесть";
+    requiredBlocks.push("короткая активация", "вес и восстановление", "техническая уверенность");
+    warnings.push("0-4 дня до старта: ЛМВ, плотность борьбы, силовая и интервальная работа запрещены как автофокус");
+  } else if (params.phase === "taper") {
+    allowedModes = ["activation", "recovery", "transfer"];
+    forbiddenModes = ["development"];
+    mandatoryFocus = ["fatigue_skill", "taper_quality", "weight_management", "recovery"];
+    blockedFocus = ["legs_lme", "arms_grip", "max_strength", "anaerobic_power"];
+    weeklyRhythm = "объём снижается, активные дни короткие, восстановление и вес обязательны";
+  } else if (params.role === "main_peak" && params.daysToStart !== null && params.daysToStart <= 30) {
     allowedModes = ["maintenance", "transfer", "activation", "recovery"];
     forbiddenModes = ["development"];
     mandatoryFocus = MAIN_START_FOCUS;
@@ -391,12 +414,6 @@ function rulesForSnapshot(params: {
       "ПН/ВТ полный день, СР половинчатая разгрузка, ЧТ/ПТ полный день, СБ половинчатая разгрузка, ВС отдых";
     requiredBlocks.push("борцовская техника", "соревновательная модель", "вес и восстановление");
     warnings.push("главный старт ближе 30 дней: развитие скорости, ЛМВ и силы запрещено");
-  } else if (params.phase === "taper" || params.phase === "start_window") {
-    allowedModes = ["maintenance", "activation", "recovery", "transfer"];
-    forbiddenModes = ["development"];
-    mandatoryFocus = ["taper_quality", "weight_management", "recovery", "fatigue_skill"];
-    blockedFocus = ["legs_lme", "arms_grip", "max_strength", "anaerobic_power"];
-    weeklyRhythm = "объём снижается, активные дни короткие, восстановление и вес обязательны";
   } else if (params.stage === "deep_special_preparation") {
     mandatoryFocus = ["fatigue_skill", "wrestling_contact_density", "legs_lme", "aerobic_base"];
     weeklyRhythm =
