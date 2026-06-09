@@ -6,6 +6,7 @@ import {
   buildPerformConstructorDraft,
   buildSeasonStrategySnapshot,
   classifyConstructorTemplateCard,
+  compareLegacyAndMatrixConstructorDrafts,
   CONSTRUCTOR_TEMPLATE_CARDS,
   CONSTRUCTOR_TRAINING_BLOCK_LIBRARY,
   explainBlockEligibility,
@@ -1128,6 +1129,87 @@ const matrixConstructorDraftFarDevelopment = buildMatrixDrivenConstructorDraft(
     weighInDate: "2026-09-05",
   }),
 );
+const comparison28 = compareLegacyAndMatrixConstructorDrafts(
+  matrixPlanInput({
+    daysToStart: 28,
+    cycleLengthDays: 28,
+    phase: "special_preparation",
+    travelRequired: true,
+  }),
+);
+const comparison21 = compareLegacyAndMatrixConstructorDrafts(
+  matrixPlanInput({
+    daysToStart: 21,
+    cycleLengthDays: 21,
+    phase: "special_preparation",
+  }),
+);
+const comparison10 = compareLegacyAndMatrixConstructorDrafts(
+  matrixPlanInput({
+    daysToStart: 10,
+    cycleLengthDays: 10,
+    phase: "taper",
+  }),
+);
+const comparison3 = compareLegacyAndMatrixConstructorDrafts(
+  matrixPlanInput({
+    daysToStart: 3,
+    cycleLengthDays: 3,
+    phase: "start_window",
+  }),
+);
+const comparisonTravel = compareLegacyAndMatrixConstructorDrafts(
+  matrixPlanInput({
+    daysToStart: 2,
+    cycleLengthDays: 1,
+    phase: "start_window",
+    travelRequired: true,
+  }),
+);
+const comparisonWeighIn = compareLegacyAndMatrixConstructorDrafts(
+  matrixPlanInput({
+    daysToStart: 1,
+    cycleLengthDays: 1,
+    phase: "start_window",
+  }),
+);
+const comparisonCompetitionDay = compareLegacyAndMatrixConstructorDrafts(
+  matrixPlanInput({
+    daysToStart: 0,
+    cycleLengthDays: 1,
+    phase: "start_window",
+  }),
+);
+const comparisonPostCompetition = compareLegacyAndMatrixConstructorDrafts(
+  matrixPlanInput({
+    daysToStart: -1,
+    cycleLengthDays: 1,
+    phase: "recovery",
+  }),
+);
+const comparisonSecondary = compareLegacyAndMatrixConstructorDrafts(
+  matrixPlanInput({
+    daysToStart: 21,
+    cycleLengthDays: 7,
+    phase: "special_preparation",
+    role: "secondary_peak",
+    priority: "B",
+    level: "national",
+  }),
+);
+const comparisonFarDevelopment = compareLegacyAndMatrixConstructorDrafts(
+  matrixPlanInput({
+    daysToStart: 90,
+    cycleLengthDays: 7,
+    phase: "base",
+    role: "main_peak",
+    priority: "A",
+    level: "continental",
+    startDate: "2026-09-06",
+    weighInDate: "2026-09-05",
+  }),
+  { includeInfo: true },
+);
 
 assert(CONSTRUCTOR_TEMPLATE_CARDS.length >= 6, "Expected first constructor template cards");
 assert(draft.plan.weeks.length > 0, "Draft must contain plan weeks");
@@ -1683,6 +1765,126 @@ assert(
     draft.plan.weeks.length > 0 &&
     draft.selectedCards.length > 0,
   "Default buildPerformConstructorDraft should remain legacy-compatible and not become matrix by default",
+);
+assert(
+  comparison28.generatedFrom === "legacy_matrix_comparison" &&
+    comparison28.legacyDraft.plan.weeks.length > 0 &&
+    comparison28.matrixDraft.generatedFrom === "matrix",
+  "Comparison report should dual-run legacy and matrix drafts",
+);
+assert(
+  comparison28.summary.safeToPreview &&
+    comparison28.summary.legacyDefaultUnchanged &&
+    comparison28.summary.expectedDifferenceCount > 0,
+  "28-day comparison should be safe to preview and mark expected legacy/matrix differences",
+);
+assert(
+  comparison28.matrixSafetyInvariants.every((item) => item.passed || item.severity !== "error"),
+  "28-day comparison should pass matrix safety invariants",
+);
+assert(
+  comparison28.differences.some((item) => item.category === "legacy_template_dependency"),
+  "28-day comparison should explicitly report legacy template dependency difference",
+);
+assert(
+  !constructorDraftBlocks(comparison28.matrixDraft).some((block) =>
+    block.localLoadZones.includes("matrix:leg_lmv"),
+  ) &&
+    constructorDraftBlocks(comparison28.matrixDraft).some((block) =>
+      block.localLoadZones.includes("matrix:mat_competition_model"),
+    ),
+  "28-day comparison matrix draft should keep special work and reject heavy development",
+);
+assert(
+  comparison21.summary.safeToPreview &&
+    !constructorDraftBlocks(comparison21.matrixDraft).some((block) =>
+      block.localLoadZones.includes("matrix:leg_lmv") || block.localLoadZones.includes("matrix:mat_control_bouts"),
+    ) &&
+    /control_bouts_too_close_to_start/.test(comparison21.matrixDraft.explanation.riskImpact),
+  "21-day comparison should show controlled volume and rejected control/LMV blocks",
+);
+assert(
+  comparison10.summary.safeToPreview &&
+    !constructorDraftBlocks(comparison10.matrixDraft).some((block) =>
+      block.localLoadZones.includes("matrix:leg_lmv") ||
+      block.localLoadZones.includes("matrix:spp") ||
+      block.localLoadZones.includes("matrix:mat_control_bouts"),
+    ) &&
+    constructorDraftBlocks(comparison10.matrixDraft).some((block) =>
+      block.localLoadZones.includes("matrix:mat_light_technical") ||
+      block.localLoadZones.includes("matrix:recovery") ||
+      block.localLoadZones.includes("matrix:mobility"),
+    ),
+  "10-day comparison should show taper/direct pre-comp matrix behavior",
+);
+assert(
+  comparison3.summary.safeToPreview &&
+    !constructorDraftBlocks(comparison3.matrixDraft).some((block) =>
+      block.localLoadZones.includes("matrix:leg_lmv") ||
+      block.localLoadZones.includes("matrix:spp") ||
+      block.localLoadZones.includes("matrix:mat_control_bouts"),
+    ) &&
+    constructorDraftHasText(comparison3.matrixDraft, /Главный старт ближе 30|развитие/i),
+  "3-day comparison should keep safety invariant green and explain close-start development ban",
+);
+assert(
+  comparisonTravel.summary.safeToPreview &&
+    constructorDraftBlocks(comparisonTravel.matrixDraft).every((block) => !/нагрузка high|нагрузка medium/.test(block.volume)) &&
+    constructorDraftHasText(comparisonTravel.matrixDraft, /travel|дорог|logistics/i),
+  "Travel comparison should show no heavy load and logistics explanation",
+);
+assert(
+  comparisonWeighIn.summary.safeToPreview &&
+    !constructorDraftBlocks(comparisonWeighIn.matrixDraft).some((block) =>
+      block.localLoadZones.includes("matrix:mat_control_bouts") ||
+      block.localLoadZones.includes("matrix:mat_competition_model") ||
+      block.localLoadZones.includes("matrix:spp"),
+    ) &&
+    constructorDraftHasText(comparisonWeighIn.matrixDraft, /взвеш|weight/i),
+  "Weigh-in comparison should show short activation/recovery and weight explanation",
+);
+assert(
+  comparisonCompetitionDay.summary.safeToPreview &&
+    constructorDraftBlocks(comparisonCompetitionDay.matrixDraft).every((block) =>
+      block.localLoadZones.includes("matrix:competition_start"),
+    ),
+  "Competition-day comparison should select competition_start and no ordinary heavy training",
+);
+assert(
+  comparisonPostCompetition.summary.safeToPreview &&
+    constructorDraftBlocks(comparisonPostCompetition.matrixDraft).some((block) =>
+      block.localLoadZones.includes("matrix:post_competition_recovery") ||
+      block.localLoadZones.includes("matrix:recovery"),
+    ) &&
+    !constructorDraftBlocks(comparisonPostCompetition.matrixDraft).some((block) =>
+      block.localLoadZones.includes("matrix:leg_lmv"),
+    ),
+  "Post-competition comparison should select recovery and no development",
+);
+assert(
+  comparisonSecondary.summary.safeToPreview &&
+    !comparisonSecondary.matrixDraft.matrix.draft.warnings.some((warning) => warning.code === "close_main_start") &&
+    !constructorDraftBlocks(comparisonSecondary.matrixDraft).some((block) =>
+      block.localLoadZones.includes("matrix:leg_lmv"),
+    ),
+  "Secondary comparison should be softer than main start but still reject risky close-start blocks",
+);
+assert(
+  comparisonFarDevelopment.summary.safeToPreview &&
+    constructorDraftBlocks(comparisonFarDevelopment.matrixDraft).some((block) =>
+      block.localLoadZones.includes("matrix:leg_lmv"),
+    ) &&
+    constructorDraftBlocks(comparisonFarDevelopment.matrixDraft).some((block) =>
+      block.localLoadZones.includes("matrix:gpp") || block.localLoadZones.includes("matrix:spp"),
+    ) &&
+    constructorDraftSessions(comparisonFarDevelopment.matrixDraft).some((session) => session.name === "ВЕЧЕР") &&
+    comparisonFarDevelopment.summary.totalDifferences >= comparisonFarDevelopment.summary.expectedDifferenceCount,
+  "Far-development comparison should allow development/SPP/GPP and summarize expected differences",
+);
+assert(
+  comparison28.legacyDefaultInvariants.every((item) => item.passed || item.severity !== "error") &&
+    comparison28.legacyDraft.generatedFrom === undefined,
+  "Legacy default guard should confirm buildPerformConstructorDraft remains legacy by default",
 );
 assert(
   draft.missingData.every((item) => item.code !== "speed_tests"),

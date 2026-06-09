@@ -1239,3 +1239,150 @@ npm run check:constructor-core
 3. Постепенная замена `mergeWeeks` internals.
 4. Regression tests на реальных сценариях тренера.
 5. Debug/telemetry output для сравнения двух путей.
+
+Пункт 2 закрыт этапом 5 ниже как отдельный comparison/dual-run слой без переключения production path.
+
+## 16. Этап 5: Legacy vs matrix comparison layer
+
+Дата: 2026-06-09.
+
+Этап 5 добавляет отдельный dual-run слой для сравнения legacy и matrix-driven draft на одинаковых входных данных.
+
+### 16.1 Что реализовано
+
+Добавлен shared-модуль `packages/shared/src/constructor-matrix-comparison.ts`.
+
+Основные функции:
+
+- `compareLegacyAndMatrixConstructorDrafts(input, options?)`;
+- `buildConstructorDraftComparisonReport(legacyDraft, matrixDraft, input, options?)`;
+- `summarizeConstructorDraftDifferences(report)`;
+- `assertMatrixDraftSafetyInvariants(matrixDraft, input)`;
+- `assertLegacyDefaultUnchanged(input)`.
+
+Dual-run цепочка:
+
+```text
+legacy: buildPerformConstructorDraft(input)
+matrix: buildMatrixDrivenConstructorDraft(input)
+→ ConstructorDraftComparisonReport
+→ ConstructorDraftComparisonSummary
+```
+
+Production path не переключается.
+
+### 16.2 Что сравнивается
+
+Comparison layer не делает full snapshot. Он сравнивает устойчивые инварианты:
+
+- наличие weeks/days/sessions;
+- week count;
+- day coverage;
+- session density;
+- block count;
+- наличие risk output;
+- наличие explanation output;
+- legacy template dependency;
+- matrix generated marker;
+- matrix legacy-card policy;
+- close-start safety;
+- travel/weigh-in/competition/post-competition handling.
+
+### 16.3 Safety invariants matrix path
+
+`assertMatrixDraftSafetyInvariants` проверяет:
+
+- `generatedFrom === "matrix"`;
+- есть weeks/days/sessions;
+- нет `legacy_template_used_as_structure`;
+- fixed template cards не являются structural source;
+- нет development/heavy LMV near main start;
+- нет heavy strength close to start;
+- нет control bouts close to start;
+- нет heavy travel load;
+- нет heavy weigh-in load;
+- competition day содержит `competition_start`;
+- post-competition содержит recovery/post-competition recovery;
+- explanations присутствуют.
+
+Если invariant нарушен, возвращается structured result с severity, affected и explanation.
+
+### 16.4 Legacy default guard
+
+`assertLegacyDefaultUnchanged(input)` проверяет:
+
+- `buildPerformConstructorDraft(input)` вызывается без options;
+- legacy output сохраняет weeks/days/explanation;
+- default output не получает `generatedFrom=matrix`;
+- selectedCards остаются частью текущего legacy behavior.
+
+### 16.5 Human-readable summary
+
+`summarizeConstructorDraftDifferences(report)` возвращает:
+
+- `safeToPreview`;
+- `legacyDefaultUnchanged`;
+- `totalDifferences`;
+- `errorCount`;
+- `warningCount`;
+- `expectedDifferenceCount`;
+- `headline`;
+- top differences.
+
+Пример успешного смысла:
+
+```text
+Matrix draft is safe for internal preview; differences are expected due to matrix-driven block selection.
+```
+
+### 16.6 Проверки этапа 5
+
+В `scripts/check-perform-constructor-core.mjs` добавлены dual-run сценарии:
+
+- 28 дней до главного старта;
+- 21 день;
+- 10 дней;
+- 3 дня;
+- travel day;
+- weigh-in day;
+- competition day;
+- post-competition;
+- secondary/control start;
+- far development week;
+- legacy default guard.
+
+Проверяется, что matrix path safe для internal preview, а legacy default path не подменён.
+
+### 16.7 Что намеренно не изменено
+
+Не изменены:
+
+- `selectTemplateCards`;
+- `mergeWeeks`;
+- `pickSourceWeekForPhase`;
+- default `buildPerformConstructorDraft`;
+- API route contracts;
+- DB schema;
+- UI;
+- storage/telemetry.
+
+### 16.8 Команды проверки этапа 5
+
+Запущены:
+
+```bash
+npm run build --workspace @training-platform/shared
+npm run check:constructor-core
+```
+
+Результат: обе команды прошли успешно.
+
+### 16.9 Следующий PR после этапа 5
+
+Следующий шаг:
+
+1. Internal preview flag для API/UI или debug endpoint.
+2. Side-by-side preview для тренера.
+3. Controlled rollout matrix path для выбранных сценариев.
+4. Сбор feedback/regression cases.
+5. Только после этого — постепенная замена `mergeWeeks` internals.
