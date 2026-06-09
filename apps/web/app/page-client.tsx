@@ -257,6 +257,8 @@ type ConstructorMatrixWorkspaceState = {
   readOnly: true;
 };
 
+type ActiveConstructorDraftSource = "legacy" | "matrix_internal";
+
 const CLOSED_CONSTRUCTOR_MATRIX_WORKSPACE: ConstructorMatrixWorkspaceState = {
   open: false,
   draft: null,
@@ -493,6 +495,31 @@ function canOpenConstructorMatrixWorkspace(params: {
     safetyErrorCount === 0 &&
     !hasErrorBlockers
   );
+}
+
+function canActivateConstructorMatrixInternalDraft(params: {
+  workspace: ConstructorMatrixWorkspaceState;
+  decision?: MatrixConstructorRolloutDecision | null;
+  preview?: ConstructorMatrixPreviewResponse | null;
+  matrixDraft?: ConstructorMatrixPreviewResponse["matrixDraft"] | null;
+  safetyErrorCount: number;
+}) {
+  const { workspace, decision, preview, matrixDraft, safetyErrorCount } = params;
+
+  return (
+    workspace.open &&
+    Boolean(workspace.draft) &&
+    canOpenConstructorMatrixWorkspace({
+      decision,
+      preview,
+      matrixDraft,
+      safetyErrorCount,
+    })
+  );
+}
+
+function isConstructorDraftSaveAllowed(source: ActiveConstructorDraftSource) {
+  return source === "legacy";
 }
 
 function formatConstructorPreviewAffected(
@@ -9799,11 +9826,17 @@ export function PageClient({
     useState<MatrixConstructorRolloutDecision | null>(null);
   const [constructorMatrixWorkspace, setConstructorMatrixWorkspace] =
     useState<ConstructorMatrixWorkspaceState>(CLOSED_CONSTRUCTOR_MATRIX_WORKSPACE);
+  const [activeConstructorDraftSource, setActiveConstructorDraftSource] =
+    useState<ActiveConstructorDraftSource>("legacy");
   const [constructorMatrixPreviewBusy, setConstructorMatrixPreviewBusy] = useState(false);
   const [constructorMatrixPreviewError, setConstructorMatrixPreviewError] = useState("");
   const [constructorMatrixRolloutError, setConstructorMatrixRolloutError] = useState("");
   const [constructorMatrixIncludeInfoDifferences, setConstructorMatrixIncludeInfoDifferences] =
     useState(false);
+  useEffect(() => {
+    setConstructorMatrixWorkspace(CLOSED_CONSTRUCTOR_MATRIX_WORKSPACE);
+    setActiveConstructorDraftSource("legacy");
+  }, [constructorForm]);
   const [seasonDisplayMode, setSeasonDisplayMode] =
     useState<SeasonDisplayMode>("hybrid");
   const [seasonEditorMode, setSeasonEditorMode] = useState<SeasonEditorMode>(
@@ -14517,6 +14550,7 @@ export function PageClient({
     setConstructorMessage("");
     setErrorMessage("");
     setConstructorMatrixWorkspace(CLOSED_CONSTRUCTOR_MATRIX_WORKSPACE);
+    setActiveConstructorDraftSource("legacy");
 
     try {
       if (isPreviewMode) {
@@ -14582,6 +14616,7 @@ export function PageClient({
     setConstructorMatrixPreview(null);
     setConstructorMatrixRolloutDecision(null);
     setConstructorMatrixWorkspace(CLOSED_CONSTRUCTOR_MATRIX_WORKSPACE);
+    setActiveConstructorDraftSource("legacy");
 
     try {
       const [previewResult, rolloutResult] = await Promise.allSettled([
@@ -14636,13 +14671,46 @@ export function PageClient({
       source: "rollout_preview",
       readOnly: true,
     });
+    setActiveConstructorDraftSource("legacy");
   }
 
   function handleCloseConstructorMatrixWorkspace() {
     setConstructorMatrixWorkspace(CLOSED_CONSTRUCTOR_MATRIX_WORKSPACE);
+    setActiveConstructorDraftSource("legacy");
+  }
+
+  function handleActivateConstructorMatrixInternalDraft() {
+    if (
+      !canActivateConstructorMatrixInternalDraft({
+        workspace: constructorMatrixWorkspace,
+        decision: constructorMatrixRolloutDecision,
+        preview: constructorMatrixPreview,
+        matrixDraft: constructorMatrixPreviewMatrixDraft,
+        safetyErrorCount: constructorMatrixPreviewSafetyErrorCount,
+      })
+    ) {
+      return;
+    }
+
+    setActiveConstructorDraftSource("matrix_internal");
+  }
+
+  function handleReturnToLegacyConstructorDraft() {
+    setActiveConstructorDraftSource("legacy");
   }
 
   async function handleSaveConstructorTemplate() {
+    if (!isConstructorDraftSaveAllowed(activeConstructorDraftSource)) {
+      setConstructorMessage(
+        copyFor(language, {
+          en: "Matrix internal draft is read-only and cannot be saved as a template.",
+          ru: "Matrix internal draft доступен только read-only и не сохраняется как шаблон.",
+          bg: "Matrix internal draft е само read-only и не се записва като шаблон.",
+        }),
+      );
+      return;
+    }
+
     if (!constructorTemplatePayload) {
       setConstructorMessage(
         copyFor(language, {
@@ -15796,12 +15864,19 @@ export function PageClient({
         constructorSeasonStrategySnapshot.targetCompetition.role ?? "-"
       }`
     : copyFor(language, { en: "No target start", ru: "Целевой старт не выбран", bg: "Няма целеви старт" });
-  const constructorConfidenceLabel = constructorDraft
+  const activeConstructorDraftIsMatrixInternal =
+    activeConstructorDraftSource === "matrix_internal" &&
+    constructorMatrixWorkspace.open &&
+    Boolean(constructorMatrixWorkspace.draft);
+  const activeConstructorDraft = activeConstructorDraftIsMatrixInternal
+    ? constructorMatrixWorkspace.draft
+    : constructorDraft;
+  const constructorConfidenceLabel = activeConstructorDraft
     ? ({
         high: copyFor(language, { en: "High", ru: "Высокая", bg: "Висока" }),
         medium: copyFor(language, { en: "Medium", ru: "Средняя", bg: "Средна" }),
         low: copyFor(language, { en: "Low", ru: "Низкая", bg: "Ниска" }),
-      } satisfies Record<ConstructorDraft["confidence"], string>)[constructorDraft.confidence]
+      } satisfies Record<ConstructorDraft["confidence"], string>)[activeConstructorDraft.confidence]
     : "-";
   const constructorMatrixPreviewLegacyMetrics = buildConstructorPreviewDraftMetrics(
     constructorMatrixPreview?.legacyDraft ?? constructorMatrixPreview?.comparisonReport?.legacyDraft ?? null,
@@ -15827,6 +15902,13 @@ export function PageClient({
     (item) => item.severity === "error",
   ).length;
   const constructorMatrixWorkspaceCanOpen = canOpenConstructorMatrixWorkspace({
+    decision: constructorMatrixRolloutDecision,
+    preview: constructorMatrixPreview,
+    matrixDraft: constructorMatrixPreviewMatrixDraft,
+    safetyErrorCount: constructorMatrixPreviewSafetyErrorCount,
+  });
+  const constructorMatrixInternalDraftCanActivate = canActivateConstructorMatrixInternalDraft({
+    workspace: constructorMatrixWorkspace,
     decision: constructorMatrixRolloutDecision,
     preview: constructorMatrixPreview,
     matrixDraft: constructorMatrixPreviewMatrixDraft,
@@ -22563,33 +22645,33 @@ export function PageClient({
                     <strong>{constructorCalendarSourceText}</strong>
                     <p>{constructorPhaseRecommendationText}</p>
                   </div>
-                  {constructorDraft ? (
+                  {activeConstructorDraft ? (
                     <>
                       <div className="constructor-decision-card">
-                        <strong>{constructorDraft.understood.mainTask}</strong>
-                        <p>{constructorDraft.understood.interpretation}</p>
-                        <small>{constructorDraft.understood.limitation}</small>
+                        <strong>{activeConstructorDraft.understood.mainTask}</strong>
+                        <p>{activeConstructorDraft.understood.interpretation}</p>
+                        <small>{activeConstructorDraft.understood.limitation}</small>
                       </div>
                       <div className="constructor-focus-card">
                         <div className="summary-topline">
-                          <strong>{constructorDraft.focusPlan.title}</strong>
+                          <strong>{activeConstructorDraft.focusPlan.title}</strong>
                           <span>
-                            {constructorDraft.focusPlan.developmentAllowed
+                            {activeConstructorDraft.focusPlan.developmentAllowed
                               ? copyFor(language, { en: "Development allowed", ru: "Развитие разрешено", bg: "Развитието е разрешено" })
                               : copyFor(language, { en: "No development load", ru: "Развитие запрещено", bg: "Без развиващо натоварване" })}
                           </span>
                         </div>
                         <div className="constructor-focus-list">
-                          {constructorDraft.focusPlan.items.map((item) => (
+                          {activeConstructorDraft.focusPlan.items.map((item) => (
                             <span key={`${item.goalType}-${item.mode}`}>
                               <strong>{item.label}</strong>
                               <small>{constructorGoalModeLabel(item.mode)}</small>
                             </span>
                           ))}
                         </div>
-                        {constructorDraft.focusPlan.phaseMap.length ? (
+                        {activeConstructorDraft.focusPlan.phaseMap.length ? (
                           <div className="constructor-phase-map">
-                            {constructorDraft.focusPlan.phaseMap.map((phase) => (
+                            {activeConstructorDraft.focusPlan.phaseMap.map((phase) => (
                               <article key={`${phase.range}-${phase.title}`}>
                                 <span>{phase.range}</span>
                                 <strong>{phase.title}</strong>
@@ -22602,25 +22684,25 @@ export function PageClient({
                       <div className="constructor-mini-grid">
                         <article>
                           <span>{copyFor(language, { en: "Cards", ru: "Методики", bg: "Методики" })}</span>
-                          <strong>{constructorDraft.selectedCards.length}</strong>
+                          <strong>{activeConstructorDraft.selectedCards.length}</strong>
                           <p>
-                            {constructorDraft.selectedCards.map((card) => card.title).join(", ") ||
+                            {activeConstructorDraft.selectedCards.map((card) => card.title).join(", ") ||
                               ui("notGenerated")}
                           </p>
                         </article>
                         <article>
                           <span>{copyFor(language, { en: "Missing", ru: "Не хватает", bg: "Липсва" })}</span>
-                          <strong>{constructorDraft.missingData.length}</strong>
+                          <strong>{activeConstructorDraft.missingData.length}</strong>
                           <p>
-                            {constructorDraft.missingData[0]?.message ??
+                            {activeConstructorDraft.missingData[0]?.message ??
                               copyFor(language, { en: "Enough data for a draft.", ru: "Данных достаточно для черновика.", bg: "Данните стигат за чернова." })}
                           </p>
                         </article>
                         <article>
                           <span>{copyFor(language, { en: "Risks", ru: "Риски", bg: "Рискове" })}</span>
-                          <strong>{constructorDraft.riskFlags.length}</strong>
+                          <strong>{activeConstructorDraft.riskFlags.length}</strong>
                           <p>
-                            {constructorDraft.riskFlags[0]?.message ??
+                            {activeConstructorDraft.riskFlags[0]?.message ??
                               copyFor(language, { en: "No critical risks detected.", ru: "Критичных рисков не найдено.", bg: "Няма критични рискове." })}
                           </p>
                         </article>
@@ -22628,15 +22710,15 @@ export function PageClient({
                       <div className="constructor-explanation-list">
                         <div>
                           <span>{copyFor(language, { en: "Decision", ru: "Решение", bg: "Решение" })}</span>
-                          <p>{constructorDraft.explanation.mainDecision}</p>
+                          <p>{activeConstructorDraft.explanation.mainDecision}</p>
                         </div>
                         <div>
                           <span>{copyFor(language, { en: "Why now", ru: "Почему сейчас", bg: "Защо сега" })}</span>
-                          <p>{constructorDraft.explanation.whyNow}</p>
+                          <p>{activeConstructorDraft.explanation.whyNow}</p>
                         </div>
                         <div>
                           <span>{copyFor(language, { en: "Evidence", ru: "Доказательная база", bg: "Доказателства" })}</span>
-                          <p>{constructorDraft.explanation.evidenceSummary}</p>
+                          <p>{activeConstructorDraft.explanation.evidenceSummary}</p>
                         </div>
                       </div>
                     </>
@@ -22661,15 +22743,67 @@ export function PageClient({
                       })}
                     </strong>
                     <span>
-                      {constructorDraft
-                        ? `${constructorDraft.plan.cycleLengthDays} ${copyFor(language, { en: "days", ru: "дней", bg: "дни" })}`
+                      {activeConstructorDraft
+                        ? `${activeConstructorDraft.plan.cycleLengthDays} ${copyFor(language, { en: "days", ru: "дней", bg: "дни" })}`
                         : ui("notGenerated")}
                     </span>
                   </div>
-                  {constructorDraft ? (
+                  {activeConstructorDraft ? (
                     <>
+                      <div className="constructor-active-draft-source-row">
+                        <span
+                          className={
+                            activeConstructorDraftIsMatrixInternal
+                              ? "constructor-active-draft-badge is-matrix"
+                              : "constructor-active-draft-badge"
+                          }
+                        >
+                          {activeConstructorDraftIsMatrixInternal
+                            ? copyFor(language, {
+                                en: "matrix_internal · read-only",
+                                ru: "matrix_internal · read-only",
+                                bg: "matrix_internal · read-only",
+                              })
+                            : copyFor(language, {
+                                en: "legacy draft",
+                                ru: "legacy draft",
+                                bg: "legacy draft",
+                              })}
+                        </span>
+                        {activeConstructorDraftIsMatrixInternal ? (
+                          <button
+                            className="tertiary-button"
+                            onClick={handleReturnToLegacyConstructorDraft}
+                            type="button"
+                          >
+                            {copyFor(language, {
+                              en: "Return to legacy draft",
+                              ru: "Вернуться к legacy draft",
+                              bg: "Върни legacy draft",
+                            })}
+                          </button>
+                        ) : null}
+                      </div>
+                      {activeConstructorDraftIsMatrixInternal ? (
+                        <div className="constructor-active-draft-banner">
+                          <strong>
+                            {copyFor(language, {
+                              en: "Matrix internal draft active",
+                              ru: "Активен matrix internal draft",
+                              bg: "Активен matrix internal draft",
+                            })}
+                          </strong>
+                          <p>
+                            {copyFor(language, {
+                              en: "This draft is used only for internal UI review. It is read-only, not saved, not assigned, and the legacy draft is unchanged.",
+                              ru: "Этот черновик используется только для внутренней UI-проверки. Он read-only, не сохраняется, не назначается, legacy draft не изменён.",
+                              bg: "Тази чернова е само за вътрешна UI проверка. Read-only е, не се записва, не се назначава и legacy draft не е променен.",
+                            })}
+                          </p>
+                        </div>
+                      ) : null}
                       <div className="constructor-week-list">
-                        {constructorDraft.plan.weeks.map((week) => (
+                        {activeConstructorDraft.plan.weeks.map((week) => (
                           <article className="constructor-week-card" key={`${week.weekNumber}-${week.title}`}>
                             <div className="summary-topline">
                               <strong>{week.title}</strong>
@@ -22738,18 +22872,28 @@ export function PageClient({
                           </article>
                         ))}
                       </div>
-                      <button
-                        className="primary-button"
-                        disabled={constructorBusy || !constructorTemplatePayload}
-                        onClick={handleSaveConstructorTemplate}
-                        type="button"
-                      >
-                        {copyFor(language, {
-                          en: "Save as template",
-                          ru: "Сохранить как шаблон",
-                          bg: "Запази като шаблон",
-                        })}
-                      </button>
+                      {activeConstructorDraftIsMatrixInternal ? (
+                        <p className="constructor-matrix-save-guard-note">
+                          {copyFor(language, {
+                            en: "Save/template/assign actions are disabled for matrix_internal. Return to legacy draft to save a template.",
+                            ru: "Save/template/assign отключены для matrix_internal. Вернитесь к legacy draft, чтобы сохранить шаблон.",
+                            bg: "Save/template/assign са изключени за matrix_internal. Върнете legacy draft, за да запазите шаблон.",
+                          })}
+                        </p>
+                      ) : (
+                        <button
+                          className="primary-button"
+                          disabled={constructorBusy || !constructorTemplatePayload}
+                          onClick={handleSaveConstructorTemplate}
+                          type="button"
+                        >
+                          {copyFor(language, {
+                            en: "Save as template",
+                            ru: "Сохранить как шаблон",
+                            bg: "Запази като шаблон",
+                          })}
+                        </button>
+                      )}
                     </>
                   ) : (
                     <p className="placeholder-copy">
@@ -23423,6 +23567,69 @@ export function PageClient({
                       >
                         {constructorMatrixRolloutBadgeLabel || "internal"}
                       </span>
+                    </div>
+
+                    <div className="constructor-matrix-activation-panel">
+                      <div>
+                        <strong>
+                          {activeConstructorDraftIsMatrixInternal
+                            ? copyFor(language, {
+                                en: "Matrix is active in the internal draft area",
+                                ru: "Matrix активен во внутренней draft-зоне",
+                                bg: "Matrix е активен във вътрешната draft зона",
+                              })
+                            : copyFor(language, {
+                                en: "Use matrix draft in internal workspace",
+                                ru: "Использовать matrix как internal draft",
+                                bg: "Използвай matrix като internal draft",
+                              })}
+                        </strong>
+                        <p>
+                          {activeConstructorDraftIsMatrixInternal
+                            ? copyFor(language, {
+                                en: "The main draft panel now shows this read-only matrix candidate. Legacy draft and template payload are unchanged.",
+                                ru: "Основная draft-панель сейчас показывает этот read-only matrix candidate. Legacy draft и template payload не изменены.",
+                                bg: "Основният draft панел показва този read-only matrix candidate. Legacy draft и template payload не са променени.",
+                              })
+                            : constructorMatrixInternalDraftCanActivate
+                              ? copyFor(language, {
+                                  en: "Allowed by rollout gate for internal review only. It will not save, assign, or write to storage.",
+                                  ru: "Разрешено rollout gate только для internal review. Не сохраняет, не назначает и не пишет в storage.",
+                                  bg: "Разрешено от rollout gate само за internal review. Не записва, не назначава и не пише в storage.",
+                                })
+                              : constructorMatrixWorkspaceUnavailableReason}
+                        </p>
+                      </div>
+                      <div className="constructor-matrix-activation-actions">
+                        {activeConstructorDraftIsMatrixInternal ? (
+                          <button
+                            className="secondary-button"
+                            onClick={handleReturnToLegacyConstructorDraft}
+                            type="button"
+                          >
+                            {copyFor(language, {
+                              en: "Return to legacy draft",
+                              ru: "Вернуться к legacy draft",
+                              bg: "Върни legacy draft",
+                            })}
+                          </button>
+                        ) : (
+                          <button
+                            className="secondary-button"
+                            disabled={!constructorMatrixInternalDraftCanActivate}
+                            onClick={handleActivateConstructorMatrixInternalDraft}
+                            title={constructorMatrixWorkspaceUnavailableReason}
+                            type="button"
+                          >
+                            {copyFor(language, {
+                              en: "Use matrix draft in internal workspace",
+                              ru: "Использовать matrix как internal draft",
+                              bg: "Използвай matrix като internal draft",
+                            })}
+                          </button>
+                        )}
+                        <span className="constructor-matrix-readonly-badge">read-only / no save</span>
+                      </div>
                     </div>
 
                     <div className="constructor-matrix-count-grid constructor-matrix-workspace-overview">

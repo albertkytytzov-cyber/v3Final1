@@ -220,6 +220,33 @@ Fixture runner остаётся data-safety источником. UI manual chec
 - close main-start D-3 remains disabled/preview-only;
 - workspace contains no save/template/assign controls.
 
+## Internal matrix draft activation
+
+Stage 13 добавляет controlled activation поверх workspace:
+
+```text
+Использовать matrix как internal draft
+```
+
+Activation использует тот же allowlist/gate, что и workspace:
+
+- `matrix_allowed_for_primary`;
+- `matrix_allowed_for_internal`;
+- safe preview;
+- unchanged legacy default guard;
+- no safety error blockers;
+- no rollout error blockers.
+
+Manual UI verification для activation:
+
+- far development D-90 opens workspace and enables activation;
+- after activation the main draft area shows `matrix_internal · read-only`;
+- save/template/assign controls are hidden/disabled for `matrix_internal`;
+- returning to legacy restores legacy draft and save template action;
+- close main-start D-3 remains preview-only and cannot activate matrix.
+
+Fixture runner остаётся data-safety источником. Stage 13 intentionally does not add snapshot testing for the React UI state and does not write matrix activation to DB, localStorage or sessionStorage.
+
 ## Что не проверяется
 
 Fixtures не делают full snapshot:

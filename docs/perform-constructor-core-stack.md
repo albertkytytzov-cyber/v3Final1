@@ -1201,3 +1201,39 @@ POST /api/v1/plans/constructor/draft
 ```
 
 and still uses `buildPerformConstructorDraft(input)`.
+
+### 15.5 Controlled internal matrix draft activation
+
+Stage 13 allows an opened matrix workspace draft to become the active internal UI draft.
+
+Action:
+
+```text
+Использовать matrix как internal draft
+```
+
+State:
+
+```ts
+type ActiveConstructorDraftSource = "legacy" | "matrix_internal";
+```
+
+Rules:
+
+- default source is always `legacy`;
+- activation is manual and only available inside an opened internal matrix workspace;
+- allowed only for `matrix_allowed_for_primary` and `matrix_allowed_for_internal`;
+- safe preview, unchanged default path, no safety errors, and no rollout error blockers are required;
+- changing constructor inputs, rebuilding legacy draft, or rerunning matrix preview resets source to `legacy`;
+- closing the matrix workspace also returns to `legacy`.
+
+Read-only contract:
+
+- the main draft panel can render the matrix candidate for review;
+- the panel shows `matrix_internal · read-only`;
+- save/template/assign controls are hidden or disabled;
+- `handleSaveConstructorTemplate` has a defensive source guard;
+- `constructorTemplatePayload` is still produced only by the legacy draft flow;
+- no DB writes, localStorage/sessionStorage writes, mobile contract changes, or production API changes.
+
+This is still an internal QA step, not a rollout of matrix as the default constructor.

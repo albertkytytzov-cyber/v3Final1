@@ -2406,3 +2406,85 @@ Stage 12 не меняет:
 - или feature flag for internal workspace visibility;
 - или limited production pilot только для `far_development_week` / `post_competition_recovery`;
 - но не full replacement of `mergeWeeks`.
+
+## 24. Stage 13: Controlled internal matrix draft activation
+
+Stage 13 добавляет поверх Stage 12 контролируемое действие:
+
+```text
+Использовать matrix как internal draft
+```
+
+Это не production rollout. Это временный UI-режим для внутренней проверки, где matrix candidate можно увидеть в основной draft-зоне конструктора, но нельзя сохранить, назначить или превратить в template payload.
+
+### 24.1 UI state
+
+В web UI добавлен источник активного черновика:
+
+```ts
+type ActiveConstructorDraftSource = "legacy" | "matrix_internal";
+```
+
+`activeConstructorDraftSource="legacy"` остаётся default. `matrix_internal` включается только вручную из открытого internal matrix workspace.
+
+При новом legacy draft, новом matrix preview или изменении вводных constructor form режим сбрасывается обратно в `legacy`, а workspace закрывается.
+
+### 24.2 Когда activation доступен
+
+Activation разрешён только через тот же controlled gate, что и workspace:
+
+- rollout mode = `matrix_allowed_for_primary` или `matrix_allowed_for_internal`;
+- matrix draft есть в workspace;
+- preview и rollout говорят `safeToPreview=true`;
+- legacy default guard говорит `defaultPathUnchanged=true`;
+- safety errors отсутствуют;
+- rollout error blockers отсутствуют.
+
+Для `preview_only`, `legacy_only`, `blocked`, missing matrix draft, safety/default guard errors activation disabled и показывает причину.
+
+### 24.3 Read-only / no-save policy
+
+Когда активен `matrix_internal`:
+
+- основной draft panel показывает matrix candidate;
+- сверху появляется banner `Matrix internal draft active`;
+- save as template скрыт и заменён read-only note;
+- `handleSaveConstructorTemplate` дополнительно проверяет `activeConstructorDraftSource`;
+- `constructorTemplatePayload` не строится из matrix draft;
+- legacy draft не мутируется;
+- DB, localStorage, sessionStorage и mobile contracts не используются.
+
+Кнопка:
+
+```text
+Вернуться к legacy draft
+```
+
+просто возвращает `activeConstructorDraftSource="legacy"` без API-запросов и без мутаций.
+
+### 24.4 Что не изменено
+
+Stage 13 не меняет:
+
+- `buildPerformConstructorDraft(input)`;
+- `selectTemplateCards`;
+- `mergeWeeks`;
+- `pickSourceWeekForPhase`;
+- production `POST /api/v1/plans/constructor/draft`;
+- DB schema;
+- legacy save/template/assign flow;
+- mobile contracts;
+- telemetry/storage.
+
+### 24.5 Manual verification target
+
+Для stage 13 нужно проверить:
+
+1. Legacy draft generation работает как раньше.
+2. Legacy save as template доступен до matrix activation.
+3. D-90/far development: workspace opens, activation enabled.
+4. После activation основная draft-зона показывает `matrix_internal · read-only`.
+5. Save/template/assign actions hidden/disabled for matrix source.
+6. `Вернуться к legacy draft` возвращает legacy draft и save as template.
+7. D-3/main start остаётся `preview_only`, workspace/activation disabled.
+8. Console errors отсутствуют.
