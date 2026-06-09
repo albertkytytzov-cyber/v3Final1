@@ -1,5 +1,6 @@
 import {
   buildConstructorTemplatePayload,
+  buildMatrixDrivenConstructorDraft,
   buildMatrixDrivenPlanDraft,
   buildMatrixDrivenWeekSkeleton,
   buildPerformConstructorDraft,
@@ -163,6 +164,53 @@ function matrixDraftHasExplanation(draft, pattern) {
   ];
 
   return messages.some((message) => pattern.test(message));
+}
+
+function constructorDraftDays(draft) {
+  return draft.plan.weeks.flatMap((week) => week.days);
+}
+
+function constructorDraftSessions(draft) {
+  return constructorDraftDays(draft).flatMap((day) => day.sessions ?? []);
+}
+
+function constructorDraftBlocks(draft) {
+  return constructorDraftSessions(draft).flatMap((session) => session.blocks);
+}
+
+function constructorDraftHasText(draft, pattern) {
+  const texts = [
+    draft.understood.mainTask,
+    draft.understood.interpretation,
+    draft.understood.limitation,
+    draft.explanation.mainDecision,
+    draft.explanation.whyNow,
+    draft.explanation.riskImpact,
+    draft.explanation.evidenceSummary,
+    ...draft.selectedCards.flatMap((card) => [card.id, card.title, card.rationale]),
+    ...draft.plan.weeks.flatMap((week) => [
+      week.title,
+      week.mainIntent,
+      ...week.days.flatMap((day) => [
+        day.dayLabel,
+        day.dayIntent,
+        day.readinessGate,
+        ...(day.sessions ?? []).flatMap((session) => [
+          session.name,
+          session.notes,
+          ...session.blocks.flatMap((block) => [
+            block.name,
+            block.volume,
+            block.energySystem,
+            ...block.localLoadZones,
+            ...block.evidenceRefs,
+          ]),
+        ]),
+      ]),
+    ]),
+  ];
+
+  return texts.some((text) => pattern.test(String(text)));
 }
 
 function sessionHasPhysicalSupport(session) {
@@ -1000,6 +1048,86 @@ const matrixDraftSkeletonOnly = buildMatrixDrivenPlanDraft(
   }),
   { mode: "skeleton_only" },
 );
+const matrixConstructorDraft28 = buildMatrixDrivenConstructorDraft(
+  matrixPlanInput({
+    daysToStart: 28,
+    cycleLengthDays: 28,
+    phase: "special_preparation",
+    travelRequired: true,
+  }),
+);
+const matrixConstructorDraft21 = buildMatrixDrivenConstructorDraft(
+  matrixPlanInput({
+    daysToStart: 21,
+    cycleLengthDays: 21,
+    phase: "special_preparation",
+  }),
+);
+const matrixConstructorDraft10 = buildMatrixDrivenConstructorDraft(
+  matrixPlanInput({
+    daysToStart: 10,
+    cycleLengthDays: 10,
+    phase: "taper",
+  }),
+);
+const matrixConstructorDraft3 = buildMatrixDrivenConstructorDraft(
+  matrixPlanInput({
+    daysToStart: 3,
+    cycleLengthDays: 3,
+    phase: "start_window",
+  }),
+);
+const matrixConstructorDraftTravel = buildMatrixDrivenConstructorDraft(
+  matrixPlanInput({
+    daysToStart: 2,
+    cycleLengthDays: 1,
+    phase: "start_window",
+    travelRequired: true,
+  }),
+);
+const matrixConstructorDraftWeighIn = buildMatrixDrivenConstructorDraft(
+  matrixPlanInput({
+    daysToStart: 1,
+    cycleLengthDays: 1,
+    phase: "start_window",
+  }),
+);
+const matrixConstructorDraftCompetitionDay = buildMatrixDrivenConstructorDraft(
+  matrixPlanInput({
+    daysToStart: 0,
+    cycleLengthDays: 1,
+    phase: "start_window",
+  }),
+);
+const matrixConstructorDraftPostCompetition = buildMatrixDrivenConstructorDraft(
+  matrixPlanInput({
+    daysToStart: -1,
+    cycleLengthDays: 1,
+    phase: "recovery",
+  }),
+);
+const matrixConstructorDraftSecondary = buildMatrixDrivenConstructorDraft(
+  matrixPlanInput({
+    daysToStart: 21,
+    cycleLengthDays: 7,
+    phase: "special_preparation",
+    role: "secondary_peak",
+    priority: "B",
+    level: "national",
+  }),
+);
+const matrixConstructorDraftFarDevelopment = buildMatrixDrivenConstructorDraft(
+  matrixPlanInput({
+    daysToStart: 90,
+    cycleLengthDays: 7,
+    phase: "base",
+    role: "main_peak",
+    priority: "A",
+    level: "continental",
+    startDate: "2026-09-06",
+    weighInDate: "2026-09-05",
+  }),
+);
 
 assert(CONSTRUCTOR_TEMPLATE_CARDS.length >= 6, "Expected first constructor template cards");
 assert(draft.plan.weeks.length > 0, "Draft must contain plan weeks");
@@ -1418,6 +1546,143 @@ assert(
     matrixDraftSkeletonOnly.weeks.length === 0 &&
     matrixDraftSkeletonOnly.skeleton.weeks.length > 0,
   "Skeleton-only matrix option should not build plan weeks",
+);
+assert(
+  matrixConstructorDraft28.generatedFrom === "matrix" &&
+    matrixConstructorDraft28.matrix.draft.generatedFrom === "matrix",
+  "Controlled matrix adapter should return matrix-generated constructor draft",
+);
+assert(
+  matrixConstructorDraft28.plan.weeks.length > 0 &&
+    constructorDraftDays(matrixConstructorDraft28).length > 0 &&
+    constructorDraftSessions(matrixConstructorDraft28).length > 0,
+  "Controlled matrix adapter should expose constructor-compatible weeks, days and sessions",
+);
+assert(
+  constructorDraftBlocks(matrixConstructorDraft28).length > 0,
+  "Controlled matrix adapter should convert selected matrix blocks into ConstructorPlanBlock entries",
+);
+assert(
+  matrixConstructorDraft28.matrix.legacyCards.usedAsStructure === false &&
+    constructorDraftHasText(matrixConstructorDraft28, /generatedFrom=matrix|legacy cards are content metadata only/i),
+  "Controlled matrix adapter should explain matrix generation and legacy metadata-only behavior",
+);
+assert(
+  matrixConstructorDraft28.riskFlags.length > 0 &&
+    /main_start_development_forbidden|heavy_lmv_too_close_to_start/.test(matrixConstructorDraft28.explanation.riskImpact),
+  "Controlled matrix adapter should preserve matrix risk checks in constructor-compatible output",
+);
+assert(
+  !constructorDraftBlocks(matrixConstructorDraft28).some((block) =>
+    block.localLoadZones.includes("matrix:leg_lmv"),
+  ),
+  "28-day adapted matrix draft should not include heavy leg LMV",
+);
+assert(
+  constructorDraftBlocks(matrixConstructorDraft28).some((block) =>
+    block.localLoadZones.includes("matrix:mat_competition_model"),
+  ),
+  "28-day adapted matrix draft should include special competition-model work",
+);
+assert(
+  !constructorDraftBlocks(matrixConstructorDraft21).some((block) =>
+    block.localLoadZones.includes("matrix:leg_lmv") || block.localLoadZones.includes("matrix:mat_control_bouts"),
+  ),
+  "21-day adapted matrix draft should not include heavy LMV or control bouts",
+);
+assert(
+  /control_bouts_too_close_to_start/.test(matrixConstructorDraft21.explanation.riskImpact),
+  "21-day adapted matrix draft should retain control-bout rejection risk",
+);
+assert(
+  !constructorDraftBlocks(matrixConstructorDraft10).some((block) =>
+    block.localLoadZones.includes("matrix:leg_lmv") ||
+    block.localLoadZones.includes("matrix:spp") ||
+    block.localLoadZones.includes("matrix:mat_control_bouts"),
+  ),
+  "10-day adapted matrix draft should not include heavy development/SPP/control bouts",
+);
+assert(
+  constructorDraftBlocks(matrixConstructorDraft10).some((block) =>
+    block.localLoadZones.includes("matrix:mat_light_technical") ||
+    block.localLoadZones.includes("matrix:recovery") ||
+    block.localLoadZones.includes("matrix:mobility"),
+  ),
+  "10-day adapted matrix draft should include light technical/recovery work",
+);
+assert(
+  !constructorDraftBlocks(matrixConstructorDraft3).some((block) =>
+    block.localLoadZones.includes("matrix:leg_lmv") ||
+    block.localLoadZones.includes("matrix:spp") ||
+    block.localLoadZones.includes("matrix:mat_control_bouts"),
+  ),
+  "3-day adapted matrix draft should not include heavy/control/development blocks",
+);
+assert(
+  constructorDraftHasText(matrixConstructorDraft3, /Главный старт ближе 30|развитие/i),
+  "3-day adapted matrix draft should explain development ban near main start",
+);
+assert(
+  constructorDraftBlocks(matrixConstructorDraftTravel).every((block) => !/нагрузка high|нагрузка medium/.test(block.volume)) &&
+    constructorDraftBlocks(matrixConstructorDraftTravel).some((block) =>
+      block.localLoadZones.includes("matrix:mobility") || block.localLoadZones.includes("matrix:recovery"),
+    ),
+  "Travel adapted matrix draft should keep light logistics blocks",
+);
+assert(
+  constructorDraftHasText(matrixConstructorDraftTravel, /travel|дорог|logistics/i),
+  "Travel adapted matrix draft should preserve logistics explanation",
+);
+assert(
+  !constructorDraftBlocks(matrixConstructorDraftWeighIn).some((block) =>
+    block.localLoadZones.includes("matrix:mat_control_bouts") ||
+    block.localLoadZones.includes("matrix:mat_competition_model") ||
+    block.localLoadZones.includes("matrix:spp"),
+  ),
+  "Weigh-in adapted matrix draft should not include mat/control/SFP blocks",
+);
+assert(
+  constructorDraftHasText(matrixConstructorDraftWeighIn, /взвеш|weight/i),
+  "Weigh-in adapted matrix draft should preserve weight-control explanation",
+);
+assert(
+  constructorDraftBlocks(matrixConstructorDraftCompetitionDay).every((block) =>
+    block.localLoadZones.includes("matrix:competition_start"),
+  ),
+  "Competition-day adapted matrix draft should only include competition_start",
+);
+assert(
+  constructorDraftBlocks(matrixConstructorDraftPostCompetition).some((block) =>
+    block.localLoadZones.includes("matrix:post_competition_recovery") ||
+    block.localLoadZones.includes("matrix:recovery"),
+  ) &&
+    !constructorDraftBlocks(matrixConstructorDraftPostCompetition).some((block) =>
+      block.localLoadZones.includes("matrix:leg_lmv"),
+    ),
+  "Post-competition adapted matrix draft should include recovery and no development",
+);
+assert(
+  !matrixConstructorDraftSecondary.matrix.draft.warnings.some((warning) => warning.code === "close_main_start") &&
+    !constructorDraftBlocks(matrixConstructorDraftSecondary).some((block) =>
+      block.localLoadZones.includes("matrix:leg_lmv"),
+    ),
+  "Secondary adapted matrix draft should be softer than main start but still cut risky close-start LMV",
+);
+assert(
+  constructorDraftBlocks(matrixConstructorDraftFarDevelopment).some((block) =>
+    block.localLoadZones.includes("matrix:leg_lmv"),
+  ) &&
+    constructorDraftBlocks(matrixConstructorDraftFarDevelopment).some((block) =>
+      block.localLoadZones.includes("matrix:gpp") || block.localLoadZones.includes("matrix:spp"),
+    ) &&
+    constructorDraftSessions(matrixConstructorDraftFarDevelopment).some((session) => session.name === "ВЕЧЕР"),
+  "Far development adapted matrix draft should allow development, SPP/GPP and two-session days",
+);
+assert(
+  draft.generatedFrom === undefined &&
+    draft.plan.weeks.length > 0 &&
+    draft.selectedCards.length > 0,
+  "Default buildPerformConstructorDraft should remain legacy-compatible and not become matrix by default",
 );
 assert(
   draft.missingData.every((item) => item.code !== "speed_tests"),

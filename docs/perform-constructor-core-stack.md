@@ -968,5 +968,6 @@ coachEditable
 - `constructor-matrix.ts` — правила фаз, недель, дней, eligibility и block library;
 - `constructor-matrix-skeleton.ts` — matrix-driven week/day/session skeleton;
 - `constructor-matrix-plan-builder.ts` — отдельный matrix draft builder с selected blocks, volume rules, risk checks и explanations.
+- `constructor-matrix-adapter.ts` — controlled adapter `buildMatrixDrivenConstructorDraft`, который переводит matrix draft в constructor-compatible output без переключения legacy default path.
 
-Старый `buildPerformConstructorDraft` не переключён по умолчанию. Следующий шаг — controlled adapter / feature flag и regression tests на итоговый `ConstructorDraft`.
+Старый `buildPerformConstructorDraft` не переключён по умолчанию. Следующий шаг — controlled rollout в UI/API или internal flag, сравнение legacy vs matrix draft и постепенная замена `mergeWeeks` internals.

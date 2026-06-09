@@ -1103,3 +1103,139 @@ npm run check:constructor-core
 2. Начать частичную замену тела `mergeWeeks` на matrix draft.
 3. Старые карточки оставить только как block content library.
 4. Добавить regression tests уже на итоговый `ConstructorDraft`, а не только на отдельный matrix draft.
+
+Пункт 1 закрыт этапом 4 ниже через отдельную experimental-функцию без изменения default `buildPerformConstructorDraft`.
+
+## 15. Этап 4: Controlled matrix-driven constructor adapter
+
+Дата: 2026-06-09.
+
+Этап 4 добавляет controlled adapter, который переводит `MatrixDrivenPlanDraft` в существующий constructor-compatible output. Default legacy path не изменён.
+
+### 15.1 Что реализовано
+
+Добавлен shared-модуль `packages/shared/src/constructor-matrix-adapter.ts`.
+
+Основная experimental-функция:
+
+```ts
+buildMatrixDrivenConstructorDraft(input, options?)
+```
+
+Выбран безопасный вариант A:
+
+- `buildPerformConstructorDraft(input)` не меняет сигнатуру;
+- default behavior остаётся legacy/template-driven;
+- matrix path вызывается только явно через `buildMatrixDrivenConstructorDraft`.
+
+### 15.2 Adapter-функции
+
+Добавлены:
+
+- `adaptMatrixDrivenDraftToConstructorWeeks(matrixDraft, input)`;
+- `adaptMatrixDrivenWeekToConstructorWeek(matrixWeek, input)`;
+- `adaptMatrixDrivenDayToConstructorDay(matrixDay, input)`;
+- `adaptMatrixDrivenSessionToConstructorSession(matrixSession, input)`;
+- `buildMatrixDrivenConstructorDraft(input, options?)`.
+
+### 15.3 Что переносится в ConstructorDraft-compatible shape
+
+Adapter переносит:
+
+- weeks -> `ConstructorPlanWeek[]`;
+- days -> `ConstructorPlanDay[]`;
+- morning/evening sessions -> `ConstructorPlanSession[]`;
+- selected matrix blocks -> `ConstructorPlanBlock[]`;
+- volume prescription -> `volume`, `localLoadZones`, `energySystem`, `readinessGate`;
+- risk tags -> block `riskFlags`;
+- matrix risk checks -> constructor `riskFlags` и `explanation.riskImpact`;
+- matrix explanations -> `understood`, week/day/session notes, `explanation`;
+- sourceCompatibilityCards -> `selectedCards` и `evidenceRefs` как metadata/content hints.
+
+Дополнительно experimental output расширен безопасным metadata-блоком:
+
+```ts
+generatedFrom: "matrix"
+matrix: {
+  draft,
+  riskChecks,
+  explanationCount,
+  legacyCards
+}
+```
+
+Это отдельная функция, поэтому production API и старый output не меняются.
+
+### 15.4 Legacy cards policy
+
+Legacy cards в matrix adapter используются только как:
+
+- content metadata;
+- `legacy-content:*` evidence refs;
+- selectedCards-описание источников контента.
+
+Они не используются как:
+
+- week source;
+- day source;
+- готовая структура;
+- управляющая логика.
+
+Normal matrix path фиксирует:
+
+```ts
+generatedFrom: "matrix"
+matrix.legacyCards.usedAsStructure === false
+```
+
+### 15.5 Regression guards
+
+В `scripts/check-perform-constructor-core.mjs` добавлены проверки:
+
+- `buildMatrixDrivenConstructorDraft` возвращает constructor-compatible weeks/days/sessions/blocks;
+- matrix metadata и risk checks сохраняются;
+- 28 дней: special work есть, heavy LMV нет;
+- 21 день: heavy LMV/control bouts не попадают в adapted output;
+- 10 дней: taper без heavy development/SPP/control bouts;
+- 3 дня: no heavy/control/development, explanation про запрет развития;
+- travel: light logistics blocks и explanation про дорогу;
+- weigh-in: no mat/control/SFP и explanation про вес;
+- competition day: только `competition_start`;
+- post-competition: recovery, no development;
+- secondary start: мягче main start, но close-start LMV режется;
+- far development: development/SPP/GPP и two-session days доступны;
+- default `buildPerformConstructorDraft(input)` остаётся legacy-compatible и не получает `generatedFrom=matrix`.
+
+### 15.6 Что намеренно не изменено
+
+Не изменены:
+
+- `selectTemplateCards`;
+- `mergeWeeks`;
+- `pickSourceWeekForPhase`;
+- default `buildPerformConstructorDraft`;
+- API contracts;
+- database schema;
+- UI;
+- production-facing constructor behavior.
+
+### 15.7 Команды проверки этапа 4
+
+Запущены:
+
+```bash
+npm run build --workspace @training-platform/shared
+npm run check:constructor-core
+```
+
+Результат: обе команды прошли успешно.
+
+### 15.8 Следующий PR после этапа 4
+
+Следующий шаг:
+
+1. Controlled rollout в UI/API или internal flag.
+2. Сравнение legacy vs matrix draft на одинаковых inputs.
+3. Постепенная замена `mergeWeeks` internals.
+4. Regression tests на реальных сценариях тренера.
+5. Debug/telemetry output для сравнения двух путей.
