@@ -15,6 +15,7 @@
 - `docs/europe-2026-plan-analysis.md`
 - `docs/perform-constructor-json-schema.json`
 - `docs/perform-constructor-mvp-test-report.md`
+- `docs/constructor-phase-matrix-transition-plan.md`
 
 ## 1. Главный принцип
 
@@ -957,3 +958,15 @@ coachEditable
 3. Добавить редактирование дня/блока.
 4. Добавить сохранение draft как шаблона.
 5. После подтверждения тренером разрешить назначение спортсмену.
+
+## 15. Matrix-Driven Migration Status
+
+Текущий migration plan зафиксирован в `docs/constructor-phase-matrix-transition-plan.md`.
+
+На 2026-06-09 добавлены отдельные shared-слои:
+
+- `constructor-matrix.ts` — правила фаз, недель, дней, eligibility и block library;
+- `constructor-matrix-skeleton.ts` — matrix-driven week/day/session skeleton;
+- `constructor-matrix-plan-builder.ts` — отдельный matrix draft builder с selected blocks, volume rules, risk checks и explanations.
+
+Старый `buildPerformConstructorDraft` не переключён по умолчанию. Следующий шаг — controlled adapter / feature flag и regression tests на итоговый `ConstructorDraft`.
