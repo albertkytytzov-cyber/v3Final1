@@ -1,4 +1,5 @@
 import {
+  buildConstructorComparisonPreview,
   buildConstructorTemplatePayload,
   buildMatrixDrivenConstructorDraft,
   buildMatrixDrivenPlanDraft,
@@ -1210,6 +1211,83 @@ const comparisonFarDevelopment = compareLegacyAndMatrixConstructorDrafts(
   }),
   { includeInfo: true },
 );
+const previewInput28 = matrixPlanInput({
+  daysToStart: 28,
+  cycleLengthDays: 28,
+  phase: "special_preparation",
+  travelRequired: true,
+});
+const previewInput28Snapshot = JSON.stringify(previewInput28);
+const previewLegacyBefore = buildPerformConstructorDraft(previewInput28);
+const preview28 = buildConstructorComparisonPreview(previewInput28);
+const previewLegacyAfter = buildPerformConstructorDraft(previewInput28);
+const preview3 = buildConstructorComparisonPreview(
+  matrixPlanInput({
+    daysToStart: 3,
+    cycleLengthDays: 3,
+    phase: "start_window",
+  }),
+  { explanationDepth: "detailed" },
+);
+const preview10 = buildConstructorComparisonPreview(
+  matrixPlanInput({
+    daysToStart: 10,
+    cycleLengthDays: 10,
+    phase: "taper",
+  }),
+);
+const previewTravel = buildConstructorComparisonPreview(
+  matrixPlanInput({
+    daysToStart: 2,
+    cycleLengthDays: 1,
+    phase: "start_window",
+    travelRequired: true,
+  }),
+);
+const previewWeighIn = buildConstructorComparisonPreview(
+  matrixPlanInput({
+    daysToStart: 1,
+    cycleLengthDays: 1,
+    phase: "start_window",
+  }),
+);
+const previewCompetitionDay = buildConstructorComparisonPreview(
+  matrixPlanInput({
+    daysToStart: 0,
+    cycleLengthDays: 1,
+    phase: "start_window",
+  }),
+);
+const previewPostCompetition = buildConstructorComparisonPreview(
+  matrixPlanInput({
+    daysToStart: -1,
+    cycleLengthDays: 1,
+    phase: "recovery",
+  }),
+);
+const previewFarDevelopment = buildConstructorComparisonPreview(
+  matrixPlanInput({
+    daysToStart: 90,
+    cycleLengthDays: 7,
+    phase: "base",
+    role: "main_peak",
+    priority: "A",
+    level: "continental",
+    startDate: "2026-09-06",
+    weighInDate: "2026-09-05",
+  }),
+  { includeInfoDifferences: true },
+);
+const previewNoDrafts = buildConstructorComparisonPreview(previewInput28, {
+  includeDrafts: false,
+  includeSafetyDetails: false,
+});
+const previewNoReport = buildConstructorComparisonPreview(previewInput28, {
+  includeDrafts: false,
+  includeComparisonReport: false,
+  includeSafetyDetails: false,
+  explanationDepth: "short",
+});
 
 assert(CONSTRUCTOR_TEMPLATE_CARDS.length >= 6, "Expected first constructor template cards");
 assert(draft.plan.weeks.length > 0, "Draft must contain plan weeks");
@@ -1885,6 +1963,110 @@ assert(
   comparison28.legacyDefaultInvariants.every((item) => item.passed || item.severity !== "error") &&
     comparison28.legacyDraft.generatedFrom === undefined,
   "Legacy default guard should confirm buildPerformConstructorDraft remains legacy by default",
+);
+assert(
+  preview28.generatedFrom === "legacy_matrix_comparison_preview" &&
+    preview28.mode === "comparison_preview" &&
+    preview28.legacyDraft?.plan.weeks.length > 0 &&
+    preview28.matrixDraft?.generatedFrom === "matrix" &&
+    preview28.comparisonReport?.generatedFrom === "legacy_matrix_comparison" &&
+    preview28.summary.previewMode === "comparison_preview" &&
+    preview28.safetyInvariants?.length > 0 &&
+    preview28.legacyDefaultGuard?.every((item) => item.passed || item.severity !== "error"),
+  "Preview smoke should return legacy draft, matrix draft, comparison report, summary and green legacy guard",
+);
+assert(
+  previewLegacyBefore.generatedFrom === undefined &&
+    previewLegacyAfter.generatedFrom === undefined &&
+    previewLegacyBefore.plan.weeks.length === previewLegacyAfter.plan.weeks.length &&
+    JSON.stringify(previewInput28) === previewInput28Snapshot,
+  "Preview should not mutate input or change legacy default output shape",
+);
+assert(
+  preview28.safeToPreview &&
+    preview28.safety.safeToPreview &&
+    preview28.safety.matrixSafetyPassed &&
+    preview28.defaultPathUnchanged &&
+    preview28.summary.expectedDifferenceCount > 0,
+  "28-day preview should be safe and keep expected differences as non-errors",
+);
+assert(
+  preview10.safeToPreview &&
+    preview3.safeToPreview &&
+    preview3.summary.safeToPreview &&
+    preview3.notes.some((note) => /Top comparison differences|Input summary/i.test(note)),
+  "10-day and 3-day previews should be safe, and detailed preview should include explanations",
+);
+assert(
+  !constructorDraftBlocks(preview3.matrixDraft).some((block) =>
+    block.localLoadZones.includes("matrix:leg_lmv") ||
+    block.localLoadZones.includes("matrix:spp") ||
+    block.localLoadZones.includes("matrix:mat_control_bouts"),
+  ) &&
+    constructorDraftHasText(preview3.matrixDraft, /Главный старт ближе 30|развитие/i),
+  "3-day preview matrix draft should not contain heavy/development/control blocks",
+);
+assert(
+  previewTravel.safeToPreview &&
+    constructorDraftBlocks(previewTravel.matrixDraft).every((block) => !/нагрузка high|нагрузка medium/.test(block.volume)) &&
+    constructorDraftHasText(previewTravel.matrixDraft, /travel|дорог|logistics/i),
+  "Travel preview should keep light logistics load and explanation",
+);
+assert(
+  previewWeighIn.safeToPreview &&
+    !constructorDraftBlocks(previewWeighIn.matrixDraft).some((block) =>
+      block.localLoadZones.includes("matrix:mat_control_bouts") ||
+      block.localLoadZones.includes("matrix:mat_competition_model") ||
+      block.localLoadZones.includes("matrix:spp"),
+    ) &&
+    constructorDraftHasText(previewWeighIn.matrixDraft, /взвеш|weight/i),
+  "Weigh-in preview should keep short activation/recovery and weight-control explanation",
+);
+assert(
+  previewCompetitionDay.safeToPreview &&
+    constructorDraftBlocks(previewCompetitionDay.matrixDraft).every((block) =>
+      block.localLoadZones.includes("matrix:competition_start"),
+    ),
+  "Competition-day preview should select competition_start only",
+);
+assert(
+  previewPostCompetition.safeToPreview &&
+    constructorDraftBlocks(previewPostCompetition.matrixDraft).some((block) =>
+      block.localLoadZones.includes("matrix:post_competition_recovery") ||
+      block.localLoadZones.includes("matrix:recovery"),
+    ) &&
+    !constructorDraftBlocks(previewPostCompetition.matrixDraft).some((block) =>
+      block.localLoadZones.includes("matrix:leg_lmv"),
+    ),
+  "Post-competition preview should select recovery and no development",
+);
+assert(
+  previewFarDevelopment.safeToPreview &&
+    constructorDraftBlocks(previewFarDevelopment.matrixDraft).some((block) =>
+      block.localLoadZones.includes("matrix:leg_lmv"),
+    ) &&
+    constructorDraftSessions(previewFarDevelopment.matrixDraft).some((session) => session.name === "ВЕЧЕР"),
+  "Far-development preview should allow development and larger two-session structure",
+);
+assert(
+  previewNoDrafts.legacyDraft === undefined &&
+    previewNoDrafts.matrixDraft === undefined &&
+    previewNoDrafts.comparisonReport?.legacyDraft === undefined &&
+    previewNoDrafts.comparisonReport?.matrixDraft === undefined &&
+    previewNoDrafts.safetyInvariants === undefined &&
+    previewNoDrafts.legacyDefaultGuard === undefined &&
+    previewNoDrafts.summary.includedDrafts === false &&
+    previewNoDrafts.summary.includedSafetyDetails === false,
+  "Preview includeDrafts/includeSafetyDetails false should omit full drafts and safety details",
+);
+assert(
+  previewNoReport.comparisonReport === undefined &&
+    previewNoReport.legacyDraft === undefined &&
+    previewNoReport.matrixDraft === undefined &&
+    previewNoReport.summary.includedComparisonReport === false &&
+    previewNoReport.summary.includedDrafts === false &&
+    previewNoReport.notes.length === 2,
+  "Preview includeComparisonReport false should keep summary/safety but omit report and drafts",
 );
 assert(
   draft.missingData.every((item) => item.code !== "speed_tests"),

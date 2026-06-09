@@ -970,5 +970,54 @@ coachEditable
 - `constructor-matrix-plan-builder.ts` — отдельный matrix draft builder с selected blocks, volume rules, risk checks и explanations.
 - `constructor-matrix-adapter.ts` — controlled adapter `buildMatrixDrivenConstructorDraft`, который переводит matrix draft в constructor-compatible output без переключения legacy default path.
 - `constructor-matrix-comparison.ts` — dual-run comparison layer для legacy vs matrix draft, safety invariants, legacy default guard и summary для internal preview.
+- `constructor-matrix-preview.ts` — internal preview builder `buildConstructorComparisonPreview`, который возвращает side-by-side legacy draft, matrix draft, comparison report, summary, safety status, warnings и notes.
 
-Старый `buildPerformConstructorDraft` не переключён по умолчанию. Следующий шаг — internal preview flag/debug endpoint, side-by-side preview для тренера и controlled rollout matrix path на выбранных сценариях.
+Старый `buildPerformConstructorDraft` не переключён по умолчанию.
+
+### 15.1 Internal comparison preview
+
+Preview-режим нужен для QA и будущей side-by-side панели, а не для production rollout.
+
+Вызов:
+
+```text
+buildConstructorComparisonPreview(input, options?)
+```
+
+Output:
+
+- `generatedFrom: "legacy_matrix_comparison_preview"`;
+- `mode: "comparison_preview"`;
+- `legacyDraft`;
+- `matrixDraft`;
+- `comparisonReport`;
+- `summary`;
+- `safety`;
+- `safetyInvariants`;
+- `legacyDefaultGuard`;
+- `safeToPreview`;
+- `defaultPathUnchanged`;
+- `warnings`;
+- `notes`.
+
+Опции:
+
+- `includeDrafts`;
+- `includeComparisonReport`;
+- `includeSafetyDetails`;
+- `explanationDepth`;
+- `failOnMatrixSafetyError`;
+- `matrixOptions`;
+- `includeInfoDifferences`.
+
+Как читать:
+
+- `safeToPreview = true` означает, что matrix draft можно показывать внутренне рядом с legacy;
+- `expectedDifferenceCount` означает ожидаемые отличия, а не ошибку;
+- `safety.matrixSafetyPassed` проверяет close-start, travel, weigh-in, competition, post-competition и marker rules;
+- `safety.defaultPathUnchanged` подтверждает, что обычный legacy path не переключён;
+- `warnings` показывает structured warning/error/info список.
+
+На текущем этапе API, DB и UI не изменены. Preview не пишет в базу, не создаёт шаблон и не назначает план спортсмену.
+
+Следующий шаг — internal UI side-by-side panel или отдельный debug endpoint/explicit flag после утверждения auth и формата ответа.

@@ -1379,10 +1379,167 @@ npm run check:constructor-core
 
 ### 16.9 Следующий PR после этапа 5
 
-Следующий шаг:
+Следующий шаг закрыт этапом 6 ниже:
 
 1. Internal preview flag для API/UI или debug endpoint.
 2. Side-by-side preview для тренера.
 3. Controlled rollout matrix path для выбранных сценариев.
 4. Сбор feedback/regression cases.
 5. Только после этого — постепенная замена `mergeWeeks` internals.
+
+## 17. Этап 6: Internal matrix comparison preview
+
+Дата: 2026-06-09.
+
+Этап 6 добавляет внутренний preview/debug path для matrix-driven конструктора. Это не rollout и не переключение production generator.
+
+### 17.1 Что реализовано
+
+Добавлен shared-модуль `packages/shared/src/constructor-matrix-preview.ts`.
+
+Основная функция:
+
+- `buildConstructorComparisonPreview(input, options?)`.
+
+Preview собирает side-by-side объект:
+
+```text
+legacy: buildPerformConstructorDraft(input)
+matrix: buildMatrixDrivenConstructorDraft(input)
+comparison: compareLegacyAndMatrixConstructorDrafts(input)
+summary: summarizeConstructorDraftDifferences(report)
+safety: matrix invariants + legacy default guard
+```
+
+Возвращаемый объект помечен:
+
+```text
+generatedFrom: "legacy_matrix_comparison_preview"
+mode: "comparison_preview"
+```
+
+### 17.2 Output preview
+
+`ConstructorComparisonPreview` содержит:
+
+- `legacyDraft`;
+- `matrixDraft`;
+- `comparisonReport`;
+- `summary`;
+- `safety`;
+- `safetyInvariants`;
+- `legacyDefaultGuard`;
+- `safeToPreview`;
+- `defaultPathUnchanged`;
+- `warnings`;
+- `notes`;
+- `generatedAt`.
+
+Для уменьшения размера output доступны опции:
+
+- `includeDrafts`;
+- `includeComparisonReport`;
+- `includeSafetyDetails`;
+- `explanationDepth`;
+- `failOnMatrixSafetyError`;
+- `matrixOptions`;
+- `includeInfoDifferences`.
+
+По умолчанию shared-функция возвращает drafts, report и safety details, потому что она предназначена для internal checks.
+
+### 17.3 Как читать preview
+
+Ключевые поля:
+
+- `safeToPreview` — можно показывать matrix рядом с legacy во внутреннем QA;
+- `summary.expectedDifferenceCount` — ожидаемые отличия legacy/matrix, это не ошибка;
+- `warnings` — structured warning/error/info список;
+- `safety.matrixSafetyPassed` — matrix не нарушила критичные правила;
+- `safety.defaultPathUnchanged` — legacy default guard зелёный;
+- `legacyDefaultGuard` — подтверждает, что обычный `buildPerformConstructorDraft(input)` не стал matrix path.
+
+Если `includeDrafts: false`, top-level `legacyDraft` и `matrixDraft` не возвращаются. Если `includeSafetyDetails: false`, подробные invariants не возвращаются, но summary/safety остаются.
+
+### 17.4 API/debug endpoint
+
+На этапе 6 API не изменён.
+
+Причина: текущий production route `POST /api/v1/plans/constructor/draft` имеет стабильный контракт и сразу возвращает `draft + templatePayload`. Чтобы не менять mobile/web/API behavior, preview пока доступен только через shared-функцию и check-script.
+
+Отдельный endpoint или controlled flag можно добавлять следующим PR после утверждения политики auth/output:
+
+```text
+POST /api/v1/internal/plans/constructor/preview-comparison
+```
+
+или explicit debug flag без изменения default response.
+
+### 17.5 Что preview не делает
+
+Preview:
+
+- не пишет в DB;
+- не создаёт шаблон;
+- не назначает план спортсмену;
+- не меняет UI;
+- не меняет API response;
+- не переключает default generator;
+- не логирует персональные данные;
+- не добавляет telemetry/storage.
+
+### 17.6 Проверки этапа 6
+
+В `scripts/check-perform-constructor-core.mjs` добавлены сценарии:
+
+- preview smoke;
+- default legacy guard до/после preview;
+- input immutability;
+- `28`, `10`, `3` дня до главного старта;
+- travel day;
+- weigh-in day;
+- competition day;
+- post-competition;
+- far development week;
+- output options `includeDrafts: false`;
+- output options `includeComparisonReport: false`;
+- output options `includeSafetyDetails: false`.
+
+Проверяется, что expected differences не считаются error, matrix safety invariants зелёные, а default `buildPerformConstructorDraft` остаётся legacy.
+
+### 17.7 Что намеренно не изменено
+
+Не изменены:
+
+- `selectTemplateCards`;
+- `mergeWeeks`;
+- `pickSourceWeekForPhase`;
+- default `buildPerformConstructorDraft`;
+- production API contracts;
+- DB schema;
+- UI;
+- storage/telemetry;
+- fixed template cards.
+
+Legacy cards остаются metadata/content hints для matrix path, но не становятся structural source.
+
+### 17.8 Команды проверки этапа 6
+
+Запускать перед сдачей:
+
+```bash
+npm run build --workspace @training-platform/shared
+npm run check:constructor-core
+npm run check
+```
+
+Если в будущем будет добавлен API/debug endpoint, дополнительно запускать релевантную API/web сборку.
+
+### 17.9 Следующий PR после этапа 6
+
+Следующий шаг:
+
+1. Internal UI side-by-side panel для тренера/QA.
+2. Controlled API/debug endpoint или explicit preview flag для выбранных пользователей.
+3. Real-world regression fixtures по календарю стартов, 4/10/28 дней, travel/weigh-in/start/post-start.
+4. После накопления fixtures — controlled rollout отдельных сценариев на matrix path.
+5. Только после подтверждения — постепенная замена internals `mergeWeeks`, без удаления legacy cards раньше времени.
