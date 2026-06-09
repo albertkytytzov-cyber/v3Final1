@@ -2,12 +2,18 @@ import type { ConstructorDraft, ConstructorInput } from "./constructor-core";
 import type {
   ConstructorDraftComparisonReport,
   ConstructorDraftComparisonSummary,
+  ConstructorDraftDifferenceCategory,
+  ConstructorDraftDifferenceSeverity,
   ConstructorDraftDifference,
   ConstructorDraftSafetyInvariantResult,
 } from "./constructor-matrix-comparison";
 import { compareLegacyAndMatrixConstructorDrafts } from "./constructor-matrix-comparison";
 import type { MatrixDrivenConstructorDraft } from "./constructor-matrix-adapter";
-import type { MatrixDrivenBuilderOptions } from "./constructor-matrix-plan-builder";
+import type {
+  MatrixDrivenBuilderOptions,
+  MatrixDrivenRiskCode,
+} from "./constructor-matrix-plan-builder";
+import type { ConstructorTrainingBlockType } from "./constructor-matrix";
 
 export type ConstructorComparisonPreviewMode = "comparison_preview";
 export type ConstructorComparisonPreviewExplanationDepth = "short" | "normal" | "detailed";
@@ -73,6 +79,42 @@ export interface ConstructorComparisonPreview {
   defaultPathUnchanged: boolean;
   warnings: ConstructorComparisonPreviewWarning[];
   notes: string[];
+}
+
+export interface ConstructorPreviewFixtureLegacyExpectations {
+  shouldBuild: boolean;
+}
+
+export interface ConstructorPreviewFixtureMatrixExpectations {
+  shouldBuild: boolean;
+  safeToPreview: boolean;
+  forbiddenSelectedBlockTypes?: ConstructorTrainingBlockType[];
+  requiredSelectedBlockTypes?: ConstructorTrainingBlockType[];
+  requiredAnySelectedBlockTypes?: ConstructorTrainingBlockType[][];
+  requiredExplanationKeywords?: string[];
+  forbiddenRiskCodes?: MatrixDrivenRiskCode[];
+  requiredRiskCodes?: MatrixDrivenRiskCode[];
+  maxErrorCount: number;
+  maxWarningCount?: number;
+  requireEveningSession?: boolean;
+}
+
+export interface ConstructorPreviewFixtureComparisonExpectations {
+  allowedDifferenceCategories?: ConstructorDraftDifferenceCategory[];
+  forbiddenDifferenceSeverities?: ConstructorDraftDifferenceSeverity[];
+  legacyDefaultMustRemainUnchanged: boolean;
+}
+
+export interface ConstructorPreviewFixture {
+  id: string;
+  title: string;
+  description: string;
+  input: ConstructorInput;
+  expectations: {
+    legacy: ConstructorPreviewFixtureLegacyExpectations;
+    matrix: ConstructorPreviewFixtureMatrixExpectations;
+    comparison: ConstructorPreviewFixtureComparisonExpectations;
+  };
 }
 
 function withPreviewDefaults(options?: ConstructorComparisonPreviewOptions) {

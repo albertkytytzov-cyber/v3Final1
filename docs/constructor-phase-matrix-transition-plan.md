@@ -1536,10 +1536,136 @@ npm run check
 
 ### 17.9 Следующий PR после этапа 6
 
-Следующий шаг:
+Следующий шаг закрыт этапом 7 ниже:
 
 1. Internal UI side-by-side panel для тренера/QA.
 2. Controlled API/debug endpoint или explicit preview flag для выбранных пользователей.
 3. Real-world regression fixtures по календарю стартов, 4/10/28 дней, travel/weigh-in/start/post-start.
 4. После накопления fixtures — controlled rollout отдельных сценариев на matrix path.
 5. Только после подтверждения — постепенная замена internals `mergeWeeks`, без удаления legacy cards раньше времени.
+
+## 18. Этап 7: Constructor matrix preview regression fixtures
+
+Дата: 2026-06-09.
+
+Этап 7 добавляет regression fixture pack для internal matrix comparison preview. Это не production rollout и не переключение default generator.
+
+### 18.1 Где лежат fixtures
+
+Fixture pack:
+
+```text
+scripts/fixtures/constructor/preview-regression-fixtures.mjs
+```
+
+Runner:
+
+```text
+scripts/constructor-preview-fixture-runner.mjs
+```
+
+Документация:
+
+```text
+docs/constructor-matrix-preview-fixtures.md
+```
+
+Runner подключён в `scripts/check-perform-constructor-core.mjs`, поэтому fixtures запускаются через:
+
+```bash
+npm run check:constructor-core
+```
+
+### 18.2 Формат fixture
+
+Каждый fixture содержит:
+
+- `id`;
+- `title`;
+- `description`;
+- `input`;
+- `expectations.legacy`;
+- `expectations.matrix`;
+- `expectations.comparison`.
+
+Минимальные exported-типы добавлены в `packages/shared/src/constructor-matrix-preview.ts`:
+
+- `ConstructorPreviewFixture`;
+- `ConstructorPreviewFixtureLegacyExpectations`;
+- `ConstructorPreviewFixtureMatrixExpectations`;
+- `ConstructorPreviewFixtureComparisonExpectations`.
+
+Fixture проверяет инварианты, а не full snapshot всего draft.
+
+### 18.3 Покрытые сценарии
+
+Добавлено 11 synthetic scenarios:
+
+1. `main_start_d28_special_pre_competition`;
+2. `main_start_d21_controlled_volume`;
+3. `main_start_d10_taper`;
+4. `main_start_d3_final_activation`;
+5. `travel_day`;
+6. `weigh_in_day`;
+7. `competition_day`;
+8. `post_competition_day`;
+9. `secondary_start_d10`;
+10. `far_development_week_d90`;
+11. `missing_readiness_data`.
+
+### 18.4 Что проверяет runner
+
+Runner проверяет:
+
+- preview строится и имеет marker `legacy_matrix_comparison_preview`;
+- legacy draft и matrix draft строятся;
+- comparison report строится;
+- `defaultPathUnchanged === true`;
+- legacy default guard зелёный;
+- preview не мутирует fixture input;
+- `safeToPreview` совпадает с expectation;
+- forbidden/required matrix block types;
+- required-any matrix block groups;
+- forbidden/required risk codes;
+- required explanation keywords;
+- matrix safety errors и comparison errors;
+- forbidden difference severities;
+- allowed difference categories, если заданы;
+- evening session, если fixture этого требует.
+
+### 18.5 Safe-data rules
+
+Fixtures synthetic-only. Запрещено добавлять:
+
+- реальные имена;
+- даты рождения;
+- контакты;
+- production IDs;
+- медицинские записи;
+- данные часов;
+- `.env`;
+- cookies;
+- browser profiles;
+- dumps/logs с боевого сайта.
+
+### 18.6 Что намеренно не изменено
+
+Не изменены:
+
+- `buildPerformConstructorDraft`;
+- `selectTemplateCards`;
+- `mergeWeeks`;
+- `pickSourceWeekForPhase`;
+- production API contracts;
+- DB schema;
+- UI;
+- storage/telemetry.
+
+### 18.7 Следующий PR после этапа 7
+
+Следующий шаг:
+
+1. Internal side-by-side UI panel для QA/тренера.
+2. Controlled debug endpoint или explicit preview flag после утверждения auth/output.
+3. Добавление новых real-world synthetic regression cases на основе обнаруженных ошибок конструктора.
+4. Только после стабильного fixture pack — controlled rollout отдельных сценариев на matrix path.

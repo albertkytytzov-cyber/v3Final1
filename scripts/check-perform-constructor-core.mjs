@@ -18,6 +18,7 @@ import {
   getWeekTypeForContext,
   isTrainingBlockAllowed,
 } from "@training-platform/shared";
+import { runConstructorPreviewFixtures } from "./constructor-preview-fixture-runner.mjs";
 
 function assert(condition, message) {
   if (!condition) {
@@ -2410,10 +2411,17 @@ assert(
   `4-day start whyNow should explain why load cannot be added: ${fourDayStartDraft.explanation.whyNow}`,
 );
 
+const constructorPreviewFixtureResult = runConstructorPreviewFixtures();
+
 console.log(
   JSON.stringify(
     {
       status: "ok",
+      previewFixturePack: {
+        status: constructorPreviewFixtureResult.status,
+        fixtureCount: constructorPreviewFixtureResult.fixtureCount,
+        fixtureIds: constructorPreviewFixtureResult.fixtureIds,
+      },
       confidence: draft.confidence,
       selectedCards: draft.selectedCards.map((card) => card.id),
       missingData: draft.missingData.map((item) => item.code),

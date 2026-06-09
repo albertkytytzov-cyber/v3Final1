@@ -16,6 +16,7 @@
 - `docs/perform-constructor-json-schema.json`
 - `docs/perform-constructor-mvp-test-report.md`
 - `docs/constructor-phase-matrix-transition-plan.md`
+- `docs/constructor-matrix-preview-fixtures.md`
 
 ## 1. Главный принцип
 
@@ -971,6 +972,8 @@ coachEditable
 - `constructor-matrix-adapter.ts` — controlled adapter `buildMatrixDrivenConstructorDraft`, который переводит matrix draft в constructor-compatible output без переключения legacy default path.
 - `constructor-matrix-comparison.ts` — dual-run comparison layer для legacy vs matrix draft, safety invariants, legacy default guard и summary для internal preview.
 - `constructor-matrix-preview.ts` — internal preview builder `buildConstructorComparisonPreview`, который возвращает side-by-side legacy draft, matrix draft, comparison report, summary, safety status, warnings и notes.
+- `scripts/fixtures/constructor/preview-regression-fixtures.mjs` — synthetic regression fixture pack для matrix preview.
+- `scripts/constructor-preview-fixture-runner.mjs` — fixture runner для safety, block, risk, explanation и legacy-default инвариантов.
 
 Старый `buildPerformConstructorDraft` не переключён по умолчанию.
 
@@ -1019,5 +1022,7 @@ Output:
 - `warnings` показывает structured warning/error/info список.
 
 На текущем этапе API, DB и UI не изменены. Preview не пишет в базу, не создаёт шаблон и не назначает план спортсмену.
+
+Regression fixtures запускаются через `npm run check:constructor-core` и описаны в `docs/constructor-matrix-preview-fixtures.md`.
 
 Следующий шаг — internal UI side-by-side panel или отдельный debug endpoint/explicit flag после утверждения auth и формата ответа.
