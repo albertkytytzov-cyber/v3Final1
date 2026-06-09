@@ -1912,3 +1912,251 @@ Request:
 - `expectedDifferenceCount>0` — ожидаемые отличия, не обязательно ошибка;
 - `matrix safety failed` — matrix output нельзя использовать даже внутренне без разбора;
 - `legacy guard failed` — надо остановиться, потому что default-path invariant нарушен.
+
+## 21. Этап 10: Controlled matrix rollout gate
+
+### 21.1 Зачем нужен gate
+
+Internal preview показывает, что matrix draft можно безопасно смотреть рядом с legacy, но это ещё не
+означает, что matrix можно отдавать как основной результат.
+
+Controlled rollout gate добавлен как отдельный слой:
+
+```text
+ConstructorInput + comparison preview + safety invariants -> rollout decision
+```
+
+Он отвечает на вопрос:
+
+```text
+legacy default / preview only / internal matrix / primary matrix / blocked
+```
+
+Default generator не изменён:
+
+```text
+buildPerformConstructorDraft(input)
+```
+
+по-прежнему остаётся legacy path.
+
+### 21.2 Где реализовано
+
+Shared module:
+
+```text
+packages/shared/src/constructor-matrix-rollout.ts
+```
+
+Экспортируется через:
+
+```text
+packages/shared/src/index.ts
+```
+
+Основные функции:
+
+- `decideMatrixConstructorRollout(input, options?)`;
+- `classifyConstructorRolloutScenario(input, preview?)`;
+- `isMatrixScenarioAllowlisted(scenario, input, preview?, options?)`;
+- `getMatrixRolloutBlockers(input, preview?, options?)`;
+- `buildMatrixRolloutDecisionExplanation(decision)`;
+- `buildMatrixConstructorDraftIfAllowed(input, options?)`.
+
+### 21.3 Modes
+
+Rollout decision может вернуть:
+
+- `legacy_only` — использовать только legacy default;
+- `preview_only` — matrix можно показывать только в side-by-side preview;
+- `matrix_allowed_for_internal` — matrix можно использовать только во внутреннем/QA сценарии;
+- `matrix_allowed_for_primary` — matrix разрешён как primary только через explicit helper;
+- `blocked` — matrix заблокирован safety/contract/rollout blockers.
+
+### 21.4 Scenarios
+
+Начальная классификация:
+
+- `far_development_week`;
+- `post_competition_recovery`;
+- `travel_day`;
+- `weigh_in_day`;
+- `secondary_start_preview`;
+- `main_start_d28_preview`;
+- `main_start_d21_preview`;
+- `main_start_d10_preview`;
+- `main_start_d3_preview`;
+- `competition_day_preview`;
+- `unknown`;
+- `unsafe`.
+
+Важно: scenario классифицирует текущий фокус окна, а не любой день внутри длинного draft.
+Например, 28-дневный draft может содержать будущий weigh-in day, но scenario остаётся
+`main_start_d28_preview`, а не `weigh_in_day`.
+
+### 21.5 Initial allowlist
+
+`matrix_allowed_for_primary`:
+
+- `far_development_week`;
+- `post_competition_recovery`.
+
+`matrix_allowed_for_internal`:
+
+- `travel_day`;
+- `weigh_in_day`.
+
+`preview_only`:
+
+- `secondary_start_preview`;
+- `main_start_d28_preview`;
+- `main_start_d21_preview`;
+- `main_start_d10_preview`;
+- `main_start_d3_preview`;
+- `competition_day_preview`.
+
+Почему D-28/D-21/D-10/D-3 главного старта не primary:
+
+- это критическое окно подготовки;
+- ошибки в объёме/ковре/подводке могут стоить старта;
+- matrix должен сначала пройти side-by-side feedback на реальных тренерских кейсах;
+- legacy остаётся основным источником production draft.
+
+### 21.6 Blockers
+
+Rollout gate возвращает structured blockers:
+
+- `matrix_safety_error`;
+- `legacy_default_changed`;
+- `comparison_error`;
+- `forbidden_risk_code`;
+- `legacy_template_used_as_structure`;
+- `main_start_too_close_for_primary`;
+- `competition_day_primary_not_enabled`;
+- `missing_required_explanation`;
+- `unknown_scenario`;
+- `not_allowlisted`;
+- `explicitly_disabled`;
+- `input_mutation_detected`.
+
+Hard blockers (`severity: "error"`) переводят decision в `blocked`.
+Warning blockers могут оставлять сценарий в `preview_only` или `legacy_only`, но запрещают тихий rollout.
+
+### 21.7 Internal API
+
+Добавлен отдельный internal endpoint:
+
+```http
+POST /api/v1/plans/constructor/internal/matrix-rollout-decision
+```
+
+Request:
+
+```json
+{
+  "input": "...ConstructorInput...",
+  "options": {
+    "previewOptions": {
+      "includeDrafts": true,
+      "includeComparisonReport": true,
+      "includeSafetyDetails": true
+    }
+  }
+}
+```
+
+Response:
+
+```json
+{
+  "generatedFrom": "matrix_constructor_rollout_decision",
+  "mode": "preview_only",
+  "scenario": "main_start_d28_preview",
+  "allowlisted": true,
+  "safeToPreview": true,
+  "defaultPathUnchanged": true,
+  "matrixPrimaryAllowed": false,
+  "blockers": [],
+  "previewSummary": {},
+  "explanation": {},
+  "recommendedAction": "show_preview_only"
+}
+```
+
+Endpoint внутренний:
+
+- использует те же auth/athlete-access guard'ы;
+- не пишет в DB;
+- не создаёт шаблон;
+- не меняет production route.
+
+Старый endpoint `POST /api/v1/plans/constructor/internal/matrix-preview` не изменён.
+
+### 21.8 Helper для explicit matrix primary
+
+Добавлен helper:
+
+```text
+buildMatrixConstructorDraftIfAllowed(input, options?)
+```
+
+Default:
+
+- `fallbackToLegacy: true`;
+- `requirePrimaryAllowed: false`;
+- `allowedModes: ["matrix_allowed_for_primary"]`.
+
+То есть:
+
+- для `far_development_week` helper может вернуть matrix draft;
+- для `main_start_d3_preview` helper по умолчанию вернёт legacy fallback;
+- если `fallbackToLegacy=false` и primary не разрешён, вернёт blocked result.
+
+Helper не подключён к production route.
+
+### 21.9 Checks
+
+`npm run check:constructor-core` теперь проверяет:
+
+- `far_development_week_d90` -> `matrix_allowed_for_primary`;
+- `post_competition_day` -> `matrix_allowed_for_primary`;
+- `travel_day` -> `matrix_allowed_for_internal`;
+- `weigh_in_day` -> `matrix_allowed_for_internal`;
+- `main_start_d28` -> `preview_only`;
+- `main_start_d21` -> `preview_only`;
+- `main_start_d10` -> `preview_only`;
+- `main_start_d3` -> `preview_only`;
+- `competition_day` -> `preview_only`;
+- `unknown` -> `legacy_only`/blocked with explicit blocker;
+- `buildMatrixConstructorDraftIfAllowed`;
+- no input mutation;
+- default `buildPerformConstructorDraft` remains legacy.
+
+### 21.10 Что намеренно не изменено
+
+Не изменены:
+
+- `buildPerformConstructorDraft`;
+- `selectTemplateCards`;
+- `mergeWeeks`;
+- `pickSourceWeekForPhase`;
+- production `POST /api/v1/plans/constructor/draft`;
+- DB schema;
+- default UI flow;
+- mobile contracts;
+- storage/telemetry.
+
+### 21.11 Следующий PR
+
+Следующий controlled PR:
+
+1. Добавить badge в internal preview panel:
+   - `Matrix primary allowed`;
+   - `Preview only`;
+   - `Blocked`.
+2. Добавить internal-only кнопку `Use matrix draft for preview only` без сохранения в DB.
+3. Начать limited rollout только для:
+   - far development;
+   - post-competition recovery;
+   - logistics scenarios.
+4. Только после feedback обсуждать изменение production behavior.

@@ -135,6 +135,40 @@ Runner проверяет:
 - no input mutation;
 - `defaultPathUnchanged`.
 
+## Controlled rollout gate checks
+
+Этап 10 добавил отдельный rollout gate:
+
+```text
+packages/shared/src/constructor-matrix-rollout.ts
+```
+
+Fixture pack остаётся preview/safety базой, а `check-perform-constructor-core.mjs` дополнительно
+проверяет controlled rollout decision:
+
+- `far_development_week_d90` -> `scenario=far_development_week`, `mode=matrix_allowed_for_primary`, `matrixPrimaryAllowed=true`;
+- `post_competition_day` -> `scenario=post_competition_recovery`, `mode=matrix_allowed_for_primary`;
+- `travel_day` -> `scenario=travel_day`, `mode=matrix_allowed_for_internal`;
+- `weigh_in_day` -> `scenario=weigh_in_day`, `mode=matrix_allowed_for_internal`;
+- `main_start_d28` -> `scenario=main_start_d28_preview`, `mode=preview_only`;
+- `main_start_d21` -> `scenario=main_start_d21_preview`, `mode=preview_only`;
+- `main_start_d10` -> `scenario=main_start_d10_preview`, `mode=preview_only`;
+- `main_start_d3` -> `scenario=main_start_d3_preview`, `mode=preview_only`;
+- `competition_day` -> `scenario=competition_day_preview`, `mode=preview_only`;
+- `unknown` -> `legacy_only` или `blocked` с явным blocker;
+- `explicitly_disabled` -> `blocked`;
+- `buildMatrixConstructorDraftIfAllowed` returns matrix only for primary-allowed far development and falls back/blocks close main-start scenarios;
+- rollout decision не мутирует input;
+- default `buildPerformConstructorDraft` остаётся legacy.
+
+Отдельный internal endpoint:
+
+```http
+POST /api/v1/plans/constructor/internal/matrix-rollout-decision
+```
+
+Он возвращает только decision, не full drafts, не пишет в DB и не меняет production draft route.
+
 Internal web preview panel использует тот же response shape через
 `POST /api/v1/plans/constructor/internal/matrix-preview`. Поэтому fixture runner остаётся главным
 автоматическим safety-слоем для данных, которые UI показывает как summary/safety/differences.

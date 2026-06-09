@@ -972,9 +972,11 @@ coachEditable
 - `constructor-matrix-adapter.ts` — controlled adapter `buildMatrixDrivenConstructorDraft`, который переводит matrix draft в constructor-compatible output без переключения legacy default path.
 - `constructor-matrix-comparison.ts` — dual-run comparison layer для legacy vs matrix draft, safety invariants, legacy default guard и summary для internal preview.
 - `constructor-matrix-preview.ts` — internal preview builder `buildConstructorComparisonPreview`, который возвращает side-by-side legacy draft, matrix draft, comparison report, summary, safety status, warnings и notes.
+- `constructor-matrix-rollout.ts` — controlled rollout gate `decideMatrixConstructorRollout`, который классифицирует scenario, проверяет allowlist/blockers и решает: legacy only, preview only, internal matrix, primary matrix или blocked.
 - `scripts/fixtures/constructor/preview-regression-fixtures.mjs` — synthetic regression fixture pack для matrix preview.
 - `scripts/constructor-preview-fixture-runner.mjs` — fixture runner для safety, block, risk, explanation и legacy-default инвариантов.
 - `POST /api/v1/plans/constructor/internal/matrix-preview` — internal/debug endpoint для matrix-vs-legacy preview с теми же auth/athlete-access guard'ами, что и production constructor draft route.
+- `POST /api/v1/plans/constructor/internal/matrix-rollout-decision` — internal/debug endpoint для rollout decision без DB writes и без production route changes.
 - `apps/web/app/page-client.tsx` — collapsed internal panel `Matrix preview / internal`, который вызывает endpoint и показывает side-by-side QA без изменения основного draft flow.
 
 Старый `buildPerformConstructorDraft` не переключён по умолчанию.
@@ -1030,3 +1032,52 @@ Regression fixtures запускаются через `npm run check:constructor
 Обычный `POST /api/v1/plans/constructor/draft` не изменён. Internal endpoint принимает `{ input, options }`, возвращает preview object и не пишет в DB.
 
 Internal UI показывает summary, safety, week density, matrix decision explanation, differences и optional raw JSON. Это не rollout matrix path: основной `buildPerformConstructorDraft(input)` остаётся legacy default.
+
+### 15.2 Controlled matrix rollout gate
+
+Rollout gate нужен после preview, потому что `safeToPreview=true` не равно “можно сделать matrix
+основным production draft”.
+
+Вызов:
+
+```text
+decideMatrixConstructorRollout(input, options?)
+```
+
+Decision:
+
+- `mode`;
+- `scenario`;
+- `allowlisted`;
+- `safeToPreview`;
+- `defaultPathUnchanged`;
+- `matrixPrimaryAllowed`;
+- `blockers`;
+- `previewSummary`;
+- `explanation`;
+- `recommendedAction`.
+
+Initial policy:
+
+- primary: `far_development_week`, `post_competition_recovery`;
+- internal only: `travel_day`, `weigh_in_day`;
+- preview only: close main-start windows `D-28`, `D-21`, `D-10`, `D-3`, competition day and secondary close starts;
+- legacy/block: unknown, unsafe, comparison errors, legacy guard failures, input mutation, forbidden structural legacy usage.
+
+Explicit helper:
+
+```text
+buildMatrixConstructorDraftIfAllowed(input, options?)
+```
+
+Default helper policy returns matrix only for `matrix_allowed_for_primary`.
+For close main-start scenarios it returns legacy fallback unless fallback is disabled, in which case it
+returns blocked result.
+
+This layer intentionally does not:
+
+- switch `buildPerformConstructorDraft`;
+- change `POST /api/v1/plans/constructor/draft`;
+- write rollout decisions to DB;
+- add telemetry;
+- change mobile contracts.

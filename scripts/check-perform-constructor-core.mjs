@@ -2,6 +2,7 @@ import {
   buildConstructorComparisonPreview,
   buildConstructorMatrixPreviewResponse,
   buildConstructorTemplatePayload,
+  buildMatrixConstructorDraftIfAllowed,
   buildMatrixDrivenConstructorDraft,
   buildMatrixDrivenPlanDraft,
   buildMatrixDrivenWeekSkeleton,
@@ -11,6 +12,7 @@ import {
   compareLegacyAndMatrixConstructorDrafts,
   CONSTRUCTOR_TEMPLATE_CARDS,
   CONSTRUCTOR_TRAINING_BLOCK_LIBRARY,
+  decideMatrixConstructorRollout,
   explainBlockEligibility,
   filterAllowedTrainingBlocks,
   getAllowedSessionSlots,
@@ -1326,6 +1328,107 @@ const apiPreviewWeighIn = buildConstructorMatrixPreviewResponse(
     phase: "start_window",
   }),
 );
+const rolloutInputFarDevelopment = matrixPlanInput({
+  daysToStart: 90,
+  cycleLengthDays: 7,
+  phase: "base",
+  role: "main_peak",
+  priority: "A",
+  level: "continental",
+  startDate: "2026-09-06",
+  weighInDate: "2026-09-05",
+});
+const rolloutInputFarDevelopmentSnapshot = JSON.stringify(rolloutInputFarDevelopment);
+const rolloutFarDevelopment = decideMatrixConstructorRollout(rolloutInputFarDevelopment);
+const rolloutInputPostCompetition = matrixPlanInput({
+  daysToStart: -1,
+  cycleLengthDays: 1,
+  phase: "recovery",
+});
+const rolloutPostCompetition = decideMatrixConstructorRollout(rolloutInputPostCompetition);
+const rolloutInputTravel = matrixPlanInput({
+  daysToStart: 2,
+  cycleLengthDays: 1,
+  phase: "start_window",
+  travelRequired: true,
+});
+const rolloutTravel = decideMatrixConstructorRollout(rolloutInputTravel);
+const rolloutInputWeighIn = matrixPlanInput({
+  daysToStart: 1,
+  cycleLengthDays: 1,
+  phase: "start_window",
+});
+const rolloutWeighIn = decideMatrixConstructorRollout(rolloutInputWeighIn);
+const rolloutMainStartD28 = decideMatrixConstructorRollout(
+  matrixPlanInput({
+    daysToStart: 28,
+    cycleLengthDays: 28,
+    phase: "special_preparation",
+  }),
+);
+const rolloutMainStartD21 = decideMatrixConstructorRollout(
+  matrixPlanInput({
+    daysToStart: 21,
+    cycleLengthDays: 21,
+    phase: "special_preparation",
+  }),
+);
+const rolloutMainStartD10 = decideMatrixConstructorRollout(
+  matrixPlanInput({
+    daysToStart: 10,
+    cycleLengthDays: 10,
+    phase: "taper",
+  }),
+);
+const rolloutMainStartD3 = decideMatrixConstructorRollout(
+  matrixPlanInput({
+    daysToStart: 3,
+    cycleLengthDays: 3,
+    phase: "start_window",
+  }),
+);
+const rolloutCompetitionDay = decideMatrixConstructorRollout(
+  matrixPlanInput({
+    daysToStart: 0,
+    cycleLengthDays: 1,
+    phase: "start_window",
+  }),
+);
+const rolloutUnknown = decideMatrixConstructorRollout(
+  matrixPlanInput({
+    daysToStart: 45,
+    cycleLengthDays: 7,
+    phase: "special_preparation",
+    role: "main_peak",
+    priority: "A",
+    level: "continental",
+    startDate: "2026-08-20",
+    weighInDate: "2026-08-19",
+  }),
+);
+const rolloutDisabled = decideMatrixConstructorRollout(rolloutInputFarDevelopment, {
+  disabled: true,
+  disabledReason: "Synthetic rollout disabled check.",
+});
+const matrixIfAllowedFarDevelopment = buildMatrixConstructorDraftIfAllowed(rolloutInputFarDevelopment);
+const matrixIfAllowedD3Fallback = buildMatrixConstructorDraftIfAllowed(
+  matrixPlanInput({
+    daysToStart: 3,
+    cycleLengthDays: 3,
+    phase: "start_window",
+  }),
+);
+const matrixIfAllowedD3Blocked = buildMatrixConstructorDraftIfAllowed(
+  matrixPlanInput({
+    daysToStart: 3,
+    cycleLengthDays: 3,
+    phase: "start_window",
+  }),
+  {
+    fallbackToLegacy: false,
+    requirePrimaryAllowed: true,
+  },
+);
 
 assert(CONSTRUCTOR_TEMPLATE_CARDS.length >= 6, "Expected first constructor template cards");
 assert(draft.plan.weeks.length > 0, "Draft must contain plan weeks");
@@ -2155,6 +2258,93 @@ assert(
   "API preview helper weigh-in scenario should keep weight-control safety",
 );
 assert(
+  rolloutFarDevelopment.scenario === "far_development_week" &&
+    rolloutFarDevelopment.mode === "matrix_allowed_for_primary" &&
+    rolloutFarDevelopment.matrixPrimaryAllowed === true &&
+    rolloutFarDevelopment.recommendedAction === "allow_matrix_primary" &&
+    rolloutFarDevelopment.blockers.length === 0,
+  `Far-development rollout should allow matrix primary without blockers, got ${rolloutFarDevelopment.scenario}/${rolloutFarDevelopment.mode}/${rolloutFarDevelopment.blockers.map((item) => item.code).join(",")}`,
+);
+assert(
+  JSON.stringify(rolloutInputFarDevelopment) === rolloutInputFarDevelopmentSnapshot,
+  "Rollout decision should not mutate the input",
+);
+assert(
+  rolloutPostCompetition.scenario === "post_competition_recovery" &&
+    rolloutPostCompetition.mode === "matrix_allowed_for_primary" &&
+    rolloutPostCompetition.matrixPrimaryAllowed === true &&
+    rolloutPostCompetition.blockers.length === 0,
+  `Post-competition rollout should allow recovery matrix primary without blockers, got ${rolloutPostCompetition.scenario}/${rolloutPostCompetition.mode}/${rolloutPostCompetition.blockers.map((item) => item.code).join(",")}`,
+);
+assert(
+  rolloutTravel.scenario === "travel_day" &&
+    rolloutTravel.mode === "matrix_allowed_for_internal" &&
+    rolloutTravel.matrixPrimaryAllowed === false &&
+    rolloutTravel.recommendedAction === "allow_internal_matrix_primary" &&
+    rolloutTravel.blockers.length === 0,
+  `Travel rollout should stay internal-only without blockers, got ${rolloutTravel.scenario}/${rolloutTravel.mode}/${rolloutTravel.blockers.map((item) => item.code).join(",")}`,
+);
+assert(
+  rolloutWeighIn.scenario === "weigh_in_day" &&
+    rolloutWeighIn.mode === "matrix_allowed_for_internal" &&
+    rolloutWeighIn.matrixPrimaryAllowed === false &&
+    rolloutWeighIn.blockers.length === 0,
+  `Weigh-in rollout should stay internal-only without blockers, got ${rolloutWeighIn.scenario}/${rolloutWeighIn.mode}/${rolloutWeighIn.blockers.map((item) => item.code).join(",")}`,
+);
+for (const [label, decision, expectedScenario] of [
+  ["D-28", rolloutMainStartD28, "main_start_d28_preview"],
+  ["D-21", rolloutMainStartD21, "main_start_d21_preview"],
+  ["D-10", rolloutMainStartD10, "main_start_d10_preview"],
+  ["D-3", rolloutMainStartD3, "main_start_d3_preview"],
+]) {
+  assert(
+    decision.scenario === expectedScenario &&
+      decision.mode === "preview_only" &&
+      decision.matrixPrimaryAllowed === false &&
+      decision.recommendedAction === "show_preview_only" &&
+      decision.blockers.some((item) => item.code === "main_start_too_close_for_primary"),
+    `${label} rollout should be preview-only with main-start primary blocker, got ${decision.scenario}/${decision.mode}/${decision.blockers.map((item) => item.code).join(",")}`,
+  );
+}
+assert(
+  rolloutCompetitionDay.scenario === "competition_day_preview" &&
+    rolloutCompetitionDay.mode === "preview_only" &&
+    rolloutCompetitionDay.matrixPrimaryAllowed === false &&
+    rolloutCompetitionDay.blockers.some((item) => item.code === "competition_day_primary_not_enabled"),
+  `Competition-day rollout should stay preview-only, got ${rolloutCompetitionDay.scenario}/${rolloutCompetitionDay.mode}/${rolloutCompetitionDay.blockers.map((item) => item.code).join(",")}`,
+);
+assert(
+  rolloutUnknown.scenario === "unknown" &&
+    (rolloutUnknown.mode === "legacy_only" || rolloutUnknown.mode === "blocked") &&
+    rolloutUnknown.matrixPrimaryAllowed === false &&
+    rolloutUnknown.blockers.some((item) => item.code === "unknown_scenario" || item.code === "not_allowlisted"),
+  `Unknown rollout should fall back to legacy/block with an explicit blocker, got ${rolloutUnknown.scenario}/${rolloutUnknown.mode}/${rolloutUnknown.blockers.map((item) => item.code).join(",")}`,
+);
+assert(
+  rolloutDisabled.mode === "blocked" &&
+    rolloutDisabled.recommendedAction === "block_matrix" &&
+    rolloutDisabled.blockers.some((item) => item.code === "explicitly_disabled"),
+  "Explicitly disabled rollout should block matrix",
+);
+assert(
+  matrixIfAllowedFarDevelopment.source === "matrix" &&
+    matrixIfAllowedFarDevelopment.draft?.generatedFrom === "matrix" &&
+    matrixIfAllowedFarDevelopment.decision.matrixPrimaryAllowed,
+  "buildMatrixConstructorDraftIfAllowed should return matrix draft for primary-allowed far development",
+);
+assert(
+  matrixIfAllowedD3Fallback.source === "legacy_fallback" &&
+    matrixIfAllowedD3Fallback.draft?.generatedFrom === undefined &&
+    matrixIfAllowedD3Fallback.decision.mode === "preview_only",
+  "buildMatrixConstructorDraftIfAllowed should return legacy fallback for D-3 by default",
+);
+assert(
+  matrixIfAllowedD3Blocked.source === "blocked" &&
+    matrixIfAllowedD3Blocked.draft === null &&
+    matrixIfAllowedD3Blocked.blocked === true,
+  "buildMatrixConstructorDraftIfAllowed should return blocked result for D-3 when fallback is disabled",
+);
+assert(
   draft.missingData.every((item) => item.code !== "speed_tests"),
   "Speed tests should be satisfied in the Europe preparation scenario",
 );
@@ -2562,6 +2752,28 @@ console.log(
         targets: Array.from(fourDayStartTargets),
         focus: fourDayStartDraft.focusPlan.items.map((item) => item.goalType),
         phaseMap: fourDayStartDraft.focusPlan.phaseMap.map((phase) => phase.range),
+      },
+      matrixRolloutGate: {
+        farDevelopment: {
+          scenario: rolloutFarDevelopment.scenario,
+          mode: rolloutFarDevelopment.mode,
+          matrixPrimaryAllowed: rolloutFarDevelopment.matrixPrimaryAllowed,
+        },
+        closeMainStartModes: {
+          d28: rolloutMainStartD28.mode,
+          d21: rolloutMainStartD21.mode,
+          d10: rolloutMainStartD10.mode,
+          d3: rolloutMainStartD3.mode,
+        },
+        logisticsModes: {
+          travel: rolloutTravel.mode,
+          weighIn: rolloutWeighIn.mode,
+        },
+        helperSources: {
+          farDevelopment: matrixIfAllowedFarDevelopment.source,
+          d3Default: matrixIfAllowedD3Fallback.source,
+          d3Blocked: matrixIfAllowedD3Blocked.source,
+        },
       },
     },
     null,

@@ -8,6 +8,7 @@ import type {
   AutoAssignMicrocyclePayload,
   ConstructorMatrixPreviewRequest,
   ConstructorMatrixPreviewApiOptions,
+  MatrixConstructorRolloutOptions,
   ConstructorInput,
   PlanBlockInput,
   PlanDayInput,
@@ -205,6 +206,72 @@ export function parseConstructorMatrixPreviewBody(
   return {
     input: parseConstructorDraftBody(payload.input),
     options: parseConstructorMatrixPreviewOptions(payload.options),
+  };
+}
+
+function readStringArray(value: unknown) {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : undefined;
+}
+
+function parseConstructorMatrixRolloutOptions(
+  value: unknown,
+): MatrixConstructorRolloutOptions {
+  const payload = (value ?? {}) as Partial<MatrixConstructorRolloutOptions>;
+  const options: MatrixConstructorRolloutOptions = {};
+
+  if (payload.previewOptions && typeof payload.previewOptions === "object") {
+    options.previewOptions = parseConstructorMatrixPreviewOptions(payload.previewOptions);
+  }
+
+  if (typeof payload.disabled === "boolean") {
+    options.disabled = payload.disabled;
+  }
+
+  if (typeof payload.disabledReason === "string") {
+    options.disabledReason = payload.disabledReason;
+  }
+
+  const forbiddenRiskCodes = readStringArray(payload.forbiddenRiskCodes);
+  if (forbiddenRiskCodes) {
+    options.forbiddenRiskCodes = forbiddenRiskCodes as MatrixConstructorRolloutOptions["forbiddenRiskCodes"];
+  }
+
+  const primaryAllowlist = readStringArray(payload.primaryAllowlist);
+  if (primaryAllowlist) {
+    options.primaryAllowlist = primaryAllowlist as MatrixConstructorRolloutOptions["primaryAllowlist"];
+  }
+
+  const internalAllowlist = readStringArray(payload.internalAllowlist);
+  if (internalAllowlist) {
+    options.internalAllowlist = internalAllowlist as MatrixConstructorRolloutOptions["internalAllowlist"];
+  }
+
+  const previewAllowlist = readStringArray(payload.previewAllowlist);
+  if (previewAllowlist) {
+    options.previewAllowlist = previewAllowlist as MatrixConstructorRolloutOptions["previewAllowlist"];
+  }
+
+  return options;
+}
+
+export function parseConstructorMatrixRolloutDecisionBody(body: unknown): {
+  input: ConstructorInput;
+  options?: MatrixConstructorRolloutOptions;
+} {
+  const payload = (body ?? {}) as {
+    input?: unknown;
+    options?: unknown;
+  };
+
+  if (!payload.input) {
+    throw new Error("input is required");
+  }
+
+  return {
+    input: parseConstructorDraftBody(payload.input),
+    options: parseConstructorMatrixRolloutOptions(payload.options),
   };
 }
 

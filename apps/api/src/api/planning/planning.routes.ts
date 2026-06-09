@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import {
   buildConstructorTemplatePayload,
   buildConstructorMatrixPreviewResponse,
+  decideMatrixConstructorRollout,
   buildPerformConstructorDraft,
 } from "@training-platform/shared";
 import {
@@ -27,6 +28,7 @@ import {
   parseAutoAssignMicrocycleBody,
   parseConstructorDraftBody,
   parseConstructorMatrixPreviewBody,
+  parseConstructorMatrixRolloutDecisionBody,
   parsePlanningAthleteDateQuery,
   parsePlanTemplateBody,
   parseTemplatePackQuery,
@@ -152,6 +154,29 @@ export function registerPlanningRoutes(
 
     // Internal/experimental preview only: no DB writes, no template creation and no production route changes.
     return buildConstructorMatrixPreviewResponse(body.input, body.options);
+  });
+
+  app.post("/api/v1/plans/constructor/internal/matrix-rollout-decision", async (request) => {
+    const user = await dependencies.guards.requireUser(request);
+
+    if (user.role !== "coach" && user.role !== "admin") {
+      throw dependencies.httpError(
+        403,
+        "Only coach or admin accounts can build constructor rollout decisions",
+      );
+    }
+
+    let body;
+    try {
+      body = parseConstructorMatrixRolloutDecisionBody(request.body);
+    } catch (error) {
+      throw dependencies.httpError(400, (error as Error).message);
+    }
+
+    await dependencies.guards.assertAthleteAccess(user, body.input.athlete.athleteId);
+
+    // Internal decision only: no DB writes, no template creation and no production route changes.
+    return decideMatrixConstructorRollout(body.input, body.options);
   });
 
   app.post("/api/v1/plans/templates", async (request) => {
