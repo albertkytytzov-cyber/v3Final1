@@ -975,6 +975,7 @@ coachEditable
 - `scripts/fixtures/constructor/preview-regression-fixtures.mjs` — synthetic regression fixture pack для matrix preview.
 - `scripts/constructor-preview-fixture-runner.mjs` — fixture runner для safety, block, risk, explanation и legacy-default инвариантов.
 - `POST /api/v1/plans/constructor/internal/matrix-preview` — internal/debug endpoint для matrix-vs-legacy preview с теми же auth/athlete-access guard'ами, что и production constructor draft route.
+- `apps/web/app/page-client.tsx` — collapsed internal panel `Matrix preview / internal`, который вызывает endpoint и показывает side-by-side QA без изменения основного draft flow.
 
 Старый `buildPerformConstructorDraft` не переключён по умолчанию.
 
@@ -1022,10 +1023,10 @@ Output:
 - `safety.defaultPathUnchanged` подтверждает, что обычный legacy path не переключён;
 - `warnings` показывает structured warning/error/info список.
 
-На текущем этапе API, DB и UI не изменены. Preview не пишет в базу, не создаёт шаблон и не назначает план спортсмену.
+На текущем этапе production API и DB не изменены. UI получил только internal/experimental панель. Preview не пишет в базу, не создаёт шаблон и не назначает план спортсмену.
 
 Regression fixtures запускаются через `npm run check:constructor-core` и описаны в `docs/constructor-matrix-preview-fixtures.md`.
 
 Обычный `POST /api/v1/plans/constructor/draft` не изменён. Internal endpoint принимает `{ input, options }`, возвращает preview object и не пишет в DB.
 
-Следующий шаг — internal UI side-by-side panel или role-gated web preview, который вызывает internal endpoint.
+Internal UI показывает summary, safety, week density, matrix decision explanation, differences и optional raw JSON. Это не rollout matrix path: основной `buildPerformConstructorDraft(input)` остаётся legacy default.

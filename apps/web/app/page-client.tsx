@@ -21,6 +21,8 @@ import {
   type ConstructorGoalMode,
   type ConstructorGoalType,
   type ConstructorInput,
+  type ConstructorMatrixPreviewApiOptions,
+  type ConstructorMatrixPreviewResponse,
   type ConstructorPhase,
   type CreateCompetitionPayload,
   type CreateCompetitionPlanPayload,
@@ -198,6 +200,159 @@ type ConstructorDraftResponse = {
   draft: ConstructorDraft;
   templatePayload: PlanTemplatePayload;
 };
+
+type ConstructorPreviewDraftMetrics = {
+  weekCount: number;
+  dayCount: number;
+  sessionCount: number;
+  blockCount: number;
+  closeStartDayCount: number;
+  density: string;
+  weekRows: {
+    key: string;
+    label: string;
+    phase: ConstructorPhase;
+    dayCount: number;
+    sessionCount: number;
+    blockCount: number;
+    closeStartDayCount: number;
+  }[];
+};
+
+type ConstructorPreviewDecisionSummary = {
+  items: {
+    label: string;
+    value: string;
+  }[];
+  explanations: string[];
+};
+
+function constructorPreviewSessionsForDay(
+  day: ConstructorDraft["plan"]["weeks"][number]["days"][number],
+) {
+  return day.sessions?.length
+    ? day.sessions
+    : [
+        {
+          name: day.dayIntent,
+          notes: day.readinessGate,
+          orderIndex: 0,
+          blocks: day.blocks,
+        },
+      ];
+}
+
+function buildConstructorPreviewDraftMetrics(
+  draft?: ConstructorDraft | null,
+): ConstructorPreviewDraftMetrics {
+  const weeks = draft?.plan.weeks ?? [];
+  const weekRows = weeks.map((week) => {
+    const sessions = week.days.flatMap(constructorPreviewSessionsForDay);
+    const closeStartDayCount =
+      week.phase === "taper" || week.phase === "start_window"
+        ? week.days.length
+        : 0;
+
+    return {
+      key: `${week.weekNumber}-${week.title}`,
+      label: week.title || `Week ${week.weekNumber}`,
+      phase: week.phase,
+      dayCount: week.days.length,
+      sessionCount: sessions.length,
+      blockCount: sessions.reduce((sum, session) => sum + session.blocks.length, 0),
+      closeStartDayCount,
+    };
+  });
+  const dayCount = weekRows.reduce((sum, row) => sum + row.dayCount, 0);
+  const sessionCount = weekRows.reduce((sum, row) => sum + row.sessionCount, 0);
+  const blockCount = weekRows.reduce((sum, row) => sum + row.blockCount, 0);
+  const closeStartDayCount = weekRows.reduce((sum, row) => sum + row.closeStartDayCount, 0);
+
+  return {
+    weekCount: weeks.length,
+    dayCount,
+    sessionCount,
+    blockCount,
+    closeStartDayCount,
+    density: `${weeks.length}w / ${dayCount}d / ${sessionCount}s / ${blockCount}b`,
+    weekRows,
+  };
+}
+
+function buildConstructorPreviewDecisionSummary(
+  preview: ConstructorMatrixPreviewResponse,
+): ConstructorPreviewDecisionSummary {
+  const matrixDraft = preview.matrixDraft ?? preview.comparisonReport?.matrixDraft;
+  const matrix = matrixDraft?.matrix.draft;
+  const flaggedDays =
+    matrix?.weeks.flatMap((week) =>
+      week.days.filter(
+        (day) => day.flags.travel || day.flags.weighIn || day.flags.competition || day.flags.postCompetition,
+      ),
+    ) ?? [];
+  const flagLabels = Array.from(
+    new Set(
+      flaggedDays.flatMap((day) => [
+        day.flags.travel ? "travel" : "",
+        day.flags.weighIn ? "weigh-in" : "",
+        day.flags.competition ? "competition" : "",
+        day.flags.postCompetition ? "post-start" : "",
+      ]),
+    ),
+  ).filter(Boolean);
+  const developmentStatus = matrixDraft?.focusPlan.developmentAllowed
+    ? "development allowed"
+    : "development forbidden or limited";
+
+  return {
+    items: [
+      {
+        label: "phase",
+        value: matrix?.preparationPhase ?? "not included",
+      },
+      {
+        label: "role / start proximity",
+        value: matrix
+          ? `${matrix.competitionRole} · D-${matrix.daysUntilStart ?? "?"} · ${
+              matrix.isMainStart ? "main start" : "non-main start"
+            }`
+          : "not included",
+      },
+      {
+        label: "development rule",
+        value: developmentStatus,
+      },
+      {
+        label: "logistics flags",
+        value: flagLabels.length ? flagLabels.join(", ") : "none in matrix days",
+      },
+    ],
+    explanations:
+      matrix?.explanations
+        .filter((item) => item.code === "strategy" || item.code === "phase" || item.code === "risk")
+        .slice(0, 5)
+        .map((item) => item.message) ?? [],
+  };
+}
+
+function formatConstructorPreviewAffected(
+  affected?: NonNullable<
+    NonNullable<ConstructorMatrixPreviewResponse["comparisonReport"]>["differences"][number]["affected"]
+  >,
+) {
+  if (!affected) {
+    return "whole preview";
+  }
+
+  return [
+    affected.weekNumber ? `W${affected.weekNumber}` : "",
+    affected.dayNumber ? `D${affected.dayNumber}` : "",
+    affected.sessionName ?? "",
+    affected.blockType ?? "",
+  ]
+    .filter(Boolean)
+    .join(" / ");
+}
 
 type ConstructorFormState = {
   competitionPlanId: string;
@@ -9452,6 +9607,12 @@ export function PageClient({
     useState<PlanTemplatePayload | null>(null);
   const [constructorBusy, setConstructorBusy] = useState(false);
   const [constructorMessage, setConstructorMessage] = useState("");
+  const [constructorMatrixPreview, setConstructorMatrixPreview] =
+    useState<ConstructorMatrixPreviewResponse | null>(null);
+  const [constructorMatrixPreviewBusy, setConstructorMatrixPreviewBusy] = useState(false);
+  const [constructorMatrixPreviewError, setConstructorMatrixPreviewError] = useState("");
+  const [constructorMatrixIncludeInfoDifferences, setConstructorMatrixIncludeInfoDifferences] =
+    useState(false);
   const [seasonDisplayMode, setSeasonDisplayMode] =
     useState<SeasonDisplayMode>("hybrid");
   const [seasonEditorMode, setSeasonEditorMode] = useState<SeasonEditorMode>(
@@ -14208,6 +14369,43 @@ export function PageClient({
     }
   }
 
+  async function handleBuildConstructorMatrixPreview() {
+    const input = buildConstructorInputFromForm();
+
+    if (!input) {
+      return;
+    }
+
+    const options: ConstructorMatrixPreviewApiOptions = {
+      includeDrafts: true,
+      includeComparisonReport: true,
+      includeSafetyDetails: true,
+      explanationDepth: "normal",
+      includeInfoDifferences: constructorMatrixIncludeInfoDifferences,
+    };
+
+    setConstructorMatrixPreviewBusy(true);
+    setConstructorMatrixPreviewError("");
+
+    try {
+      const response = await apiRequest<ConstructorMatrixPreviewResponse>(
+        "/plans/constructor/internal/matrix-preview",
+        {
+          method: "POST",
+          body: JSON.stringify({ input, options }),
+        },
+      );
+
+      setConstructorMatrixPreview(response);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+
+      setConstructorMatrixPreviewError(message);
+    } finally {
+      setConstructorMatrixPreviewBusy(false);
+    }
+  }
+
   async function handleSaveConstructorTemplate() {
     if (!constructorTemplatePayload) {
       setConstructorMessage(
@@ -15369,6 +15567,21 @@ export function PageClient({
         low: copyFor(language, { en: "Low", ru: "Низкая", bg: "Ниска" }),
       } satisfies Record<ConstructorDraft["confidence"], string>)[constructorDraft.confidence]
     : "-";
+  const constructorMatrixPreviewLegacyMetrics = buildConstructorPreviewDraftMetrics(
+    constructorMatrixPreview?.legacyDraft ?? constructorMatrixPreview?.comparisonReport?.legacyDraft ?? null,
+  );
+  const constructorMatrixPreviewMatrixMetrics = buildConstructorPreviewDraftMetrics(
+    constructorMatrixPreview?.matrixDraft ?? constructorMatrixPreview?.comparisonReport?.matrixDraft ?? null,
+  );
+  const constructorMatrixPreviewDecision = constructorMatrixPreview
+    ? buildConstructorPreviewDecisionSummary(constructorMatrixPreview)
+    : null;
+  const constructorMatrixPreviewDifferences =
+    constructorMatrixPreview?.comparisonReport?.differences ?? [];
+  const constructorMatrixPreviewFailedSafety =
+    constructorMatrixPreview?.safetyInvariants?.filter((item) => !item.passed) ?? [];
+  const constructorMatrixPreviewFailedLegacyGuard =
+    constructorMatrixPreview?.legacyDefaultGuard?.filter((item) => !item.passed) ?? [];
   const topOverviewItems = [
     {
       label: t("athlete"),
@@ -22128,6 +22341,334 @@ export function PageClient({
                     </p>
                   )}
                 </div>
+
+                <details className="constructor-panel constructor-matrix-preview-panel">
+                  <summary>
+                    <div>
+                      <strong>
+                        {copyFor(language, {
+                          en: "Matrix preview / internal",
+                          ru: "Сравнение legacy vs matrix - internal",
+                          bg: "Matrix preview / internal",
+                        })}
+                      </strong>
+                      <span>
+                        {copyFor(language, {
+                          en: "Experimental side-by-side QA. Does not save or replace the draft.",
+                          ru: "Экспериментальная QA-панель. Не сохраняет и не заменяет черновик.",
+                          bg: "Експериментален QA панел. Не записва и не заменя черновата.",
+                        })}
+                      </span>
+                    </div>
+                    <span className="constructor-source-badge">
+                      {copyFor(language, { en: "internal", ru: "internal", bg: "internal" })}
+                    </span>
+                  </summary>
+
+                  <div className="constructor-matrix-preview-actions">
+                    <button
+                      className="secondary-button"
+                      disabled={constructorMatrixPreviewBusy || !selectedCoachAthlete}
+                      onClick={handleBuildConstructorMatrixPreview}
+                      type="button"
+                    >
+                      {constructorMatrixPreviewBusy
+                        ? ui("loading")
+                        : constructorMatrixPreview || constructorMatrixPreviewError
+                          ? copyFor(language, {
+                              en: "Retry matrix preview",
+                              ru: "Повторить matrix-preview",
+                              bg: "Повтори matrix-preview",
+                            })
+                          : copyFor(language, {
+                              en: "Compare legacy vs matrix",
+                              ru: "Сравнить legacy vs matrix",
+                              bg: "Сравни legacy vs matrix",
+                            })}
+                    </button>
+                    <label>
+                      <input
+                        checked={constructorMatrixIncludeInfoDifferences}
+                        type="checkbox"
+                        onChange={(event) =>
+                          setConstructorMatrixIncludeInfoDifferences(event.target.checked)
+                        }
+                      />
+                      <span>
+                        {copyFor(language, {
+                          en: "Include info differences",
+                          ru: "Показывать info-различия",
+                          bg: "Показвай info разлики",
+                        })}
+                      </span>
+                    </label>
+                  </div>
+
+                  {constructorMatrixPreviewError ? (
+                    <div className="constructor-matrix-preview-error">
+                      <strong>
+                        {copyFor(language, {
+                          en: "Internal preview failed",
+                          ru: "Internal-preview не прошёл",
+                          bg: "Internal-preview не мина",
+                        })}
+                      </strong>
+                      <p>{constructorMatrixPreviewError}</p>
+                    </div>
+                  ) : null}
+
+                  {constructorMatrixPreview ? (
+                    <div className="constructor-matrix-preview-body">
+                      <div className="constructor-matrix-preview-grid">
+                        <article className="constructor-matrix-preview-card">
+                          <div className="summary-topline">
+                            <strong>
+                              {copyFor(language, { en: "Summary", ru: "Сводка", bg: "Сводка" })}
+                            </strong>
+                            <span>{constructorMatrixPreview.generatedAt}</span>
+                          </div>
+                          <div className="constructor-matrix-status-row">
+                            <span
+                              className={`status-chip ${
+                                constructorMatrixPreview.safeToPreview ? "green" : "warning"
+                              }`}
+                            >
+                              safeToPreview: {constructorMatrixPreview.safeToPreview ? "yes" : "no"}
+                            </span>
+                            <span
+                              className={`status-chip ${
+                                constructorMatrixPreview.defaultPathUnchanged ? "green" : "danger"
+                              }`}
+                            >
+                              defaultPathUnchanged:{" "}
+                              {constructorMatrixPreview.defaultPathUnchanged ? "yes" : "no"}
+                            </span>
+                          </div>
+                          <div className="constructor-matrix-count-grid">
+                            {[
+                              ["errors", constructorMatrixPreview.summary.errorCount],
+                              ["warnings", constructorMatrixPreview.summary.warningCount],
+                              ["expected", constructorMatrixPreview.summary.expectedDifferenceCount],
+                              ["total", constructorMatrixPreview.summary.totalDifferences],
+                            ].map(([label, value]) => (
+                              <span key={label}>
+                                <small>{label}</small>
+                                <strong>{value}</strong>
+                              </span>
+                            ))}
+                          </div>
+                          <p>{constructorMatrixPreview.summary.headline}</p>
+                        </article>
+
+                        <article className="constructor-matrix-preview-card">
+                          <div className="summary-topline">
+                            <strong>
+                              {copyFor(language, { en: "Safety", ru: "Безопасность", bg: "Безопасност" })}
+                            </strong>
+                            <span>
+                              {constructorMatrixPreview.safety.errorCount === 0
+                                ? copyFor(language, { en: "no errors", ru: "без ошибок", bg: "без грешки" })
+                                : copyFor(language, { en: "attention", ru: "внимание", bg: "внимание" })}
+                            </span>
+                          </div>
+                          <div className="constructor-matrix-status-row">
+                            <span
+                              className={`status-chip ${
+                                constructorMatrixPreview.safety.matrixSafetyPassed ? "green" : "danger"
+                              }`}
+                            >
+                              matrix: {constructorMatrixPreview.safety.matrixSafetyPassed ? "passed" : "failed"}
+                            </span>
+                            <span
+                              className={`status-chip ${
+                                constructorMatrixPreview.safety.legacyDefaultGuardPassed ? "green" : "danger"
+                              }`}
+                            >
+                              legacy guard:{" "}
+                              {constructorMatrixPreview.safety.legacyDefaultGuardPassed ? "passed" : "failed"}
+                            </span>
+                          </div>
+                          <ul className="constructor-matrix-preview-list">
+                            {[
+                              ...constructorMatrixPreviewFailedSafety,
+                              ...constructorMatrixPreviewFailedLegacyGuard,
+                            ].length ? (
+                              [
+                                ...constructorMatrixPreviewFailedSafety,
+                                ...constructorMatrixPreviewFailedLegacyGuard,
+                              ].map((item) => (
+                                <li key={`${item.code}-${item.explanation}`}>
+                                  <strong>{item.code}</strong>
+                                  <span>{item.explanation}</span>
+                                </li>
+                              ))
+                            ) : (
+                              <li>
+                                <strong>
+                                  {copyFor(language, {
+                                    en: "No failed invariants",
+                                    ru: "Нет проваленных инвариантов",
+                                    bg: "Няма неуспешни инварианти",
+                                  })}
+                                </strong>
+                                <span>
+                                  {copyFor(language, {
+                                    en: "Backend safety guards passed for this internal preview.",
+                                    ru: "Backend safety guards пройдены для этого internal-preview.",
+                                    bg: "Backend safety guards са преминали за този internal-preview.",
+                                  })}
+                                </span>
+                              </li>
+                            )}
+                          </ul>
+                          {constructorMatrixPreview.warnings.length ? (
+                            <ul className="constructor-matrix-preview-list">
+                              {constructorMatrixPreview.warnings.slice(0, 4).map((warning) => (
+                                <li key={`${warning.code}-${warning.message}`}>
+                                  <strong>{warning.code}</strong>
+                                  <span>{warning.message}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : null}
+                        </article>
+                      </div>
+
+                      <div className="constructor-matrix-side-by-side">
+                        {([
+                          ["legacy", constructorMatrixPreviewLegacyMetrics],
+                          ["matrix", constructorMatrixPreviewMatrixMetrics],
+                        ] satisfies Array<[string, ConstructorPreviewDraftMetrics]>).map(([label, metrics]) => (
+                          <article className="constructor-matrix-preview-card" key={label}>
+                            <div className="summary-topline">
+                              <strong>{label}</strong>
+                              <span>{metrics.density}</span>
+                            </div>
+                            <div className="constructor-matrix-count-grid">
+                              {[
+                                ["weeks", metrics.weekCount],
+                                ["days", metrics.dayCount],
+                                ["sessions", metrics.sessionCount],
+                                ["close-start", metrics.closeStartDayCount],
+                              ].map(([metricLabel, value]) => (
+                                <span key={metricLabel}>
+                                  <small>{metricLabel}</small>
+                                  <strong>{value}</strong>
+                                </span>
+                              ))}
+                            </div>
+                            <ul className="constructor-matrix-preview-list">
+                              {metrics.weekRows.slice(0, 5).map((week) => (
+                                <li key={week.key}>
+                                  <strong>{week.label}</strong>
+                                  <span>
+                                    {constructorPhaseLabel(week.phase)} · {week.dayCount}d /{" "}
+                                    {week.sessionCount}s / {week.blockCount}b
+                                    {week.closeStartDayCount
+                                      ? ` · close-start ${week.closeStartDayCount}d`
+                                      : ""}
+                                  </span>
+                                </li>
+                              ))}
+                            </ul>
+                          </article>
+                        ))}
+                      </div>
+
+                      <article className="constructor-matrix-preview-card">
+                        <div className="summary-topline">
+                          <strong>
+                            {copyFor(language, {
+                              en: "Matrix decision explanation",
+                              ru: "Почему matrix решил так",
+                              bg: "Matrix decision explanation",
+                            })}
+                          </strong>
+                          <span>{constructorMatrixPreview.mode}</span>
+                        </div>
+                        <div className="constructor-matrix-count-grid constructor-matrix-decision-grid">
+                          {constructorMatrixPreviewDecision?.items.map((item) => (
+                            <span key={item.label}>
+                              <small>{item.label}</small>
+                              <strong>{item.value}</strong>
+                            </span>
+                          ))}
+                        </div>
+                        {constructorMatrixPreviewDecision?.explanations.length ? (
+                          <ul className="constructor-matrix-preview-list">
+                            {constructorMatrixPreviewDecision.explanations.map((message) => (
+                              <li key={message}>
+                                <strong>matrix</strong>
+                                <span>{message}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p>
+                            {copyFor(language, {
+                              en: "No matrix explanation was included in the response.",
+                              ru: "В ответе нет отдельного matrix-объяснения.",
+                              bg: "Няма matrix обяснение в отговора.",
+                            })}
+                          </p>
+                        )}
+                      </article>
+
+                      <article className="constructor-matrix-preview-card">
+                        <div className="summary-topline">
+                          <strong>
+                            {copyFor(language, { en: "Differences", ru: "Различия", bg: "Разлики" })}
+                          </strong>
+                          <span>{constructorMatrixPreviewDifferences.length}</span>
+                        </div>
+                        {constructorMatrixPreviewDifferences.length ? (
+                          <ul className="constructor-matrix-difference-list">
+                            {constructorMatrixPreviewDifferences.slice(0, 12).map((difference, index) => (
+                              <li
+                                className={`constructor-matrix-difference constructor-matrix-severity-${difference.severity}`}
+                                key={`${difference.category}-${difference.message}-${index}`}
+                              >
+                                <div>
+                                  <strong>{difference.category}</strong>
+                                  <span>{difference.severity}</span>
+                                </div>
+                                <p>{difference.message}</p>
+                                <small>{formatConstructorPreviewAffected(difference.affected)}</small>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p>
+                            {copyFor(language, {
+                              en: "No differences were returned by the comparison report.",
+                              ru: "Comparison report не вернул различий.",
+                              bg: "Comparison report не върна разлики.",
+                            })}
+                          </p>
+                        )}
+                      </article>
+
+                      <details className="constructor-matrix-raw-json">
+                        <summary>
+                          {copyFor(language, {
+                            en: "Raw JSON",
+                            ru: "Raw JSON",
+                            bg: "Raw JSON",
+                          })}
+                        </summary>
+                        <pre>{JSON.stringify(constructorMatrixPreview, null, 2)}</pre>
+                      </details>
+                    </div>
+                  ) : (
+                    <p className="placeholder-copy">
+                      {copyFor(language, {
+                        en: "Open this internal panel and run the comparison when QA needs to inspect matrix output. The current production draft is untouched.",
+                        ru: "Откройте internal-панель и запустите сравнение, когда QA нужно проверить matrix-output. Текущий production-черновик не трогается.",
+                        bg: "Отворете internal панела и пуснете сравнение за QA. Текущата production чернова не се променя.",
+                      })}
+                    </p>
+                  )}
+                </details>
               </section>
             ) : null}
 

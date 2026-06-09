@@ -1810,9 +1810,105 @@ API route использует helper и не содержит бизнес-ло
 
 ### 19.8 Следующий PR после этапа 8
 
-Следующий шаг:
+Этап 9 закрыл первый internal UI слой:
 
-1. Internal UI side-by-side panel для coach/QA.
-2. Role-gated preview в web, который вызывает internal endpoint.
-3. Дополнительные synthetic regression fixtures после ручной QA.
-4. Controlled rollout matrix path для отдельных сценариев только после подтверждения.
+1. В web Planning Studio Constructor добавлена collapsed-панель `Matrix preview / internal`.
+2. Панель доступна внутри уже существующего coach/admin конструктора и вызывает только:
+   `POST /api/v1/plans/constructor/internal/matrix-preview`.
+3. Preview имеет отдельную кнопку, отдельные loading/error/success/retry состояния и не меняет основной `constructorDraft`.
+4. Preview не пишет в DB, не создаёт шаблон, не назначает план спортсмену, не сохраняет результат в localStorage/sessionStorage.
+5. Production `POST /api/v1/plans/constructor/draft` не изменён.
+
+Следующие шаги после этапа 9:
+
+1. Ручная QA на реальных сценариях конструктора.
+2. Дополнительные synthetic regression fixtures после ручной QA.
+3. Controlled rollout matrix path для отдельных сценариев только после подтверждения.
+
+## 20. Этап 9: Internal UI side-by-side preview
+
+### 20.1 Где находится UI
+
+UI добавлен в:
+
+```text
+apps/web/app/page-client.tsx
+```
+
+Место:
+
+- `activeWorkspace === "planning-studio"`;
+- `planningView === "constructor"`;
+- внутри существующего coach/admin-gated Planning Studio.
+
+Панель:
+
+```text
+Matrix preview / internal
+Сравнение legacy vs matrix - internal
+```
+
+Она collapsed по умолчанию и расположена после обычного `Draft plan`.
+
+### 20.2 Что вызывает UI
+
+Панель вызывает:
+
+```http
+POST /api/v1/plans/constructor/internal/matrix-preview
+```
+
+Request:
+
+```json
+{
+  "input": "...ConstructorInput from current constructor form...",
+  "options": {
+    "includeDrafts": true,
+    "includeComparisonReport": true,
+    "includeSafetyDetails": true,
+    "explanationDepth": "normal",
+    "includeInfoDifferences": false
+  }
+}
+```
+
+Есть отдельный checkbox `includeInfoDifferences`. Это влияет только на internal comparison output.
+
+### 20.3 Что показывает UI
+
+Панель показывает:
+
+- summary: `safeToPreview`, `defaultPathUnchanged`, error/warning/expected/total counts, headline;
+- safety: matrix safety status, legacy default guard status, failed invariants, warnings;
+- side-by-side overview: legacy/matrix weeks, days, sessions, blocks, close-start days;
+- matrix decision explanation: phase, competition role, D-day proximity, development rule, logistics flags, explanations;
+- differences list: category, severity, message, affected week/day/session/block;
+- optional collapsed raw JSON.
+
+### 20.4 Что намеренно не изменено
+
+Не изменены:
+
+- `buildPerformConstructorDraft(input)`;
+- `POST /api/v1/plans/constructor/draft`;
+- `constructorDraft` state основного UI;
+- сохранение шаблона;
+- назначение плана спортсмену;
+- DB schema;
+- mobile contracts;
+- `selectTemplateCards`;
+- `mergeWeeks`;
+- `pickSourceWeekForPhase`.
+
+### 20.5 Safety-интерпретация
+
+Панель не означает rollout matrix path.
+
+Правильное чтение:
+
+- `safeToPreview=true` — можно смотреть matrix draft внутренне рядом с legacy;
+- `defaultPathUnchanged=true` — обычный legacy default path не изменился;
+- `expectedDifferenceCount>0` — ожидаемые отличия, не обязательно ошибка;
+- `matrix safety failed` — matrix output нельзя использовать даже внутренне без разбора;
+- `legacy guard failed` — надо остановиться, потому что default-path invariant нарушен.

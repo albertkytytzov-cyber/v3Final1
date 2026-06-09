@@ -135,6 +135,10 @@ Runner проверяет:
 - no input mutation;
 - `defaultPathUnchanged`.
 
+Internal web preview panel использует тот же response shape через
+`POST /api/v1/plans/constructor/internal/matrix-preview`. Поэтому fixture runner остаётся главным
+автоматическим safety-слоем для данных, которые UI показывает как summary/safety/differences.
+
 ## Что не проверяется
 
 Fixtures не делают full snapshot:
