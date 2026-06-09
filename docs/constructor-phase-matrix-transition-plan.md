@@ -2287,3 +2287,122 @@ UI показывает причину и скрывает read-only primary can
 - или feature flag для visibility панели;
 - или сбор QA feedback по allowlisted сценариям;
 - затем limited production primary mode только для far development/post-competition/logistics after feedback.
+
+## 23. Stage 12: Internal matrix preview workspace
+
+Stage 12 добавляет в internal constructor panel безопасный workspace, где можно временно открыть matrix candidate как визуальный draft.
+
+Это не production rollout и не замена legacy generator.
+
+### 23.1 Где находится workspace
+
+UI:
+
+```text
+apps/web/app/page-client.tsx
+```
+
+Styles:
+
+```text
+apps/web/app/globals.css
+```
+
+Кнопка появляется в блоке `Rollout decision`:
+
+```text
+Показать matrix-кандидат в preview workspace
+```
+
+После открытия появляется отдельная секция:
+
+```text
+Internal matrix preview workspace
+Matrix-кандидат черновика
+```
+
+### 23.2 Когда workspace доступен
+
+Открытие разрешено только если одновременно:
+
+- rollout mode = `matrix_allowed_for_primary` или `matrix_allowed_for_internal`;
+- `matrixPrimaryAllowed=true` или mode = `matrix_allowed_for_internal`;
+- `preview.safeToPreview=true`;
+- `preview.defaultPathUnchanged=true`;
+- matrix draft есть в preview response;
+- safety errors отсутствуют;
+- rollout error blockers отсутствуют.
+
+Для `preview_only`, `legacy_only` и `blocked` кнопка disabled и показывает причину.
+D-28/D-21/D-10/D-3 главного старта остаются preview-only.
+
+### 23.3 Что показывает workspace
+
+Workspace показывает:
+
+- mode/scenario/safe/default status;
+- read-only/not saved/does not replace legacy badges;
+- weeks/days/sessions/blocks counts;
+- recommended action и объяснение, почему это не основной draft;
+- rollout blockers, если они есть;
+- risk flags matrix candidate;
+- plan-level explanations;
+- weeks/days/sessions/blocks в draft-compatible визуальном формате.
+
+### 23.4 Read-only guards
+
+Workspace намеренно не подключён к:
+
+- `constructorDraft`;
+- `constructorTemplatePayload`;
+- `handleSaveConstructorTemplate`;
+- save as template;
+- assign plan;
+- DB writes;
+- localStorage/sessionStorage;
+- mobile contracts.
+
+В коде оставлен guard-comment рядом с renderer:
+
+```text
+Matrix workspace is display-only: never pass this draft to template/save/assign handlers.
+```
+
+При новом legacy draft или новом matrix preview workspace закрывается, чтобы старый matrix candidate не висел после изменения вводных.
+
+### 23.5 Что не изменено
+
+Stage 12 не меняет:
+
+- `buildPerformConstructorDraft(input)`;
+- `selectTemplateCards`;
+- `mergeWeeks`;
+- `pickSourceWeekForPhase`;
+- production `POST /api/v1/plans/constructor/draft`;
+- DB schema;
+- save/template/assign flow;
+- mobile contracts;
+- telemetry/storage.
+
+### 23.6 Manual verification
+
+Для stage 12 manual/browser verification:
+
+1. Legacy draft flow работает как раньше.
+2. Internal panel запускает preview и rollout decision.
+3. D-90/far development показывает `matrix_allowed_for_primary`, кнопка workspace активна.
+4. Workspace открывается, показывает matrix draft и read-only badges.
+5. В workspace нет save/template/assign controls.
+6. Close возвращает к legacy draft.
+7. Legacy draft остаётся доступным.
+8. D-3/main start остаётся `preview_only`, workspace disabled.
+9. Endpoint error не ломает основной draft.
+
+### 23.7 Следующий PR
+
+Следующий controlled PR после stage 12:
+
+- controlled internal feedback capture без персональных данных;
+- или feature flag for internal workspace visibility;
+- или limited production pilot только для `far_development_week` / `post_competition_recovery`;
+- но не full replacement of `mergeWeeks`.

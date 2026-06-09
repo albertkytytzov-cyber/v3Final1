@@ -250,6 +250,20 @@ type ConstructorMatrixCandidateSummary = {
   explanations: string[];
 };
 
+type ConstructorMatrixWorkspaceState = {
+  open: boolean;
+  draft: ConstructorDraft | null;
+  source: "rollout_preview";
+  readOnly: true;
+};
+
+const CLOSED_CONSTRUCTOR_MATRIX_WORKSPACE: ConstructorMatrixWorkspaceState = {
+  open: false,
+  draft: null,
+  source: "rollout_preview",
+  readOnly: true,
+};
+
 function constructorPreviewSessionsForDay(
   day: ConstructorDraft["plan"]["weeks"][number]["days"][number],
 ) {
@@ -441,6 +455,44 @@ function collectConstructorMatrixCandidateSummary(
       })) ?? [],
     explanations: uniqueExplanations.slice(0, 8),
   };
+}
+
+function isConstructorMatrixWorkspaceAllowedMode(
+  decision?: MatrixConstructorRolloutDecision | null,
+) {
+  return (
+    decision?.mode === "matrix_allowed_for_primary" ||
+    decision?.mode === "matrix_allowed_for_internal"
+  );
+}
+
+function canOpenConstructorMatrixWorkspace(params: {
+  decision?: MatrixConstructorRolloutDecision | null;
+  preview?: ConstructorMatrixPreviewResponse | null;
+  matrixDraft?: ConstructorMatrixPreviewResponse["matrixDraft"] | null;
+  safetyErrorCount: number;
+}) {
+  const { decision, preview, matrixDraft, safetyErrorCount } = params;
+
+  if (!decision || !preview || !matrixDraft) {
+    return false;
+  }
+
+  const modeAllowed = isConstructorMatrixWorkspaceAllowedMode(decision);
+  const primaryOrInternalAllowed =
+    decision.matrixPrimaryAllowed || decision.mode === "matrix_allowed_for_internal";
+  const hasErrorBlockers = decision.blockers.some((blocker) => blocker.severity === "error");
+
+  return (
+    modeAllowed &&
+    primaryOrInternalAllowed &&
+    preview.safeToPreview &&
+    preview.defaultPathUnchanged &&
+    decision.safeToPreview &&
+    decision.defaultPathUnchanged &&
+    safetyErrorCount === 0 &&
+    !hasErrorBlockers
+  );
 }
 
 function formatConstructorPreviewAffected(
@@ -9745,6 +9797,8 @@ export function PageClient({
     useState<ConstructorMatrixPreviewResponse | null>(null);
   const [constructorMatrixRolloutDecision, setConstructorMatrixRolloutDecision] =
     useState<MatrixConstructorRolloutDecision | null>(null);
+  const [constructorMatrixWorkspace, setConstructorMatrixWorkspace] =
+    useState<ConstructorMatrixWorkspaceState>(CLOSED_CONSTRUCTOR_MATRIX_WORKSPACE);
   const [constructorMatrixPreviewBusy, setConstructorMatrixPreviewBusy] = useState(false);
   const [constructorMatrixPreviewError, setConstructorMatrixPreviewError] = useState("");
   const [constructorMatrixRolloutError, setConstructorMatrixRolloutError] = useState("");
@@ -14462,6 +14516,7 @@ export function PageClient({
     setConstructorBusy(true);
     setConstructorMessage("");
     setErrorMessage("");
+    setConstructorMatrixWorkspace(CLOSED_CONSTRUCTOR_MATRIX_WORKSPACE);
 
     try {
       if (isPreviewMode) {
@@ -14526,6 +14581,7 @@ export function PageClient({
     setConstructorMatrixRolloutError("");
     setConstructorMatrixPreview(null);
     setConstructorMatrixRolloutDecision(null);
+    setConstructorMatrixWorkspace(CLOSED_CONSTRUCTOR_MATRIX_WORKSPACE);
 
     try {
       const [previewResult, rolloutResult] = await Promise.allSettled([
@@ -14559,6 +14615,31 @@ export function PageClient({
     } finally {
       setConstructorMatrixPreviewBusy(false);
     }
+  }
+
+  function handleOpenConstructorMatrixWorkspace() {
+    if (
+      !canOpenConstructorMatrixWorkspace({
+        decision: constructorMatrixRolloutDecision,
+        preview: constructorMatrixPreview,
+        matrixDraft: constructorMatrixPreviewMatrixDraft,
+        safetyErrorCount: constructorMatrixPreviewSafetyErrorCount,
+      }) ||
+      !constructorMatrixPreviewMatrixDraft
+    ) {
+      return;
+    }
+
+    setConstructorMatrixWorkspace({
+      open: true,
+      draft: constructorMatrixPreviewMatrixDraft,
+      source: "rollout_preview",
+      readOnly: true,
+    });
+  }
+
+  function handleCloseConstructorMatrixWorkspace() {
+    setConstructorMatrixWorkspace(CLOSED_CONSTRUCTOR_MATRIX_WORKSPACE);
   }
 
   async function handleSaveConstructorTemplate() {
@@ -15742,6 +15823,15 @@ export function PageClient({
     constructorMatrixPreview?.safetyInvariants?.filter((item) => !item.passed) ?? [];
   const constructorMatrixPreviewFailedLegacyGuard =
     constructorMatrixPreview?.legacyDefaultGuard?.filter((item) => !item.passed) ?? [];
+  const constructorMatrixPreviewSafetyErrorCount = constructorMatrixPreviewFailedSafety.filter(
+    (item) => item.severity === "error",
+  ).length;
+  const constructorMatrixWorkspaceCanOpen = canOpenConstructorMatrixWorkspace({
+    decision: constructorMatrixRolloutDecision,
+    preview: constructorMatrixPreview,
+    matrixDraft: constructorMatrixPreviewMatrixDraft,
+    safetyErrorCount: constructorMatrixPreviewSafetyErrorCount,
+  });
   const constructorMatrixRolloutBadgeLabel = constructorMatrixRolloutDecision
     ? ({
         matrix_allowed_for_primary: copyFor(language, {
@@ -15810,6 +15900,108 @@ export function PageClient({
                   bg: "Controlled gate разрешава matrix primary, но този панел е read-only.",
                 })
               : "";
+  const constructorMatrixWorkspaceUnavailableReason = !constructorMatrixRolloutDecision
+    ? copyFor(language, {
+        en: "Run the internal matrix preview first.",
+        ru: "Сначала запустите internal matrix preview.",
+        bg: "Първо пуснете internal matrix preview.",
+      })
+    : !constructorMatrixPreviewMatrixDraft
+      ? copyFor(language, {
+          en: "Matrix draft was not returned by the preview response.",
+          ru: "Matrix draft не вернулся в preview response.",
+          bg: "Matrix draft не е върнат в preview response.",
+        })
+      : !isConstructorMatrixWorkspaceAllowedMode(constructorMatrixRolloutDecision)
+        ? constructorMatrixRolloutDecision.mode === "preview_only"
+          ? copyFor(language, {
+              en: "Matrix workspace is unavailable: main-start D-28/D-21/D-10/D-3 windows remain preview-only.",
+              ru: "Matrix workspace недоступен: главные старты D-28/D-21/D-10/D-3 пока только preview.",
+              bg: "Matrix workspace не е достъпен: главните стартове D-28/D-21/D-10/D-3 са само preview.",
+            })
+          : copyFor(language, {
+              en: "Matrix workspace is unavailable: rollout mode is legacy-only or blocked.",
+              ru: "Matrix workspace недоступен: rollout mode legacy-only или blocked.",
+              bg: "Matrix workspace не е достъпен: rollout mode е legacy-only или blocked.",
+            })
+        : !constructorMatrixPreview?.safeToPreview || !constructorMatrixRolloutDecision.safeToPreview
+          ? copyFor(language, {
+              en: "Matrix workspace is unavailable: preview safety did not pass.",
+              ru: "Matrix workspace недоступен: preview safety не прошёл.",
+              bg: "Matrix workspace не е достъпен: preview safety не мина.",
+            })
+          : !constructorMatrixPreview.defaultPathUnchanged ||
+              !constructorMatrixRolloutDecision.defaultPathUnchanged
+            ? copyFor(language, {
+                en: "Matrix workspace is unavailable: legacy default guard changed.",
+                ru: "Matrix workspace недоступен: legacy default guard изменился.",
+                bg: "Matrix workspace не е достъпен: legacy default guard се промени.",
+              })
+            : constructorMatrixPreviewSafetyErrorCount > 0
+              ? copyFor(language, {
+                  en: "Matrix workspace is unavailable: safety blockers are present.",
+                  ru: "Matrix workspace недоступен: есть safety blockers.",
+                  bg: "Matrix workspace не е достъпен: има safety blockers.",
+                })
+              : constructorMatrixRolloutDecision.blockers.some((blocker) => blocker.severity === "error")
+                ? copyFor(language, {
+                    en: "Matrix workspace is unavailable: rollout blockers are present.",
+                    ru: "Matrix workspace недоступен: есть rollout blockers.",
+                    bg: "Matrix workspace не е достъпен: има rollout blockers.",
+                  })
+                : copyFor(language, {
+                    en: "Matrix candidate can be opened only as a read-only internal workspace.",
+                    ru: "Matrix candidate можно открыть только как read-only internal workspace.",
+                    bg: "Matrix candidate може да се отвори само като read-only internal workspace.",
+                  });
+  const constructorMatrixWorkspaceMetrics = buildConstructorPreviewDraftMetrics(
+    constructorMatrixWorkspace.draft,
+  );
+  const constructorMatrixWorkspaceWhyText =
+    constructorMatrixRolloutDecision?.mode === "matrix_allowed_for_internal"
+      ? copyFor(language, {
+          en: "This scenario is allowed only for internal inspection, not for production primary usage.",
+          ru: "Этот сценарий разрешён только для internal проверки, не для production primary.",
+          bg: "Този сценарий е разрешен само за internal проверка, не за production primary.",
+        })
+      : constructorMatrixRolloutDecision?.mode === "matrix_allowed_for_primary"
+        ? copyFor(language, {
+            en: "The gate allows a primary candidate, but this workspace is still read-only until a separate rollout decision.",
+            ru: "Gate разрешает primary candidate, но этот workspace остаётся read-only до отдельного rollout-решения.",
+            bg: "Gate разрешава primary candidate, но този workspace остава read-only до отделно rollout решение.",
+          })
+        : constructorMatrixRolloutDecision?.mode === "preview_only"
+          ? copyFor(language, {
+              en: "This scenario stays preview-only, so the matrix candidate cannot become a workspace draft.",
+              ru: "Этот сценарий остаётся preview-only, поэтому matrix-кандидат нельзя открыть как workspace draft.",
+              bg: "Този сценарий остава preview-only, затова matrix кандидатът не се отваря като workspace draft.",
+            })
+          : copyFor(language, {
+              en: "Legacy remains the main draft for this scenario.",
+              ru: "Legacy остаётся основным черновиком для этого сценария.",
+              bg: "Legacy остава основната чернова за този сценарий.",
+            });
+  const constructorMatrixWorkspaceScenarioText =
+    constructorMatrixRolloutDecision?.scenario === "far_development_week"
+      ? copyFor(language, {
+          en: "Low-risk scenario far from the start.",
+          ru: "Низкорисковый сценарий далеко от старта.",
+          bg: "Нискорисков сценарий далеч от старта.",
+        })
+      : constructorMatrixRolloutDecision?.scenario === "post_competition_recovery"
+        ? copyFor(language, {
+            en: "Recovery scenario after competition.",
+            ru: "Восстановительный сценарий после старта.",
+            bg: "Възстановителен сценарий след старт.",
+          })
+        : constructorMatrixRolloutDecision?.scenario === "travel_day" ||
+            constructorMatrixRolloutDecision?.scenario === "weigh_in_day"
+          ? copyFor(language, {
+              en: "Logistics scenario allowed only for internal review.",
+              ru: "Логистический сценарий, разрешённый только для internal проверки.",
+              bg: "Логистичен сценарий само за internal проверка.",
+            })
+          : "";
   const topOverviewItems = [
     {
       label: t("athlete"),
@@ -22862,6 +23054,30 @@ export function PageClient({
                                 ))}
                               </ul>
                             ) : null}
+                            <div className="constructor-matrix-workspace-actions">
+                              <button
+                                className="secondary-button"
+                                disabled={!constructorMatrixWorkspaceCanOpen}
+                                title={constructorMatrixWorkspaceUnavailableReason}
+                                onClick={handleOpenConstructorMatrixWorkspace}
+                                type="button"
+                              >
+                                {copyFor(language, {
+                                  en: "Open matrix candidate in preview workspace",
+                                  ru: "Показать matrix-кандидат в preview workspace",
+                                  bg: "Покажи matrix кандидата в preview workspace",
+                                })}
+                              </button>
+                              <p className="constructor-matrix-rollout-note">
+                                {constructorMatrixWorkspaceCanOpen
+                                  ? copyFor(language, {
+                                      en: "Available as read-only internal workspace. It will not save, assign, or replace the legacy draft.",
+                                      ru: "Доступно только как read-only internal workspace. Не сохраняет, не назначает и не заменяет legacy draft.",
+                                      bg: "Достъпно само като read-only internal workspace. Не записва, не назначава и не заменя legacy draft.",
+                                    })
+                                  : constructorMatrixWorkspaceUnavailableReason}
+                              </p>
+                            </div>
                           </>
                         ) : (
                           <p>
@@ -23155,6 +23371,232 @@ export function PageClient({
                     </p>
                   )}
                 </details>
+
+                {constructorMatrixWorkspace.open && constructorMatrixWorkspace.draft ? (
+                  <section className="constructor-panel constructor-matrix-workspace-panel">
+                    {/* Matrix workspace is display-only: never pass this draft to template/save/assign handlers. */}
+                    <header className="constructor-matrix-workspace-header">
+                      <div>
+                        <span className="eyebrow eyebrow-muted">
+                          {copyFor(language, {
+                            en: "Internal matrix preview workspace",
+                            ru: "Internal matrix preview workspace",
+                            bg: "Internal matrix preview workspace",
+                          })}
+                        </span>
+                        <h3>
+                          {copyFor(language, {
+                            en: "Matrix candidate draft",
+                            ru: "Matrix-кандидат черновика",
+                            bg: "Matrix кандидат чернова",
+                          })}
+                        </h3>
+                        <p>
+                          {copyFor(language, {
+                            en: "Read-only, not saved, and does not replace the legacy draft.",
+                            ru: "Read-only, не сохраняется и не заменяет legacy draft.",
+                            bg: "Read-only, не се записва и не заменя legacy draft.",
+                          })}
+                        </p>
+                      </div>
+                      <button
+                        className="tertiary-button"
+                        onClick={handleCloseConstructorMatrixWorkspace}
+                        type="button"
+                      >
+                        {copyFor(language, {
+                          en: "Close matrix workspace",
+                          ru: "Вернуться к legacy draft",
+                          bg: "Затвори matrix workspace",
+                        })}
+                      </button>
+                    </header>
+
+                    <div className="constructor-matrix-workspace-badges">
+                      <span className="constructor-matrix-readonly-badge">read-only</span>
+                      <span className="constructor-matrix-readonly-badge">not saved</span>
+                      <span className="constructor-matrix-readonly-badge">does not replace legacy</span>
+                      <span
+                        className={`constructor-matrix-rollout-badge ${constructorMatrixRolloutBadgeClass(
+                          constructorMatrixRolloutDecision?.mode,
+                        )}`}
+                      >
+                        {constructorMatrixRolloutBadgeLabel || "internal"}
+                      </span>
+                    </div>
+
+                    <div className="constructor-matrix-count-grid constructor-matrix-workspace-overview">
+                      {[
+                        ["mode", constructorMatrixRolloutDecision?.mode ?? "-"],
+                        ["scenario", constructorMatrixRolloutDecision?.scenario ?? "-"],
+                        ["safe", constructorMatrixRolloutDecision?.safeToPreview ? "yes" : "no"],
+                        ["default", constructorMatrixRolloutDecision?.defaultPathUnchanged ? "unchanged" : "changed"],
+                        ["weeks", constructorMatrixWorkspaceMetrics.weekCount],
+                        ["days", constructorMatrixWorkspaceMetrics.dayCount],
+                        ["sessions", constructorMatrixWorkspaceMetrics.sessionCount],
+                        ["blocks", constructorMatrixWorkspaceMetrics.blockCount],
+                      ].map(([label, value]) => (
+                        <span key={label}>
+                          <small>{label}</small>
+                          <strong>{value}</strong>
+                        </span>
+                      ))}
+                    </div>
+
+                    <div className="constructor-matrix-workspace-context-grid">
+                      <article className="constructor-matrix-preview-card">
+                        <div className="summary-topline">
+                          <strong>
+                            {copyFor(language, {
+                              en: "Why this is not the main draft",
+                              ru: "Почему это не основной draft",
+                              bg: "Защо това не е основната чернова",
+                            })}
+                          </strong>
+                          <span>{constructorMatrixRolloutDecision?.recommendedAction ?? "-"}</span>
+                        </div>
+                        <p>{constructorMatrixWorkspaceWhyText}</p>
+                        {constructorMatrixWorkspaceScenarioText ? (
+                          <p className="constructor-matrix-rollout-note">
+                            {constructorMatrixWorkspaceScenarioText}
+                          </p>
+                        ) : null}
+                        {constructorMatrixRolloutDecision?.blockers.length ? (
+                          <ul className="constructor-matrix-preview-list">
+                            {constructorMatrixRolloutDecision.blockers.map((blocker, index) => (
+                              <li key={`${blocker.code}-${index}`}>
+                                <strong>{blocker.code}</strong>
+                                <span>{blocker.message}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="constructor-matrix-rollout-note">
+                            {copyFor(language, {
+                              en: "No rollout blockers were returned, but this workspace remains internal and read-only.",
+                              ru: "Rollout blockers не вернулись, но workspace остаётся internal и read-only.",
+                              bg: "Няма rollout blockers, но workspace остава internal и read-only.",
+                            })}
+                          </p>
+                        )}
+                      </article>
+
+                      <article className="constructor-matrix-preview-card">
+                        <div className="summary-topline">
+                          <strong>
+                            {copyFor(language, {
+                              en: "Matrix risks and explanation",
+                              ru: "Matrix риски и объяснение",
+                              bg: "Matrix рискове и обяснение",
+                            })}
+                          </strong>
+                          <span>{constructorMatrixWorkspace.draft.confidence}</span>
+                        </div>
+                        <ul className="constructor-matrix-preview-list">
+                          {constructorMatrixWorkspace.draft.riskFlags.length ? (
+                            constructorMatrixWorkspace.draft.riskFlags.slice(0, 6).map((risk, index) => (
+                              <li key={`${risk.code}-${index}`}>
+                                <strong>
+                                  {risk.code} · {risk.level}
+                                </strong>
+                                <span>{risk.message}</span>
+                              </li>
+                            ))
+                          ) : (
+                            <li>
+                              <strong>risk</strong>
+                              <span>
+                                {copyFor(language, {
+                                  en: "No critical risks detected in the matrix candidate.",
+                                  ru: "Критичных рисков в matrix-кандидате не найдено.",
+                                  bg: "Няма критични рискове в matrix кандидата.",
+                                })}
+                              </span>
+                            </li>
+                          )}
+                        </ul>
+                        <div className="constructor-explanation-list constructor-matrix-workspace-explanations">
+                          <div>
+                            <span>{copyFor(language, { en: "Decision", ru: "Решение", bg: "Решение" })}</span>
+                            <p>{constructorMatrixWorkspace.draft.explanation.mainDecision}</p>
+                          </div>
+                          <div>
+                            <span>{copyFor(language, { en: "Why now", ru: "Почему сейчас", bg: "Защо сега" })}</span>
+                            <p>{constructorMatrixWorkspace.draft.explanation.whyNow}</p>
+                          </div>
+                        </div>
+                      </article>
+                    </div>
+
+                    <div className="constructor-week-list constructor-matrix-workspace-week-list">
+                      {constructorMatrixWorkspace.draft.plan.weeks.map((week) => (
+                        <article className="constructor-week-card" key={`matrix-workspace-${week.weekNumber}-${week.title}`}>
+                          <div className="summary-topline">
+                            <strong>{week.title}</strong>
+                            <span>{constructorPhaseLabel(week.phase)}</span>
+                          </div>
+                          <p>{week.mainIntent}</p>
+                          <div className="constructor-day-list">
+                            {week.days.map((day) => (
+                              <div
+                                className="constructor-day-row"
+                                key={`matrix-workspace-${week.weekNumber}-${day.dayLabel}-${day.dayIntent}`}
+                              >
+                                <div>
+                                  <strong>{day.dayLabel}</strong>
+                                  <span>{day.dayIntent}</span>
+                                </div>
+                                <small>{day.readinessGate}</small>
+                                {constructorPreviewSessionsForDay(day).map((session) => (
+                                  <div
+                                    className="constructor-session-preview"
+                                    key={`matrix-workspace-${day.dayLabel}-${session.name}`}
+                                  >
+                                    <div className="summary-topline">
+                                      <strong>{session.name}</strong>
+                                      <span>{session.notes}</span>
+                                    </div>
+                                    <ul>
+                                      {session.blocks.map((block, blockIndex) => (
+                                        <li key={`matrix-workspace-${day.dayLabel}-${session.name}-${block.name}-${blockIndex}`}>
+                                          <span>{block.name}</span>
+                                          <strong>{block.volume}</strong>
+                                          {block.exercises?.length ? (
+                                            <small>
+                                              {block.exercises
+                                                .slice(0, 3)
+                                                .map((exercise) => {
+                                                  const details = [
+                                                    exercise.targetSets ? `${exercise.targetSets} сер.` : "",
+                                                    exercise.targetReps ? `${exercise.targetReps} повт.` : "",
+                                                    exercise.targetDurationMinutes
+                                                      ? `${exercise.targetDurationMinutes} мин`
+                                                      : "",
+                                                    exercise.targetRpe ? `RPE ${exercise.targetRpe}` : "",
+                                                  ]
+                                                    .filter(Boolean)
+                                                    .join(" / ");
+
+                                                  return details
+                                                    ? `${exercise.name} (${details})`
+                                                    : exercise.name;
+                                                })
+                                                .join("; ")}
+                                            </small>
+                                          ) : null}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                ))}
+                              </div>
+                            ))}
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  </section>
+                ) : null}
               </section>
             ) : null}
 

@@ -1138,3 +1138,66 @@ Candidate is explicitly internal/read-only and is not connected to:
 - mobile contracts.
 
 Close main-start windows remain preview-only.
+
+### 15.4 Internal matrix preview workspace
+
+Stage 12 adds a read-only internal workspace inside the constructor matrix preview panel.
+
+Purpose:
+
+- allow a coach/admin QA user to inspect the matrix candidate in the same visual shape as a draft;
+- keep the legacy draft visible and unchanged;
+- prevent saving, assigning, or turning the matrix candidate into a template.
+
+Open action:
+
+```text
+Показать matrix-кандидат в preview workspace
+```
+
+Allowed rollout modes:
+
+- `matrix_allowed_for_primary`;
+- `matrix_allowed_for_internal`.
+
+Additional guards:
+
+- matrix draft exists;
+- `safeToPreview=true`;
+- `defaultPathUnchanged=true`;
+- no safety errors;
+- no rollout error blockers;
+- `matrixPrimaryAllowed=true` unless the mode is `matrix_allowed_for_internal`.
+
+Workspace badges:
+
+- read-only;
+- not saved;
+- does not replace legacy;
+- rollout mode badge.
+
+Workspace content:
+
+- rollout mode/scenario/recommended action;
+- safety/default status;
+- weeks/days/sessions/blocks counts;
+- explanation why this is not the main draft;
+- risk flags;
+- weeks, days, sessions and blocks in draft-compatible display.
+
+Read-only policy:
+
+- no `constructorTemplatePayload` update;
+- no `handleSaveConstructorTemplate` usage;
+- no save/template/assign buttons;
+- no DB writes;
+- no localStorage/sessionStorage;
+- no mobile contract changes.
+
+The production route remains:
+
+```http
+POST /api/v1/plans/constructor/draft
+```
+
+and still uses `buildPerformConstructorDraft(input)`.

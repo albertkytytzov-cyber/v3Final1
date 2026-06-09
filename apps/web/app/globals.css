@@ -6338,6 +6338,74 @@ td {
   padding: 10px 12px;
 }
 
+.constructor-matrix-workspace-actions {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.constructor-matrix-workspace-actions .secondary-button {
+  justify-self: start;
+}
+
+.constructor-matrix-workspace-panel {
+  border-color: rgba(20, 184, 166, 0.3);
+  background:
+    linear-gradient(180deg, rgba(240, 253, 250, 0.86), rgba(255, 255, 255, 0.94));
+}
+
+.constructor-matrix-workspace-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.constructor-matrix-workspace-header > div {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.constructor-matrix-workspace-header h3 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 1.16rem;
+  line-height: 1.18;
+}
+
+.constructor-matrix-workspace-header p {
+  margin: 0;
+  color: var(--muted);
+  font-weight: 760;
+}
+
+.constructor-matrix-workspace-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.constructor-matrix-workspace-overview {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.constructor-matrix-workspace-context-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+  gap: 14px;
+}
+
+.constructor-matrix-workspace-explanations {
+  margin-top: 10px;
+}
+
+.constructor-matrix-workspace-week-list {
+  max-height: 840px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
 .constructor-matrix-candidate-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.08fr) minmax(0, 0.92fr);
@@ -12711,8 +12779,14 @@ td {
   .constructor-matrix-decision-grid,
   .constructor-matrix-rollout-grid,
   .constructor-matrix-candidate-grid,
-  .constructor-matrix-load-grid {
+  .constructor-matrix-load-grid,
+  .constructor-matrix-workspace-overview,
+  .constructor-matrix-workspace-context-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .constructor-matrix-workspace-header {
+    display: grid;
   }
 
   .constructor-day-row > div,
