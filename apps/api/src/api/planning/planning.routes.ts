@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import {
   buildConstructorTemplatePayload,
+  buildConstructorMatrixPreviewResponse,
   buildPerformConstructorDraft,
 } from "@training-platform/shared";
 import {
@@ -25,6 +26,7 @@ import {
   parseAssignedPlanBody,
   parseAutoAssignMicrocycleBody,
   parseConstructorDraftBody,
+  parseConstructorMatrixPreviewBody,
   parsePlanningAthleteDateQuery,
   parsePlanTemplateBody,
   parseTemplatePackQuery,
@@ -127,6 +129,29 @@ export function registerPlanningRoutes(
         `PERFORM Constructor • ${body.competition.name}`,
       ),
     };
+  });
+
+  app.post("/api/v1/plans/constructor/internal/matrix-preview", async (request) => {
+    const user = await dependencies.guards.requireUser(request);
+
+    if (user.role !== "coach" && user.role !== "admin") {
+      throw dependencies.httpError(
+        403,
+        "Only coach or admin accounts can build constructor preview",
+      );
+    }
+
+    let body;
+    try {
+      body = parseConstructorMatrixPreviewBody(request.body);
+    } catch (error) {
+      throw dependencies.httpError(400, (error as Error).message);
+    }
+
+    await dependencies.guards.assertAthleteAccess(user, body.input.athlete.athleteId);
+
+    // Internal/experimental preview only: no DB writes, no template creation and no production route changes.
+    return buildConstructorMatrixPreviewResponse(body.input, body.options);
   });
 
   app.post("/api/v1/plans/templates", async (request) => {

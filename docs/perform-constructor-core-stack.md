@@ -974,6 +974,7 @@ coachEditable
 - `constructor-matrix-preview.ts` — internal preview builder `buildConstructorComparisonPreview`, который возвращает side-by-side legacy draft, matrix draft, comparison report, summary, safety status, warnings и notes.
 - `scripts/fixtures/constructor/preview-regression-fixtures.mjs` — synthetic regression fixture pack для matrix preview.
 - `scripts/constructor-preview-fixture-runner.mjs` — fixture runner для safety, block, risk, explanation и legacy-default инвариантов.
+- `POST /api/v1/plans/constructor/internal/matrix-preview` — internal/debug endpoint для matrix-vs-legacy preview с теми же auth/athlete-access guard'ами, что и production constructor draft route.
 
 Старый `buildPerformConstructorDraft` не переключён по умолчанию.
 
@@ -1025,4 +1026,6 @@ Output:
 
 Regression fixtures запускаются через `npm run check:constructor-core` и описаны в `docs/constructor-matrix-preview-fixtures.md`.
 
-Следующий шаг — internal UI side-by-side panel или отдельный debug endpoint/explicit flag после утверждения auth и формата ответа.
+Обычный `POST /api/v1/plans/constructor/draft` не изменён. Internal endpoint принимает `{ input, options }`, возвращает preview object и не пишет в DB.
+
+Следующий шаг — internal UI side-by-side panel или role-gated web preview, который вызывает internal endpoint.

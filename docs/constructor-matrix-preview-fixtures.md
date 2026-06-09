@@ -24,6 +24,12 @@ Runner подключён в:
 scripts/check-perform-constructor-core.mjs
 ```
 
+Internal/debug API endpoint, который использует тот же preview response helper:
+
+```text
+POST /api/v1/plans/constructor/internal/matrix-preview
+```
+
 Запуск:
 
 ```bash
@@ -117,6 +123,17 @@ Runner проверяет:
 - forbidden difference severities отсутствуют;
 - allowed difference categories не нарушены, если они заданы;
 - evening session присутствует, если fixture это требует.
+
+Дополнительно `check-perform-constructor-core.mjs` проверяет API response helper:
+
+- `includeDrafts=false`;
+- `includeComparisonReport=false`;
+- `includeSafetyDetails=false`;
+- D-3 main start;
+- travel day;
+- weigh-in day;
+- no input mutation;
+- `defaultPathUnchanged`.
 
 ## Что не проверяется
 

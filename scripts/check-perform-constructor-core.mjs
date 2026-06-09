@@ -1,5 +1,6 @@
 import {
   buildConstructorComparisonPreview,
+  buildConstructorMatrixPreviewResponse,
   buildConstructorTemplatePayload,
   buildMatrixDrivenConstructorDraft,
   buildMatrixDrivenPlanDraft,
@@ -1289,6 +1290,42 @@ const previewNoReport = buildConstructorComparisonPreview(previewInput28, {
   includeSafetyDetails: false,
   explanationDepth: "short",
 });
+const apiPreviewInput28Snapshot = JSON.stringify(previewInput28);
+const apiPreviewNoDrafts = buildConstructorMatrixPreviewResponse(previewInput28, {
+  includeDrafts: false,
+  includeComparisonReport: true,
+  includeSafetyDetails: false,
+  explanationDepth: "normal",
+});
+const apiPreviewNoReport = buildConstructorMatrixPreviewResponse(previewInput28, {
+  includeDrafts: false,
+  includeComparisonReport: false,
+  includeSafetyDetails: false,
+  explanationDepth: "short",
+});
+const apiPreview3 = buildConstructorMatrixPreviewResponse(
+  matrixPlanInput({
+    daysToStart: 3,
+    cycleLengthDays: 3,
+    phase: "start_window",
+  }),
+  { explanationDepth: "detailed" },
+);
+const apiPreviewTravel = buildConstructorMatrixPreviewResponse(
+  matrixPlanInput({
+    daysToStart: 2,
+    cycleLengthDays: 1,
+    phase: "start_window",
+    travelRequired: true,
+  }),
+);
+const apiPreviewWeighIn = buildConstructorMatrixPreviewResponse(
+  matrixPlanInput({
+    daysToStart: 1,
+    cycleLengthDays: 1,
+    phase: "start_window",
+  }),
+);
 
 assert(CONSTRUCTOR_TEMPLATE_CARDS.length >= 6, "Expected first constructor template cards");
 assert(draft.plan.weeks.length > 0, "Draft must contain plan weeks");
@@ -2068,6 +2105,54 @@ assert(
     previewNoReport.summary.includedDrafts === false &&
     previewNoReport.notes.length === 2,
   "Preview includeComparisonReport false should keep summary/safety but omit report and drafts",
+);
+assert(
+  apiPreviewNoDrafts.generatedFrom === "legacy_matrix_comparison_preview" &&
+    apiPreviewNoDrafts.safeToPreview &&
+    apiPreviewNoDrafts.defaultPathUnchanged &&
+    apiPreviewNoDrafts.summary.includedDrafts === false &&
+    apiPreviewNoDrafts.summary.includedComparisonReport === true &&
+    apiPreviewNoDrafts.summary.includedSafetyDetails === false &&
+    apiPreviewNoDrafts.legacyDraft === undefined &&
+    apiPreviewNoDrafts.matrixDraft === undefined &&
+    apiPreviewNoDrafts.comparisonReport?.legacyDraft === undefined &&
+    apiPreviewNoDrafts.comparisonReport?.matrixDraft === undefined &&
+    JSON.stringify(previewInput28) === apiPreviewInput28Snapshot,
+  "API preview response helper should support includeDrafts=false without mutating input",
+);
+assert(
+  apiPreviewNoReport.generatedFrom === "legacy_matrix_comparison_preview" &&
+    apiPreviewNoReport.safeToPreview &&
+    apiPreviewNoReport.summary.includedComparisonReport === false &&
+    apiPreviewNoReport.comparisonReport === undefined &&
+    apiPreviewNoReport.notes.length === 2,
+  "API preview response helper should support includeComparisonReport=false",
+);
+assert(
+  apiPreview3.safeToPreview &&
+    !constructorDraftBlocks(apiPreview3.matrixDraft).some((block) =>
+      block.localLoadZones.includes("matrix:leg_lmv") ||
+      block.localLoadZones.includes("matrix:spp") ||
+      block.localLoadZones.includes("matrix:mat_control_bouts"),
+    ) &&
+    constructorDraftHasText(apiPreview3.matrixDraft, /Главный старт ближе 30|развитие/i),
+  "API preview helper D-3 scenario should keep close-start safety",
+);
+assert(
+  apiPreviewTravel.safeToPreview &&
+    constructorDraftBlocks(apiPreviewTravel.matrixDraft).every((block) => !/нагрузка high|нагрузка medium/.test(block.volume)) &&
+    constructorDraftHasText(apiPreviewTravel.matrixDraft, /travel|дорог|logistics/i),
+  "API preview helper travel scenario should keep logistics safety",
+);
+assert(
+  apiPreviewWeighIn.safeToPreview &&
+    !constructorDraftBlocks(apiPreviewWeighIn.matrixDraft).some((block) =>
+      block.localLoadZones.includes("matrix:mat_control_bouts") ||
+      block.localLoadZones.includes("matrix:mat_competition_model") ||
+      block.localLoadZones.includes("matrix:spp"),
+    ) &&
+    constructorDraftHasText(apiPreviewWeighIn.matrixDraft, /взвеш|weight/i),
+  "API preview helper weigh-in scenario should keep weight-control safety",
 );
 assert(
   draft.missingData.every((item) => item.code !== "speed_tests"),

@@ -6,6 +6,8 @@ import {
 import type {
   AssignedPlanPayload,
   AutoAssignMicrocyclePayload,
+  ConstructorMatrixPreviewRequest,
+  ConstructorMatrixPreviewApiOptions,
   ConstructorInput,
   PlanBlockInput,
   PlanDayInput,
@@ -115,6 +117,94 @@ function toDayInput(value: unknown): PlanDayInput {
     notes: typeof day.notes === "string" ? day.notes : "",
     orderIndex: Number(day.orderIndex ?? 0),
     sessions,
+  };
+}
+
+function parseConstructorMatrixPreviewOptions(
+  value: unknown,
+): ConstructorMatrixPreviewApiOptions {
+  const payload = (value ?? {}) as Partial<ConstructorMatrixPreviewApiOptions>;
+  const options: ConstructorMatrixPreviewApiOptions = {};
+
+  if (typeof payload.includeDrafts === "boolean") {
+    options.includeDrafts = payload.includeDrafts;
+  }
+
+  if (typeof payload.includeComparisonReport === "boolean") {
+    options.includeComparisonReport = payload.includeComparisonReport;
+  }
+
+  if (typeof payload.includeSafetyDetails === "boolean") {
+    options.includeSafetyDetails = payload.includeSafetyDetails;
+  }
+
+  if (
+    payload.explanationDepth === "short" ||
+    payload.explanationDepth === "normal" ||
+    payload.explanationDepth === "detailed"
+  ) {
+    options.explanationDepth = payload.explanationDepth;
+  }
+
+  if (typeof payload.failOnMatrixSafetyError === "boolean") {
+    options.failOnMatrixSafetyError = payload.failOnMatrixSafetyError;
+  }
+
+  if (typeof payload.includeInfoDifferences === "boolean") {
+    options.includeInfoDifferences = payload.includeInfoDifferences;
+  }
+
+  if (payload.matrixOptions && typeof payload.matrixOptions === "object") {
+    const matrixOptions = payload.matrixOptions as NonNullable<
+      ConstructorMatrixPreviewApiOptions["matrixOptions"]
+    >;
+    const sanitizedMatrixOptions: NonNullable<
+      ConstructorMatrixPreviewApiOptions["matrixOptions"]
+    > = {};
+
+    if (matrixOptions.mode === "draft" || matrixOptions.mode === "skeleton_only") {
+      sanitizedMatrixOptions.mode = matrixOptions.mode;
+    }
+
+    if (typeof matrixOptions.useLegacyCardsAsContentLibrary === "boolean") {
+      sanitizedMatrixOptions.useLegacyCardsAsContentLibrary =
+        matrixOptions.useLegacyCardsAsContentLibrary;
+    }
+
+    if (typeof matrixOptions.includeForbiddenCandidates === "boolean") {
+      sanitizedMatrixOptions.includeForbiddenCandidates =
+        matrixOptions.includeForbiddenCandidates;
+    }
+
+    if (
+      matrixOptions.explanationDepth === "short" ||
+      matrixOptions.explanationDepth === "normal" ||
+      matrixOptions.explanationDepth === "detailed"
+    ) {
+      sanitizedMatrixOptions.explanationDepth = matrixOptions.explanationDepth;
+    }
+
+    options.matrixOptions = sanitizedMatrixOptions;
+  }
+
+  return options;
+}
+
+export function parseConstructorMatrixPreviewBody(
+  body: unknown,
+): ConstructorMatrixPreviewRequest {
+  const payload = (body ?? {}) as {
+    input?: unknown;
+    options?: unknown;
+  };
+
+  if (!payload.input) {
+    throw new Error("input is required");
+  }
+
+  return {
+    input: parseConstructorDraftBody(payload.input),
+    options: parseConstructorMatrixPreviewOptions(payload.options),
   };
 }
 

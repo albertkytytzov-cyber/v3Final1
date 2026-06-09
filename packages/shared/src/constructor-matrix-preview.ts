@@ -81,6 +81,15 @@ export interface ConstructorComparisonPreview {
   notes: string[];
 }
 
+export type ConstructorMatrixPreviewApiOptions = ConstructorComparisonPreviewOptions;
+
+export interface ConstructorMatrixPreviewRequest {
+  input: ConstructorInput;
+  options?: ConstructorMatrixPreviewApiOptions;
+}
+
+export type ConstructorMatrixPreviewResponse = ConstructorComparisonPreview;
+
 export interface ConstructorPreviewFixtureLegacyExpectations {
   shouldBuild: boolean;
 }
@@ -316,4 +325,11 @@ export function buildConstructorComparisonPreview(
     warnings: buildPreviewWarnings(comparisonReport),
     notes: buildPreviewNotes(comparisonReport, resolvedOptions.explanationDepth),
   };
+}
+
+export function buildConstructorMatrixPreviewResponse(
+  input: ConstructorInput,
+  options?: ConstructorMatrixPreviewApiOptions,
+): ConstructorMatrixPreviewResponse {
+  return buildConstructorComparisonPreview(input, options);
 }

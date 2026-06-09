@@ -1663,9 +1663,156 @@ Fixtures synthetic-only. Запрещено добавлять:
 
 ### 18.7 Следующий PR после этапа 7
 
-Следующий шаг:
+Следующий шаг закрыт этапом 8 ниже:
 
 1. Internal side-by-side UI panel для QA/тренера.
 2. Controlled debug endpoint или explicit preview flag после утверждения auth/output.
 3. Добавление новых real-world synthetic regression cases на основе обнаруженных ошибок конструктора.
 4. Только после стабильного fixture pack — controlled rollout отдельных сценариев на matrix path.
+
+## 19. Этап 8: Internal API/debug matrix preview
+
+Дата: 2026-06-09.
+
+Этап 8 добавляет internal/debug API endpoint для matrix-vs-legacy constructor preview. Это не production rollout и не изменение обычного constructor draft route.
+
+### 19.1 Endpoint
+
+Добавлен endpoint:
+
+```text
+POST /api/v1/plans/constructor/internal/matrix-preview
+```
+
+Назначение: внутренний QA/dev preview, который явно вызывает:
+
+```text
+buildConstructorMatrixPreviewResponse(input, options?)
+```
+
+и возвращает `ConstructorMatrixPreviewResponse`.
+
+### 19.2 Request
+
+Формат body:
+
+```json
+{
+  "input": {
+    "competition": {},
+    "athlete": {},
+    "context": {},
+    "goals": [],
+    "tests": {},
+    "state": {},
+    "constraints": {},
+    "seasonStrategy": null
+  },
+  "options": {
+    "includeDrafts": false,
+    "includeComparisonReport": true,
+    "includeSafetyDetails": false,
+    "explanationDepth": "normal",
+    "failOnMatrixSafetyError": false,
+    "includeInfoDifferences": false,
+    "matrixOptions": {
+      "mode": "draft",
+      "useLegacyCardsAsContentLibrary": true,
+      "includeForbiddenCandidates": false,
+      "explanationDepth": "normal"
+    }
+  }
+}
+```
+
+Parser whitelist-ит только поддержанные preview options. Обычный `POST /api/v1/plans/constructor/draft` не меняется.
+
+### 19.3 Response
+
+Response — это preview object:
+
+- `generatedFrom: "legacy_matrix_comparison_preview"`;
+- `mode: "comparison_preview"`;
+- `safeToPreview`;
+- `defaultPathUnchanged`;
+- `summary`;
+- `safety`;
+- `warnings`;
+- `notes`;
+- optional `legacyDraft`;
+- optional `matrixDraft`;
+- optional `comparisonReport`;
+- optional `safetyInvariants`;
+- optional `legacyDefaultGuard`.
+
+Если `includeDrafts=false`, full `legacyDraft/matrixDraft` не возвращаются. Summary и safety остаются доступными.
+
+### 19.4 Auth и безопасность
+
+Endpoint использует тот же security pattern, что production constructor draft route:
+
+- `dependencies.guards.requireUser(request)`;
+- разрешены только `coach` и `admin`;
+- `dependencies.guards.assertAthleteAccess(user, input.athlete.athleteId)`;
+- без auth endpoint недоступен;
+- без доступа к athlete endpoint недоступен.
+
+Endpoint:
+
+- не пишет в DB;
+- не создаёт шаблон;
+- не назначает план;
+- не сохраняет preview;
+- не логирует input/body;
+- не меняет cookies/session/CORS;
+- не меняет mobile contracts;
+- не меняет production constructor route response.
+
+### 19.5 API helper
+
+В shared добавлены:
+
+- `ConstructorMatrixPreviewApiOptions`;
+- `ConstructorMatrixPreviewRequest`;
+- `ConstructorMatrixPreviewResponse`;
+- `buildConstructorMatrixPreviewResponse(input, options?)`.
+
+API route использует helper и не содержит бизнес-логики конструктора.
+
+### 19.6 Проверки этапа 8
+
+В `scripts/check-perform-constructor-core.mjs` добавлены focused checks для API response helper:
+
+- `includeDrafts=false`;
+- `includeComparisonReport=false`;
+- `includeSafetyDetails=false`;
+- no input mutation;
+- D-3 main start;
+- travel day;
+- weigh-in day;
+- `defaultPathUnchanged`.
+
+Полноценный route-level smoke test не добавлен, потому что в проекте нет лёгкого route-test harness без запуска auth/session окружения. Основная защита endpoint покрыта тем, что route повторяет существующий guard pattern, а response helper проверяется отдельно.
+
+### 19.7 Что намеренно не изменено
+
+Не изменены:
+
+- `buildPerformConstructorDraft`;
+- `selectTemplateCards`;
+- `mergeWeeks`;
+- `pickSourceWeekForPhase`;
+- production `POST /api/v1/plans/constructor/draft`;
+- DB schema;
+- UI;
+- mobile API contracts;
+- storage/telemetry.
+
+### 19.8 Следующий PR после этапа 8
+
+Следующий шаг:
+
+1. Internal UI side-by-side panel для coach/QA.
+2. Role-gated preview в web, который вызывает internal endpoint.
+3. Дополнительные synthetic regression fixtures после ручной QA.
+4. Controlled rollout matrix path для отдельных сценариев только после подтверждения.
