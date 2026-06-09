@@ -5,6 +5,7 @@ import { createRequire } from "node:module";
 const appRoot = resolve(import.meta.dirname, "..");
 const localEnvPath = resolve(appRoot, ".env.mobile.local");
 const require = createRequire(import.meta.url);
+const defaultMobileApiBaseUrl = "https://185.195.185.67.sslip.io/api/v1";
 
 function loadLocalEnv() {
   if (!existsSync(localEnvPath)) {
@@ -44,7 +45,7 @@ const apiBaseUrl = toApiBaseUrl(
     localEnv.MOBILE_API_BASE_URL ||
     process.env.MOBILE_SERVER_URL ||
     localEnv.MOBILE_SERVER_URL ||
-    "",
+    defaultMobileApiBaseUrl,
 );
 
 const config = `window.__PERFORM_MOBILE_CONFIG__ = ${JSON.stringify(
