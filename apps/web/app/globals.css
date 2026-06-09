@@ -6263,6 +6263,103 @@ td {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.constructor-matrix-rollout-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.constructor-matrix-rollout-card,
+.constructor-matrix-candidate-card {
+  border-color: rgba(20, 184, 166, 0.24);
+  background: rgba(240, 253, 250, 0.62);
+}
+
+.constructor-matrix-candidate-hidden {
+  border-color: rgba(245, 158, 11, 0.24);
+  background: rgba(255, 251, 235, 0.64);
+}
+
+.constructor-matrix-rollout-badge,
+.constructor-matrix-readonly-badge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  max-width: 100%;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 950;
+  line-height: 1.15;
+  text-transform: uppercase;
+}
+
+.constructor-matrix-rollout-badge.is-primary-allowed {
+  border-color: rgba(20, 184, 166, 0.38);
+  background: rgba(204, 251, 241, 0.9);
+  color: #0f766e;
+}
+
+.constructor-matrix-rollout-badge.is-internal-only {
+  border-color: rgba(37, 99, 235, 0.28);
+  background: rgba(219, 234, 254, 0.88);
+  color: #1d4ed8;
+}
+
+.constructor-matrix-rollout-badge.is-preview-only {
+  border-color: rgba(245, 158, 11, 0.3);
+  background: rgba(255, 251, 235, 0.92);
+  color: #92400e;
+}
+
+.constructor-matrix-rollout-badge.is-blocked {
+  border-color: rgba(239, 68, 68, 0.3);
+  background: rgba(254, 242, 242, 0.92);
+  color: #991b1b;
+}
+
+.constructor-matrix-rollout-badge.is-legacy-only {
+  border-color: rgba(100, 116, 139, 0.24);
+  background: rgba(248, 250, 252, 0.94);
+  color: #475569;
+}
+
+.constructor-matrix-readonly-badge {
+  border-color: rgba(20, 184, 166, 0.28);
+  background: rgba(240, 253, 250, 0.94);
+  color: #0f766e;
+}
+
+.constructor-matrix-rollout-note {
+  border: 1px solid rgba(20, 184, 166, 0.18);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.72);
+  padding: 10px 12px;
+}
+
+.constructor-matrix-candidate-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.08fr) minmax(0, 0.92fr);
+  gap: 12px;
+}
+
+.constructor-matrix-candidate-grid > section {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.constructor-matrix-candidate-grid > section > strong {
+  color: var(--ink);
+  font-size: 0.88rem;
+  font-weight: 950;
+}
+
+.constructor-matrix-load-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .constructor-matrix-count-grid > span {
   display: grid;
   gap: 3px;
@@ -6356,6 +6453,11 @@ td {
 .constructor-matrix-severity-warning {
   border-color: rgba(245, 158, 11, 0.28);
   background: rgba(255, 251, 235, 0.82);
+}
+
+.constructor-matrix-severity-info {
+  border-color: rgba(59, 130, 246, 0.22);
+  background: rgba(239, 246, 255, 0.82);
 }
 
 .constructor-matrix-severity-error {
@@ -12606,7 +12708,10 @@ td {
   .constructor-matrix-preview-grid,
   .constructor-matrix-side-by-side,
   .constructor-matrix-count-grid,
-  .constructor-matrix-decision-grid {
+  .constructor-matrix-decision-grid,
+  .constructor-matrix-rollout-grid,
+  .constructor-matrix-candidate-grid,
+  .constructor-matrix-load-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 

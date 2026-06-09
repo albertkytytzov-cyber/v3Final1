@@ -1081,3 +1081,60 @@ This layer intentionally does not:
 - write rollout decisions to DB;
 - add telemetry;
 - change mobile contracts.
+
+### 15.3 Rollout decision in internal UI
+
+Stage 11 подключает rollout gate к existing internal preview panel.
+
+UI:
+
+```text
+apps/web/app/page-client.tsx
+```
+
+Styles:
+
+```text
+apps/web/app/globals.css
+```
+
+Internal panel now calls:
+
+```http
+POST /api/v1/plans/constructor/internal/matrix-preview
+POST /api/v1/plans/constructor/internal/matrix-rollout-decision
+```
+
+Decision block shows:
+
+- mode/scenario;
+- badge;
+- recommended action;
+- matrixPrimaryAllowed;
+- safeToPreview/default guard status;
+- blockers;
+- explanation.
+
+Badges:
+
+- `Matrix primary allowed`;
+- `Matrix internal only`;
+- `Preview only`;
+- `Legacy default`;
+- `Blocked`.
+
+Read-only candidate is visible only when rollout mode is:
+
+- `matrix_allowed_for_primary`;
+- `matrix_allowed_for_internal`.
+
+Candidate is explicitly internal/read-only and is not connected to:
+
+- `constructorDraft`;
+- `constructorTemplatePayload`;
+- save as template;
+- assign plan;
+- DB writes;
+- mobile contracts.
+
+Close main-start windows remain preview-only.

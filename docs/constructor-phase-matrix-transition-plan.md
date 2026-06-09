@@ -2160,3 +2160,130 @@ Helper не подключён к production route.
    - post-competition recovery;
    - logistics scenarios.
 4. Только после feedback обсуждать изменение production behavior.
+
+## 22. Stage 11: Rollout decision in internal UI
+
+### 22.1 Где находится UI
+
+UI добавлен в уже существующую internal panel:
+
+```text
+apps/web/app/page-client.tsx
+```
+
+Панель:
+
+```text
+Matrix preview / internal
+Сравнение legacy vs matrix - internal
+```
+
+Она остаётся collapsed по умолчанию и находится внутри Planning Studio constructor view.
+
+### 22.2 Какие endpoints вызывает panel
+
+Одна internal action-кнопка запускает два независимых запроса:
+
+```http
+POST /api/v1/plans/constructor/internal/matrix-preview
+POST /api/v1/plans/constructor/internal/matrix-rollout-decision
+```
+
+Если rollout endpoint падает, preview остаётся видимым.
+Если preview endpoint падает, rollout error показывается отдельно.
+
+### 22.3 Что показывает rollout decision block
+
+Новый блок `Rollout decision` показывает:
+
+- `mode`;
+- `scenario`;
+- `recommendedAction`;
+- `matrixPrimaryAllowed`;
+- `allowlisted`;
+- `safeToPreview`;
+- blockers count;
+- explanation headline/reasons/next step;
+- blockers list with code/severity/message/details.
+
+Badge mapping:
+
+- `matrix_allowed_for_primary` -> `Matrix primary allowed`;
+- `matrix_allowed_for_internal` -> `Matrix internal only`;
+- `preview_only` -> `Preview only`;
+- `legacy_only` -> `Legacy default`;
+- `blocked` -> `Blocked`.
+
+### 22.4 Read-only matrix primary candidate
+
+Добавлена секция:
+
+```text
+Matrix primary candidate - read-only
+```
+
+Она видна только если:
+
+- rollout mode = `matrix_allowed_for_primary` или `matrix_allowed_for_internal`;
+- matrix draft есть в preview response;
+- `safeToPreview=true`;
+- `defaultPathUnchanged=true`.
+
+Секция показывает:
+
+- week/day/session/block counts;
+- selected block overview;
+- load summary;
+- risk summary;
+- matrix explanations.
+
+Явная подпись:
+
+```text
+Внутренний read-only кандидат. Не сохраняется и не заменяет основной черновик.
+```
+
+### 22.5 Что не изменено
+
+Stage 11 не меняет:
+
+- `buildPerformConstructorDraft`;
+- `selectTemplateCards`;
+- `mergeWeeks`;
+- `pickSourceWeekForPhase`;
+- production `POST /api/v1/plans/constructor/draft`;
+- save/template/assign flow;
+- DB schema;
+- mobile contracts;
+- localStorage/sessionStorage;
+- telemetry.
+
+Основной `constructorDraft` state остаётся legacy/main draft state.
+Matrix candidate не подставляется в `constructorTemplatePayload` и не даёт кнопки сохранения.
+
+### 22.6 Preview-only policy
+
+D-28/D-21/D-10/D-3 главного старта и competition day остаются `preview_only`.
+UI показывает причину и скрывает read-only primary candidate для этих сценариев.
+
+### 22.7 Manual verification
+
+Для stage 11 требуется browser/manual check affected flow:
+
+1. Internal panel collapsed by default.
+2. Main draft generation still works.
+3. Matrix preview loads.
+4. Rollout decision loads.
+5. Badge/status visible.
+6. Read-only candidate visible only for allowed primary/internal scenarios.
+7. Preview-only/blocked scenarios hide candidate.
+8. Save/template/assign buttons do not save matrix candidate.
+
+### 22.8 Следующий PR
+
+Следующий controlled PR:
+
+- internal “use matrix draft in preview workspace” без сохранения в DB;
+- или feature flag для visibility панели;
+- или сбор QA feedback по allowlisted сценариям;
+- затем limited production primary mode только для far development/post-competition/logistics after feedback.

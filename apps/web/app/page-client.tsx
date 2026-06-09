@@ -23,6 +23,9 @@ import {
   type ConstructorInput,
   type ConstructorMatrixPreviewApiOptions,
   type ConstructorMatrixPreviewResponse,
+  type MatrixConstructorRolloutDecision,
+  type MatrixConstructorRolloutMode,
+  type MatrixConstructorRolloutOptions,
   type ConstructorPhase,
   type CreateCompetitionPayload,
   type CreateCompetitionPlanPayload,
@@ -227,6 +230,26 @@ type ConstructorPreviewDecisionSummary = {
   explanations: string[];
 };
 
+type ConstructorMatrixCandidateSummary = {
+  selectedBlockOverview: {
+    key: string;
+    label: string;
+    count: number;
+    loadLevels: string;
+  }[];
+  loadSummary: {
+    label: string;
+    value: string;
+  }[];
+  riskSummary: {
+    key: string;
+    code: string;
+    severity: string;
+    message: string;
+  }[];
+  explanations: string[];
+};
+
 function constructorPreviewSessionsForDay(
   day: ConstructorDraft["plan"]["weeks"][number]["days"][number],
 ) {
@@ -332,6 +355,91 @@ function buildConstructorPreviewDecisionSummary(
         .filter((item) => item.code === "strategy" || item.code === "phase" || item.code === "risk")
         .slice(0, 5)
         .map((item) => item.message) ?? [],
+  };
+}
+
+function constructorMatrixRolloutBadgeClass(mode?: MatrixConstructorRolloutMode | null) {
+  switch (mode) {
+    case "matrix_allowed_for_primary":
+      return "is-primary-allowed";
+    case "matrix_allowed_for_internal":
+      return "is-internal-only";
+    case "preview_only":
+      return "is-preview-only";
+    case "blocked":
+      return "is-blocked";
+    case "legacy_only":
+    default:
+      return "is-legacy-only";
+  }
+}
+
+function collectConstructorMatrixCandidateSummary(
+  draft?: ConstructorMatrixPreviewResponse["matrixDraft"] | null,
+): ConstructorMatrixCandidateSummary {
+  const matrix = draft?.matrix.draft;
+  const selectedBlocks =
+    matrix?.weeks.flatMap((week) =>
+      week.days.flatMap((day) =>
+        day.sessions.flatMap((session) => session.selectedBlocks),
+      ),
+    ) ?? [];
+  const blockCounts = new Map<
+    string,
+    {
+      label: string;
+      count: number;
+      loadLevels: Set<string>;
+    }
+  >();
+  const loadCounts = new Map<string, number>();
+
+  for (const block of selectedBlocks) {
+    const key = block.blockType;
+    const existing =
+      blockCounts.get(key) ??
+      {
+        label: block.label,
+        count: 0,
+        loadLevels: new Set<string>(),
+      };
+
+    existing.count += 1;
+    existing.loadLevels.add(block.volume.loadLevel);
+    blockCounts.set(key, existing);
+    loadCounts.set(block.volume.loadLevel, (loadCounts.get(block.volume.loadLevel) ?? 0) + 1);
+  }
+
+  const explanationCandidates = [
+    ...(matrix?.explanations ?? []),
+    ...(matrix?.weeks.flatMap((week) => week.explanations) ?? []),
+    ...(matrix?.weeks.flatMap((week) =>
+      week.days.flatMap((day) => day.explanations),
+    ) ?? []),
+  ];
+  const uniqueExplanations = Array.from(new Set(explanationCandidates.map((item) => item.message)));
+
+  return {
+    selectedBlockOverview: Array.from(blockCounts.entries())
+      .map(([key, value]) => ({
+        key,
+        label: value.label,
+        count: value.count,
+        loadLevels: Array.from(value.loadLevels).join(", "),
+      }))
+      .sort((left, right) => right.count - left.count)
+      .slice(0, 8),
+    loadSummary: Array.from(loadCounts.entries())
+      .map(([label, value]) => ({ label, value: String(value) }))
+      .sort((left, right) => left.label.localeCompare(right.label)),
+    riskSummary:
+      draft?.matrix.riskChecks.slice(0, 8).map((risk, index) => ({
+        key: `${risk.code}-${index}`,
+        code: risk.code,
+        severity: risk.severity,
+        message: risk.message,
+      })) ?? [],
+    explanations: uniqueExplanations.slice(0, 8),
   };
 }
 
@@ -1341,6 +1449,32 @@ async function apiRequest<T>(path: string, options?: RequestInit): Promise<T> {
   }
 
   return (await response.json()) as T;
+}
+
+function requestConstructorMatrixPreview(
+  input: ConstructorInput,
+  options: ConstructorMatrixPreviewApiOptions,
+) {
+  return apiRequest<ConstructorMatrixPreviewResponse>(
+    "/plans/constructor/internal/matrix-preview",
+    {
+      method: "POST",
+      body: JSON.stringify({ input, options }),
+    },
+  );
+}
+
+function requestConstructorMatrixRolloutDecision(
+  input: ConstructorInput,
+  options: MatrixConstructorRolloutOptions,
+) {
+  return apiRequest<MatrixConstructorRolloutDecision>(
+    "/plans/constructor/internal/matrix-rollout-decision",
+    {
+      method: "POST",
+      body: JSON.stringify({ input, options }),
+    },
+  );
 }
 
 function copyFor(language: Language, values: Record<Language, string>) {
@@ -9609,8 +9743,11 @@ export function PageClient({
   const [constructorMessage, setConstructorMessage] = useState("");
   const [constructorMatrixPreview, setConstructorMatrixPreview] =
     useState<ConstructorMatrixPreviewResponse | null>(null);
+  const [constructorMatrixRolloutDecision, setConstructorMatrixRolloutDecision] =
+    useState<MatrixConstructorRolloutDecision | null>(null);
   const [constructorMatrixPreviewBusy, setConstructorMatrixPreviewBusy] = useState(false);
   const [constructorMatrixPreviewError, setConstructorMatrixPreviewError] = useState("");
+  const [constructorMatrixRolloutError, setConstructorMatrixRolloutError] = useState("");
   const [constructorMatrixIncludeInfoDifferences, setConstructorMatrixIncludeInfoDifferences] =
     useState(false);
   const [seasonDisplayMode, setSeasonDisplayMode] =
@@ -14386,21 +14523,39 @@ export function PageClient({
 
     setConstructorMatrixPreviewBusy(true);
     setConstructorMatrixPreviewError("");
+    setConstructorMatrixRolloutError("");
+    setConstructorMatrixPreview(null);
+    setConstructorMatrixRolloutDecision(null);
 
     try {
-      const response = await apiRequest<ConstructorMatrixPreviewResponse>(
-        "/plans/constructor/internal/matrix-preview",
-        {
-          method: "POST",
-          body: JSON.stringify({ input, options }),
-        },
-      );
+      const [previewResult, rolloutResult] = await Promise.allSettled([
+        requestConstructorMatrixPreview(input, options),
+        requestConstructorMatrixRolloutDecision(input, {
+          previewOptions: options,
+        }),
+      ]);
 
-      setConstructorMatrixPreview(response);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      if (previewResult.status === "fulfilled") {
+        setConstructorMatrixPreview(previewResult.value);
+      } else {
+        const message =
+          previewResult.reason instanceof Error
+            ? previewResult.reason.message
+            : String(previewResult.reason);
 
-      setConstructorMatrixPreviewError(message);
+        setConstructorMatrixPreviewError(message);
+      }
+
+      if (rolloutResult.status === "fulfilled") {
+        setConstructorMatrixRolloutDecision(rolloutResult.value);
+      } else {
+        const message =
+          rolloutResult.reason instanceof Error
+            ? rolloutResult.reason.message
+            : String(rolloutResult.reason);
+
+        setConstructorMatrixRolloutError(message);
+      }
     } finally {
       setConstructorMatrixPreviewBusy(false);
     }
@@ -15570,8 +15725,13 @@ export function PageClient({
   const constructorMatrixPreviewLegacyMetrics = buildConstructorPreviewDraftMetrics(
     constructorMatrixPreview?.legacyDraft ?? constructorMatrixPreview?.comparisonReport?.legacyDraft ?? null,
   );
+  const constructorMatrixPreviewMatrixDraft =
+    constructorMatrixPreview?.matrixDraft ?? constructorMatrixPreview?.comparisonReport?.matrixDraft ?? null;
   const constructorMatrixPreviewMatrixMetrics = buildConstructorPreviewDraftMetrics(
-    constructorMatrixPreview?.matrixDraft ?? constructorMatrixPreview?.comparisonReport?.matrixDraft ?? null,
+    constructorMatrixPreviewMatrixDraft,
+  );
+  const constructorMatrixCandidateSummary = collectConstructorMatrixCandidateSummary(
+    constructorMatrixPreviewMatrixDraft,
   );
   const constructorMatrixPreviewDecision = constructorMatrixPreview
     ? buildConstructorPreviewDecisionSummary(constructorMatrixPreview)
@@ -15582,6 +15742,74 @@ export function PageClient({
     constructorMatrixPreview?.safetyInvariants?.filter((item) => !item.passed) ?? [];
   const constructorMatrixPreviewFailedLegacyGuard =
     constructorMatrixPreview?.legacyDefaultGuard?.filter((item) => !item.passed) ?? [];
+  const constructorMatrixRolloutBadgeLabel = constructorMatrixRolloutDecision
+    ? ({
+        matrix_allowed_for_primary: copyFor(language, {
+          en: "Matrix primary allowed",
+          ru: "Matrix primary allowed",
+          bg: "Matrix primary allowed",
+        }),
+        matrix_allowed_for_internal: copyFor(language, {
+          en: "Matrix internal only",
+          ru: "Matrix internal only",
+          bg: "Matrix internal only",
+        }),
+        preview_only: copyFor(language, {
+          en: "Preview only",
+          ru: "Preview only",
+          bg: "Preview only",
+        }),
+        legacy_only: copyFor(language, {
+          en: "Legacy default",
+          ru: "Legacy default",
+          bg: "Legacy default",
+        }),
+        blocked: copyFor(language, {
+          en: "Blocked",
+          ru: "Blocked",
+          bg: "Blocked",
+        }),
+      } satisfies Record<MatrixConstructorRolloutMode, string>)[constructorMatrixRolloutDecision.mode]
+    : "";
+  const constructorMatrixReadOnlyCandidateVisible =
+    Boolean(constructorMatrixRolloutDecision) &&
+    (constructorMatrixRolloutDecision?.mode === "matrix_allowed_for_primary" ||
+      constructorMatrixRolloutDecision?.mode === "matrix_allowed_for_internal") &&
+    Boolean(constructorMatrixPreviewMatrixDraft) &&
+    Boolean(constructorMatrixPreview?.safeToPreview) &&
+    Boolean(constructorMatrixPreview?.defaultPathUnchanged);
+  const constructorMatrixRolloutSupportText =
+    constructorMatrixRolloutDecision?.mode === "preview_only"
+      ? copyFor(language, {
+          en: "Matrix remains preview-only for this scenario. Close main-start windows are not primary yet.",
+          ru: "Matrix остаётся только preview для этого сценария. Главные старты D-28/D-21/D-10/D-3 пока не разрешены как primary.",
+          bg: "Matrix остава само preview за този сценарий. Близките основни стартове още не са primary.",
+        })
+      : constructorMatrixRolloutDecision?.mode === "blocked"
+        ? copyFor(language, {
+            en: "Matrix is blocked here. Use the legacy default.",
+            ru: "Matrix заблокирован здесь. Используйте legacy default.",
+            bg: "Matrix е блокиран тук. Използвайте legacy default.",
+          })
+        : constructorMatrixRolloutDecision?.mode === "legacy_only"
+          ? copyFor(language, {
+              en: "Matrix is not enabled as primary for this scenario.",
+              ru: "Matrix не разрешён для primary в этом сценарии.",
+              bg: "Matrix не е разрешен като primary за този сценарий.",
+            })
+          : constructorMatrixRolloutDecision?.mode === "matrix_allowed_for_internal"
+            ? copyFor(language, {
+                en: "Matrix can be inspected as an internal candidate only.",
+                ru: "Matrix можно смотреть только как внутренний кандидат.",
+                bg: "Matrix може да се гледа само като вътрешен кандидат.",
+              })
+            : constructorMatrixRolloutDecision?.mode === "matrix_allowed_for_primary"
+              ? copyFor(language, {
+                  en: "Matrix primary is allowed by the controlled gate, but this panel is still read-only.",
+                  ru: "Controlled gate разрешает matrix primary, но эта панель всё равно read-only.",
+                  bg: "Controlled gate разрешава matrix primary, но този панел е read-only.",
+                })
+              : "";
   const topOverviewItems = [
     {
       label: t("athlete"),
@@ -22417,6 +22645,19 @@ export function PageClient({
                     </div>
                   ) : null}
 
+                  {constructorMatrixRolloutError ? (
+                    <div className="constructor-matrix-preview-error constructor-matrix-rollout-error">
+                      <strong>
+                        {copyFor(language, {
+                          en: "Rollout decision unavailable",
+                          ru: "Rollout decision недоступен",
+                          bg: "Rollout decision не е наличен",
+                        })}
+                      </strong>
+                      <p>{constructorMatrixRolloutError}</p>
+                    </div>
+                  ) : null}
+
                   {constructorMatrixPreview ? (
                     <div className="constructor-matrix-preview-body">
                       <div className="constructor-matrix-preview-grid">
@@ -22534,6 +22775,105 @@ export function PageClient({
                         </article>
                       </div>
 
+                      <article className="constructor-matrix-preview-card constructor-matrix-rollout-card">
+                        <div className="summary-topline">
+                          <strong>
+                            {copyFor(language, {
+                              en: "Rollout decision",
+                              ru: "Rollout decision",
+                              bg: "Rollout decision",
+                            })}
+                          </strong>
+                          {constructorMatrixRolloutDecision ? (
+                            <span
+                              className={`constructor-matrix-rollout-badge ${constructorMatrixRolloutBadgeClass(
+                                constructorMatrixRolloutDecision.mode,
+                              )}`}
+                            >
+                              {constructorMatrixRolloutBadgeLabel}
+                            </span>
+                          ) : (
+                            <span>
+                              {copyFor(language, {
+                                en: "not loaded",
+                                ru: "не загружено",
+                                bg: "не е заредено",
+                              })}
+                            </span>
+                          )}
+                        </div>
+                        {constructorMatrixRolloutDecision ? (
+                          <>
+                            <div className="constructor-matrix-count-grid constructor-matrix-rollout-grid">
+                              {[
+                                ["mode", constructorMatrixRolloutDecision.mode],
+                                ["scenario", constructorMatrixRolloutDecision.scenario],
+                                ["action", constructorMatrixRolloutDecision.recommendedAction],
+                                [
+                                  "primary",
+                                  constructorMatrixRolloutDecision.matrixPrimaryAllowed ? "allowed" : "not allowed",
+                                ],
+                                ["allowlisted", constructorMatrixRolloutDecision.allowlisted ? "yes" : "no"],
+                                ["safe", constructorMatrixRolloutDecision.safeToPreview ? "yes" : "no"],
+                                ["blockers", constructorMatrixRolloutDecision.blockers.length],
+                              ].map(([label, value]) => (
+                                <span key={label}>
+                                  <small>{label}</small>
+                                  <strong>{value}</strong>
+                                </span>
+                              ))}
+                            </div>
+                            <p>{constructorMatrixRolloutDecision.explanation.headline}</p>
+                            {constructorMatrixRolloutSupportText ? (
+                              <p className="constructor-matrix-rollout-note">
+                                {constructorMatrixRolloutSupportText}
+                              </p>
+                            ) : null}
+                            <ul className="constructor-matrix-preview-list">
+                              {constructorMatrixRolloutDecision.explanation.reasons
+                                .slice(0, 5)
+                                .map((reason) => (
+                                  <li key={reason}>
+                                    <strong>reason</strong>
+                                    <span>{reason}</span>
+                                  </li>
+                                ))}
+                              <li>
+                                <strong>next</strong>
+                                <span>{constructorMatrixRolloutDecision.explanation.nextStep}</span>
+                              </li>
+                            </ul>
+                            {constructorMatrixRolloutDecision.blockers.length ? (
+                              <ul className="constructor-matrix-difference-list">
+                                {constructorMatrixRolloutDecision.blockers.map((blocker, index) => (
+                                  <li
+                                    className={`constructor-matrix-difference constructor-matrix-severity-${blocker.severity}`}
+                                    key={`${blocker.code}-${index}`}
+                                  >
+                                    <div>
+                                      <strong>{blocker.code}</strong>
+                                      <span>{blocker.severity}</span>
+                                    </div>
+                                    <p>{blocker.message}</p>
+                                    {blocker.details?.length ? (
+                                      <small>{blocker.details.slice(0, 3).join(" · ")}</small>
+                                    ) : null}
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : null}
+                          </>
+                        ) : (
+                          <p>
+                            {copyFor(language, {
+                              en: "Rollout gate will appear after the internal comparison request finishes.",
+                              ru: "Rollout gate появится после выполнения internal comparison request.",
+                              bg: "Rollout gate ще се появи след internal comparison request.",
+                            })}
+                          </p>
+                        )}
+                      </article>
+
                       <div className="constructor-matrix-side-by-side">
                         {([
                           ["legacy", constructorMatrixPreviewLegacyMetrics],
@@ -22574,6 +22914,152 @@ export function PageClient({
                           </article>
                         ))}
                       </div>
+
+                      {constructorMatrixReadOnlyCandidateVisible ? (
+                        <article className="constructor-matrix-preview-card constructor-matrix-candidate-card">
+                          <div className="summary-topline">
+                            <strong>
+                              {copyFor(language, {
+                                en: "Matrix primary candidate - read-only",
+                                ru: "Matrix primary candidate - read-only",
+                                bg: "Matrix primary candidate - read-only",
+                              })}
+                            </strong>
+                            <span className="constructor-matrix-readonly-badge">read-only / internal</span>
+                          </div>
+                          <p className="constructor-matrix-rollout-note">
+                            {copyFor(language, {
+                              en: "Read-only internal candidate. It is not saved and does not replace the generated legacy draft.",
+                              ru: "Внутренний read-only кандидат. Не сохраняется и не заменяет основной черновик.",
+                              bg: "Вътрешен read-only кандидат. Не се записва и не заменя основната чернова.",
+                            })}
+                          </p>
+                          <div className="constructor-matrix-count-grid">
+                            {[
+                              ["weeks", constructorMatrixPreviewMatrixMetrics.weekCount],
+                              ["days", constructorMatrixPreviewMatrixMetrics.dayCount],
+                              ["sessions", constructorMatrixPreviewMatrixMetrics.sessionCount],
+                              ["blocks", constructorMatrixPreviewMatrixMetrics.blockCount],
+                            ].map(([label, value]) => (
+                              <span key={label}>
+                                <small>{label}</small>
+                                <strong>{value}</strong>
+                              </span>
+                            ))}
+                          </div>
+                          <div className="constructor-matrix-candidate-grid">
+                            <section>
+                              <strong>
+                                {copyFor(language, {
+                                  en: "Selected blocks",
+                                  ru: "Выбранные блоки",
+                                  bg: "Избрани блокове",
+                                })}
+                              </strong>
+                              <ul className="constructor-matrix-preview-list">
+                                {constructorMatrixCandidateSummary.selectedBlockOverview.length ? (
+                                  constructorMatrixCandidateSummary.selectedBlockOverview.map((block) => (
+                                    <li key={block.key}>
+                                      <strong>{block.key}</strong>
+                                      <span>
+                                        {block.label} · {block.count}x · {block.loadLevels}
+                                      </span>
+                                    </li>
+                                  ))
+                                ) : (
+                                  <li>
+                                    <strong>matrix</strong>
+                                    <span>
+                                      {copyFor(language, {
+                                        en: "No selected block overview was returned.",
+                                        ru: "Selected block overview не вернулся.",
+                                        bg: "Няма selected block overview.",
+                                      })}
+                                    </span>
+                                  </li>
+                                )}
+                              </ul>
+                            </section>
+                            <section>
+                              <strong>
+                                {copyFor(language, {
+                                  en: "Load / risks",
+                                  ru: "Нагрузка / риски",
+                                  bg: "Натоварване / рискове",
+                                })}
+                              </strong>
+                              <div className="constructor-matrix-count-grid constructor-matrix-load-grid">
+                                {constructorMatrixCandidateSummary.loadSummary.length ? (
+                                  constructorMatrixCandidateSummary.loadSummary.map((item) => (
+                                    <span key={item.label}>
+                                      <small>{item.label}</small>
+                                      <strong>{item.value}</strong>
+                                    </span>
+                                  ))
+                                ) : (
+                                  <span>
+                                    <small>load</small>
+                                    <strong>-</strong>
+                                  </span>
+                                )}
+                              </div>
+                              <ul className="constructor-matrix-preview-list">
+                                {constructorMatrixCandidateSummary.riskSummary.length ? (
+                                  constructorMatrixCandidateSummary.riskSummary.map((risk) => (
+                                    <li key={risk.key}>
+                                      <strong>
+                                        {risk.code} · {risk.severity}
+                                      </strong>
+                                      <span>{risk.message}</span>
+                                    </li>
+                                  ))
+                                ) : (
+                                  <li>
+                                    <strong>risk</strong>
+                                    <span>
+                                      {copyFor(language, {
+                                        en: "No matrix risk summary was returned.",
+                                        ru: "Matrix risk summary не вернулся.",
+                                        bg: "Няма matrix risk summary.",
+                                      })}
+                                    </span>
+                                  </li>
+                                )}
+                              </ul>
+                            </section>
+                          </div>
+                          {constructorMatrixCandidateSummary.explanations.length ? (
+                            <ul className="constructor-matrix-preview-list">
+                              {constructorMatrixCandidateSummary.explanations.map((message) => (
+                                <li key={message}>
+                                  <strong>why</strong>
+                                  <span>{message}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : null}
+                        </article>
+                      ) : constructorMatrixRolloutDecision ? (
+                        <article className="constructor-matrix-preview-card constructor-matrix-candidate-hidden">
+                          <div className="summary-topline">
+                            <strong>
+                              {copyFor(language, {
+                                en: "Matrix primary candidate",
+                                ru: "Matrix primary candidate",
+                                bg: "Matrix primary candidate",
+                              })}
+                            </strong>
+                            <span>{constructorMatrixRolloutBadgeLabel}</span>
+                          </div>
+                          <p>
+                            {copyFor(language, {
+                              en: "Candidate is hidden because the rollout gate did not allow matrix primary/internal usage for this scenario.",
+                              ru: "Кандидат скрыт: rollout gate не разрешил matrix primary/internal usage для этого сценария.",
+                              bg: "Кандидатът е скрит: rollout gate не разрешава matrix primary/internal usage за този сценарий.",
+                            })}
+                          </p>
+                        </article>
+                      ) : null}
 
                       <article className="constructor-matrix-preview-card">
                         <div className="summary-topline">

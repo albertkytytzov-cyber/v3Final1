@@ -169,6 +169,21 @@ POST /api/v1/plans/constructor/internal/matrix-rollout-decision
 
 Он возвращает только decision, не full drafts, не пишет в DB и не меняет production draft route.
 
+## Internal UI rollout status
+
+Stage 11 не меняет fixture pack, но подключает rollout decision к internal UI panel.
+
+UI использует те же rollout modes, которые проверяются в `check-perform-constructor-core.mjs`:
+
+- primary allowed;
+- internal only;
+- preview only;
+- legacy default;
+- blocked.
+
+Read-only matrix candidate показывается только для primary/internal-allowlisted scenarios.
+D-28/D-21/D-10/D-3 и competition day остаются preview-only и candidate в UI скрывают.
+
 Internal web preview panel использует тот же response shape через
 `POST /api/v1/plans/constructor/internal/matrix-preview`. Поэтому fixture runner остаётся главным
 автоматическим safety-слоем для данных, которые UI показывает как summary/safety/differences.
