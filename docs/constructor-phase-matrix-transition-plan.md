@@ -3384,3 +3384,39 @@ assign it through the constructor draft path.
 Stage 25 does not add a persistence path. It only verifies that the existing
 `matrix_internal` and `matrix_primary_pilot` sources stay blocked from
 save/template flow while legacy behavior remains unchanged.
+
+## 37. Stage 26: Controlled exposure/default guard
+
+Stage 26 extends `npm run check:constructor-matrix-ui-gates` with controlled
+exposure invariants for the limited matrix pilot.
+
+The invariant is:
+
+- internal matrix UI is off by default;
+- `NEXT_PUBLIC_MATRIX_CONSTRUCTOR_LIMITED_PRIMARY_PILOT` is ignored unless
+  `NEXT_PUBLIC_INTERNAL_MATRIX_CONSTRUCTOR_UI` is also explicitly enabled;
+- matrix preview, workspace, internal activation and primary pilot activation
+  stay behind explicit flags;
+- matrix UI state is not persisted in `localStorage` or `sessionStorage`;
+- production `/api/v1/plans/constructor/draft` remains legacy-backed;
+- internal matrix endpoints remain coach/admin + athlete-access guarded.
+
+This is checked by:
+
+```bash
+npm run check:constructor-matrix-ui-gates
+```
+
+### 37.1 Why this matters
+
+Stage 25 protects the save/template path after a matrix candidate is active.
+Stage 26 protects the exposure boundary before activation: the pilot must stay
+invisible by default and must not become a production route, stored preference,
+or default draft source through future refactors.
+
+### 37.2 Guardrails
+
+Stage 26 does not change matrix draft logic, rollout policy, API contracts,
+DB schema, mobile contracts, save/template/assign behavior, or production
+constructor generation. It only adds automated checks for the existing
+controlled-pilot boundaries.

@@ -470,6 +470,22 @@ The check is intentionally small: it protects the constructor draft source
 contract without adding browser snapshots or enabling any persistence path for
 matrix candidates.
 
+## Controlled exposure/default guard
+
+Stage 26 extends the same check with exposure invariants:
+
+- internal matrix UI defaults to hidden;
+- limited primary pilot requires both explicit env flags;
+- matrix preview/workspace/activation remains flag-gated;
+- matrix state is not stored in browser storage;
+- production constructor draft route remains legacy-backed;
+- internal matrix endpoints remain guarded.
+
+This keeps the fixture pack focused on pilot safety instead of full visual
+snapshots: D-90 can still pass the controlled primary gate, while D-3,
+travel and weigh-in stay preview-only/internal-only according to their rollout
+decision.
+
 ## Что не проверяется
 
 Fixtures не делают full snapshot:

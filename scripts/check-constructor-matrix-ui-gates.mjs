@@ -4,6 +4,7 @@ import {
   decideMatrixConstructorRollout,
   evaluateMatrixPilotReadiness,
 } from "@training-platform/shared";
+import { readFile } from "node:fs/promises";
 import { constructorPreviewFixtures } from "./fixtures/constructor/preview-regression-fixtures.mjs";
 
 function assert(condition, message) {
@@ -16,6 +17,260 @@ const gateModule = await import("../apps/web/app/lib/constructor-matrix-primary-
 const { canUseMatrixPrimaryPilotWithServerEvidence } = gateModule.default ?? gateModule;
 const matrixUiModule = await import("../apps/web/app/lib/constructor-matrix-ui.ts");
 const { isConstructorDraftSaveAllowed } = matrixUiModule.default ?? matrixUiModule;
+const featureFlagsModule = await import("../apps/web/app/lib/feature-flags.ts");
+const { getConstructorMatrixUiFlags } = featureFlagsModule.default ?? featureFlagsModule;
+
+async function readProjectFile(path) {
+  return readFile(new URL(`../${path}`, import.meta.url), "utf8");
+}
+
+function extractRouteBlock(source, routePath) {
+  const marker = `app.post("${routePath}"`;
+  const start = source.indexOf(marker);
+  assert(start >= 0, `Expected route ${routePath}`);
+  const nextRoute = source.indexOf("\n  app.", start + marker.length);
+
+  return source.slice(start, nextRoute >= 0 ? nextRoute : source.length);
+}
+
+function extractFunctionBlock(source, name) {
+  const marker = `function ${name}`;
+  const start = source.indexOf(marker);
+  assert(start >= 0, `Expected function ${name}`);
+  const nextFunction = source.indexOf("\n  function ", start + marker.length);
+
+  return source.slice(start, nextFunction >= 0 ? nextFunction : source.length);
+}
+
+function withFeatureFlagEnv(nextEnv, callback) {
+  const internalKey = "NEXT_PUBLIC_INTERNAL_MATRIX_CONSTRUCTOR_UI";
+  const limitedKey = "NEXT_PUBLIC_MATRIX_CONSTRUCTOR_LIMITED_PRIMARY_PILOT";
+  const previous = {
+    internal: process.env[internalKey],
+    limited: process.env[limitedKey],
+  };
+
+  try {
+    if (Object.prototype.hasOwnProperty.call(nextEnv, "internal")) {
+      if (nextEnv.internal === undefined) {
+        delete process.env[internalKey];
+      } else {
+        process.env[internalKey] = nextEnv.internal;
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(nextEnv, "limited")) {
+      if (nextEnv.limited === undefined) {
+        delete process.env[limitedKey];
+      } else {
+        process.env[limitedKey] = nextEnv.limited;
+      }
+    }
+
+    return callback();
+  } finally {
+    if (previous.internal === undefined) {
+      delete process.env[internalKey];
+    } else {
+      process.env[internalKey] = previous.internal;
+    }
+
+    if (previous.limited === undefined) {
+      delete process.env[limitedKey];
+    } else {
+      process.env[limitedKey] = previous.limited;
+    }
+  }
+}
+
+function checkFeatureFlagDefaults() {
+  const defaults = withFeatureFlagEnv({ internal: undefined, limited: undefined }, () =>
+    getConstructorMatrixUiFlags(),
+  );
+  assert(
+    defaults.internalMatrixConstructorUi === false,
+    "Internal matrix UI flag must be off by default",
+  );
+  assert(
+    defaults.matrixConstructorLimitedPrimaryPilot === false,
+    "Limited matrix primary pilot flag must be off by default",
+  );
+
+  const limitedWithoutInternal = withFeatureFlagEnv(
+    { internal: undefined, limited: "true" },
+    () => getConstructorMatrixUiFlags(),
+  );
+  assert(
+    limitedWithoutInternal.internalMatrixConstructorUi === false,
+    "Limited pilot env must not enable internal matrix UI",
+  );
+  assert(
+    limitedWithoutInternal.matrixConstructorLimitedPrimaryPilot === false,
+    "Limited pilot must be ignored unless internal matrix UI is explicitly enabled",
+  );
+
+  const internalOnly = withFeatureFlagEnv({ internal: "true", limited: undefined }, () =>
+    getConstructorMatrixUiFlags(),
+  );
+  assert(internalOnly.internalMatrixConstructorUi, "Explicit internal flag must enable UI");
+  assert(
+    internalOnly.matrixConstructorLimitedPrimaryPilot === false,
+    "Internal UI flag alone must not enable matrix primary pilot",
+  );
+
+  const bothEnabled = withFeatureFlagEnv({ internal: "true", limited: "true" }, () =>
+    getConstructorMatrixUiFlags(),
+  );
+  assert(bothEnabled.internalMatrixConstructorUi, "Explicit internal flag must stay enabled");
+  assert(
+    bothEnabled.matrixConstructorLimitedPrimaryPilot,
+    "Limited matrix primary pilot must enable only when both flags are explicit",
+  );
+
+  return {
+    defaultInternal: defaults.internalMatrixConstructorUi,
+    defaultLimitedPilot: defaults.matrixConstructorLimitedPrimaryPilot,
+    limitedRequiresInternal:
+      !limitedWithoutInternal.matrixConstructorLimitedPrimaryPilot &&
+      !internalOnly.matrixConstructorLimitedPrimaryPilot &&
+      bothEnabled.matrixConstructorLimitedPrimaryPilot,
+  };
+}
+
+async function checkControlledExposureSourceGuards() {
+  const featureFlagSource = await readProjectFile("apps/web/app/lib/feature-flags.ts");
+  assert(
+    featureFlagSource.includes("NEXT_PUBLIC_INTERNAL_MATRIX_CONSTRUCTOR_UI"),
+    "Internal matrix UI must be controlled by NEXT_PUBLIC_INTERNAL_MATRIX_CONSTRUCTOR_UI",
+  );
+  assert(
+    featureFlagSource.includes("NEXT_PUBLIC_MATRIX_CONSTRUCTOR_LIMITED_PRIMARY_PILOT"),
+    "Limited primary pilot must be controlled by NEXT_PUBLIC_MATRIX_CONSTRUCTOR_LIMITED_PRIMARY_PILOT",
+  );
+  assert(
+    featureFlagSource.includes("matrixConstructorLimitedPrimaryPilot:") &&
+      featureFlagSource.includes("internalMatrixConstructorUi &&"),
+    "Limited primary pilot must require the internal matrix UI flag",
+  );
+
+  const pageClientSource = await readProjectFile("apps/web/app/page-client.tsx");
+  const buildPreviewBlock = extractFunctionBlock(pageClientSource, "handleBuildConstructorMatrixPreview");
+  const openWorkspaceBlock = extractFunctionBlock(pageClientSource, "handleOpenConstructorMatrixWorkspace");
+  const activateInternalBlock = extractFunctionBlock(
+    pageClientSource,
+    "handleActivateConstructorMatrixInternalDraft",
+  );
+  const activatePrimaryBlock = extractFunctionBlock(
+    pageClientSource,
+    "handleActivateConstructorMatrixPrimaryPilotDraft",
+  );
+
+  assert(
+    buildPreviewBlock.includes("if (!SHOW_INTERNAL_MATRIX_CONSTRUCTOR_UI)"),
+    "Matrix preview build must return early when internal UI flag is off",
+  );
+  assert(
+    buildPreviewBlock.includes("ENABLE_MATRIX_CONSTRUCTOR_LIMITED_PRIMARY_PILOT") &&
+      buildPreviewBlock.includes("requestMatrixPrimaryPilotServerSaveDryRun"),
+    "Server save dry-run request must remain scoped behind limited primary pilot flag",
+  );
+  assert(
+    openWorkspaceBlock.includes("!SHOW_INTERNAL_MATRIX_CONSTRUCTOR_UI"),
+    "Matrix workspace open must be gated by internal UI flag",
+  );
+  assert(
+    activateInternalBlock.includes("!SHOW_INTERNAL_MATRIX_CONSTRUCTOR_UI"),
+    "Matrix internal activation must be gated by internal UI flag",
+  );
+  assert(
+    activatePrimaryBlock.includes("!SHOW_INTERNAL_MATRIX_CONSTRUCTOR_UI") &&
+      activatePrimaryBlock.includes("!ENABLE_MATRIX_CONSTRUCTOR_LIMITED_PRIMARY_PILOT"),
+    "Matrix primary pilot activation must require both internal and limited pilot flags",
+  );
+  assert(
+    /SHOW_INTERNAL_MATRIX_CONSTRUCTOR_UI\s*\?\s*\(\s*<MatrixConstructorPreviewPanel/.test(
+      pageClientSource,
+    ),
+    "Matrix preview panel must render only behind the internal UI flag",
+  );
+  assert(
+    !/localStorage\.(?:getItem|setItem|removeItem)\([^)]*(?:matrix|Matrix|constructorMatrix|activeConstructorDraftSource)/.test(
+      pageClientSource,
+    ),
+    "Matrix UI state must not be persisted in localStorage",
+  );
+  assert(
+    !/sessionStorage\.(?:getItem|setItem|removeItem)\([^)]*(?:matrix|Matrix|constructorMatrix|activeConstructorDraftSource)/.test(
+      pageClientSource,
+    ),
+    "Matrix UI state must not be persisted in sessionStorage",
+  );
+
+  const matrixSourceFiles = [
+    "apps/web/app/components/constructor/MatrixConstructorPreviewPanel.tsx",
+    "apps/web/app/components/constructor/MatrixDraftReadOnlyView.tsx",
+    "apps/web/app/components/constructor/MatrixInternalDraftBanner.tsx",
+    "apps/web/app/components/constructor/MatrixPilotReadinessCard.tsx",
+    "apps/web/app/components/constructor/MatrixPreviewWorkspace.tsx",
+    "apps/web/app/components/constructor/MatrixPrimaryPilotSaveDryRunCard.tsx",
+    "apps/web/app/components/constructor/MatrixReviewExportActions.tsx",
+    "apps/web/app/components/constructor/MatrixRolloutDecisionCard.tsx",
+    "apps/web/app/lib/constructor-matrix-primary-pilot-server-gate.ts",
+    "apps/web/app/lib/constructor-matrix-primary-pilot.ts",
+    "apps/web/app/lib/constructor-matrix-review-export.ts",
+    "apps/web/app/lib/constructor-matrix-save-dry-run.ts",
+    "apps/web/app/lib/constructor-matrix-ui.ts",
+    "apps/web/app/lib/feature-flags.ts",
+  ];
+
+  for (const path of matrixSourceFiles) {
+    const source = await readProjectFile(path);
+    assert(!/localStorage|sessionStorage/i.test(source), `${path} must not persist matrix UI state`);
+    assert(!/telemetry/i.test(source), `${path} must not add matrix telemetry`);
+  }
+
+  const planningRoutesSource = await readProjectFile("apps/api/src/api/planning/planning.routes.ts");
+  const productionDraftRoute = extractRouteBlock(
+    planningRoutesSource,
+    "/api/v1/plans/constructor/draft",
+  );
+  assert(
+    productionDraftRoute.includes("buildPerformConstructorDraft(body)"),
+    "Production constructor draft route must keep using the legacy builder",
+  );
+  assert(
+    !productionDraftRoute.includes("buildMatrixDrivenConstructorDraft") &&
+      !productionDraftRoute.includes("decideMatrixConstructorRollout") &&
+      !productionDraftRoute.includes("matrix"),
+    "Production constructor draft route must not become matrix-backed",
+  );
+
+  const internalRoutes = [
+    "/api/v1/plans/constructor/internal/matrix-preview",
+    "/api/v1/plans/constructor/internal/matrix-rollout-decision",
+    "/api/v1/plans/constructor/internal/matrix-primary-pilot-save-dry-run",
+  ];
+  for (const route of internalRoutes) {
+    const routeBlock = extractRouteBlock(planningRoutesSource, route);
+    assert(
+      routeBlock.includes('user.role !== "coach" && user.role !== "admin"'),
+      `${route} must remain coach/admin only`,
+    );
+    assert(routeBlock.includes("assertAthleteAccess"), `${route} must assert athlete access`);
+    assert(
+      routeBlock.includes("no DB writes") || route.includes("save-dry-run"),
+      `${route} must document internal/no-write behavior`,
+    );
+  }
+
+  return {
+    uiGated: true,
+    noStoragePersistence: true,
+    productionDraftRouteLegacy: true,
+    internalEndpointsGuarded: true,
+    limitedPilotServerDryRunFlagScoped: true,
+  };
+}
 
 const previewOptions = {
   includeDrafts: true,
@@ -170,6 +425,9 @@ assert(
   "matrix_primary_pilot draft must remain read-only and blocked from save/template flow",
 );
 
+const featureFlags = checkFeatureFlagDefaults();
+const controlledExposure = await checkControlledExposureSourceGuards();
+
 console.log(
   JSON.stringify(
     {
@@ -188,6 +446,8 @@ console.log(
         reason: mismatchGate.reason,
       },
       saveAllowed,
+      featureFlags,
+      controlledExposure,
     },
     null,
     2,

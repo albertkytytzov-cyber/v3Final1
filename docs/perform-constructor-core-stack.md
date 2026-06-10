@@ -1585,3 +1585,21 @@ constructor draft source persistence rule:
 This protects the controlled pilot from accidentally turning a review-only
 matrix candidate into a template/save path while preserving the legacy save
 flow.
+
+### 15.18 Controlled exposure/default guard
+
+Stage 26 extends `npm run check:constructor-matrix-ui-gates` to verify the
+limited matrix pilot remains controlled by explicit flags and cannot become
+visible or persistent by accident:
+
+- internal matrix UI is off by default;
+- the limited primary pilot flag is ignored unless the internal UI flag is also
+  explicitly enabled;
+- matrix preview/workspace/activation UI remains gated;
+- matrix UI state is not stored in `localStorage` or `sessionStorage`;
+- production `/api/v1/plans/constructor/draft` remains legacy-backed;
+- internal matrix API endpoints remain coach/admin + athlete-access guarded.
+
+This is a regression guard only. It does not change rollout policy, matrix draft
+logic, save/template/assign behavior, DB schema, API contracts, mobile
+contracts, or the production constructor route.
