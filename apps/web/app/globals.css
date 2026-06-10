@@ -6348,6 +6348,57 @@ td {
   justify-self: start;
 }
 
+.constructor-matrix-review-export {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  border: 1px dashed rgba(20, 184, 166, 0.32);
+  border-radius: 14px;
+  background: rgba(240, 253, 250, 0.54);
+  padding: 12px;
+}
+
+.constructor-matrix-review-export > div:first-child {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.constructor-matrix-review-export strong {
+  color: var(--ink);
+  font-size: 0.86rem;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.constructor-matrix-review-export span,
+.constructor-matrix-review-export-status {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 850;
+  line-height: 1.35;
+}
+
+.constructor-matrix-review-export-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.constructor-matrix-review-export-status {
+  margin: 0;
+}
+
+.constructor-matrix-review-export-status.is-success {
+  color: #0f766e;
+}
+
+.constructor-matrix-review-export-status.is-error {
+  color: #991b1b;
+}
+
 .constructor-active-draft-source-row {
   display: flex;
   align-items: center;

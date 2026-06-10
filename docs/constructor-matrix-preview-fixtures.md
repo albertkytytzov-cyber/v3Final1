@@ -277,6 +277,23 @@ Manual UI verification must cover:
 - D-3 preview-only remains disabled;
 - travel/weigh-in internal-only remains internal/read-only.
 
+## Internal matrix review export
+
+Stage 16 adds UI-only copy/export actions behind the same flag:
+
+- `Copy review summary`;
+- `Copy review JSON`.
+
+The fixture runner remains unchanged because export is a browser-only review convenience built from already-returned preview/rollout data. It does not call API, save matrix draft, assign it to an athlete, write DB/storage/telemetry, or change rollout policy.
+
+Manual verification must cover:
+
+- flag off: export UI is hidden with the matrix panel;
+- flag on D-90: exported payload includes allowed primary rollout summary;
+- flag on D-3: exported payload includes `preview_only`/blockers;
+- travel/weigh-in: exported payload includes internal-only context;
+- exported JSON/markdown does not include athlete name, email, phone, user id, athlete id, personal notes, or DB identifiers.
+
 ## Что не проверяется
 
 Fixtures не делают full snapshot:

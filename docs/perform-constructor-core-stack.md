@@ -1289,3 +1289,32 @@ When the flag is off:
 When the flag is on, Stage 14 behavior is unchanged.
 
 This flag is web-only UI visibility. It does not change shared constructor core, rollout policy, API contracts, DB schema, mobile contracts, storage, or telemetry.
+
+### 15.8 Internal matrix constructor review export
+
+Stage 16 adds an internal-only review export layer for matrix preview feedback.
+
+Helper:
+
+- `apps/web/app/lib/constructor-matrix-review-export.ts`
+
+UI:
+
+- `Copy review summary`;
+- `Copy review JSON`;
+- local success/error state inside the internal matrix panel/workspace.
+
+The export includes only anonymized review data:
+
+- rollout mode, scenario, allowlisted state, blockers, recommended action;
+- safety/risk summary;
+- legacy/matrix week/day/session/block counts;
+- matrix explanation;
+- matrix vs legacy difference summary;
+- generatedAt timestamp.
+
+It intentionally excludes athlete name, email, phone, user id, athlete id, personal notes, DB identifiers, raw constructor input, and raw draft payload.
+
+Stage 16 is still controlled by `NEXT_PUBLIC_INTERNAL_MATRIX_CONSTRUCTOR_UI`. With the flag off, the export UI is not rendered. With the flag on, Stage 14/15 preview, rollout, workspace, activation, and return-to-legacy behavior are unchanged.
+
+No DB, API contract, rollout policy, production draft route, mobile, localStorage/sessionStorage, telemetry, or matrix default behavior changes are introduced.

@@ -2,6 +2,7 @@
 
 import type {
   ConstructorDraft,
+  ConstructorMatrixPreviewResponse,
   MatrixConstructorRolloutDecision,
 } from "@training-platform/shared";
 import {
@@ -16,6 +17,7 @@ import {
 } from "../../lib/constructor-matrix-ui";
 import type { Language } from "../../lib/i18n";
 import { MatrixDraftReadOnlyView } from "./MatrixDraftReadOnlyView";
+import { MatrixReviewExportActions } from "./MatrixReviewExportActions";
 
 type MatrixPreviewWorkspaceProps = {
   activeDraftSource: ActiveConstructorDraftSource;
@@ -26,6 +28,7 @@ type MatrixPreviewWorkspaceProps = {
   onCloseWorkspace: () => void;
   onReturnToLegacyDraft: () => void;
   phaseLabel: (phase: ConstructorDraft["plan"]["weeks"][number]["phase"]) => string;
+  preview: ConstructorMatrixPreviewResponse | null;
   rolloutDecision: MatrixConstructorRolloutDecision | null;
   workspace: ConstructorMatrixWorkspaceState;
 };
@@ -39,6 +42,7 @@ export function MatrixPreviewWorkspace({
   onCloseWorkspace,
   onReturnToLegacyDraft,
   phaseLabel,
+  preview,
   rolloutDecision,
   workspace,
 }: MatrixPreviewWorkspaceProps) {
@@ -101,6 +105,14 @@ export function MatrixPreviewWorkspace({
           {badgeLabel}
         </span>
       </div>
+
+      <MatrixReviewExportActions
+        contextLabel="workspace"
+        language={language}
+        preview={preview}
+        rolloutDecision={rolloutDecision}
+        workspaceDraft={draft}
+      />
 
       <div className="constructor-matrix-activation-panel">
         <div>

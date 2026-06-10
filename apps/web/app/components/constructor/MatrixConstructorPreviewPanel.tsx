@@ -19,6 +19,7 @@ import {
 } from "../../lib/constructor-matrix-ui";
 import type { Language } from "../../lib/i18n";
 import { MatrixPreviewWorkspace } from "./MatrixPreviewWorkspace";
+import { MatrixReviewExportActions } from "./MatrixReviewExportActions";
 import { MatrixRolloutDecisionCard } from "./MatrixRolloutDecisionCard";
 
 type MatrixConstructorPreviewPanelProps = {
@@ -272,6 +273,13 @@ export function MatrixConstructorPreviewPanel({
               onOpenWorkspace={onOpenWorkspace}
               workspaceCanOpen={workspaceCanOpen}
               workspaceUnavailableReason={workspaceUnavailableReason}
+            />
+
+            <MatrixReviewExportActions
+              contextLabel="preview / rollout"
+              language={language}
+              preview={preview}
+              rolloutDecision={rolloutDecision}
             />
 
             <div className="constructor-matrix-side-by-side">
@@ -555,6 +563,7 @@ export function MatrixConstructorPreviewPanel({
         onCloseWorkspace={onCloseWorkspace}
         onReturnToLegacyDraft={onReturnToLegacyDraft}
         phaseLabel={phaseLabel}
+        preview={preview}
         rolloutDecision={rolloutDecision}
         workspace={workspace}
       />

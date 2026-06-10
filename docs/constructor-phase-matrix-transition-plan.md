@@ -2650,3 +2650,98 @@ Flag on:
 4. D-3/main start остаётся preview-only, workspace disabled.
 5. Travel/weigh-in scenario остаётся `matrix_allowed_for_internal`.
 6. Console errors отсутствуют.
+
+## 27. Stage 16: Internal matrix constructor review export
+
+Stage 16 добавляет internal-only export/copy package для ручного сбора обратной связи по matrix preview перед production pilot.
+
+Это не production draft route и не rollout change. Export работает только внутри UI, который уже gated через:
+
+```bash
+NEXT_PUBLIC_INTERNAL_MATRIX_CONSTRUCTOR_UI=true
+```
+
+### 27.1 Что добавлено
+
+Pure helper:
+
+```text
+apps/web/app/lib/constructor-matrix-review-export.ts
+```
+
+Он строит:
+
+- обезличенный JSON payload;
+- markdown summary для ручного review;
+- generatedAt timestamp;
+- rollout mode / scenario / allowlisted / recommendedAction;
+- blockers;
+- safety/risk summary;
+- week/day/session/block counts;
+- matrix explanation;
+- matrix vs legacy differences.
+
+UI actions:
+
+- `Copy review summary`;
+- `Copy review JSON`;
+- local success/error state.
+
+Кнопки находятся только в internal matrix preview/workspace UI, поэтому при flag off они не mounted.
+
+### 27.2 PII и storage guard
+
+Review export намеренно не включает:
+
+- athlete name;
+- email;
+- phone;
+- user id;
+- athlete id;
+- personal notes;
+- DB identifiers;
+- raw constructor input;
+- raw draft payload.
+
+Stage 16 не пишет в:
+
+- DB;
+- localStorage;
+- sessionStorage;
+- telemetry;
+- API;
+- mobile/shared storage.
+
+Export не сохраняет matrix draft, не назначает его athlete-у и не меняет legacy save/template/assign flow.
+
+### 27.3 Что не изменено
+
+Stage 16 не меняет:
+
+- production `POST /api/v1/plans/constructor/draft`;
+- internal matrix preview API contract;
+- rollout policy;
+- DB schema;
+- shared constructor core;
+- mobile contracts;
+- matrix default behavior;
+- `matrix_internal` activation rules.
+
+### 27.4 Manual verification target
+
+Flag off:
+
+1. Legacy draft generation/save работает.
+2. Matrix panel hidden.
+3. Review export buttons hidden.
+4. Console errors отсутствуют.
+
+Flag on:
+
+1. Preview/rollout/workspace работают как Stage 14/15.
+2. D-90 export содержит `matrix_allowed_for_primary` summary.
+3. D-3 export содержит `preview_only` и blockers/reasons.
+4. Travel/weigh-in export содержит internal-only context.
+5. Export JSON/markdown не содержит PII.
+6. Return to legacy работает.
+7. Save/template/assign остаются disabled для `matrix_internal`.
