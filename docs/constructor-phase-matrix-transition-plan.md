@@ -3260,3 +3260,54 @@ Stage 22 does not change:
 
 Server evidence is a review signal only. It is not a permission to save matrix
 as a real template.
+
+## 34. Stage 23: Gate primary pilot activation on server evidence
+
+Stage 23 makes the Stage 22 server dry-run evidence a required UI gate for the
+limited primary pilot activation button.
+
+This still does **not** enable real matrix save/assign.
+
+### 34.1 Activation rule
+
+`Use matrix as primary pilot draft` is enabled only when all of the following
+are true:
+
+- internal matrix UI flag is enabled;
+- limited primary pilot flag is enabled;
+- local primary pilot eligibility passes;
+- server dry-run response exists;
+- server dry-run status is `passed`;
+- server rollout mode is `matrix_allowed_for_primary`;
+- server rollout has `matrixPrimaryAllowed: true`;
+- server rollout blockers are empty;
+- server pilot readiness is `ready_for_limited_primary_pilot`;
+- server pilot readiness blockers are empty;
+- server scenario matches the local preview scenario.
+
+If any server check fails, the matrix workspace shows the reason and keeps the
+primary pilot activation button disabled.
+
+### 34.2 UI evidence
+
+The matrix workspace now shows a separate `Server primary gate checklist`.
+This checklist is derived from the server response and is intentionally separate
+from the local pilot eligibility checklist. It helps reviewers see whether the
+browser-side preview and server-side dry-run agree before the read-only primary
+pilot view can be activated.
+
+### 34.3 Guardrails
+
+Stage 23 does not change:
+
+- production `/api/v1/plans/constructor/draft`;
+- `/api/v1/plans/templates`;
+- DB schema;
+- mobile contracts;
+- telemetry/storage;
+- rollout policy;
+- real save/template/assign;
+- matrix default behavior.
+
+Server evidence only gates the read-only `matrix_primary_pilot` view inside the
+internal workspace. It does not create a real save path.

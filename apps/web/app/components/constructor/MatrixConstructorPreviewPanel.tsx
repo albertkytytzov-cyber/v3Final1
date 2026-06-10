@@ -20,6 +20,7 @@ import {
   matrixUiCopyFor,
 } from "../../lib/constructor-matrix-ui";
 import type { MatrixPrimaryPilotEligibility } from "../../lib/constructor-matrix-primary-pilot";
+import type { MatrixPrimaryPilotServerGate } from "../../lib/constructor-matrix-primary-pilot-server-gate";
 import type { MatrixPrimaryPilotSaveDryRunResult } from "../../lib/constructor-matrix-save-dry-run";
 import type { Language } from "../../lib/i18n";
 import { MatrixPilotReadinessCard } from "./MatrixPilotReadinessCard";
@@ -50,6 +51,7 @@ type MatrixConstructorPreviewPanelProps = {
   pilotReadinessError: string;
   matrixPrimaryPilotEligibility: MatrixPrimaryPilotEligibility;
   matrixPrimaryPilotSaveDryRun: MatrixPrimaryPilotSaveDryRunResult;
+  matrixPrimaryPilotServerGate: MatrixPrimaryPilotServerGate;
   matrixPrimaryPilotServerSaveDryRun: MatrixPrimaryPilotServerSaveDryRunResponse | null;
   matrixPrimaryPilotServerSaveDryRunError: string;
   rolloutDecision: MatrixConstructorRolloutDecision | null;
@@ -83,6 +85,7 @@ export function MatrixConstructorPreviewPanel({
   pilotReadinessError,
   matrixPrimaryPilotEligibility,
   matrixPrimaryPilotSaveDryRun,
+  matrixPrimaryPilotServerGate,
   matrixPrimaryPilotServerSaveDryRun,
   matrixPrimaryPilotServerSaveDryRunError,
   rolloutDecision,
@@ -624,6 +627,7 @@ export function MatrixConstructorPreviewPanel({
         readiness={pilotReadiness}
         matrixPrimaryPilotEligibility={matrixPrimaryPilotEligibility}
         matrixPrimaryPilotSaveDryRun={matrixPrimaryPilotSaveDryRun}
+        matrixPrimaryPilotServerGate={matrixPrimaryPilotServerGate}
         matrixPrimaryPilotServerSaveDryRun={matrixPrimaryPilotServerSaveDryRun}
         matrixPrimaryPilotServerSaveDryRunError={matrixPrimaryPilotServerSaveDryRunError}
         rolloutDecision={rolloutDecision}

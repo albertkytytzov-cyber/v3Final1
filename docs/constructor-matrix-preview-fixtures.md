@@ -423,6 +423,25 @@ Stage 22 adds UI visibility for the server dry-run evidence:
 Dry-run validates a generated `PlanTemplatePayload` candidate but does not save
 or expose the payload to save handlers.
 
+## Primary pilot server activation gate
+
+Stage 23 requires server evidence before the internal workspace can activate the
+read-only `matrix_primary_pilot` view:
+
+- flag off: matrix UI remains hidden and legacy flow is unchanged;
+- internal UI on + limited pilot off: preview works, but primary pilot stays
+  unavailable;
+- both flags on + D-90 allowlisted scenario: server dry-run passes and the
+  activation button can become available;
+- D-3 preview-only: server rollout/readiness evidence blocks activation;
+- travel/weigh-in: server evidence keeps the scenario internal-only;
+- server error or missing response: activation is disabled with a visible
+  reason;
+- save/template/assign remains disabled for `matrix_primary_pilot`.
+
+The fixture smoke should verify the server dry-run request is made only when the
+limited pilot flag is enabled and that no matrix draft is persisted.
+
 ## Что не проверяется
 
 Fixtures не делают full snapshot:

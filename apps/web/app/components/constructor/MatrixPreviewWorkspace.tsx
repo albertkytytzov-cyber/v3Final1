@@ -21,6 +21,10 @@ import {
   type MatrixPrimaryPilotEligibility,
   matrixPrimaryPilotDisabledReasonText,
 } from "../../lib/constructor-matrix-primary-pilot";
+import {
+  type MatrixPrimaryPilotServerGate,
+  matrixPrimaryPilotServerGateReasonText,
+} from "../../lib/constructor-matrix-primary-pilot-server-gate";
 import type { MatrixPrimaryPilotSaveDryRunResult } from "../../lib/constructor-matrix-save-dry-run";
 import type { Language } from "../../lib/i18n";
 import { MatrixDraftReadOnlyView } from "./MatrixDraftReadOnlyView";
@@ -42,6 +46,7 @@ type MatrixPreviewWorkspaceProps = {
   readiness: MatrixPilotReadinessResult | null;
   matrixPrimaryPilotEligibility: MatrixPrimaryPilotEligibility;
   matrixPrimaryPilotSaveDryRun: MatrixPrimaryPilotSaveDryRunResult;
+  matrixPrimaryPilotServerGate: MatrixPrimaryPilotServerGate;
   matrixPrimaryPilotServerSaveDryRun: MatrixPrimaryPilotServerSaveDryRunResponse | null;
   matrixPrimaryPilotServerSaveDryRunError: string;
   rolloutDecision: MatrixConstructorRolloutDecision | null;
@@ -63,6 +68,7 @@ export function MatrixPreviewWorkspace({
   readiness,
   matrixPrimaryPilotEligibility,
   matrixPrimaryPilotSaveDryRun,
+  matrixPrimaryPilotServerGate,
   matrixPrimaryPilotServerSaveDryRun,
   matrixPrimaryPilotServerSaveDryRunError,
   rolloutDecision,
@@ -80,6 +86,11 @@ export function MatrixPreviewWorkspace({
   const badgeLabel = constructorMatrixRolloutLabel(language, rolloutDecision?.mode) || "internal";
   const whyText = constructorMatrixWorkspaceWhyText(language, rolloutDecision);
   const scenarioText = constructorMatrixWorkspaceScenarioText(language, rolloutDecision);
+  const primaryPilotDisabledText = matrixPrimaryPilotEligibility.allowed
+    ? matrixPrimaryPilotServerGateReasonText(language, matrixPrimaryPilotServerGate.reason)
+    : matrixPrimaryPilotDisabledReasonText(language, matrixPrimaryPilotEligibility.reason);
+  const primaryPilotCanActivate =
+    matrixPrimaryPilotEligibility.allowed && matrixPrimaryPilotServerGate.allowed;
 
   return (
     <section className="constructor-panel constructor-matrix-workspace-panel">
@@ -228,7 +239,7 @@ export function MatrixPreviewWorkspace({
               })}
             </strong>
             <p>
-              {matrixPrimaryPilotDisabledReasonText(language, matrixPrimaryPilotEligibility.reason)}
+              {primaryPilotDisabledText}
             </p>
           </div>
           <div className="constructor-matrix-activation-actions">
@@ -243,9 +254,9 @@ export function MatrixPreviewWorkspace({
             ) : (
               <button
                 className="primary-button"
-                disabled={!matrixPrimaryPilotEligibility.allowed}
+                disabled={!primaryPilotCanActivate}
                 onClick={onActivateMatrixPrimaryPilotDraft}
-                title={matrixPrimaryPilotDisabledReasonText(language, matrixPrimaryPilotEligibility.reason)}
+                title={primaryPilotDisabledText}
                 type="button"
               >
                 {matrixUiCopyFor(language, {
@@ -269,6 +280,25 @@ export function MatrixPreviewWorkspace({
             </summary>
             <ul className="constructor-matrix-preview-list">
               {matrixPrimaryPilotEligibility.evidence.map((item) => (
+                <li key={item.key}>
+                  <strong>{item.label}</strong>
+                  <span>
+                    {item.passed ? "pass" : "stop"} · {item.value}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </details>
+          <details className="constructor-matrix-primary-pilot-evidence">
+            <summary>
+              {matrixUiCopyFor(language, {
+                en: "Server primary gate checklist",
+                ru: "Server primary gate checklist",
+                bg: "Server primary gate checklist",
+              })}
+            </summary>
+            <ul className="constructor-matrix-preview-list">
+              {matrixPrimaryPilotServerGate.evidence.map((item) => (
                 <li key={item.key}>
                   <strong>{item.label}</strong>
                   <span>

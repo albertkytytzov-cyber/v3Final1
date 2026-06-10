@@ -1527,3 +1527,26 @@ The primary pilot panel then shows:
 
 When the limited pilot flag is off, this server evidence is not requested or
 shown. Save/template/assign remains disabled for matrix pilot sources.
+
+### 15.15 Server evidence activation gate
+
+Stage 23 makes server evidence mandatory before the internal workspace can
+activate `matrix_primary_pilot`.
+
+The activation button is enabled only when local pilot eligibility passes and
+the server dry-run agrees:
+
+- server dry-run exists and status is `passed`;
+- server rollout mode is `matrix_allowed_for_primary`;
+- server rollout has `matrixPrimaryAllowed: true`;
+- server rollout blockers are empty;
+- server pilot readiness is `ready_for_limited_primary_pilot`;
+- server pilot readiness blockers are empty;
+- server scenario matches the local preview scenario.
+
+The workspace shows a dedicated server checklist and a human-readable disabled
+reason when evidence is missing, blocked, or inconsistent.
+
+This is still an internal read-only gate. It does not change the production
+draft route, template saving, assignment, DB schema, telemetry, storage, mobile
+contracts, or rollout policy.

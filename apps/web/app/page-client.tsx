@@ -209,6 +209,7 @@ import {
   isConstructorDraftSaveAllowed,
 } from "./lib/constructor-matrix-ui";
 import { canUseMatrixPrimaryPilot } from "./lib/constructor-matrix-primary-pilot";
+import { canUseMatrixPrimaryPilotWithServerEvidence } from "./lib/constructor-matrix-primary-pilot-server-gate";
 import { buildMatrixPrimaryPilotSaveDryRun } from "./lib/constructor-matrix-save-dry-run";
 import {
   isInternalMatrixConstructorUiEnabled,
@@ -14458,6 +14459,7 @@ export function PageClient({
       !SHOW_INTERNAL_MATRIX_CONSTRUCTOR_UI ||
       !ENABLE_MATRIX_CONSTRUCTOR_LIMITED_PRIMARY_PILOT ||
       !constructorMatrixPrimaryPilotEligibility.allowed ||
+      !constructorMatrixPrimaryPilotServerGate.allowed ||
       !constructorMatrixWorkspace.open ||
       !constructorMatrixWorkspace.draft
     ) {
@@ -15741,6 +15743,21 @@ export function PageClient({
       constructorMatrixPrimaryPilotEligibility,
       constructorMatrixWorkspace.draft,
       selectedConstructorCompetitionPlan?.competitionTitle,
+    ],
+  );
+  const constructorMatrixPrimaryPilotServerGate = useMemo(
+    () =>
+      canUseMatrixPrimaryPilotWithServerEvidence({
+        serverResult: constructorMatrixServerSaveDryRun,
+        serverError: constructorMatrixServerSaveDryRunError,
+        localRolloutDecision: constructorMatrixRolloutDecision,
+        localPilotReadiness: constructorMatrixPilotReadinessState.readiness,
+      }),
+    [
+      constructorMatrixPilotReadinessState.readiness,
+      constructorMatrixRolloutDecision,
+      constructorMatrixServerSaveDryRun,
+      constructorMatrixServerSaveDryRunError,
     ],
   );
   const constructorMatrixWorkspaceCanOpen =
@@ -22524,6 +22541,7 @@ export function PageClient({
                     pilotReadinessError={constructorMatrixPilotReadinessState.error}
                     matrixPrimaryPilotEligibility={constructorMatrixPrimaryPilotEligibility}
                     matrixPrimaryPilotSaveDryRun={constructorMatrixPrimaryPilotSaveDryRun}
+                    matrixPrimaryPilotServerGate={constructorMatrixPrimaryPilotServerGate}
                     matrixPrimaryPilotServerSaveDryRun={constructorMatrixServerSaveDryRun}
                     matrixPrimaryPilotServerSaveDryRunError={constructorMatrixServerSaveDryRunError}
                     rolloutDecision={constructorMatrixRolloutDecision}
