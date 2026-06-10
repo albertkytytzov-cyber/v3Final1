@@ -204,12 +204,14 @@ import {
   getConstructorMatrixSafetyErrorCount,
   isConstructorDraftSaveAllowed,
 } from "./lib/constructor-matrix-ui";
+import { isInternalMatrixConstructorUiEnabled } from "./lib/feature-flags";
 
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api/v1";
 const mobileAppDownloadUrl =
   process.env.NEXT_PUBLIC_MOBILE_APP_DOWNLOAD_URL?.trim() ||
   "/downloads/perform-mobile-android.apk";
 const SHOW_OFFLINE_CENTER_NAV = false;
+const SHOW_INTERNAL_MATRIX_CONSTRUCTOR_UI = isInternalMatrixConstructorUiEnabled();
 const DISPLAY_TIME_ZONE = "Europe/Sofia";
 type CoachPeriodPresetDays = 7 | 15 | 30;
 type ConstructorDraftResponse = {
@@ -9513,6 +9515,17 @@ export function PageClient({
     setConstructorMatrixWorkspace(CLOSED_CONSTRUCTOR_MATRIX_WORKSPACE);
     setActiveConstructorDraftSource("legacy");
   }, [constructorForm]);
+  useEffect(() => {
+    if (!SHOW_INTERNAL_MATRIX_CONSTRUCTOR_UI) {
+      setConstructorMatrixPreview(null);
+      setConstructorMatrixRolloutDecision(null);
+      setConstructorMatrixWorkspace(CLOSED_CONSTRUCTOR_MATRIX_WORKSPACE);
+      setActiveConstructorDraftSource("legacy");
+      setConstructorMatrixPreviewBusy(false);
+      setConstructorMatrixPreviewError("");
+      setConstructorMatrixRolloutError("");
+    }
+  }, []);
   const [seasonDisplayMode, setSeasonDisplayMode] =
     useState<SeasonDisplayMode>("hybrid");
   const [seasonEditorMode, setSeasonEditorMode] = useState<SeasonEditorMode>(
@@ -14272,6 +14285,10 @@ export function PageClient({
   }
 
   async function handleBuildConstructorMatrixPreview() {
+    if (!SHOW_INTERNAL_MATRIX_CONSTRUCTOR_UI) {
+      return;
+    }
+
     const input = buildConstructorInputFromForm();
 
     if (!input) {
@@ -14330,6 +14347,7 @@ export function PageClient({
 
   function handleOpenConstructorMatrixWorkspace() {
     if (
+      !SHOW_INTERNAL_MATRIX_CONSTRUCTOR_UI ||
       !canOpenConstructorMatrixWorkspace({
         decision: constructorMatrixRolloutDecision,
         preview: constructorMatrixPreview,
@@ -14357,6 +14375,7 @@ export function PageClient({
 
   function handleActivateConstructorMatrixInternalDraft() {
     if (
+      !SHOW_INTERNAL_MATRIX_CONSTRUCTOR_UI ||
       !canActivateConstructorMatrixInternalDraft({
         workspace: constructorMatrixWorkspace,
         decision: constructorMatrixRolloutDecision,
@@ -15541,6 +15560,7 @@ export function PageClient({
       }`
     : copyFor(language, { en: "No target start", ru: "Целевой старт не выбран", bg: "Няма целеви старт" });
   const activeConstructorDraftIsMatrixInternal =
+    SHOW_INTERNAL_MATRIX_CONSTRUCTOR_UI &&
     activeConstructorDraftSource === "matrix_internal" &&
     constructorMatrixWorkspace.open &&
     Boolean(constructorMatrixWorkspace.draft);
@@ -15559,19 +15579,23 @@ export function PageClient({
   );
   const constructorMatrixPreviewSafetyErrorCount =
     getConstructorMatrixSafetyErrorCount(constructorMatrixPreview);
-  const constructorMatrixWorkspaceCanOpen = canOpenConstructorMatrixWorkspace({
-    decision: constructorMatrixRolloutDecision,
-    preview: constructorMatrixPreview,
-    matrixDraft: constructorMatrixPreviewMatrixDraft,
-    safetyErrorCount: constructorMatrixPreviewSafetyErrorCount,
-  });
-  const constructorMatrixInternalDraftCanActivate = canActivateConstructorMatrixInternalDraft({
-    workspace: constructorMatrixWorkspace,
-    decision: constructorMatrixRolloutDecision,
-    preview: constructorMatrixPreview,
-    matrixDraft: constructorMatrixPreviewMatrixDraft,
-    safetyErrorCount: constructorMatrixPreviewSafetyErrorCount,
-  });
+  const constructorMatrixWorkspaceCanOpen =
+    SHOW_INTERNAL_MATRIX_CONSTRUCTOR_UI &&
+    canOpenConstructorMatrixWorkspace({
+      decision: constructorMatrixRolloutDecision,
+      preview: constructorMatrixPreview,
+      matrixDraft: constructorMatrixPreviewMatrixDraft,
+      safetyErrorCount: constructorMatrixPreviewSafetyErrorCount,
+    });
+  const constructorMatrixInternalDraftCanActivate =
+    SHOW_INTERNAL_MATRIX_CONSTRUCTOR_UI &&
+    canActivateConstructorMatrixInternalDraft({
+      workspace: constructorMatrixWorkspace,
+      decision: constructorMatrixRolloutDecision,
+      preview: constructorMatrixPreview,
+      matrixDraft: constructorMatrixPreviewMatrixDraft,
+      safetyErrorCount: constructorMatrixPreviewSafetyErrorCount,
+    });
   const constructorMatrixWorkspaceUnavailableReason =
     getConstructorMatrixWorkspaceUnavailableReason({
       language,
@@ -22304,30 +22328,32 @@ export function PageClient({
                   )}
                 </div>
 
-                <MatrixConstructorPreviewPanel
-                  activeDraftSource={activeConstructorDraftSource}
-                  activationDisabledReason={constructorMatrixWorkspaceUnavailableReason}
-                  canActivateMatrixInternalDraft={constructorMatrixInternalDraftCanActivate}
-                  includeInfoDifferences={constructorMatrixIncludeInfoDifferences}
-                  language={language}
-                  loadingLabel={ui("loading")}
-                  onActivateMatrixInternalDraft={handleActivateConstructorMatrixInternalDraft}
-                  onBuildPreview={handleBuildConstructorMatrixPreview}
-                  onCloseWorkspace={handleCloseConstructorMatrixWorkspace}
-                  onIncludeInfoDifferencesChange={setConstructorMatrixIncludeInfoDifferences}
-                  onOpenWorkspace={handleOpenConstructorMatrixWorkspace}
-                  onReturnToLegacyDraft={handleReturnToLegacyConstructorDraft}
-                  phaseLabel={constructorPhaseLabel}
-                  preview={constructorMatrixPreview}
-                  previewBusy={constructorMatrixPreviewBusy}
-                  previewError={constructorMatrixPreviewError}
-                  rolloutDecision={constructorMatrixRolloutDecision}
-                  rolloutError={constructorMatrixRolloutError}
-                  selectedCoachAthleteAvailable={Boolean(selectedCoachAthlete)}
-                  workspace={constructorMatrixWorkspace}
-                  workspaceCanOpen={constructorMatrixWorkspaceCanOpen}
-                  workspaceUnavailableReason={constructorMatrixWorkspaceUnavailableReason}
-                />
+                {SHOW_INTERNAL_MATRIX_CONSTRUCTOR_UI ? (
+                  <MatrixConstructorPreviewPanel
+                    activeDraftSource={activeConstructorDraftSource}
+                    activationDisabledReason={constructorMatrixWorkspaceUnavailableReason}
+                    canActivateMatrixInternalDraft={constructorMatrixInternalDraftCanActivate}
+                    includeInfoDifferences={constructorMatrixIncludeInfoDifferences}
+                    language={language}
+                    loadingLabel={ui("loading")}
+                    onActivateMatrixInternalDraft={handleActivateConstructorMatrixInternalDraft}
+                    onBuildPreview={handleBuildConstructorMatrixPreview}
+                    onCloseWorkspace={handleCloseConstructorMatrixWorkspace}
+                    onIncludeInfoDifferencesChange={setConstructorMatrixIncludeInfoDifferences}
+                    onOpenWorkspace={handleOpenConstructorMatrixWorkspace}
+                    onReturnToLegacyDraft={handleReturnToLegacyConstructorDraft}
+                    phaseLabel={constructorPhaseLabel}
+                    preview={constructorMatrixPreview}
+                    previewBusy={constructorMatrixPreviewBusy}
+                    previewError={constructorMatrixPreviewError}
+                    rolloutDecision={constructorMatrixRolloutDecision}
+                    rolloutError={constructorMatrixRolloutError}
+                    selectedCoachAthleteAvailable={Boolean(selectedCoachAthlete)}
+                    workspace={constructorMatrixWorkspace}
+                    workspaceCanOpen={constructorMatrixWorkspaceCanOpen}
+                    workspaceUnavailableReason={constructorMatrixWorkspaceUnavailableReason}
+                  />
+                ) : null}
               </section>
             ) : null}
 

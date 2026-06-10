@@ -1267,3 +1267,25 @@ Behavior is intentionally unchanged from Stage 13:
 - save/template/assign remain unavailable for `matrix_internal`;
 - rollout policy, safety guards, preview-only windows, and legacy fallback are unchanged;
 - no production route, DB, mobile, localStorage/sessionStorage, telemetry, `mergeWeeks`, `selectTemplateCards`, or `pickSourceWeekForPhase` changes.
+
+### 15.7 Internal matrix constructor UI visibility flag
+
+Stage 15 gates the internal matrix UI behind an explicit web feature flag:
+
+```bash
+NEXT_PUBLIC_INTERNAL_MATRIX_CONSTRUCTOR_UI=true
+```
+
+Enabled values are `1`, `true`, `enabled`, and `on`. Missing or any other value means the flag is off.
+
+When the flag is off:
+
+- the internal matrix preview panel is not rendered;
+- matrix preview actions are unavailable;
+- workspace open and internal activation handlers return early;
+- `matrix_internal` cannot become the active visible draft source;
+- legacy constructor generation, save as template, assign flow, and production draft behavior remain unchanged.
+
+When the flag is on, Stage 14 behavior is unchanged.
+
+This flag is web-only UI visibility. It does not change shared constructor core, rollout policy, API contracts, DB schema, mobile contracts, storage, or telemetry.

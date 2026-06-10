@@ -2562,3 +2562,91 @@ Stage 14 не меняет:
 6. Return to legacy восстанавливает legacy draft и save button.
 7. D-3/main start остаётся preview-only и не открывает workspace.
 8. Console errors отсутствуют.
+
+## 26. Stage 15: Internal matrix constructor UI feature flag
+
+Stage 15 добавляет controlled visibility gate для internal matrix constructor UI.
+
+Это не rollout matrix logic. Это только UI visibility feature flag, чтобы internal preview/rollout/workspace/activation не были видны без явного включения.
+
+### 26.1 Flag
+
+Web flag:
+
+```bash
+NEXT_PUBLIC_INTERNAL_MATRIX_CONSTRUCTOR_UI=true
+```
+
+Допустимые enabled values:
+
+- `1`;
+- `true`;
+- `enabled`;
+- `on`.
+
+Любое другое значение или отсутствие env означает `off`.
+
+Flag не сохраняется в:
+
+- localStorage;
+- sessionStorage;
+- DB;
+- telemetry.
+
+### 26.2 Что контролирует flag
+
+При `off`:
+
+- `MatrixConstructorPreviewPanel` не отображается;
+- matrix preview button недоступен, потому что panel не mounted;
+- `handleBuildConstructorMatrixPreview` делает early return;
+- workspace open недоступен;
+- internal activation недоступна;
+- `matrix_internal` не может стать активным draft source;
+- active matrix banner не отображается;
+- legacy constructor generation/save/template flow работает как раньше.
+
+При `on` поведение Stage 14 сохраняется:
+
+- internal matrix preview visible;
+- rollout decision visible;
+- read-only workspace visible для allowed scenarios;
+- manual internal activation доступна только через controlled gate;
+- save/template/assign disabled для `matrix_internal`;
+- return to legacy работает без API/storage mutations.
+
+### 26.3 Что не изменено
+
+Stage 15 не меняет:
+
+- `buildPerformConstructorDraft(input)`;
+- production `POST /api/v1/plans/constructor/draft`;
+- internal API contracts;
+- DB schema;
+- mobile contracts;
+- shared constructor core;
+- `mergeWeeks`;
+- `selectTemplateCards`;
+- `pickSourceWeekForPhase`;
+- rollout allowlist/policy;
+- save/template/assign semantics.
+
+### 26.4 Manual verification target
+
+Проверить два режима.
+
+Flag off:
+
+1. Legacy draft generation работает.
+2. Save as template виден для legacy draft.
+3. Matrix preview panel hidden.
+4. Console errors отсутствуют.
+
+Flag on:
+
+1. D-90/far development открывает workspace и включает internal activation.
+2. `matrix_internal` показывает read-only draft и скрывает save/template/assign.
+3. Return to legacy восстанавливает legacy draft и save button.
+4. D-3/main start остаётся preview-only, workspace disabled.
+5. Travel/weigh-in scenario остаётся `matrix_allowed_for_internal`.
+6. Console errors отсутствуют.

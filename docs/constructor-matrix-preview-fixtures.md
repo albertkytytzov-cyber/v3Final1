@@ -260,6 +260,23 @@ Stage 14 выносит internal matrix UI из `page-client.tsx` в focused com
 
 Fixture runner не меняется и по-прежнему проверяет data-safety инварианты. UI decomposition intentionally does not add React snapshot fixtures and does not change activation, rollout, save/template/assign, DB, storage, mobile, or production draft behavior.
 
+## Internal matrix UI feature flag
+
+Stage 15 hides the internal matrix UI unless this web flag is explicitly enabled:
+
+```bash
+NEXT_PUBLIC_INTERNAL_MATRIX_CONSTRUCTOR_UI=true
+```
+
+Fixture runner remains unchanged because the flag controls only React UI visibility. Data-safety fixtures continue to validate preview, rollout, and constructor invariants independent of whether the internal web panel is mounted.
+
+Manual UI verification must cover:
+
+- flag off: legacy constructor works and matrix panel is hidden;
+- flag on: Stage 14 matrix preview/workspace/activation behavior is unchanged;
+- D-3 preview-only remains disabled;
+- travel/weigh-in internal-only remains internal/read-only.
+
 ## Что не проверяется
 
 Fixtures не делают full snapshot:
