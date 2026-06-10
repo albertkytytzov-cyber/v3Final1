@@ -32,6 +32,9 @@ Rules:
   `NEXT_PUBLIC_INTERNAL_MATRIX_CONSTRUCTOR_UI=true`.
 - Because the flags are `NEXT_PUBLIC_*`, changing them requires rebuilding the
   web app before the browser can see the new state.
+- In self-host Docker deploys the flags are wired through `docker-compose.yml`
+  as web build args and runtime env. Keep `.env` explicit and run
+  `bash scripts/update.sh` after changing them.
 
 ## Pre-deploy checks
 
@@ -170,4 +173,3 @@ Stop or roll back if:
 - save/template/assign becomes available for matrix sources;
 - review export leaks identity/raw ids;
 - constructor legacy flow regresses.
-

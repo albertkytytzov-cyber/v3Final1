@@ -3513,3 +3513,33 @@ Stage 28 does not change matrix draft logic, rollout policy, API contracts,
 DB schema, mobile contracts, storage, telemetry, save/template/assign behavior,
 or production constructor generation. It only makes the production pilot
 verification protocol explicit and regression-checked.
+
+## 40. Stage 29: Production flag wiring
+
+Stage 29 wires the existing matrix pilot flags into the self-host production web
+build:
+
+- `apps/web/Dockerfile` accepts `NEXT_PUBLIC_INTERNAL_MATRIX_CONSTRUCTOR_UI`
+  and `NEXT_PUBLIC_MATRIX_CONSTRUCTOR_LIMITED_PRIMARY_PILOT` as build args;
+- `docker-compose.yml` passes those flags to the web build and runtime env with
+  false defaults;
+- `.env.example` documents both flags as false by default.
+
+The wiring is guarded by:
+
+```bash
+npm run check:constructor-matrix-production-rollout
+```
+
+### 40.1 Why this matters
+
+Stages 26-28 made the pilot controlled and documented the production smoke
+process, but a self-host Docker deploy still needs the flags at Next.js build
+time. Without this wiring, the flag-on smoke would not be reproducible on the
+production server.
+
+### 40.2 Guardrails
+
+Stage 29 keeps flag defaults false and does not change matrix draft logic,
+rollout policy, API contracts, DB schema, mobile contracts, storage, telemetry,
+save/template/assign behavior, or production constructor generation.

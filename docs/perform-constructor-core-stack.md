@@ -1646,3 +1646,21 @@ save/template/assign guard verification.
 This is an operational checklist only. It does not change constructor behavior,
 rollout policy, DB/API contracts, storage, telemetry, mobile contracts, or
 production save/template/assign behavior.
+
+### 15.21 Production flag wiring
+
+Stage 29 wires the existing matrix pilot flags into the self-host web Docker
+build:
+
+- `apps/web/Dockerfile` accepts the matrix flags as build args and exposes them
+  to the Next.js build stage;
+- `docker-compose.yml` passes both flags as web build args and runtime env with
+  false defaults;
+- `.env.example` documents both flags as false by default.
+
+This is required because `NEXT_PUBLIC_*` values are embedded into the client
+bundle at build time. The wiring is guarded by
+`npm run check:constructor-matrix-production-rollout`.
+
+The defaults remain false, so production stays legacy-only unless the operator
+explicitly enables the internal pilot flags and rebuilds/redeploys web.
