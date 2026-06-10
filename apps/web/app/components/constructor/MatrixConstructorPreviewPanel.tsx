@@ -2,13 +2,10 @@
 
 import type {
   ConstructorDraft,
-  ConstructorInput,
   ConstructorMatrixPreviewResponse,
   MatrixConstructorRolloutDecision,
   MatrixPilotReadinessResult,
 } from "@training-platform/shared";
-import { evaluateMatrixPilotReadiness } from "@training-platform/shared";
-import { useMemo } from "react";
 import {
   type ActiveConstructorDraftSource,
   type ConstructorMatrixWorkspaceState,
@@ -21,6 +18,7 @@ import {
   isConstructorMatrixReadOnlyCandidateVisible,
   matrixUiCopyFor,
 } from "../../lib/constructor-matrix-ui";
+import type { MatrixPrimaryPilotEligibility } from "../../lib/constructor-matrix-primary-pilot";
 import type { Language } from "../../lib/i18n";
 import { MatrixPilotReadinessCard } from "./MatrixPilotReadinessCard";
 import { MatrixPreviewWorkspace } from "./MatrixPreviewWorkspace";
@@ -33,8 +31,10 @@ type MatrixConstructorPreviewPanelProps = {
   canActivateMatrixInternalDraft: boolean;
   includeInfoDifferences: boolean;
   language: Language;
+  limitedPrimaryPilotEnabled: boolean;
   loadingLabel: string;
   onActivateMatrixInternalDraft: () => void;
+  onActivateMatrixPrimaryPilotDraft: () => void;
   onBuildPreview: () => void;
   onCloseWorkspace: () => void;
   onIncludeInfoDifferencesChange: (value: boolean) => void;
@@ -44,7 +44,9 @@ type MatrixConstructorPreviewPanelProps = {
   preview: ConstructorMatrixPreviewResponse | null;
   previewBusy: boolean;
   previewError: string;
-  previewInput: ConstructorInput | null;
+  pilotReadiness: MatrixPilotReadinessResult | null;
+  pilotReadinessError: string;
+  matrixPrimaryPilotEligibility: MatrixPrimaryPilotEligibility;
   rolloutDecision: MatrixConstructorRolloutDecision | null;
   rolloutError: string;
   selectedCoachAthleteAvailable: boolean;
@@ -59,8 +61,10 @@ export function MatrixConstructorPreviewPanel({
   canActivateMatrixInternalDraft,
   includeInfoDifferences,
   language,
+  limitedPrimaryPilotEnabled,
   loadingLabel,
   onActivateMatrixInternalDraft,
+  onActivateMatrixPrimaryPilotDraft,
   onBuildPreview,
   onCloseWorkspace,
   onIncludeInfoDifferencesChange,
@@ -70,7 +74,9 @@ export function MatrixConstructorPreviewPanel({
   preview,
   previewBusy,
   previewError,
-  previewInput,
+  pilotReadiness,
+  pilotReadinessError,
+  matrixPrimaryPilotEligibility,
   rolloutDecision,
   rolloutError,
   selectedCoachAthleteAvailable,
@@ -94,43 +100,6 @@ export function MatrixConstructorPreviewPanel({
     matrixDraft,
   });
   const rolloutBadgeLabel = constructorMatrixRolloutLabel(language, rolloutDecision?.mode);
-  const pilotReadinessState = useMemo<{
-    readiness: MatrixPilotReadinessResult | null;
-    error: string;
-  }>(() => {
-    if (!preview || !rolloutDecision || !previewInput) {
-      return { readiness: null, error: "" };
-    }
-
-    try {
-      return {
-        readiness: evaluateMatrixPilotReadiness(previewInput, {
-          rolloutOptions: {
-            previewOptions: {
-              includeDrafts: true,
-              includeComparisonReport: true,
-              includeSafetyDetails: true,
-              includeInfoDifferences,
-            },
-          },
-        }),
-        error: "",
-      };
-    } catch (error) {
-      return {
-        readiness: null,
-        error:
-          error instanceof Error
-            ? error.message
-            : matrixUiCopyFor(language, {
-                en: "Pilot readiness evaluation failed.",
-                ru: "Pilot readiness evaluation не прошёл.",
-                bg: "Pilot readiness evaluation не мина.",
-              }),
-      };
-    }
-  }, [includeInfoDifferences, language, preview, previewInput, rolloutDecision]);
-
   return (
     <>
       <details className="constructor-panel constructor-matrix-preview-panel">
@@ -336,7 +305,7 @@ export function MatrixConstructorPreviewPanel({
             <MatrixPilotReadinessCard
               defaultPathUnchanged={preview.defaultPathUnchanged}
               error={
-                pilotReadinessState.error ||
+                pilotReadinessError ||
                 (!rolloutDecision
                   ? matrixUiCopyFor(language, {
                       en: "Pilot readiness unavailable until rollout decision is loaded.",
@@ -348,7 +317,7 @@ export function MatrixConstructorPreviewPanel({
               language={language}
               loading={previewBusy}
               onRetry={onBuildPreview}
-              readiness={pilotReadinessState.readiness}
+              readiness={pilotReadiness}
               safeToPreview={preview.safeToPreview}
             />
 
@@ -356,7 +325,7 @@ export function MatrixConstructorPreviewPanel({
               contextLabel="preview / rollout"
               language={language}
               preview={preview}
-              readiness={pilotReadinessState.readiness}
+              readiness={pilotReadiness}
               rolloutDecision={rolloutDecision}
             />
 
@@ -636,13 +605,16 @@ export function MatrixConstructorPreviewPanel({
         activeDraftSource={activeDraftSource}
         activationDisabledReason={activationDisabledReason}
         canActivate={canActivateMatrixInternalDraft}
+        limitedPrimaryPilotEnabled={limitedPrimaryPilotEnabled}
         language={language}
         onActivateMatrixInternalDraft={onActivateMatrixInternalDraft}
+        onActivateMatrixPrimaryPilotDraft={onActivateMatrixPrimaryPilotDraft}
         onCloseWorkspace={onCloseWorkspace}
         onReturnToLegacyDraft={onReturnToLegacyDraft}
         phaseLabel={phaseLabel}
         preview={preview}
-        readiness={pilotReadinessState.readiness}
+        readiness={pilotReadiness}
+        matrixPrimaryPilotEligibility={matrixPrimaryPilotEligibility}
         rolloutDecision={rolloutDecision}
         workspace={workspace}
       />

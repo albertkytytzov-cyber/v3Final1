@@ -6517,6 +6517,13 @@ td {
   color: #0f766e;
 }
 
+.constructor-active-draft-badge.is-matrix-pilot,
+.constructor-matrix-primary-pilot-badge {
+  border-color: rgba(37, 99, 235, 0.32);
+  background: rgba(239, 246, 255, 0.96);
+  color: #1d4ed8;
+}
+
 .constructor-active-draft-banner,
 .constructor-matrix-save-guard-note {
   border: 1px solid rgba(20, 184, 166, 0.22);
@@ -6615,6 +6622,36 @@ td {
   justify-content: flex-start;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+.constructor-matrix-primary-pilot-panel {
+  border-color: rgba(37, 99, 235, 0.24);
+  background: rgba(239, 246, 255, 0.66);
+}
+
+.constructor-matrix-primary-pilot-badge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 0.72rem;
+  font-weight: 950;
+  line-height: 1.15;
+  text-transform: uppercase;
+}
+
+.constructor-matrix-primary-pilot-evidence {
+  display: grid;
+  gap: 10px;
+}
+
+.constructor-matrix-primary-pilot-evidence summary {
+  cursor: pointer;
+  color: var(--ink);
+  font-size: 0.84rem;
+  font-weight: 950;
+  text-transform: uppercase;
 }
 
 .constructor-matrix-workspace-overview {

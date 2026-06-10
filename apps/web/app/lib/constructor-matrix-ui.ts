@@ -61,7 +61,7 @@ export type ConstructorMatrixWorkspaceState = {
   readOnly: true;
 };
 
-export type ActiveConstructorDraftSource = "legacy" | "matrix_internal";
+export type ActiveConstructorDraftSource = "legacy" | "matrix_internal" | "matrix_primary_pilot";
 
 export const CLOSED_CONSTRUCTOR_MATRIX_WORKSPACE: ConstructorMatrixWorkspaceState = {
   open: false,

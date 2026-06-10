@@ -25,6 +25,7 @@ import {
   type ConstructorMatrixPreviewResponse,
   type MatrixConstructorRolloutDecision,
   type MatrixConstructorRolloutOptions,
+  type MatrixPilotReadinessResult,
   type ConstructorPhase,
   type CreateCompetitionPayload,
   type CreateCompetitionPlanPayload,
@@ -95,6 +96,7 @@ import {
   buildConstructorTemplatePayload,
   buildPerformConstructorDraft,
   buildSeasonStrategySnapshot,
+  evaluateMatrixPilotReadiness,
   estimateTrainingActualLoad,
   estimateTrainingBlockLoad,
   estimateTrainingBlocksLoad,
@@ -114,6 +116,7 @@ import {
   type ReactNode,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -204,7 +207,11 @@ import {
   getConstructorMatrixSafetyErrorCount,
   isConstructorDraftSaveAllowed,
 } from "./lib/constructor-matrix-ui";
-import { isInternalMatrixConstructorUiEnabled } from "./lib/feature-flags";
+import { canUseMatrixPrimaryPilot } from "./lib/constructor-matrix-primary-pilot";
+import {
+  isInternalMatrixConstructorUiEnabled,
+  isMatrixConstructorLimitedPrimaryPilotEnabled,
+} from "./lib/feature-flags";
 
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api/v1";
 const mobileAppDownloadUrl =
@@ -212,6 +219,8 @@ const mobileAppDownloadUrl =
   "/downloads/perform-mobile-android.apk";
 const SHOW_OFFLINE_CENTER_NAV = false;
 const SHOW_INTERNAL_MATRIX_CONSTRUCTOR_UI = isInternalMatrixConstructorUiEnabled();
+const ENABLE_MATRIX_CONSTRUCTOR_LIMITED_PRIMARY_PILOT =
+  isMatrixConstructorLimitedPrimaryPilotEnabled();
 const DISPLAY_TIME_ZONE = "Europe/Sofia";
 type CoachPeriodPresetDays = 7 | 15 | 30;
 type ConstructorDraftResponse = {
@@ -14396,6 +14405,20 @@ export function PageClient({
     setActiveConstructorDraftSource("matrix_internal");
   }
 
+  function handleActivateConstructorMatrixPrimaryPilotDraft() {
+    if (
+      !SHOW_INTERNAL_MATRIX_CONSTRUCTOR_UI ||
+      !ENABLE_MATRIX_CONSTRUCTOR_LIMITED_PRIMARY_PILOT ||
+      !constructorMatrixPrimaryPilotEligibility.allowed ||
+      !constructorMatrixWorkspace.open ||
+      !constructorMatrixWorkspace.draft
+    ) {
+      return;
+    }
+
+    setActiveConstructorDraftSource("matrix_primary_pilot");
+  }
+
   function handleReturnToLegacyConstructorDraft() {
     setActiveConstructorDraftSource("legacy");
   }
@@ -15565,12 +15588,16 @@ export function PageClient({
         constructorSeasonStrategySnapshot.targetCompetition.role ?? "-"
       }`
     : copyFor(language, { en: "No target start", ru: "Целевой старт не выбран", bg: "Няма целеви старт" });
-  const activeConstructorDraftIsMatrixInternal =
+  const activeConstructorDraftIsMatrixCandidate =
     SHOW_INTERNAL_MATRIX_CONSTRUCTOR_UI &&
-    activeConstructorDraftSource === "matrix_internal" &&
+    (activeConstructorDraftSource === "matrix_internal" ||
+      activeConstructorDraftSource === "matrix_primary_pilot") &&
     constructorMatrixWorkspace.open &&
     Boolean(constructorMatrixWorkspace.draft);
-  const activeConstructorDraft = activeConstructorDraftIsMatrixInternal
+  const activeConstructorDraftIsMatrixPrimaryPilot =
+    activeConstructorDraftSource === "matrix_primary_pilot" &&
+    activeConstructorDraftIsMatrixCandidate;
+  const activeConstructorDraft = activeConstructorDraftIsMatrixCandidate
     ? constructorMatrixWorkspace.draft
     : constructorDraft;
   const constructorConfidenceLabel = activeConstructorDraft
@@ -15585,6 +15612,72 @@ export function PageClient({
   );
   const constructorMatrixPreviewSafetyErrorCount =
     getConstructorMatrixSafetyErrorCount(constructorMatrixPreview);
+  const constructorMatrixPilotReadinessState = useMemo<{
+    readiness: MatrixPilotReadinessResult | null;
+    error: string;
+  }>(() => {
+    if (
+      !SHOW_INTERNAL_MATRIX_CONSTRUCTOR_UI ||
+      !constructorMatrixPreview ||
+      !constructorMatrixRolloutDecision ||
+      !constructorMatrixPreviewInput
+    ) {
+      return { readiness: null, error: "" };
+    }
+
+    try {
+      return {
+        readiness: evaluateMatrixPilotReadiness(constructorMatrixPreviewInput, {
+          rolloutOptions: {
+            previewOptions: {
+              includeDrafts: true,
+              includeComparisonReport: true,
+              includeSafetyDetails: true,
+              includeInfoDifferences: constructorMatrixIncludeInfoDifferences,
+            },
+          },
+        }),
+        error: "",
+      };
+    } catch (error) {
+      return {
+        readiness: null,
+        error:
+          error instanceof Error
+            ? error.message
+            : copyFor(language, {
+                en: "Pilot readiness evaluation failed.",
+                ru: "Pilot readiness evaluation не прошёл.",
+                bg: "Pilot readiness evaluation не мина.",
+              }),
+      };
+    }
+  }, [
+    constructorMatrixIncludeInfoDifferences,
+    constructorMatrixPreview,
+    constructorMatrixPreviewInput,
+    constructorMatrixRolloutDecision,
+    language,
+  ]);
+  const constructorMatrixPrimaryPilotEligibility = useMemo(
+    () =>
+      canUseMatrixPrimaryPilot({
+        activeDraftSource: activeConstructorDraftSource,
+        internalUiEnabled: SHOW_INTERNAL_MATRIX_CONSTRUCTOR_UI,
+        limitedPilotEnabled: ENABLE_MATRIX_CONSTRUCTOR_LIMITED_PRIMARY_PILOT,
+        preview: constructorMatrixPreview,
+        rolloutDecision: constructorMatrixRolloutDecision,
+        pilotReadiness: constructorMatrixPilotReadinessState.readiness,
+        matrixDraft: constructorMatrixPreviewMatrixDraft,
+      }),
+    [
+      activeConstructorDraftSource,
+      constructorMatrixPilotReadinessState.readiness,
+      constructorMatrixPreview,
+      constructorMatrixPreviewMatrixDraft,
+      constructorMatrixRolloutDecision,
+    ],
+  );
   const constructorMatrixWorkspaceCanOpen =
     SHOW_INTERNAL_MATRIX_CONSTRUCTOR_UI &&
     canOpenConstructorMatrixWorkspace({
@@ -22276,7 +22369,7 @@ export function PageClient({
                   </div>
                   {activeConstructorDraft ? (
                     <>
-                      {activeConstructorDraftIsMatrixInternal ? (
+                      {activeConstructorDraftIsMatrixCandidate ? (
                         <MatrixInternalDraftBanner
                           activeDraftSource={activeConstructorDraftSource}
                           language={language}
@@ -22296,16 +22389,22 @@ export function PageClient({
                       <MatrixDraftReadOnlyView
                         draft={activeConstructorDraft}
                         keyPrefix={
-                          activeConstructorDraftIsMatrixInternal ? "matrix-active" : "legacy-active"
+                          activeConstructorDraftIsMatrixCandidate ? "matrix-active" : "legacy-active"
                         }
                         phaseLabel={constructorPhaseLabel}
                       />
-                      {activeConstructorDraftIsMatrixInternal ? (
+                      {activeConstructorDraftIsMatrixCandidate ? (
                         <p className="constructor-matrix-save-guard-note">
                           {copyFor(language, {
-                            en: "Save/template/assign actions are disabled for matrix_internal. Return to legacy draft to save a template.",
-                            ru: "Save/template/assign отключены для matrix_internal. Вернитесь к legacy draft, чтобы сохранить шаблон.",
-                            bg: "Save/template/assign са изключени за matrix_internal. Върнете legacy draft, за да запазите шаблон.",
+                            en: activeConstructorDraftIsMatrixPrimaryPilot
+                              ? "Save/template/assign actions are disabled for matrix_primary_pilot. This is a limited pilot view, not the default production path."
+                              : "Save/template/assign actions are disabled for matrix_internal. Return to legacy draft to save a template.",
+                            ru: activeConstructorDraftIsMatrixPrimaryPilot
+                              ? "Save/template/assign отключены для matrix_primary_pilot. Это limited pilot view, а не default production path."
+                              : "Save/template/assign отключены для matrix_internal. Вернитесь к legacy draft, чтобы сохранить шаблон.",
+                            bg: activeConstructorDraftIsMatrixPrimaryPilot
+                              ? "Save/template/assign са изключени за matrix_primary_pilot. Това е limited pilot view, не default production path."
+                              : "Save/template/assign са изключени за matrix_internal. Върнете legacy draft, за да запазите шаблон.",
                           })}
                         </p>
                       ) : (
@@ -22341,8 +22440,12 @@ export function PageClient({
                     canActivateMatrixInternalDraft={constructorMatrixInternalDraftCanActivate}
                     includeInfoDifferences={constructorMatrixIncludeInfoDifferences}
                     language={language}
+                    limitedPrimaryPilotEnabled={ENABLE_MATRIX_CONSTRUCTOR_LIMITED_PRIMARY_PILOT}
                     loadingLabel={ui("loading")}
                     onActivateMatrixInternalDraft={handleActivateConstructorMatrixInternalDraft}
+                    onActivateMatrixPrimaryPilotDraft={
+                      handleActivateConstructorMatrixPrimaryPilotDraft
+                    }
                     onBuildPreview={handleBuildConstructorMatrixPreview}
                     onCloseWorkspace={handleCloseConstructorMatrixWorkspace}
                     onIncludeInfoDifferencesChange={setConstructorMatrixIncludeInfoDifferences}
@@ -22352,7 +22455,9 @@ export function PageClient({
                     preview={constructorMatrixPreview}
                     previewBusy={constructorMatrixPreviewBusy}
                     previewError={constructorMatrixPreviewError}
-                    previewInput={constructorMatrixPreviewInput}
+                    pilotReadiness={constructorMatrixPilotReadinessState.readiness}
+                    pilotReadinessError={constructorMatrixPilotReadinessState.error}
+                    matrixPrimaryPilotEligibility={constructorMatrixPrimaryPilotEligibility}
                     rolloutDecision={constructorMatrixRolloutDecision}
                     rolloutError={constructorMatrixRolloutError}
                     selectedCoachAthleteAvailable={Boolean(selectedCoachAthlete)}

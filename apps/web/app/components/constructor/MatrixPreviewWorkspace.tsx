@@ -16,6 +16,10 @@ import {
   constructorMatrixWorkspaceWhyText,
   matrixUiCopyFor,
 } from "../../lib/constructor-matrix-ui";
+import {
+  type MatrixPrimaryPilotEligibility,
+  matrixPrimaryPilotDisabledReasonText,
+} from "../../lib/constructor-matrix-primary-pilot";
 import type { Language } from "../../lib/i18n";
 import { MatrixDraftReadOnlyView } from "./MatrixDraftReadOnlyView";
 import { MatrixReviewExportActions } from "./MatrixReviewExportActions";
@@ -24,13 +28,16 @@ type MatrixPreviewWorkspaceProps = {
   activeDraftSource: ActiveConstructorDraftSource;
   activationDisabledReason: string;
   canActivate: boolean;
+  limitedPrimaryPilotEnabled: boolean;
   language: Language;
   onActivateMatrixInternalDraft: () => void;
+  onActivateMatrixPrimaryPilotDraft: () => void;
   onCloseWorkspace: () => void;
   onReturnToLegacyDraft: () => void;
   phaseLabel: (phase: ConstructorDraft["plan"]["weeks"][number]["phase"]) => string;
   preview: ConstructorMatrixPreviewResponse | null;
   readiness: MatrixPilotReadinessResult | null;
+  matrixPrimaryPilotEligibility: MatrixPrimaryPilotEligibility;
   rolloutDecision: MatrixConstructorRolloutDecision | null;
   workspace: ConstructorMatrixWorkspaceState;
 };
@@ -39,13 +46,16 @@ export function MatrixPreviewWorkspace({
   activeDraftSource,
   activationDisabledReason,
   canActivate,
+  limitedPrimaryPilotEnabled,
   language,
   onActivateMatrixInternalDraft,
+  onActivateMatrixPrimaryPilotDraft,
   onCloseWorkspace,
   onReturnToLegacyDraft,
   phaseLabel,
   preview,
   readiness,
+  matrixPrimaryPilotEligibility,
   rolloutDecision,
   workspace,
 }: MatrixPreviewWorkspaceProps) {
@@ -55,6 +65,8 @@ export function MatrixPreviewWorkspace({
 
   const draft = workspace.draft;
   const activeMatrixInternal = activeDraftSource === "matrix_internal";
+  const activeMatrixPrimaryPilot = activeDraftSource === "matrix_primary_pilot";
+  const activeMatrixCandidate = activeMatrixInternal || activeMatrixPrimaryPilot;
   const metrics = buildConstructorPreviewDraftMetrics(draft);
   const badgeLabel = constructorMatrixRolloutLabel(language, rolloutDecision?.mode) || "internal";
   const whyText = constructorMatrixWorkspaceWhyText(language, rolloutDecision);
@@ -100,6 +112,13 @@ export function MatrixPreviewWorkspace({
         <span className="constructor-matrix-readonly-badge">read-only</span>
         <span className="constructor-matrix-readonly-badge">not saved</span>
         <span className="constructor-matrix-readonly-badge">does not replace legacy</span>
+        {limitedPrimaryPilotEnabled ? (
+          <>
+            <span className="constructor-matrix-primary-pilot-badge">limited pilot</span>
+            <span className="constructor-matrix-primary-pilot-badge">not default</span>
+            <span className="constructor-matrix-primary-pilot-badge">allowed scenario only</span>
+          </>
+        ) : null}
         <span
           className={`constructor-matrix-rollout-badge ${constructorMatrixRolloutBadgeClass(
             rolloutDecision?.mode,
@@ -121,7 +140,13 @@ export function MatrixPreviewWorkspace({
       <div className="constructor-matrix-activation-panel">
         <div>
           <strong>
-            {activeMatrixInternal
+            {activeMatrixPrimaryPilot
+              ? matrixUiCopyFor(language, {
+                  en: "Matrix primary pilot draft is active",
+                  ru: "Активен matrix primary pilot draft",
+                  bg: "Активен matrix primary pilot draft",
+                })
+              : activeMatrixInternal
               ? matrixUiCopyFor(language, {
                   en: "Matrix is active in the internal draft area",
                   ru: "Matrix активен во внутренней draft-зоне",
@@ -134,7 +159,13 @@ export function MatrixPreviewWorkspace({
                 })}
           </strong>
           <p>
-            {activeMatrixInternal
+            {activeMatrixPrimaryPilot
+              ? matrixUiCopyFor(language, {
+                  en: "The main draft panel shows this matrix candidate as a limited primary pilot. It is still not the default path, not saved, and not assigned automatically.",
+                  ru: "Основная draft-панель показывает этот matrix candidate как limited primary pilot. Это всё ещё не default path, не сохраняется и не назначается автоматически.",
+                  bg: "Основният draft панел показва този matrix candidate като limited primary pilot. Това не е default path, не се записва и не се назначава автоматично.",
+                })
+              : activeMatrixInternal
               ? matrixUiCopyFor(language, {
                   en: "The main draft panel now shows this read-only matrix candidate. Legacy draft and template payload are unchanged.",
                   ru: "Основная draft-панель сейчас показывает этот read-only matrix candidate. Legacy draft и template payload не изменены.",
@@ -150,7 +181,7 @@ export function MatrixPreviewWorkspace({
           </p>
         </div>
         <div className="constructor-matrix-activation-actions">
-          {activeMatrixInternal ? (
+          {activeMatrixCandidate ? (
             <button className="secondary-button" onClick={onReturnToLegacyDraft} type="button">
               {matrixUiCopyFor(language, {
                 en: "Return to legacy draft",
@@ -176,6 +207,70 @@ export function MatrixPreviewWorkspace({
           <span className="constructor-matrix-readonly-badge">read-only / no save</span>
         </div>
       </div>
+
+      {limitedPrimaryPilotEnabled ? (
+        <div className="constructor-matrix-activation-panel constructor-matrix-primary-pilot-panel">
+          <div>
+            <strong>
+              {matrixUiCopyFor(language, {
+                en: "Limited primary pilot action",
+                ru: "Limited primary pilot action",
+                bg: "Limited primary pilot action",
+              })}
+            </strong>
+            <p>
+              {matrixPrimaryPilotDisabledReasonText(language, matrixPrimaryPilotEligibility.reason)}
+            </p>
+          </div>
+          <div className="constructor-matrix-activation-actions">
+            {activeMatrixPrimaryPilot ? (
+              <button className="secondary-button" onClick={onReturnToLegacyDraft} type="button">
+                {matrixUiCopyFor(language, {
+                  en: "Return to legacy draft",
+                  ru: "Вернуться к legacy draft",
+                  bg: "Върни legacy draft",
+                })}
+              </button>
+            ) : (
+              <button
+                className="primary-button"
+                disabled={!matrixPrimaryPilotEligibility.allowed}
+                onClick={onActivateMatrixPrimaryPilotDraft}
+                title={matrixPrimaryPilotDisabledReasonText(language, matrixPrimaryPilotEligibility.reason)}
+                type="button"
+              >
+                {matrixUiCopyFor(language, {
+                  en: "Use matrix as primary pilot draft",
+                  ru: "Использовать matrix как primary pilot draft",
+                  bg: "Използвай matrix като primary pilot draft",
+                })}
+              </button>
+            )}
+            <span className="constructor-matrix-primary-pilot-badge">Matrix primary pilot</span>
+            <span className="constructor-matrix-primary-pilot-badge">Limited pilot</span>
+            <span className="constructor-matrix-primary-pilot-badge">Not default</span>
+          </div>
+          <details className="constructor-matrix-primary-pilot-evidence">
+            <summary>
+              {matrixUiCopyFor(language, {
+                en: "Pilot eligibility checklist",
+                ru: "Pilot eligibility checklist",
+                bg: "Pilot eligibility checklist",
+              })}
+            </summary>
+            <ul className="constructor-matrix-preview-list">
+              {matrixPrimaryPilotEligibility.evidence.map((item) => (
+                <li key={item.key}>
+                  <strong>{item.label}</strong>
+                  <span>
+                    {item.passed ? "pass" : "stop"} · {item.value}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </details>
+        </div>
+      ) : null}
 
       <div className="constructor-matrix-count-grid constructor-matrix-workspace-overview">
         {[

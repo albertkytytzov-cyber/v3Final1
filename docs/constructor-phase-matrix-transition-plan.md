@@ -2963,4 +2963,78 @@ Stage 18 не меняет:
 8. QA export includes safe readiness summary and no PII/raw evidence.
 9. Console errors отсутствуют.
 
-Следующий PR: internal pilot runbook/checklist или controlled limited primary switch для `ready_for_limited_primary_pilot`, всё ещё behind explicit flag. Не full replacement of `mergeWeeks`.
+## 30. Stage 19: Explicit limited matrix primary pilot switch
+
+Stage 19 adds the first controlled UI switch that can show a matrix draft as a
+limited primary pilot candidate. This is **not** a production rollout and does
+not make matrix the default constructor.
+
+### 30.1 Flags
+
+The action is visible only when both flags are enabled:
+
+```bash
+NEXT_PUBLIC_INTERNAL_MATRIX_CONSTRUCTOR_UI=true
+NEXT_PUBLIC_MATRIX_CONSTRUCTOR_LIMITED_PRIMARY_PILOT=true
+```
+
+`NEXT_PUBLIC_MATRIX_CONSTRUCTOR_LIMITED_PRIMARY_PILOT` is ignored unless the
+internal matrix UI flag is also enabled. Both default to off.
+
+### 30.2 Eligibility
+
+The UI action is allowed only when all checks pass:
+
+- internal matrix UI flag enabled;
+- limited primary pilot flag enabled;
+- readiness status is `ready_for_limited_primary_pilot`;
+- rollout mode is `matrix_allowed_for_primary`;
+- scenario is `far_development_week` or `post_competition_recovery`;
+- `safeToPreview === true`;
+- `defaultPathUnchanged === true`;
+- no safety errors;
+- no comparison errors;
+- no rollout/readiness blockers;
+- no `legacy_template_used_as_structure`;
+- matrix draft exists.
+
+The pure web helper is:
+
+- `apps/web/app/lib/constructor-matrix-primary-pilot.ts`;
+- `canUseMatrixPrimaryPilot(...)`.
+
+### 30.3 UI behavior
+
+When the pilot flag is off:
+
+- Stage 18 behavior is unchanged;
+- no primary pilot action is shown;
+- legacy generation/save/template/assign is unchanged.
+
+When both flags are on:
+
+- the matrix workspace can show `Use matrix as primary pilot draft`;
+- unavailable states show a disabled action and reason/checklist;
+- active result is labelled:
+  - `matrix_primary_pilot`;
+  - `limited pilot`;
+  - `not default`;
+  - `allowed scenario only`.
+
+The action only switches the current UI draft source. It does not save, assign,
+write DB, write storage/telemetry, or change the production route.
+
+### 30.4 What remains unchanged
+
+Stage 19 does not change:
+
+- `buildPerformConstructorDraft(input)`;
+- production `/api/v1/plans/constructor/draft`;
+- DB schema;
+- mobile contracts;
+- telemetry/storage;
+- rollout policy and close-main-start primary rules;
+- `mergeWeeks`;
+- `selectTemplateCards`;
+- `pickSourceWeekForPhase`;
+- legacy save/template/assign behavior.

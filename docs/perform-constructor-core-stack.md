@@ -1385,3 +1385,41 @@ Stage 16 review export now includes only a safe readiness summary: status, scena
 It still excludes raw input, raw draft, raw readiness evidence, athlete identity, notes, DB IDs, and contact data.
 
 Stage 18 remains controlled by `NEXT_PUBLIC_INTERNAL_MATRIX_CONSTRUCTOR_UI`. With the flag off, readiness UI is not rendered and no internal matrix requests are started. With the flag on, preview, rollout, workspace, activation, return-to-legacy, save/template/assign guards, and rollout policy are unchanged.
+
+### 15.11 Limited matrix primary pilot switch
+
+Stage 19 adds an explicit UI-only limited primary pilot switch. It is controlled
+by:
+
+```bash
+NEXT_PUBLIC_INTERNAL_MATRIX_CONSTRUCTOR_UI=true
+NEXT_PUBLIC_MATRIX_CONSTRUCTOR_LIMITED_PRIMARY_PILOT=true
+```
+
+The second flag only works when the internal matrix UI flag is enabled. It does
+not affect the production draft route by itself.
+
+The web helper:
+
+- `apps/web/app/lib/constructor-matrix-primary-pilot.ts`;
+- `canUseMatrixPrimaryPilot(...)`.
+
+The helper allows the action only when:
+
+- readiness is `ready_for_limited_primary_pilot`;
+- rollout mode is `matrix_allowed_for_primary`;
+- scenario is `far_development_week` or `post_competition_recovery`;
+- preview is safe and the legacy default path is unchanged;
+- safety/comparison checks have no errors;
+- rollout/readiness blockers are empty;
+- matrix did not use legacy templates as structure;
+- a matrix draft exists.
+
+The UI can label the active source as `matrix_primary_pilot`, but this is still
+not the default production path. The draft remains unsaved, unassigned, and
+blocked from save/template/assign flows by the existing constructor draft source
+guard.
+
+Stage 19 does not change shared constructor core, API contracts, DB, mobile,
+telemetry/storage, rollout policy, close-main-start rules, `mergeWeeks`,
+`selectTemplateCards`, or `pickSourceWeekForPhase`.

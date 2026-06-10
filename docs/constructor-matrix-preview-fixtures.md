@@ -346,6 +346,32 @@ The fixture runner remains data-safety oriented and does not snapshot React UI. 
 
 Stage 18 does not add an endpoint, write DB/storage/telemetry, save or assign matrix drafts, or change rollout policy.
 
+## Limited primary pilot switch
+
+Stage 19 adds a UI-only action behind two flags:
+
+```bash
+NEXT_PUBLIC_INTERNAL_MATRIX_CONSTRUCTOR_UI=true
+NEXT_PUBLIC_MATRIX_CONSTRUCTOR_LIMITED_PRIMARY_PILOT=true
+```
+
+Fixture expectations still come from shared rollout/readiness logic. Browser
+smoke must additionally cover:
+
+- flag off: matrix UI hidden and no primary pilot action;
+- internal UI on + pilot flag off: Stage 18 behavior remains, primary pilot
+  action hidden;
+- both flags on: eligible far-development/post-competition scenario can show
+  the explicit `Use matrix as primary pilot draft` action;
+- D-3/close-main-start preview-only scenarios do not expose an enabled primary
+  pilot action;
+- travel/weigh-in remain internal-only and do not become primary;
+- returning to legacy still works;
+- save/template/assign remain disabled for `matrix_primary_pilot`.
+
+The pilot helper must not store state, send telemetry, write DB, or change the
+production constructor draft route.
+
 ## Что не проверяется
 
 Fixtures не делают full snapshot:
