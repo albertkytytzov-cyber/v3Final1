@@ -1603,3 +1603,24 @@ visible or persistent by accident:
 This is a regression guard only. It does not change rollout policy, matrix draft
 logic, save/template/assign behavior, DB schema, API contracts, mobile
 contracts, or the production constructor route.
+
+### 15.19 Review export evidence regression
+
+Stage 27 adds `npm run check:constructor-matrix-review-export` and includes it
+in the root `npm run check` chain.
+
+The check builds internal review export packages for the key pilot scenarios:
+
+- D-90 limited primary candidate;
+- D-3 preview-only close-start blocker;
+- travel day internal-only context;
+- weigh-in day internal-only context.
+
+It verifies the export contains rollout mode, scenario, recommended action,
+readiness status, structural counts, JSON, markdown and anonymized privacy
+metadata. It also checks that athlete identity, coach notes, raw season/plan
+ids, email-like values, phone-like values and UUID-like values are not exported.
+
+This keeps the manual feedback package safe and useful without changing
+production constructor behavior, rollout policy, DB/API contracts, storage,
+telemetry, save/template/assign behavior, or mobile contracts.

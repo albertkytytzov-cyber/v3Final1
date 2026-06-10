@@ -486,6 +486,30 @@ snapshots: D-90 can still pass the controlled primary gate, while D-3,
 travel and weigh-in stay preview-only/internal-only according to their rollout
 decision.
 
+## Review export evidence regression
+
+Stage 27 adds `npm run check:constructor-matrix-review-export`.
+
+The check builds anonymized export packages for:
+
+- `far_development_week_d90`;
+- `main_start_d3_final_activation`;
+- `travel_day`;
+- `weigh_in_day`.
+
+It validates the copied review package, not the full UI:
+
+- rollout mode/scenario/action;
+- pilot readiness status and `matrixPrimaryAllowed`;
+- matrix week/day/session/block counts;
+- markdown and JSON shape;
+- privacy marker;
+- no athlete name, athlete id, coach note, raw season/plan ids, email-like,
+  phone-like or UUID-like values.
+
+This gives the manual pilot review path its own fixture coverage while keeping
+the production constructor route unchanged.
+
 ## Что не проверяется
 
 Fixtures не делают full snapshot:

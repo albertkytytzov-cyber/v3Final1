@@ -3420,3 +3420,49 @@ Stage 26 does not change matrix draft logic, rollout policy, API contracts,
 DB schema, mobile contracts, save/template/assign behavior, or production
 constructor generation. It only adds automated checks for the existing
 controlled-pilot boundaries.
+
+## 38. Stage 27: Review export evidence regression
+
+Stage 27 adds a dedicated regression check for the internal matrix review
+export package.
+
+The new check is:
+
+```bash
+npm run check:constructor-matrix-review-export
+```
+
+It is included in the root `npm run check` test chain.
+
+### 38.1 Covered scenarios
+
+The check builds anonymized review packages for:
+
+- `far_development_week_d90` — limited primary pilot allowed;
+- `main_start_d3_final_activation` — preview-only with close-start blocker;
+- `travel_day` — internal-only logistics context;
+- `weigh_in_day` — internal-only weigh-in context.
+
+For every package it verifies:
+
+- rollout mode, scenario, recommended action and readiness status;
+- matrix structural counts are present;
+- markdown and JSON are generated;
+- privacy mode is `anonymized`;
+- athlete name, athlete id, coach notes, season ids, competition-plan ids,
+  email-like values, phone-like values and UUID-like values are not exported.
+
+### 38.2 Why this matters
+
+The controlled pilot needs a manual feedback path before production rollout.
+Stage 16 added the internal review export UI. Stage 27 makes that export
+auditable: reviewers can copy a safe package, and future edits cannot
+accidentally leak identity/raw fixture fields or lose the rollout/readiness
+summary.
+
+### 38.3 Guardrails
+
+Stage 27 does not change matrix draft logic, rollout policy, API contracts,
+DB schema, mobile contracts, storage, telemetry, save/template/assign behavior,
+or production constructor generation. It only adds an automated evidence check
+for the existing internal review export.
