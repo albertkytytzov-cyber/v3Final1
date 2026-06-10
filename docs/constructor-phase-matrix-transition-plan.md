@@ -3122,3 +3122,81 @@ Stage 20 does not change:
 
 Passing dry-run is evidence for future guarded server-side work, not permission
 to save matrix as a real template today.
+
+## 32. Stage 21: Server-side primary pilot save dry-run
+
+Stage 21 adds a backend internal dry-run endpoint for the same
+`matrix_primary_pilot` save-readiness question.
+
+It still does **not** enable real matrix save/assign.
+
+### 32.1 Shared helper
+
+The Stage 20 dry-run implementation is moved into shared code:
+
+- `packages/shared/src/constructor-matrix-save-dry-run.ts`;
+- exported from `packages/shared/src/index.ts`;
+- consumed by the web UI wrapper and by the API route.
+
+This keeps the UI and server on one checklist instead of two similar
+implementations.
+
+The helper remains pure:
+
+- no API calls;
+- no DB writes;
+- no storage writes;
+- no telemetry;
+- no assignment;
+- no template creation.
+
+### 32.2 Internal API route
+
+Internal route:
+
+```text
+POST /api/v1/plans/constructor/internal/matrix-primary-pilot-save-dry-run
+```
+
+Request:
+
+- `input`: constructor input;
+- `rolloutOptions`: optional matrix rollout options;
+- `templateName`: optional dry-run template name.
+
+The route:
+
+1. requires coach/admin user;
+2. checks athlete access;
+3. recomputes rollout decision on the server;
+4. recomputes pilot readiness on the server;
+5. builds a matrix draft candidate server-side;
+6. runs the shared dry-run checklist;
+7. returns dry-run status, rollout decision and pilot readiness.
+
+It does not trust the browser to prove pilot eligibility.
+
+### 32.3 Response
+
+Response shape:
+
+- `generatedFrom = matrix_primary_pilot_server_save_dry_run`;
+- `dryRun`;
+- `rolloutDecision`;
+- `pilotReadiness`;
+- `notes`.
+
+The route returns validation evidence only. It does not return a saved template
+id and does not write anything to the database.
+
+### 32.4 Required behavior
+
+- D-90 / allowlisted primary scenario can return `dryRun.status = passed`;
+- D-3 / close main-start remains blocked or preview-only;
+- travel and weigh-in remain internal-only and cannot pass primary pilot dry-run;
+- production `/api/v1/plans/constructor/draft` remains legacy;
+- `/api/v1/plans/templates` behavior remains unchanged;
+- save/template/assign UI remains disabled for `matrix_primary_pilot`.
+
+Stage 21 is a backend validation gate for controlled pilot readiness, not a
+production save switch.

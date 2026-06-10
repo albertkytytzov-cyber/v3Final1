@@ -9,6 +9,7 @@ import type {
   ConstructorMatrixPreviewRequest,
   ConstructorMatrixPreviewApiOptions,
   MatrixConstructorRolloutOptions,
+  MatrixPrimaryPilotServerSaveDryRunRequest,
   ConstructorInput,
   PlanBlockInput,
   PlanDayInput,
@@ -272,6 +273,26 @@ export function parseConstructorMatrixRolloutDecisionBody(body: unknown): {
   return {
     input: parseConstructorDraftBody(payload.input),
     options: parseConstructorMatrixRolloutOptions(payload.options),
+  };
+}
+
+export function parseMatrixPrimaryPilotSaveDryRunBody(
+  body: unknown,
+): MatrixPrimaryPilotServerSaveDryRunRequest {
+  const payload = (body ?? {}) as {
+    input?: unknown;
+    rolloutOptions?: unknown;
+    templateName?: unknown;
+  };
+
+  if (!payload.input) {
+    throw new Error("input is required");
+  }
+
+  return {
+    input: parseConstructorDraftBody(payload.input),
+    rolloutOptions: parseConstructorMatrixRolloutOptions(payload.rolloutOptions),
+    templateName: typeof payload.templateName === "string" ? payload.templateName : undefined,
   };
 }
 

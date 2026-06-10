@@ -388,6 +388,26 @@ Browser smoke should cover:
   not become passed through those flows;
 - real save/template/assign remains disabled for `matrix_primary_pilot`.
 
+## Server-side pilot save dry-run
+
+Stage 21 adds an internal API dry-run for the same primary pilot save-readiness
+check:
+
+```text
+POST /api/v1/plans/constructor/internal/matrix-primary-pilot-save-dry-run
+```
+
+Smoke expectations:
+
+- shared dry-run helper is used by both web and API;
+- D-90 allowlisted primary fixture returns `dryRun.status = passed`;
+- D-3 fixture returns `dryRun.status = blocked`;
+- travel and weigh-in fixtures return `dryRun.status = blocked`;
+- response contains rollout decision and pilot readiness evidence;
+- response does not contain a template id or assigned plan id;
+- no DB/API production save route is called;
+- production constructor draft remains legacy.
+
 Dry-run validates a generated `PlanTemplatePayload` candidate but does not save
 or expose the payload to save handlers.
 

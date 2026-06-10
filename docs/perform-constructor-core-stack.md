@@ -1461,3 +1461,40 @@ NEXT_PUBLIC_MATRIX_CONSTRUCTOR_LIMITED_PRIMARY_PILOT=true
 
 Passing dry-run is a readiness signal for future server-side guarded pilot work,
 not production permission.
+
+### 15.13 Server-side primary pilot save dry-run
+
+Stage 21 moves the pilot-safe dry-run checklist into shared code and exposes it
+through an internal API route:
+
+```text
+POST /api/v1/plans/constructor/internal/matrix-primary-pilot-save-dry-run
+```
+
+Shared file:
+
+- `packages/shared/src/constructor-matrix-save-dry-run.ts`
+
+API behavior:
+
+- requires coach/admin access;
+- checks athlete access;
+- recomputes rollout decision server-side;
+- recomputes pilot readiness server-side;
+- builds a matrix draft candidate server-side;
+- runs the shared dry-run checklist;
+- returns validation evidence only.
+
+This route is still a dry-run:
+
+- no template is created;
+- no plan is assigned;
+- no DB/storage/telemetry write happens;
+- production `/api/v1/plans/constructor/draft` remains the legacy route;
+- real save/template/assign remains disabled for `matrix_primary_pilot`.
+
+Expected controlled-pilot behavior:
+
+- D-90 allowlisted primary scenario can pass the server dry-run;
+- D-3 close main-start stays preview-only/blocked for primary save;
+- travel and weigh-in stay internal-only and cannot pass primary pilot save dry-run.
