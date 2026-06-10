@@ -45,8 +45,8 @@ export function MatrixPilotReadinessCard({
       <div className="summary-topline">
         <strong>
           {matrixUiCopyFor(language, {
-            en: "Pilot readiness",
-            ru: "Pilot readiness",
+            en: "Readiness to use",
+            ru: "Готовность к применению",
             bg: "Pilot readiness",
           })}
         </strong>
@@ -61,18 +61,25 @@ export function MatrixPilotReadinessCard({
         <>
           <div className="constructor-matrix-count-grid constructor-matrix-pilot-grid">
             {[
-              ["status", readiness.status],
-              ["scenario", readiness.scenario],
-              ["rollout", readiness.rolloutMode],
-              ["action", readiness.recommendedAction],
-              ["safe", safeToPreview === null || safeToPreview === undefined ? "-" : safeToPreview ? "yes" : "no"],
+              [matrixUiCopyFor(language, { en: "status", ru: "статус", bg: "статус" }), readiness.status],
+              [matrixUiCopyFor(language, { en: "scenario", ru: "сценарий", bg: "сценарий" }), readiness.scenario],
+              [matrixUiCopyFor(language, { en: "mode", ru: "режим", bg: "режим" }), readiness.rolloutMode],
+              [matrixUiCopyFor(language, { en: "action", ru: "действие", bg: "действие" }), readiness.recommendedAction],
               [
-                "default",
+                matrixUiCopyFor(language, { en: "safety", ru: "безопасность", bg: "безопасност" }),
+                safeToPreview === null || safeToPreview === undefined
+                  ? "-"
+                  : safeToPreview
+                    ? matrixUiCopyFor(language, { en: "ok", ru: "пройдена", bg: "ok" })
+                    : matrixUiCopyFor(language, { en: "stop", ru: "стоп", bg: "стоп" }),
+              ],
+              [
+                matrixUiCopyFor(language, { en: "current", ru: "текущий", bg: "текущ" }),
                 defaultPathUnchanged === null || defaultPathUnchanged === undefined
                   ? "-"
                   : defaultPathUnchanged
-                    ? "unchanged"
-                    : "changed",
+                    ? matrixUiCopyFor(language, { en: "unchanged", ru: "не изменён", bg: "непроменен" })
+                    : matrixUiCopyFor(language, { en: "changed", ru: "изменён", bg: "променен" }),
               ],
             ].map(([label, value]) => (
               <span key={label}>
@@ -95,7 +102,7 @@ export function MatrixPilotReadinessCard({
           <p>
             {matrixUiCopyFor(language, {
               en: "This card is display-only. It does not enable matrix primary, save, assign, or change rollout rules.",
-              ru: "Эта карточка только показывает readiness. Она не включает matrix primary, save, assign и не меняет rollout rules.",
+              ru: "Эта карточка только показывает готовность. Она сама не включает сохранение, назначение и не меняет правила применения.",
               bg: "Тази карта е само display. Не включва matrix primary, save, assign и не променя rollout rules.",
             })}
           </p>
@@ -105,7 +112,7 @@ export function MatrixPilotReadinessCard({
               <strong>
                 {matrixUiCopyFor(language, {
                   en: "Blockers",
-                  ru: "Blockers",
+                  ru: "Блокеры",
                   bg: "Blockers",
                 })}
               </strong>
@@ -128,7 +135,7 @@ export function MatrixPilotReadinessCard({
             <p className="constructor-matrix-rollout-note">
               {matrixUiCopyFor(language, {
                 en: "No readiness blockers were returned.",
-                ru: "Readiness blockers не вернулись.",
+                ru: "Блокирующих проблем готовности нет.",
                 bg: "Няма readiness blockers.",
               })}
             </p>
@@ -138,7 +145,7 @@ export function MatrixPilotReadinessCard({
             <summary>
               {matrixUiCopyFor(language, {
                 en: "Checklist details",
-                ru: "Checklist details",
+                ru: "Детали проверки",
                 bg: "Checklist details",
               })}
             </summary>
@@ -167,7 +174,7 @@ export function MatrixPilotReadinessCard({
             {error ||
               matrixUiCopyFor(language, {
                 en: "Pilot readiness unavailable until preview and rollout decision are loaded.",
-                ru: "Pilot readiness недоступен, пока не загружены preview и rollout decision.",
+                ru: "Готовность недоступна, пока не выполнено сравнение нового конструктора.",
                 bg: "Pilot readiness не е наличен преди preview и rollout decision.",
               })}
           </p>
@@ -175,7 +182,7 @@ export function MatrixPilotReadinessCard({
             <button className="secondary-button" disabled={loading} onClick={onRetry} type="button">
               {matrixUiCopyFor(language, {
                 en: "Retry matrix preview",
-                ru: "Повторить matrix-preview",
+                ru: "Повторить сравнение",
                 bg: "Повтори matrix-preview",
               })}
             </button>

@@ -118,21 +118,21 @@ export function MatrixConstructorPreviewPanel({
           <div>
             <strong>
               {matrixUiCopyFor(language, {
-                en: "Matrix preview / internal",
-                ru: "Сравнение legacy vs matrix - internal",
+                en: "Current vs new constructor",
+                ru: "Сравнение текущего и нового конструктора",
                 bg: "Matrix preview / internal",
               })}
             </strong>
             <span>
               {matrixUiCopyFor(language, {
-                en: "Experimental side-by-side QA. Does not save or replace the draft.",
-                ru: "Экспериментальная QA-панель. Не сохраняет и не заменяет черновик.",
+                en: "Check the new planning logic before using it for templates or assignments.",
+                ru: "Проверка новой логики планирования перед сохранением шаблона или назначением.",
                 bg: "Експериментален QA панел. Не записва и не заменя черновата.",
               })}
             </span>
           </div>
           <span className="constructor-source-badge">
-            {matrixUiCopyFor(language, { en: "internal", ru: "internal", bg: "internal" })}
+            {matrixUiCopyFor(language, { en: "review", ru: "проверка", bg: "проверка" })}
           </span>
         </summary>
 
@@ -147,13 +147,13 @@ export function MatrixConstructorPreviewPanel({
               ? loadingLabel
               : preview || previewError
                 ? matrixUiCopyFor(language, {
-                    en: "Retry matrix preview",
-                    ru: "Повторить matrix-preview",
+                    en: "Compare again",
+                    ru: "Сравнить ещё раз",
                     bg: "Повтори matrix-preview",
                   })
                 : matrixUiCopyFor(language, {
-                    en: "Compare legacy vs matrix",
-                    ru: "Сравнить legacy vs matrix",
+                    en: "Compare current vs new",
+                    ru: "Сравнить текущий и новый",
                     bg: "Сравни legacy vs matrix",
                   })}
           </button>
@@ -166,7 +166,7 @@ export function MatrixConstructorPreviewPanel({
             <span>
               {matrixUiCopyFor(language, {
                 en: "Include info differences",
-                ru: "Показывать info-различия",
+                ru: "Показывать технические отличия",
                 bg: "Показвай info разлики",
               })}
             </span>
@@ -178,7 +178,7 @@ export function MatrixConstructorPreviewPanel({
             <strong>
               {matrixUiCopyFor(language, {
                 en: "Internal preview failed",
-                ru: "Internal-preview не прошёл",
+                ru: "Сравнение нового конструктора не прошло",
                 bg: "Internal-preview не мина",
               })}
             </strong>
@@ -191,7 +191,7 @@ export function MatrixConstructorPreviewPanel({
             <strong>
               {matrixUiCopyFor(language, {
                 en: "Rollout decision unavailable",
-                ru: "Rollout decision недоступен",
+                ru: "Решение по применению недоступно",
                 bg: "Rollout decision не е наличен",
               })}
             </strong>
@@ -204,7 +204,7 @@ export function MatrixConstructorPreviewPanel({
             compact
             error={matrixUiCopyFor(language, {
               en: "Pilot readiness unavailable until preview and rollout decision are loaded.",
-              ru: "Pilot readiness недоступен, пока не загружены preview и rollout decision.",
+              ru: "Статус готовности недоступен, пока не выполнено сравнение нового конструктора.",
               bg: "Pilot readiness не е наличен преди preview и rollout decision.",
             })}
             language={language}
@@ -232,10 +232,22 @@ export function MatrixConstructorPreviewPanel({
                 </div>
                 <div className="constructor-matrix-count-grid">
                   {[
-                    ["errors", preview.summary.errorCount],
-                    ["warnings", preview.summary.warningCount],
-                    ["expected", preview.summary.expectedDifferenceCount],
-                    ["total", preview.summary.totalDifferences],
+                    [
+                      matrixUiCopyFor(language, { en: "errors", ru: "ошибки", bg: "грешки" }),
+                      preview.summary.errorCount,
+                    ],
+                    [
+                      matrixUiCopyFor(language, { en: "warnings", ru: "внимание", bg: "внимание" }),
+                      preview.summary.warningCount,
+                    ],
+                    [
+                      matrixUiCopyFor(language, { en: "expected", ru: "ожидаемо", bg: "очаквано" }),
+                      preview.summary.expectedDifferenceCount,
+                    ],
+                    [
+                      matrixUiCopyFor(language, { en: "total", ru: "всего", bg: "общо" }),
+                      preview.summary.totalDifferences,
+                    ],
                   ].map(([label, value]) => (
                     <span key={label}>
                       <small>{label}</small>
@@ -259,10 +271,16 @@ export function MatrixConstructorPreviewPanel({
                 </div>
                 <div className="constructor-matrix-status-row">
                   <span className={`status-chip ${preview.safety.matrixSafetyPassed ? "green" : "danger"}`}>
-                    matrix: {preview.safety.matrixSafetyPassed ? "passed" : "failed"}
+                    {matrixUiCopyFor(language, { en: "new", ru: "новый", bg: "нов" })}:{" "}
+                    {preview.safety.matrixSafetyPassed
+                      ? matrixUiCopyFor(language, { en: "passed", ru: "пройдено", bg: "премина" })
+                      : matrixUiCopyFor(language, { en: "failed", ru: "ошибка", bg: "грешка" })}
                   </span>
                   <span className={`status-chip ${preview.safety.legacyDefaultGuardPassed ? "green" : "danger"}`}>
-                    legacy guard: {preview.safety.legacyDefaultGuardPassed ? "passed" : "failed"}
+                    {matrixUiCopyFor(language, { en: "current", ru: "текущий", bg: "текущ" })}:{" "}
+                    {preview.safety.legacyDefaultGuardPassed
+                      ? matrixUiCopyFor(language, { en: "unchanged", ru: "не изменён", bg: "непроменен" })
+                      : matrixUiCopyFor(language, { en: "changed", ru: "изменён", bg: "променен" })}
                   </span>
                 </div>
                 <ul className="constructor-matrix-preview-list">
@@ -285,7 +303,7 @@ export function MatrixConstructorPreviewPanel({
                       <span>
                         {matrixUiCopyFor(language, {
                           en: "Backend safety guards passed for this internal preview.",
-                          ru: "Backend safety guards пройдены для этого internal-preview.",
+                          ru: "Серверные проверки безопасности пройдены для этого сравнения.",
                           bg: "Backend safety guards са преминали за този internal-preview.",
                         })}
                       </span>
@@ -320,7 +338,7 @@ export function MatrixConstructorPreviewPanel({
                 (!rolloutDecision
                   ? matrixUiCopyFor(language, {
                       en: "Pilot readiness unavailable until rollout decision is loaded.",
-                      ru: "Pilot readiness недоступен, пока не загружен rollout decision.",
+                      ru: "Готовность недоступна, пока не загружено решение по применению.",
                       bg: "Pilot readiness не е наличен преди rollout decision.",
                     })
                   : "")
@@ -342,8 +360,22 @@ export function MatrixConstructorPreviewPanel({
 
             <div className="constructor-matrix-side-by-side">
               {([
-                ["legacy", legacyMetrics],
-                ["matrix", matrixMetrics],
+                [
+                  matrixUiCopyFor(language, {
+                    en: "current constructor",
+                    ru: "текущий конструктор",
+                    bg: "текущ конструктор",
+                  }),
+                  legacyMetrics,
+                ],
+                [
+                  matrixUiCopyFor(language, {
+                    en: "new constructor",
+                    ru: "новый конструктор",
+                    bg: "нов конструктор",
+                  }),
+                  matrixMetrics,
+                ],
               ] as const).map(([label, metrics]) => (
                 <article className="constructor-matrix-preview-card" key={label}>
                   <div className="summary-topline">
@@ -385,16 +417,22 @@ export function MatrixConstructorPreviewPanel({
                   <strong>
                     {matrixUiCopyFor(language, {
                       en: "Matrix primary candidate - read-only",
-                      ru: "Matrix primary candidate - read-only",
+                      ru: "Новый вариант плана - только просмотр",
                       bg: "Matrix primary candidate - read-only",
                     })}
                   </strong>
-                  <span className="constructor-matrix-readonly-badge">read-only / internal</span>
+                  <span className="constructor-matrix-readonly-badge">
+                    {matrixUiCopyFor(language, {
+                      en: "review only",
+                      ru: "только проверка",
+                      bg: "само проверка",
+                    })}
+                  </span>
                 </div>
                 <p className="constructor-matrix-rollout-note">
                   {matrixUiCopyFor(language, {
-                    en: "Read-only internal candidate. It is not saved and does not replace the generated legacy draft.",
-                    ru: "Внутренний read-only кандидат. Не сохраняется и не заменяет основной черновик.",
+                    en: "Review candidate. It is not saved and does not replace the current draft until the coach explicitly chooses a safe apply path.",
+                    ru: "Кандидат для проверки. Он не сохраняется и не заменяет текущий черновик, пока тренер явно не выберет безопасное применение.",
                     bg: "Вътрешен read-only кандидат. Не се записва и не заменя основната чернова.",
                   })}
                 </p>
@@ -416,7 +454,7 @@ export function MatrixConstructorPreviewPanel({
                     <strong>
                       {matrixUiCopyFor(language, {
                         en: "Selected blocks",
-                        ru: "Выбранные блоки",
+                        ru: "Какие блоки выбрал новый конструктор",
                         bg: "Избрани блокове",
                       })}
                     </strong>
@@ -448,7 +486,7 @@ export function MatrixConstructorPreviewPanel({
                     <strong>
                       {matrixUiCopyFor(language, {
                         en: "Load / risks",
-                        ru: "Нагрузка / риски",
+                        ru: "Нагрузка и риски",
                         bg: "Натоварване / рискове",
                       })}
                     </strong>
@@ -509,7 +547,7 @@ export function MatrixConstructorPreviewPanel({
                   <strong>
                     {matrixUiCopyFor(language, {
                       en: "Matrix primary candidate",
-                      ru: "Matrix primary candidate",
+                      ru: "Новый вариант плана",
                       bg: "Matrix primary candidate",
                     })}
                   </strong>
@@ -517,8 +555,8 @@ export function MatrixConstructorPreviewPanel({
                 </div>
                 <p>
                   {matrixUiCopyFor(language, {
-                    en: "Candidate is hidden because the rollout gate did not allow matrix primary/internal usage for this scenario.",
-                    ru: "Кандидат скрыт: rollout gate не разрешил matrix primary/internal usage для этого сценария.",
+                    en: "Candidate is hidden because the safety gate did not allow the new constructor for this scenario.",
+                    ru: "Кандидат скрыт: safety-gate не разрешил новый конструктор для этого сценария.",
                     bg: "Кандидатът е скрит: rollout gate не разрешава matrix primary/internal usage за този сценарий.",
                   })}
                 </p>
@@ -530,7 +568,7 @@ export function MatrixConstructorPreviewPanel({
                 <strong>
                   {matrixUiCopyFor(language, {
                     en: "Matrix decision explanation",
-                    ru: "Почему matrix решил так",
+                    ru: "Почему новый конструктор решил так",
                     bg: "Matrix decision explanation",
                   })}
                 </strong>
@@ -548,7 +586,7 @@ export function MatrixConstructorPreviewPanel({
                 <ul className="constructor-matrix-preview-list">
                   {previewDecision.explanations.map((message) => (
                     <li key={message}>
-                      <strong>matrix</strong>
+                        <strong>matrix</strong>
                       <span>{message}</span>
                     </li>
                   ))}
@@ -557,7 +595,7 @@ export function MatrixConstructorPreviewPanel({
                 <p>
                   {matrixUiCopyFor(language, {
                     en: "No matrix explanation was included in the response.",
-                    ru: "В ответе нет отдельного matrix-объяснения.",
+                    ru: "В ответе нет отдельного объяснения нового конструктора.",
                     bg: "Няма matrix обяснение в отговора.",
                   })}
                 </p>
@@ -605,7 +643,7 @@ export function MatrixConstructorPreviewPanel({
           <p className="placeholder-copy">
             {matrixUiCopyFor(language, {
               en: "Open this internal panel and run the comparison when QA needs to inspect matrix output. The current production draft is untouched.",
-              ru: "Откройте internal-панель и запустите сравнение, когда QA нужно проверить matrix-output. Текущий production-черновик не трогается.",
+              ru: "Запустите сравнение, чтобы увидеть новый вариант плана. Текущий черновик не изменится.",
               bg: "Отворете internal панела и пуснете сравнение за QA. Текущата production чернова не се променя.",
             })}
           </p>

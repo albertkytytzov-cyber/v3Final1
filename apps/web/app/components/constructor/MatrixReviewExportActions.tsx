@@ -63,7 +63,7 @@ export function MatrixReviewExportActions({
         tone: "error",
         message: matrixUiCopyFor(language, {
           en: "Run matrix preview first.",
-          ru: "Сначала запустите matrix preview.",
+          ru: "Сначала запустите сравнение нового конструктора.",
           bg: "Първо пуснете matrix preview.",
         }),
       });
@@ -86,12 +86,12 @@ export function MatrixReviewExportActions({
           kind === "markdown"
             ? matrixUiCopyFor(language, {
                 en: "Review summary copied.",
-                ru: "Review summary скопирован.",
+                ru: "Сводка проверки скопирована.",
                 bg: "Review summary е копиран.",
               })
             : matrixUiCopyFor(language, {
                 en: "Review JSON copied.",
-                ru: "Review JSON скопирован.",
+                ru: "Данные проверки скопированы.",
                 bg: "Review JSON е копиран.",
               }),
       });
@@ -115,8 +115,8 @@ export function MatrixReviewExportActions({
       <div>
         <strong>
           {matrixUiCopyFor(language, {
-            en: "Internal review export",
-            ru: "Internal review export",
+            en: "Review package",
+            ru: "Пакет проверки",
             bg: "Internal review export",
           })}
         </strong>
@@ -131,7 +131,7 @@ export function MatrixReviewExportActions({
         >
           {matrixUiCopyFor(language, {
             en: "Copy review summary",
-            ru: "Copy review summary",
+            ru: "Скопировать сводку",
             bg: "Copy review summary",
           })}
         </button>
@@ -143,7 +143,7 @@ export function MatrixReviewExportActions({
         >
           {matrixUiCopyFor(language, {
             en: "Copy review JSON",
-            ru: "Copy review JSON",
+            ru: "Скопировать JSON",
             bg: "Copy review JSON",
           })}
         </button>

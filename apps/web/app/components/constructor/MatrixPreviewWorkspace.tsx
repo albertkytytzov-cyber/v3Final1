@@ -99,44 +99,56 @@ export function MatrixPreviewWorkspace({
         <div>
           <span className="eyebrow eyebrow-muted">
             {matrixUiCopyFor(language, {
-              en: "Internal matrix preview workspace",
-              ru: "Internal matrix preview workspace",
+              en: "New constructor plan review",
+              ru: "Проверка плана нового конструктора",
               bg: "Internal matrix preview workspace",
             })}
           </span>
           <h3>
             {matrixUiCopyFor(language, {
-              en: "Matrix candidate draft",
-              ru: "Matrix-кандидат черновика",
+              en: "New plan variant",
+              ru: "Новый вариант плана",
               bg: "Matrix кандидат чернова",
             })}
           </h3>
           <p>
             {matrixUiCopyFor(language, {
-              en: "Read-only, not saved, and does not replace the legacy draft.",
-              ru: "Read-only, не сохраняется и не заменяет legacy draft.",
+              en: "Review it before choosing whether it can replace the current draft.",
+              ru: "Проверьте его перед тем, как использовать вместо текущего черновика.",
               bg: "Read-only, не се записва и не заменя legacy draft.",
             })}
           </p>
         </div>
         <button className="tertiary-button" onClick={onCloseWorkspace} type="button">
           {matrixUiCopyFor(language, {
-            en: "Close matrix workspace",
-            ru: "Вернуться к legacy draft",
+            en: "Back to current draft",
+            ru: "Вернуться к текущему черновику",
             bg: "Затвори matrix workspace",
           })}
         </button>
       </header>
 
       <div className="constructor-matrix-workspace-badges">
-        <span className="constructor-matrix-readonly-badge">read-only</span>
-        <span className="constructor-matrix-readonly-badge">not saved</span>
-        <span className="constructor-matrix-readonly-badge">does not replace legacy</span>
+        <span className="constructor-matrix-readonly-badge">
+          {matrixUiCopyFor(language, { en: "review", ru: "проверка", bg: "проверка" })}
+        </span>
+        <span className="constructor-matrix-readonly-badge">
+          {matrixUiCopyFor(language, { en: "not saved yet", ru: "ещё не сохранено", bg: "още не е записано" })}
+        </span>
+        <span className="constructor-matrix-readonly-badge">
+          {matrixUiCopyFor(language, { en: "current draft is safe", ru: "текущий черновик сохранён", bg: "текущата чернова е запазена" })}
+        </span>
         {limitedPrimaryPilotEnabled ? (
           <>
-            <span className="constructor-matrix-primary-pilot-badge">limited pilot</span>
-            <span className="constructor-matrix-primary-pilot-badge">not default</span>
-            <span className="constructor-matrix-primary-pilot-badge">allowed scenario only</span>
+            <span className="constructor-matrix-primary-pilot-badge">
+              {matrixUiCopyFor(language, { en: "limited pilot", ru: "ограниченный пилот", bg: "ограничен pilot" })}
+            </span>
+            <span className="constructor-matrix-primary-pilot-badge">
+              {matrixUiCopyFor(language, { en: "not default", ru: "не по умолчанию", bg: "не по подразбиране" })}
+            </span>
+            <span className="constructor-matrix-primary-pilot-badge">
+              {matrixUiCopyFor(language, { en: "only allowed scenarios", ru: "только разрешённые сценарии", bg: "само разрешени сценарии" })}
+            </span>
           </>
         ) : null}
         <span
@@ -162,39 +174,39 @@ export function MatrixPreviewWorkspace({
           <strong>
             {activeMatrixPrimaryPilot
               ? matrixUiCopyFor(language, {
-                  en: "Matrix primary pilot draft is active",
-                  ru: "Активен matrix primary pilot draft",
+                en: "Matrix primary pilot draft is active",
+                  ru: "Активен новый план в режиме ограниченного пилота",
                   bg: "Активен matrix primary pilot draft",
                 })
               : activeMatrixInternal
               ? matrixUiCopyFor(language, {
                   en: "Matrix is active in the internal draft area",
-                  ru: "Matrix активен во внутренней draft-зоне",
+                  ru: "Новый план открыт в зоне проверки",
                   bg: "Matrix е активен във вътрешната draft зона",
                 })
               : matrixUiCopyFor(language, {
                   en: "Use matrix draft in internal workspace",
-                  ru: "Использовать matrix как internal draft",
+                  ru: "Показать новый план в основной панели",
                   bg: "Използвай matrix като internal draft",
                 })}
           </strong>
           <p>
             {activeMatrixPrimaryPilot
               ? matrixUiCopyFor(language, {
-                  en: "The main draft panel shows this matrix candidate as a limited primary pilot. It is still not the default path, not saved, and not assigned automatically.",
-                  ru: "Основная draft-панель показывает этот matrix candidate как limited primary pilot. Это всё ещё не default path, не сохраняется и не назначается автоматически.",
+                en: "The main draft panel shows this matrix candidate as a limited primary pilot. It is still not the default path, not saved, and not assigned automatically.",
+                  ru: "Основная панель показывает новый вариант как ограниченный пилот. Он ещё не сохраняется и не назначается автоматически.",
                   bg: "Основният draft панел показва този matrix candidate като limited primary pilot. Това не е default path, не се записва и не се назначава автоматично.",
                 })
               : activeMatrixInternal
               ? matrixUiCopyFor(language, {
                   en: "The main draft panel now shows this read-only matrix candidate. Legacy draft and template payload are unchanged.",
-                  ru: "Основная draft-панель сейчас показывает этот read-only matrix candidate. Legacy draft и template payload не изменены.",
+                  ru: "Основная панель сейчас показывает новый вариант для просмотра. Текущий черновик и шаблон не изменены.",
                   bg: "Основният draft панел показва този read-only matrix candidate. Legacy draft и template payload не са променени.",
                 })
               : canActivate
                 ? matrixUiCopyFor(language, {
                     en: "Allowed by rollout gate for internal review only. It will not save, assign, or write to storage.",
-                    ru: "Разрешено rollout gate только для internal review. Не сохраняет, не назначает и не пишет в storage.",
+                    ru: "Разрешено только для проверки. Не сохраняет, не назначает и не пишет данные.",
                     bg: "Разрешено от rollout gate само за internal review. Не записва, не назначава и не пише в storage.",
                   })
                 : activationDisabledReason}
@@ -204,8 +216,8 @@ export function MatrixPreviewWorkspace({
           {activeMatrixCandidate ? (
             <button className="secondary-button" onClick={onReturnToLegacyDraft} type="button">
               {matrixUiCopyFor(language, {
-                en: "Return to legacy draft",
-                ru: "Вернуться к legacy draft",
+                en: "Return to current draft",
+                ru: "Вернуться к текущему черновику",
                 bg: "Върни legacy draft",
               })}
             </button>
@@ -219,12 +231,14 @@ export function MatrixPreviewWorkspace({
             >
               {matrixUiCopyFor(language, {
                 en: "Use matrix draft in internal workspace",
-                ru: "Использовать matrix как internal draft",
+                ru: "Показать новый план в основной панели",
                 bg: "Използвай matrix като internal draft",
               })}
             </button>
           )}
-          <span className="constructor-matrix-readonly-badge">read-only / no save</span>
+          <span className="constructor-matrix-readonly-badge">
+            {matrixUiCopyFor(language, { en: "review / no save", ru: "проверка / без сохранения", bg: "проверка / без запис" })}
+          </span>
         </div>
       </div>
 
@@ -234,7 +248,7 @@ export function MatrixPreviewWorkspace({
             <strong>
               {matrixUiCopyFor(language, {
                 en: "Limited primary pilot action",
-                ru: "Limited primary pilot action",
+                ru: "Ограниченное применение нового плана",
                 bg: "Limited primary pilot action",
               })}
             </strong>
@@ -247,7 +261,7 @@ export function MatrixPreviewWorkspace({
               <button className="secondary-button" onClick={onReturnToLegacyDraft} type="button">
                 {matrixUiCopyFor(language, {
                   en: "Return to legacy draft",
-                  ru: "Вернуться к legacy draft",
+                  ru: "Вернуться к текущему черновику",
                   bg: "Върни legacy draft",
                 })}
               </button>
@@ -261,20 +275,26 @@ export function MatrixPreviewWorkspace({
               >
                 {matrixUiCopyFor(language, {
                   en: "Use matrix as primary pilot draft",
-                  ru: "Использовать matrix как primary pilot draft",
+                  ru: "Использовать новый план как пилотный черновик",
                   bg: "Използвай matrix като primary pilot draft",
                 })}
               </button>
             )}
-            <span className="constructor-matrix-primary-pilot-badge">Matrix primary pilot</span>
-            <span className="constructor-matrix-primary-pilot-badge">Limited pilot</span>
-            <span className="constructor-matrix-primary-pilot-badge">Not default</span>
+            <span className="constructor-matrix-primary-pilot-badge">
+              {matrixUiCopyFor(language, { en: "new constructor pilot", ru: "пилот нового конструктора", bg: "pilot нов конструктор" })}
+            </span>
+            <span className="constructor-matrix-primary-pilot-badge">
+              {matrixUiCopyFor(language, { en: "limited", ru: "ограниченно", bg: "ограничено" })}
+            </span>
+            <span className="constructor-matrix-primary-pilot-badge">
+              {matrixUiCopyFor(language, { en: "not default", ru: "не по умолчанию", bg: "не по подразбиране" })}
+            </span>
           </div>
           <details className="constructor-matrix-primary-pilot-evidence">
             <summary>
               {matrixUiCopyFor(language, {
                 en: "Pilot eligibility checklist",
-                ru: "Pilot eligibility checklist",
+                ru: "Проверка допуска пилота",
                 bg: "Pilot eligibility checklist",
               })}
             </summary>
@@ -293,7 +313,7 @@ export function MatrixPreviewWorkspace({
             <summary>
               {matrixUiCopyFor(language, {
                 en: "Server primary gate checklist",
-                ru: "Server primary gate checklist",
+                ru: "Серверная проверка применения",
                 bg: "Server primary gate checklist",
               })}
             </summary>
@@ -320,14 +340,24 @@ export function MatrixPreviewWorkspace({
 
       <div className="constructor-matrix-count-grid constructor-matrix-workspace-overview">
         {[
-          ["mode", rolloutDecision?.mode ?? "-"],
-          ["scenario", rolloutDecision?.scenario ?? "-"],
-          ["safe", rolloutDecision?.safeToPreview ? "yes" : "no"],
-          ["default", rolloutDecision?.defaultPathUnchanged ? "unchanged" : "changed"],
-          ["weeks", metrics.weekCount],
-          ["days", metrics.dayCount],
-          ["sessions", metrics.sessionCount],
-          ["blocks", metrics.blockCount],
+          [matrixUiCopyFor(language, { en: "mode", ru: "режим", bg: "режим" }), rolloutDecision?.mode ?? "-"],
+          [matrixUiCopyFor(language, { en: "scenario", ru: "сценарий", bg: "сценарий" }), rolloutDecision?.scenario ?? "-"],
+          [
+            matrixUiCopyFor(language, { en: "safety", ru: "безопасность", bg: "безопасност" }),
+            rolloutDecision?.safeToPreview
+              ? matrixUiCopyFor(language, { en: "ok", ru: "пройдена", bg: "ok" })
+              : matrixUiCopyFor(language, { en: "stop", ru: "стоп", bg: "стоп" }),
+          ],
+          [
+            matrixUiCopyFor(language, { en: "current", ru: "текущий", bg: "текущ" }),
+            rolloutDecision?.defaultPathUnchanged
+              ? matrixUiCopyFor(language, { en: "unchanged", ru: "не изменён", bg: "непроменен" })
+              : matrixUiCopyFor(language, { en: "changed", ru: "изменён", bg: "променен" }),
+          ],
+          [matrixUiCopyFor(language, { en: "weeks", ru: "недели", bg: "седмици" }), metrics.weekCount],
+          [matrixUiCopyFor(language, { en: "days", ru: "дни", bg: "дни" }), metrics.dayCount],
+          [matrixUiCopyFor(language, { en: "sessions", ru: "тренировки", bg: "тренировки" }), metrics.sessionCount],
+          [matrixUiCopyFor(language, { en: "blocks", ru: "блоки", bg: "блокове" }), metrics.blockCount],
         ].map(([label, value]) => (
           <span key={label}>
             <small>{label}</small>
@@ -342,7 +372,7 @@ export function MatrixPreviewWorkspace({
             <strong>
               {matrixUiCopyFor(language, {
                 en: "Why this is not the main draft",
-                ru: "Почему это не основной draft",
+                ru: "Почему это пока не основной черновик",
                 bg: "Защо това не е основната чернова",
               })}
             </strong>
@@ -363,7 +393,7 @@ export function MatrixPreviewWorkspace({
             <p className="constructor-matrix-rollout-note">
               {matrixUiCopyFor(language, {
                 en: "No rollout blockers were returned, but this workspace remains internal and read-only.",
-                ru: "Rollout blockers не вернулись, но workspace остаётся internal и read-only.",
+                ru: "Блокирующих ограничений нет, но этот вариант пока открыт только для проверки.",
                 bg: "Няма rollout blockers, но workspace остава internal и read-only.",
               })}
             </p>
@@ -375,7 +405,7 @@ export function MatrixPreviewWorkspace({
             <strong>
               {matrixUiCopyFor(language, {
                 en: "Matrix risks and explanation",
-                ru: "Matrix риски и объяснение",
+                ru: "Риски и объяснение нового конструктора",
                 bg: "Matrix рискове и обяснение",
               })}
             </strong>
@@ -397,7 +427,7 @@ export function MatrixPreviewWorkspace({
                 <span>
                   {matrixUiCopyFor(language, {
                     en: "No critical risks detected in the matrix candidate.",
-                    ru: "Критичных рисков в matrix-кандидате не найдено.",
+                    ru: "Критичных рисков в новом варианте не найдено.",
                     bg: "Няма критични рискове в matrix кандидата.",
                   })}
                 </span>

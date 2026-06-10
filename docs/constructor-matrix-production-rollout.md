@@ -25,11 +25,23 @@ NEXT_PUBLIC_INTERNAL_MATRIX_CONSTRUCTOR_UI=true
 NEXT_PUBLIC_MATRIX_CONSTRUCTOR_LIMITED_PRIMARY_PILOT=true
 ```
 
+The trainer-facing save/assign pilot path has a separate third flag:
+
+```bash
+NEXT_PUBLIC_MATRIX_CONSTRUCTOR_SAVE_ASSIGN_PILOT=true
+```
+
+This third flag is ignored unless the first two flags are also enabled. It
+should stay false unless the smoke explicitly validates matrix template saving
+after local and server dry-run evidence pass.
+
 Rules:
 
 - With both flags missing or false, matrix UI must be hidden.
 - `NEXT_PUBLIC_MATRIX_CONSTRUCTOR_LIMITED_PRIMARY_PILOT=true` is ignored unless
   `NEXT_PUBLIC_INTERNAL_MATRIX_CONSTRUCTOR_UI=true`.
+- `NEXT_PUBLIC_MATRIX_CONSTRUCTOR_SAVE_ASSIGN_PILOT=true` is ignored unless
+  both internal UI and limited primary pilot are enabled.
 - Because the flags are `NEXT_PUBLIC_*`, changing them requires rebuilding the
   web app before the browser can see the new state.
 - In self-host Docker deploys the flags are wired through `docker-compose.yml`
@@ -116,9 +128,10 @@ Manual browser checks:
 - `far_development_week_d90` style scenario can build preview, rollout,
   readiness, server dry-run evidence and review export;
 - matrix primary pilot can be activated only after passing server evidence;
-- active `matrix_primary_pilot` draft is read-only;
-- save/template/assign controls stay disabled for `matrix_internal` and
-  `matrix_primary_pilot`;
+- active `matrix_primary_pilot` draft remains review-only unless the third
+  save/assign pilot flag is explicitly enabled;
+- with the third flag off, save/template/assign controls stay disabled for
+  `matrix_internal` and `matrix_primary_pilot`;
 - return to legacy works;
 - D-3 close-start scenario remains preview-only;
 - travel and weigh-in scenarios remain internal-only;
@@ -133,8 +146,38 @@ Expected evidence to record:
 - rollout mode and readiness status;
 - server dry-run status;
 - export copied successfully;
-- save/template/assign remained unavailable for matrix sources;
+- save/template/assign remained unavailable for matrix sources when the third
+  flag is off;
 - return-to-legacy result.
+
+## Optional save/assign pilot smoke
+
+Only run this smoke when the team intentionally tests real matrix template
+saving. Enable all three flags, rebuild web, hard-refresh the browser, and use a
+known allowed D-90-style scenario.
+
+Manual browser checks:
+
+- build the current draft;
+- run the new constructor comparison;
+- open the new plan variant;
+- activate the limited pilot view;
+- confirm local and server safe-save checks are passed;
+- confirm the save button appears only for the active new constructor draft;
+- save as template;
+- verify the saved template appears in the template library;
+- assign the saved template to the selected athlete through the normal
+  assignment flow;
+- confirm `matrix_internal`, D-3, travel and weigh-in still cannot save.
+
+Expected evidence to record:
+
+- all three flags enabled;
+- selected athlete/scenario;
+- local and server dry-run status;
+- saved template id/name;
+- assignment id/date;
+- proof that blocked scenarios still do not expose save.
 
 ## Rollback smoke
 
@@ -163,13 +206,15 @@ Continue the controlled pilot only if:
 - flag-on smoke passes;
 - rollback smoke passes;
 - review exports are anonymized;
-- no production save/template/assign path is available for matrix sources;
+- no production save/template/assign path is available for matrix sources unless
+  the optional third-flag save/assign pilot smoke is being intentionally run;
 - coach feedback confirms the review package is understandable.
 
 Stop or roll back if:
 
 - matrix UI appears when flags are off;
 - D-3/travel/weigh-in can become primary production drafts;
-- save/template/assign becomes available for matrix sources;
+- save/template/assign becomes available for matrix sources while the third
+  save/assign pilot flag is off;
 - review export leaks identity/raw ids;
 - constructor legacy flow regresses.

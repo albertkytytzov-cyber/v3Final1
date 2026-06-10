@@ -45,9 +45,11 @@ function extractFunctionBlock(source, name) {
 function withFeatureFlagEnv(nextEnv, callback) {
   const internalKey = "NEXT_PUBLIC_INTERNAL_MATRIX_CONSTRUCTOR_UI";
   const limitedKey = "NEXT_PUBLIC_MATRIX_CONSTRUCTOR_LIMITED_PRIMARY_PILOT";
+  const saveAssignKey = "NEXT_PUBLIC_MATRIX_CONSTRUCTOR_SAVE_ASSIGN_PILOT";
   const previous = {
     internal: process.env[internalKey],
     limited: process.env[limitedKey],
+    saveAssign: process.env[saveAssignKey],
   };
 
   try {
@@ -67,6 +69,14 @@ function withFeatureFlagEnv(nextEnv, callback) {
       }
     }
 
+    if (Object.prototype.hasOwnProperty.call(nextEnv, "saveAssign")) {
+      if (nextEnv.saveAssign === undefined) {
+        delete process.env[saveAssignKey];
+      } else {
+        process.env[saveAssignKey] = nextEnv.saveAssign;
+      }
+    }
+
     return callback();
   } finally {
     if (previous.internal === undefined) {
@@ -79,6 +89,12 @@ function withFeatureFlagEnv(nextEnv, callback) {
       delete process.env[limitedKey];
     } else {
       process.env[limitedKey] = previous.limited;
+    }
+
+    if (previous.saveAssign === undefined) {
+      delete process.env[saveAssignKey];
+    } else {
+      process.env[saveAssignKey] = previous.saveAssign;
     }
   }
 }
@@ -95,6 +111,10 @@ function checkFeatureFlagDefaults() {
     defaults.matrixConstructorLimitedPrimaryPilot === false,
     "Limited matrix primary pilot flag must be off by default",
   );
+  assert(
+    defaults.matrixConstructorSaveAssignPilot === false,
+    "Matrix save/assign pilot flag must be off by default",
+  );
 
   const limitedWithoutInternal = withFeatureFlagEnv(
     { internal: undefined, limited: "true" },
@@ -108,6 +128,10 @@ function checkFeatureFlagDefaults() {
     limitedWithoutInternal.matrixConstructorLimitedPrimaryPilot === false,
     "Limited pilot must be ignored unless internal matrix UI is explicitly enabled",
   );
+  assert(
+    limitedWithoutInternal.matrixConstructorSaveAssignPilot === false,
+    "Save/assign pilot must be ignored unless internal matrix UI is explicitly enabled",
+  );
 
   const internalOnly = withFeatureFlagEnv({ internal: "true", limited: undefined }, () =>
     getConstructorMatrixUiFlags(),
@@ -116,6 +140,10 @@ function checkFeatureFlagDefaults() {
   assert(
     internalOnly.matrixConstructorLimitedPrimaryPilot === false,
     "Internal UI flag alone must not enable matrix primary pilot",
+  );
+  assert(
+    internalOnly.matrixConstructorSaveAssignPilot === false,
+    "Internal UI flag alone must not enable matrix save/assign pilot",
   );
 
   const bothEnabled = withFeatureFlagEnv({ internal: "true", limited: "true" }, () =>
@@ -126,14 +154,33 @@ function checkFeatureFlagDefaults() {
     bothEnabled.matrixConstructorLimitedPrimaryPilot,
     "Limited matrix primary pilot must enable only when both flags are explicit",
   );
+  assert(
+    bothEnabled.matrixConstructorSaveAssignPilot === false,
+    "Limited matrix primary pilot alone must not enable save/assign pilot",
+  );
+
+  const allEnabled = withFeatureFlagEnv(
+    { internal: "true", limited: "true", saveAssign: "true" },
+    () => getConstructorMatrixUiFlags(),
+  );
+  assert(
+    allEnabled.matrixConstructorSaveAssignPilot,
+    "Matrix save/assign pilot must require all three explicit flags",
+  );
 
   return {
     defaultInternal: defaults.internalMatrixConstructorUi,
     defaultLimitedPilot: defaults.matrixConstructorLimitedPrimaryPilot,
+    defaultSaveAssignPilot: defaults.matrixConstructorSaveAssignPilot,
     limitedRequiresInternal:
       !limitedWithoutInternal.matrixConstructorLimitedPrimaryPilot &&
       !internalOnly.matrixConstructorLimitedPrimaryPilot &&
       bothEnabled.matrixConstructorLimitedPrimaryPilot,
+    saveAssignRequiresLimitedPilot:
+      !limitedWithoutInternal.matrixConstructorSaveAssignPilot &&
+      !internalOnly.matrixConstructorSaveAssignPilot &&
+      !bothEnabled.matrixConstructorSaveAssignPilot &&
+      allEnabled.matrixConstructorSaveAssignPilot,
   };
 }
 
@@ -148,9 +195,19 @@ async function checkControlledExposureSourceGuards() {
     "Limited primary pilot must be controlled by NEXT_PUBLIC_MATRIX_CONSTRUCTOR_LIMITED_PRIMARY_PILOT",
   );
   assert(
-    featureFlagSource.includes("matrixConstructorLimitedPrimaryPilot:") &&
-      featureFlagSource.includes("internalMatrixConstructorUi &&"),
+    featureFlagSource.includes("NEXT_PUBLIC_MATRIX_CONSTRUCTOR_SAVE_ASSIGN_PILOT"),
+    "Save/assign pilot must be controlled by NEXT_PUBLIC_MATRIX_CONSTRUCTOR_SAVE_ASSIGN_PILOT",
+  );
+  assert(
+    featureFlagSource.includes("const matrixConstructorLimitedPrimaryPilot") &&
+      featureFlagSource.includes("internalMatrixConstructorUi &&") &&
+      featureFlagSource.includes("matrixConstructorLimitedPrimaryPilot,"),
     "Limited primary pilot must require the internal matrix UI flag",
+  );
+  assert(
+    featureFlagSource.includes("matrixConstructorSaveAssignPilot:") &&
+      featureFlagSource.includes("matrixConstructorLimitedPrimaryPilot &&"),
+    "Save/assign pilot must require the limited primary pilot flag",
   );
 
   const pageClientSource = await readProjectFile("apps/web/app/page-client.tsx");

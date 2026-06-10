@@ -215,29 +215,29 @@ export function constructorMatrixRolloutLabel(
   return (
     {
       matrix_allowed_for_primary: matrixUiCopyFor(language, {
-        en: "Matrix primary allowed",
-        ru: "Matrix primary allowed",
-        bg: "Matrix primary allowed",
+        en: "New constructor can be used",
+        ru: "Новый конструктор можно применять",
+        bg: "Новият конструктор може да се използва",
       }),
       matrix_allowed_for_internal: matrixUiCopyFor(language, {
-        en: "Matrix internal only",
-        ru: "Matrix internal only",
-        bg: "Matrix internal only",
+        en: "New constructor: review only",
+        ru: "Новый конструктор: только проверка",
+        bg: "Новият конструктор: само проверка",
       }),
       preview_only: matrixUiCopyFor(language, {
         en: "Preview only",
-        ru: "Preview only",
-        bg: "Preview only",
+        ru: "Только предварительный просмотр",
+        bg: "Само предварителен преглед",
       }),
       legacy_only: matrixUiCopyFor(language, {
-        en: "Legacy default",
-        ru: "Legacy default",
-        bg: "Legacy default",
+        en: "Use current constructor",
+        ru: "Использовать текущий конструктор",
+        bg: "Използвай текущия конструктор",
       }),
       blocked: matrixUiCopyFor(language, {
         en: "Blocked",
-        ru: "Blocked",
-        bg: "Blocked",
+        ru: "Заблокировано",
+        bg: "Блокирано",
       }),
     } satisfies Record<MatrixConstructorRolloutMode, string>
   )[mode];
@@ -271,24 +271,24 @@ export function getPilotReadinessLabel(
   return (
     {
       ready_for_limited_primary_pilot: matrixUiCopyFor(language, {
-        en: "Ready for limited primary pilot",
-        ru: "Готов к limited primary pilot",
-        bg: "Ready for limited primary pilot",
+        en: "Ready for limited use",
+        ru: "Готов к ограниченному применению",
+        bg: "Готов за ограничена употреба",
       }),
       ready_for_internal_pilot: matrixUiCopyFor(language, {
-        en: "Ready for internal pilot",
-        ru: "Готов к internal pilot",
-        bg: "Ready for internal pilot",
+        en: "Ready for internal review",
+        ru: "Готов к внутренней проверке",
+        bg: "Готов за вътрешна проверка",
       }),
       internal_only: matrixUiCopyFor(language, {
-        en: "Internal only",
-        ru: "Только internal",
-        bg: "Internal only",
+        en: "Internal review only",
+        ru: "Только внутренняя проверка",
+        bg: "Само вътрешна проверка",
       }),
       preview_only: matrixUiCopyFor(language, {
         en: "Preview only",
-        ru: "Только preview",
-        bg: "Preview only",
+        ru: "Только предварительный просмотр",
+        bg: "Само предварителен преглед",
       }),
       blocked: matrixUiCopyFor(language, {
         en: "Blocked",
@@ -298,7 +298,7 @@ export function getPilotReadinessLabel(
       needs_review: matrixUiCopyFor(language, {
         en: "Needs review",
         ru: "Нужна проверка",
-        bg: "Needs review",
+        bg: "Нужна е проверка",
       }),
     } satisfies Record<MatrixPilotReadinessStatus, string>
   )[status];
@@ -311,7 +311,7 @@ export function getPilotReadinessMeaning(
   if (!status) {
     return matrixUiCopyFor(language, {
       en: "Run the internal preview and rollout decision first.",
-      ru: "Сначала запустите internal preview и rollout decision.",
+      ru: "Сначала запустите сравнение и проверку применения нового конструктора.",
       bg: "Първо пуснете internal preview и rollout decision.",
     });
   }
@@ -319,29 +319,29 @@ export function getPilotReadinessMeaning(
   return (
     {
       ready_for_limited_primary_pilot: matrixUiCopyFor(language, {
-        en: "This scenario is a limited primary pilot candidate, but matrix is still not the default and cannot be saved from this internal UI.",
-        ru: "Этот сценарий подходит для limited primary pilot, но matrix всё равно не становится default и не сохраняется из internal UI.",
-        bg: "Този сценарий е кандидат за limited primary pilot, но matrix не става default и не се записва от internal UI.",
+        en: "The new constructor passed the limited-use checks for this scenario. Saving is still controlled by a separate safety gate.",
+        ru: "Новый конструктор прошёл проверки для ограниченного применения в этом сценарии. Сохранение пока контролируется отдельным safety-gate.",
+        bg: "Новият конструктор мина проверките за ограничена употреба. Записът още се контролира от отделен safety-gate.",
       }),
       ready_for_internal_pilot: matrixUiCopyFor(language, {
-        en: "This scenario is ready for internal QA only. It stays read-only and does not become production primary.",
-        ru: "Этот сценарий готов только для internal QA. Он остаётся read-only и не становится production primary.",
-        bg: "Този сценарий е готов само за internal QA. Остава read-only и не става production primary.",
+        en: "The new constructor can be inspected, but it should not be assigned to athletes yet.",
+        ru: "Новый конструктор можно смотреть и сравнивать, но пока не назначать спортсмену.",
+        bg: "Новият конструктор може да се преглежда, но още не трябва да се назначава.",
       }),
       internal_only: matrixUiCopyFor(language, {
-        en: "Matrix can be inspected internally, but it is not ready for limited primary usage.",
-        ru: "Matrix можно смотреть внутренне, но для limited primary он ещё не готов.",
-        bg: "Matrix може да се гледа вътрешно, но не е готов за limited primary.",
+        en: "Review the new constructor output, but keep the current constructor for saving.",
+        ru: "Проверьте новый вариант, но для сохранения используйте текущий конструктор.",
+        bg: "Прегледайте новия вариант, но за запис използвайте текущия конструктор.",
       }),
       preview_only: matrixUiCopyFor(language, {
-        en: "Matrix stays side-by-side preview only. Activation and primary usage remain disabled.",
-        ru: "Matrix остаётся только side-by-side preview. Activation и primary usage отключены.",
-        bg: "Matrix остава само side-by-side preview. Activation и primary usage са изключени.",
+        en: "The new constructor is visible only for comparison in this scenario.",
+        ru: "В этом сценарии новый конструктор доступен только для сравнения.",
+        bg: "В този сценарий новият конструктор е само за сравнение.",
       }),
       blocked: matrixUiCopyFor(language, {
-        en: "Matrix has blockers for this scenario. Keep the legacy draft.",
-        ru: "Для этого сценария у matrix есть blockers. Оставляем legacy draft.",
-        bg: "Matrix има blockers за този сценарий. Остава legacy draft.",
+        en: "The new constructor has blockers here. Keep the current draft.",
+        ru: "В новом конструкторе есть блокирующие проблемы. Оставляем текущий черновик.",
+        bg: "Новият конструктор има блокиращи проблеми. Остава текущата чернова.",
       }),
       needs_review: matrixUiCopyFor(language, {
         en: "The scenario needs manual review before it can enter a pilot.",
@@ -533,7 +533,7 @@ export function constructorMatrixRolloutSupportText(
   if (decision?.mode === "preview_only") {
     return matrixUiCopyFor(language, {
       en: "Matrix remains preview-only for this scenario. Close main-start windows are not primary yet.",
-      ru: "Matrix остаётся только preview для этого сценария. Главные старты D-28/D-21/D-10/D-3 пока не разрешены как primary.",
+      ru: "Новый конструктор пока доступен только для сравнения. Близкие окна главного старта ещё не разрешены для применения.",
       bg: "Matrix остава само preview за този сценарий. Близките основни стартове още не са primary.",
     });
   }
@@ -541,7 +541,7 @@ export function constructorMatrixRolloutSupportText(
   if (decision?.mode === "blocked") {
     return matrixUiCopyFor(language, {
       en: "Matrix is blocked here. Use the legacy default.",
-      ru: "Matrix заблокирован здесь. Используйте legacy default.",
+      ru: "Новый конструктор здесь заблокирован. Используйте текущий черновик.",
       bg: "Matrix е блокиран тук. Използвайте legacy default.",
     });
   }
@@ -549,7 +549,7 @@ export function constructorMatrixRolloutSupportText(
   if (decision?.mode === "legacy_only") {
     return matrixUiCopyFor(language, {
       en: "Matrix is not enabled as primary for this scenario.",
-      ru: "Matrix не разрешён для primary в этом сценарии.",
+      ru: "Новый конструктор не разрешён для применения в этом сценарии.",
       bg: "Matrix не е разрешен като primary за този сценарий.",
     });
   }
@@ -557,7 +557,7 @@ export function constructorMatrixRolloutSupportText(
   if (decision?.mode === "matrix_allowed_for_internal") {
     return matrixUiCopyFor(language, {
       en: "Matrix can be inspected as an internal candidate only.",
-      ru: "Matrix можно смотреть только как внутренний кандидат.",
+      ru: "Новый конструктор можно открыть только для внутренней проверки.",
       bg: "Matrix може да се гледа само като вътрешен кандидат.",
     });
   }
@@ -565,7 +565,7 @@ export function constructorMatrixRolloutSupportText(
   if (decision?.mode === "matrix_allowed_for_primary") {
     return matrixUiCopyFor(language, {
       en: "Matrix primary is allowed by the controlled gate, but this panel is still read-only.",
-      ru: "Controlled gate разрешает matrix primary, но эта панель всё равно read-only.",
+      ru: "Проверка разрешает новый вариант, но применение всё ещё идёт через отдельный безопасный шаг.",
       bg: "Controlled gate разрешава matrix primary, но този панел е read-only.",
     });
   }
@@ -585,7 +585,7 @@ export function constructorMatrixWorkspaceUnavailableReason(params: {
   if (!decision) {
     return matrixUiCopyFor(language, {
       en: "Run the internal matrix preview first.",
-      ru: "Сначала запустите internal matrix preview.",
+      ru: "Сначала запустите сравнение нового конструктора.",
       bg: "Първо пуснете internal matrix preview.",
     });
   }
@@ -593,7 +593,7 @@ export function constructorMatrixWorkspaceUnavailableReason(params: {
   if (!matrixDraft) {
     return matrixUiCopyFor(language, {
       en: "Matrix draft was not returned by the preview response.",
-      ru: "Matrix draft не вернулся в preview response.",
+      ru: "Новый черновик не вернулся из ответа сервера.",
       bg: "Matrix draft не е върнат в preview response.",
     });
   }
@@ -602,14 +602,14 @@ export function constructorMatrixWorkspaceUnavailableReason(params: {
     if (decision.mode === "preview_only") {
       return matrixUiCopyFor(language, {
         en: "Matrix workspace is unavailable: main-start D-28/D-21/D-10/D-3 windows remain preview-only.",
-        ru: "Matrix workspace недоступен: главные старты D-28/D-21/D-10/D-3 пока только preview.",
+        ru: "Новый черновик недоступен для открытия: близкие окна главного старта пока только для сравнения.",
         bg: "Matrix workspace не е достъпен: главните стартове D-28/D-21/D-10/D-3 са само preview.",
       });
     }
 
     return matrixUiCopyFor(language, {
       en: "Matrix workspace is unavailable: rollout mode is legacy-only or blocked.",
-      ru: "Matrix workspace недоступен: rollout mode legacy-only или blocked.",
+      ru: "Новый черновик недоступен: для этого сценария разрешён только текущий конструктор или есть блокировка.",
       bg: "Matrix workspace не е достъпен: rollout mode е legacy-only или blocked.",
     });
   }
@@ -617,7 +617,7 @@ export function constructorMatrixWorkspaceUnavailableReason(params: {
   if (!preview?.safeToPreview || !decision.safeToPreview) {
     return matrixUiCopyFor(language, {
       en: "Matrix workspace is unavailable: preview safety did not pass.",
-      ru: "Matrix workspace недоступен: preview safety не прошёл.",
+      ru: "Новый черновик недоступен: проверка безопасности не пройдена.",
       bg: "Matrix workspace не е достъпен: preview safety не мина.",
     });
   }
@@ -625,7 +625,7 @@ export function constructorMatrixWorkspaceUnavailableReason(params: {
   if (!preview.defaultPathUnchanged || !decision.defaultPathUnchanged) {
     return matrixUiCopyFor(language, {
       en: "Matrix workspace is unavailable: legacy default guard changed.",
-      ru: "Matrix workspace недоступен: legacy default guard изменился.",
+      ru: "Новый черновик недоступен: защита текущего конструктора изменилась.",
       bg: "Matrix workspace не е достъпен: legacy default guard се промени.",
     });
   }
@@ -633,7 +633,7 @@ export function constructorMatrixWorkspaceUnavailableReason(params: {
   if (safetyErrorCount > 0) {
     return matrixUiCopyFor(language, {
       en: "Matrix workspace is unavailable: safety blockers are present.",
-      ru: "Matrix workspace недоступен: есть safety blockers.",
+      ru: "Новый черновик недоступен: есть блокирующие safety-ошибки.",
       bg: "Matrix workspace не е достъпен: има safety blockers.",
     });
   }
@@ -641,14 +641,14 @@ export function constructorMatrixWorkspaceUnavailableReason(params: {
   if (decision.blockers.some((blocker) => blocker.severity === "error")) {
     return matrixUiCopyFor(language, {
       en: "Matrix workspace is unavailable: rollout blockers are present.",
-      ru: "Matrix workspace недоступен: есть rollout blockers.",
+      ru: "Новый черновик недоступен: есть блокирующие ограничения запуска.",
       bg: "Matrix workspace не е достъпен: има rollout blockers.",
     });
   }
 
   return matrixUiCopyFor(language, {
     en: "Matrix candidate can be opened only as a read-only internal workspace.",
-    ru: "Matrix candidate можно открыть только как read-only internal workspace.",
+    ru: "Новый вариант можно открыть для просмотра и сравнения.",
     bg: "Matrix candidate може да се отвори само като read-only internal workspace.",
   });
 }
@@ -660,7 +660,7 @@ export function constructorMatrixWorkspaceWhyText(
   if (decision?.mode === "matrix_allowed_for_internal") {
     return matrixUiCopyFor(language, {
       en: "This scenario is allowed only for internal inspection, not for production primary usage.",
-      ru: "Этот сценарий разрешён только для internal проверки, не для production primary.",
+      ru: "Этот сценарий разрешён только для внутренней проверки, не для назначения спортсмену.",
       bg: "Този сценарий е разрешен само за internal проверка, не за production primary.",
     });
   }
@@ -668,7 +668,7 @@ export function constructorMatrixWorkspaceWhyText(
   if (decision?.mode === "matrix_allowed_for_primary") {
     return matrixUiCopyFor(language, {
       en: "The gate allows a primary candidate, but this workspace is still read-only until a separate rollout decision.",
-      ru: "Gate разрешает primary candidate, но этот workspace остаётся read-only до отдельного rollout-решения.",
+      ru: "Проверка разрешила новый вариант, но сохранение включается отдельным безопасным решением.",
       bg: "Gate разрешава primary candidate, но този workspace остава read-only до отделно rollout решение.",
     });
   }
@@ -676,14 +676,14 @@ export function constructorMatrixWorkspaceWhyText(
   if (decision?.mode === "preview_only") {
     return matrixUiCopyFor(language, {
       en: "This scenario stays preview-only, so the matrix candidate cannot become a workspace draft.",
-      ru: "Этот сценарий остаётся preview-only, поэтому matrix-кандидат нельзя открыть как workspace draft.",
+      ru: "Этот сценарий остаётся только для сравнения, поэтому новый вариант нельзя сделать рабочим черновиком.",
       bg: "Този сценарий остава preview-only, затова matrix кандидатът не се отваря като workspace draft.",
     });
   }
 
   return matrixUiCopyFor(language, {
     en: "Legacy remains the main draft for this scenario.",
-    ru: "Legacy остаётся основным черновиком для этого сценария.",
+    ru: "Для этого сценария основным остаётся текущий черновик.",
     bg: "Legacy остава основната чернова за този сценарий.",
   });
 }
@@ -711,7 +711,7 @@ export function constructorMatrixWorkspaceScenarioText(
   if (decision?.scenario === "travel_day" || decision?.scenario === "weigh_in_day") {
     return matrixUiCopyFor(language, {
       en: "Logistics scenario allowed only for internal review.",
-      ru: "Логистический сценарий, разрешённый только для internal проверки.",
+      ru: "Логистический сценарий, разрешённый только для внутренней проверки.",
       bg: "Логистичен сценарий само за internal проверка.",
     });
   }

@@ -32,8 +32,8 @@ export function MatrixRolloutDecisionCard({
       <div className="summary-topline">
         <strong>
           {matrixUiCopyFor(language, {
-            en: "Rollout decision",
-            ru: "Rollout decision",
+            en: "Use decision",
+            ru: "Решение по применению",
             bg: "Rollout decision",
           })}
         </strong>
@@ -60,12 +60,36 @@ export function MatrixRolloutDecisionCard({
           <div className="constructor-matrix-count-grid constructor-matrix-rollout-grid">
             {[
               ["mode", decision.mode],
-              ["scenario", decision.scenario],
-              ["action", decision.recommendedAction],
-              ["primary", decision.matrixPrimaryAllowed ? "allowed" : "not allowed"],
-              ["allowlisted", decision.allowlisted ? "yes" : "no"],
-              ["safe", decision.safeToPreview ? "yes" : "no"],
-              ["blockers", decision.blockers.length],
+              [
+                matrixUiCopyFor(language, { en: "scenario", ru: "сценарий", bg: "сценарий" }),
+                decision.scenario,
+              ],
+              [
+                matrixUiCopyFor(language, { en: "action", ru: "действие", bg: "действие" }),
+                decision.recommendedAction,
+              ],
+              [
+                matrixUiCopyFor(language, { en: "apply", ru: "применение", bg: "прилагане" }),
+                decision.matrixPrimaryAllowed
+                  ? matrixUiCopyFor(language, { en: "allowed", ru: "разрешено", bg: "разрешено" })
+                  : matrixUiCopyFor(language, { en: "not allowed", ru: "не разрешено", bg: "не разрешено" }),
+              ],
+              [
+                matrixUiCopyFor(language, { en: "allowlist", ru: "доступ", bg: "достъп" }),
+                decision.allowlisted
+                  ? matrixUiCopyFor(language, { en: "yes", ru: "есть", bg: "да" })
+                  : matrixUiCopyFor(language, { en: "no", ru: "нет", bg: "не" }),
+              ],
+              [
+                matrixUiCopyFor(language, { en: "safety", ru: "безопасность", bg: "безопасност" }),
+                decision.safeToPreview
+                  ? matrixUiCopyFor(language, { en: "ok", ru: "пройдена", bg: "ok" })
+                  : matrixUiCopyFor(language, { en: "stop", ru: "стоп", bg: "стоп" }),
+              ],
+              [
+                matrixUiCopyFor(language, { en: "blockers", ru: "блокеры", bg: "блокери" }),
+                decision.blockers.length,
+              ],
             ].map(([label, value]) => (
               <span key={label}>
                 <small>{label}</small>
@@ -78,12 +102,14 @@ export function MatrixRolloutDecisionCard({
           <ul className="constructor-matrix-preview-list">
             {decision.explanation.reasons.slice(0, 5).map((reason) => (
               <li key={reason}>
-                <strong>reason</strong>
+                <strong>
+                  {matrixUiCopyFor(language, { en: "reason", ru: "причина", bg: "причина" })}
+                </strong>
                 <span>{reason}</span>
               </li>
             ))}
             <li>
-              <strong>next</strong>
+              <strong>{matrixUiCopyFor(language, { en: "next", ru: "дальше", bg: "следващо" })}</strong>
               <span>{decision.explanation.nextStep}</span>
             </li>
           </ul>
@@ -113,16 +139,16 @@ export function MatrixRolloutDecisionCard({
               type="button"
             >
               {matrixUiCopyFor(language, {
-                en: "Open matrix candidate in preview workspace",
-                ru: "Показать matrix-кандидат в preview workspace",
+                en: "Open new plan variant",
+                ru: "Открыть новый вариант плана",
                 bg: "Покажи matrix кандидата в preview workspace",
               })}
             </button>
             <p className="constructor-matrix-rollout-note">
               {workspaceCanOpen
                 ? matrixUiCopyFor(language, {
-                    en: "Available as read-only internal workspace. It will not save, assign, or replace the legacy draft.",
-                    ru: "Доступно только как read-only internal workspace. Не сохраняет, не назначает и не заменяет legacy draft.",
+                    en: "Available for review. It will not save, assign, or replace the current draft until the safety gate allows it.",
+                    ru: "Доступно для проверки. Не сохраняет, не назначает и не заменяет текущий черновик, пока это не разрешит safety-gate.",
                     bg: "Достъпно само като read-only internal workspace. Не записва, не назначава и не заменя legacy draft.",
                   })
                 : workspaceUnavailableReason}
@@ -133,7 +159,7 @@ export function MatrixRolloutDecisionCard({
         <p>
           {matrixUiCopyFor(language, {
             en: "Rollout gate will appear after the internal comparison request finishes.",
-            ru: "Rollout gate появится после выполнения internal comparison request.",
+            ru: "Решение по применению появится после сравнения нового конструктора.",
             bg: "Rollout gate ще се появи след internal comparison request.",
           })}
         </p>

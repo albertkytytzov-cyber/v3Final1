@@ -214,6 +214,7 @@ import { buildMatrixPrimaryPilotSaveDryRun } from "./lib/constructor-matrix-save
 import {
   isInternalMatrixConstructorUiEnabled,
   isMatrixConstructorLimitedPrimaryPilotEnabled,
+  isMatrixConstructorSaveAssignPilotEnabled,
 } from "./lib/feature-flags";
 
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api/v1";
@@ -224,6 +225,8 @@ const SHOW_OFFLINE_CENTER_NAV = false;
 const SHOW_INTERNAL_MATRIX_CONSTRUCTOR_UI = isInternalMatrixConstructorUiEnabled();
 const ENABLE_MATRIX_CONSTRUCTOR_LIMITED_PRIMARY_PILOT =
   isMatrixConstructorLimitedPrimaryPilotEnabled();
+const ENABLE_MATRIX_CONSTRUCTOR_SAVE_ASSIGN_PILOT =
+  isMatrixConstructorSaveAssignPilotEnabled();
 const DISPLAY_TIME_ZONE = "Europe/Sofia";
 type CoachPeriodPresetDays = 7 | 15 | 30;
 type ConstructorDraftResponse = {
@@ -14474,22 +14477,22 @@ export function PageClient({
   }
 
   async function handleSaveConstructorTemplate() {
-    if (!isConstructorDraftSaveAllowed(activeConstructorDraftSource)) {
+    if (!activeConstructorDraftSaveAllowed) {
       setConstructorMessage(
         copyFor(language, {
-          en: "Matrix internal draft is read-only and cannot be saved as a template.",
-          ru: "Matrix internal draft доступен только read-only и не сохраняется как шаблон.",
+          en: "This draft is not allowed for template saving yet.",
+          ru: "Этот черновик пока нельзя сохранить как шаблон.",
           bg: "Matrix internal draft е само read-only и не се записва като шаблон.",
         }),
       );
       return;
     }
 
-    if (!constructorTemplatePayload) {
+    if (!activeConstructorTemplatePayload) {
       setConstructorMessage(
         copyFor(language, {
           en: "Build the draft before saving it as a template.",
-          ru: "Сначала соберите черновик, затем сохраните его как шаблон.",
+          ru: "Сначала соберите черновик и дождитесь проверки, затем сохраните его как шаблон.",
           bg: "Първо създайте чернова, после я запазете като шаблон.",
         }),
       );
@@ -14501,7 +14504,7 @@ export function PageClient({
     setErrorMessage("");
 
     try {
-      const template = await createPlanTemplateFromDraft(constructorTemplatePayload, {
+      const template = await createPlanTemplateFromDraft(activeConstructorTemplatePayload, {
         clearImportedDraft: false,
       });
 
@@ -15760,6 +15763,46 @@ export function PageClient({
       constructorMatrixServerSaveDryRunError,
     ],
   );
+  const constructorMatrixSaveAssignPilotAllowed =
+    ENABLE_MATRIX_CONSTRUCTOR_SAVE_ASSIGN_PILOT &&
+    activeConstructorDraftIsMatrixPrimaryPilot &&
+    constructorMatrixPrimaryPilotEligibility.allowed &&
+    constructorMatrixPrimaryPilotServerGate.allowed &&
+    constructorMatrixPrimaryPilotSaveDryRun.status === "passed" &&
+    constructorMatrixServerSaveDryRun?.dryRun.status === "passed";
+  const activeConstructorTemplatePayload = useMemo(() => {
+    if (!activeConstructorDraftIsMatrixCandidate) {
+      return constructorTemplatePayload;
+    }
+
+    if (
+      !constructorMatrixSaveAssignPilotAllowed ||
+      !activeConstructorDraft ||
+      (activeConstructorDraft as { generatedFrom?: string }).generatedFrom !== "matrix"
+    ) {
+      return null;
+    }
+
+    try {
+      return buildConstructorTemplatePayload(
+        activeConstructorDraft,
+        selectedConstructorCompetitionPlan?.competitionTitle
+          ? `PERFORM Matrix Pilot • ${selectedConstructorCompetitionPlan.competitionTitle}`
+          : "PERFORM Matrix Pilot",
+      );
+    } catch {
+      return null;
+    }
+  }, [
+    activeConstructorDraft,
+    activeConstructorDraftIsMatrixCandidate,
+    constructorMatrixSaveAssignPilotAllowed,
+    constructorTemplatePayload,
+    selectedConstructorCompetitionPlan?.competitionTitle,
+  ]);
+  const activeConstructorDraftSaveAllowed =
+    isConstructorDraftSaveAllowed(activeConstructorDraftSource) ||
+    constructorMatrixSaveAssignPilotAllowed;
   const constructorMatrixWorkspaceCanOpen =
     SHOW_INTERNAL_MATRIX_CONSTRUCTOR_UI &&
     canOpenConstructorMatrixWorkspace({
@@ -22461,9 +22504,9 @@ export function PageClient({
                         <div className="constructor-active-draft-source-row">
                           <span className="constructor-active-draft-badge">
                             {copyFor(language, {
-                              en: "legacy draft",
-                              ru: "legacy draft",
-                              bg: "legacy draft",
+                              en: "current constructor draft",
+                              ru: "черновик текущего конструктора",
+                              bg: "чернова от текущия конструктор",
                             })}
                           </span>
                         </div>
@@ -22475,15 +22518,15 @@ export function PageClient({
                         }
                         phaseLabel={constructorPhaseLabel}
                       />
-                      {activeConstructorDraftIsMatrixCandidate ? (
+                      {activeConstructorDraftIsMatrixCandidate && !activeConstructorDraftSaveAllowed ? (
                         <p className="constructor-matrix-save-guard-note">
                           {copyFor(language, {
                             en: activeConstructorDraftIsMatrixPrimaryPilot
-                              ? "Save/template/assign actions are disabled for matrix_primary_pilot. This is a limited pilot view, not the default production path."
-                              : "Save/template/assign actions are disabled for matrix_internal. Return to legacy draft to save a template.",
+                              ? "Saving and assignment for the new constructor are still controlled by the safe pilot gate."
+                              : "This new constructor draft is open for review only. Return to the current draft to save a template.",
                             ru: activeConstructorDraftIsMatrixPrimaryPilot
-                              ? "Save/template/assign отключены для matrix_primary_pilot. Это limited pilot view, а не default production path."
-                              : "Save/template/assign отключены для matrix_internal. Вернитесь к legacy draft, чтобы сохранить шаблон.",
+                              ? "Сохранение и назначение нового конструктора пока контролируются безопасным pilot-gate."
+                              : "Этот черновик нового конструктора открыт только для проверки. Вернитесь к текущему черновику, чтобы сохранить шаблон.",
                             bg: activeConstructorDraftIsMatrixPrimaryPilot
                               ? "Save/template/assign са изключени за matrix_primary_pilot. Това е limited pilot view, не default production path."
                               : "Save/template/assign са изключени за matrix_internal. Върнете legacy draft, за да запазите шаблон.",
@@ -22492,7 +22535,7 @@ export function PageClient({
                       ) : (
                         <button
                           className="primary-button"
-                          disabled={constructorBusy || !constructorTemplatePayload}
+                          disabled={constructorBusy || !activeConstructorTemplatePayload}
                           onClick={handleSaveConstructorTemplate}
                           type="button"
                         >
