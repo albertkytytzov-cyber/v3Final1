@@ -163,6 +163,8 @@ Manual browser checks:
 - open the new plan variant;
 - activate the limited pilot view;
 - confirm local and server safe-save checks are passed;
+- confirm the active new draft has coach-readable focus language, concrete
+  blocks, warm-up, main work, cool-down/control and editable exercise rows;
 - confirm the save button appears only for the active new constructor draft;
 - save as template;
 - verify the saved template appears in the template library;

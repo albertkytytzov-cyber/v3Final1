@@ -3643,3 +3643,69 @@ npm run check:constructor-matrix-ui-gates
 - `matrix_internal` and `matrix_primary_pilot` remain blocked from the old
   generic save helper;
 - no matrix UI state is persisted in localStorage/sessionStorage.
+
+## 42. Stage 31: Coach-ready matrix draft adapter and guarded build action
+
+Stage 31 addresses the gap between “matrix can be previewed” and “coach can
+use the draft as planning material”.
+
+### 42.1 Adapter changes
+
+The matrix adapter now creates trainer-facing draft content:
+
+- `focusPlan` comes from the matrix phase/calendar logic rather than old selected
+  goal chips;
+- a main start inside 30 days never presents development as the active mode;
+- D-30..D-15 uses special pre-competition transfer/maintenance language;
+- D-14..D-5 uses taper/activation/recovery language;
+- D-4..start uses start-window activation, weight and recovery language;
+- sessions are named `УТРО` / `ВЕЧЕР` and include coach-readable notes;
+- training sessions get `Разминка`, main work, and `Заминка и контроль состояния`;
+- every matrix block receives concrete volume text and editable exercise rows.
+
+### 42.2 Build action behavior
+
+The normal top-level constructor build action remains current/legacy by default.
+
+When these three flags are enabled:
+
+```bash
+NEXT_PUBLIC_INTERNAL_MATRIX_CONSTRUCTOR_UI=true
+NEXT_PUBLIC_MATRIX_CONSTRUCTOR_LIMITED_PRIMARY_PILOT=true
+NEXT_PUBLIC_MATRIX_CONSTRUCTOR_SAVE_ASSIGN_PILOT=true
+```
+
+the build action attempts the matrix primary pilot path:
+
+1. run matrix preview;
+2. run rollout decision;
+3. run server save dry-run;
+4. evaluate local pilot readiness;
+5. activate `matrix_primary_pilot` only if local and server gates pass.
+
+If any gate fails, the current constructor draft is generated instead and the
+new constructor remains a preview/review artifact.
+
+### 42.3 Guardrails
+
+Stage 31 still does not change the production draft API route and does not make
+matrix globally default. The save/assign path remains gated by explicit flags
+and server dry-run evidence.
+
+Blocked scenarios stay blocked:
+
+- D-3 main start remains preview-only;
+- travel and weigh-in remain internal-only;
+- `matrix_internal` cannot save;
+- the old generic save helper still returns false for matrix sources.
+
+### 42.4 Checks
+
+Required checks:
+
+```bash
+npm run build --workspace @training-platform/shared
+npm run build --workspace @training-platform/web
+npm run check:constructor-core
+npm run check:constructor-matrix-ui-gates
+```

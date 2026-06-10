@@ -1885,8 +1885,8 @@ assert(
 );
 assert(
   matrixConstructorDraft28.matrix.legacyCards.usedAsStructure === false &&
-    constructorDraftHasText(matrixConstructorDraft28, /generatedFrom=matrix|legacy cards are content metadata only/i),
-  "Controlled matrix adapter should explain matrix generation and legacy metadata-only behavior",
+    constructorDraftHasText(matrixConstructorDraft28, /календарь старта|старые карточки используются только как источники контента/i),
+  "Controlled matrix adapter should explain calendar-driven generation and content-only legacy behavior",
 );
 assert(
   matrixConstructorDraft28.riskFlags.length > 0 &&
@@ -1895,19 +1895,19 @@ assert(
 );
 assert(
   !constructorDraftBlocks(matrixConstructorDraft28).some((block) =>
-    block.localLoadZones.includes("matrix:leg_lmv"),
+    block.localLoadZones.includes("блок:leg_lmv"),
   ),
   "28-day adapted matrix draft should not include heavy leg LMV",
 );
 assert(
   constructorDraftBlocks(matrixConstructorDraft28).some((block) =>
-    block.localLoadZones.includes("matrix:mat_competition_model"),
+    block.localLoadZones.includes("блок:mat_competition_model"),
   ),
   "28-day adapted matrix draft should include special competition-model work",
 );
 assert(
   !constructorDraftBlocks(matrixConstructorDraft21).some((block) =>
-    block.localLoadZones.includes("matrix:leg_lmv") || block.localLoadZones.includes("matrix:mat_control_bouts"),
+    block.localLoadZones.includes("блок:leg_lmv") || block.localLoadZones.includes("блок:mat_control_bouts"),
   ),
   "21-day adapted matrix draft should not include heavy LMV or control bouts",
 );
@@ -1917,25 +1917,25 @@ assert(
 );
 assert(
   !constructorDraftBlocks(matrixConstructorDraft10).some((block) =>
-    block.localLoadZones.includes("matrix:leg_lmv") ||
-    block.localLoadZones.includes("matrix:spp") ||
-    block.localLoadZones.includes("matrix:mat_control_bouts"),
+    block.localLoadZones.includes("блок:leg_lmv") ||
+    block.localLoadZones.includes("блок:spp") ||
+    block.localLoadZones.includes("блок:mat_control_bouts"),
   ),
   "10-day adapted matrix draft should not include heavy development/SPP/control bouts",
 );
 assert(
   constructorDraftBlocks(matrixConstructorDraft10).some((block) =>
-    block.localLoadZones.includes("matrix:mat_light_technical") ||
-    block.localLoadZones.includes("matrix:recovery") ||
-    block.localLoadZones.includes("matrix:mobility"),
+    block.localLoadZones.includes("блок:mat_light_technical") ||
+    block.localLoadZones.includes("блок:recovery") ||
+    block.localLoadZones.includes("блок:mobility"),
   ),
   "10-day adapted matrix draft should include light technical/recovery work",
 );
 assert(
   !constructorDraftBlocks(matrixConstructorDraft3).some((block) =>
-    block.localLoadZones.includes("matrix:leg_lmv") ||
-    block.localLoadZones.includes("matrix:spp") ||
-    block.localLoadZones.includes("matrix:mat_control_bouts"),
+    block.localLoadZones.includes("блок:leg_lmv") ||
+    block.localLoadZones.includes("блок:spp") ||
+    block.localLoadZones.includes("блок:mat_control_bouts"),
   ),
   "3-day adapted matrix draft should not include heavy/control/development blocks",
 );
@@ -1946,7 +1946,7 @@ assert(
 assert(
   constructorDraftBlocks(matrixConstructorDraftTravel).every((block) => !/нагрузка high|нагрузка medium/.test(block.volume)) &&
     constructorDraftBlocks(matrixConstructorDraftTravel).some((block) =>
-      block.localLoadZones.includes("matrix:mobility") || block.localLoadZones.includes("matrix:recovery"),
+      block.localLoadZones.includes("блок:mobility") || block.localLoadZones.includes("блок:recovery"),
     ),
   "Travel adapted matrix draft should keep light logistics blocks",
 );
@@ -1956,9 +1956,9 @@ assert(
 );
 assert(
   !constructorDraftBlocks(matrixConstructorDraftWeighIn).some((block) =>
-    block.localLoadZones.includes("matrix:mat_control_bouts") ||
-    block.localLoadZones.includes("matrix:mat_competition_model") ||
-    block.localLoadZones.includes("matrix:spp"),
+    block.localLoadZones.includes("блок:mat_control_bouts") ||
+    block.localLoadZones.includes("блок:mat_competition_model") ||
+    block.localLoadZones.includes("блок:spp"),
   ),
   "Weigh-in adapted matrix draft should not include mat/control/SFP blocks",
 );
@@ -1968,33 +1968,33 @@ assert(
 );
 assert(
   constructorDraftBlocks(matrixConstructorDraftCompetitionDay).every((block) =>
-    block.localLoadZones.includes("matrix:competition_start"),
+    block.localLoadZones.includes("блок:competition_start"),
   ),
   "Competition-day adapted matrix draft should only include competition_start",
 );
 assert(
   constructorDraftBlocks(matrixConstructorDraftPostCompetition).some((block) =>
-    block.localLoadZones.includes("matrix:post_competition_recovery") ||
-    block.localLoadZones.includes("matrix:recovery"),
+    block.localLoadZones.includes("блок:post_competition_recovery") ||
+    block.localLoadZones.includes("блок:recovery"),
   ) &&
     !constructorDraftBlocks(matrixConstructorDraftPostCompetition).some((block) =>
-      block.localLoadZones.includes("matrix:leg_lmv"),
+      block.localLoadZones.includes("блок:leg_lmv"),
     ),
   "Post-competition adapted matrix draft should include recovery and no development",
 );
 assert(
   !matrixConstructorDraftSecondary.matrix.draft.warnings.some((warning) => warning.code === "close_main_start") &&
     !constructorDraftBlocks(matrixConstructorDraftSecondary).some((block) =>
-      block.localLoadZones.includes("matrix:leg_lmv"),
+      block.localLoadZones.includes("блок:leg_lmv"),
     ),
   "Secondary adapted matrix draft should be softer than main start but still cut risky close-start LMV",
 );
 assert(
   constructorDraftBlocks(matrixConstructorDraftFarDevelopment).some((block) =>
-    block.localLoadZones.includes("matrix:leg_lmv"),
+    block.localLoadZones.includes("блок:leg_lmv"),
   ) &&
     constructorDraftBlocks(matrixConstructorDraftFarDevelopment).some((block) =>
-      block.localLoadZones.includes("matrix:gpp") || block.localLoadZones.includes("matrix:spp"),
+      block.localLoadZones.includes("блок:gpp") || block.localLoadZones.includes("блок:spp"),
     ) &&
     constructorDraftSessions(matrixConstructorDraftFarDevelopment).some((session) => session.name === "ВЕЧЕР"),
   "Far development adapted matrix draft should allow development, SPP/GPP and two-session days",
@@ -2027,17 +2027,17 @@ assert(
 );
 assert(
   !constructorDraftBlocks(comparison28.matrixDraft).some((block) =>
-    block.localLoadZones.includes("matrix:leg_lmv"),
+    block.localLoadZones.includes("блок:leg_lmv"),
   ) &&
     constructorDraftBlocks(comparison28.matrixDraft).some((block) =>
-      block.localLoadZones.includes("matrix:mat_competition_model"),
+      block.localLoadZones.includes("блок:mat_competition_model"),
     ),
   "28-day comparison matrix draft should keep special work and reject heavy development",
 );
 assert(
   comparison21.summary.safeToPreview &&
     !constructorDraftBlocks(comparison21.matrixDraft).some((block) =>
-      block.localLoadZones.includes("matrix:leg_lmv") || block.localLoadZones.includes("matrix:mat_control_bouts"),
+      block.localLoadZones.includes("блок:leg_lmv") || block.localLoadZones.includes("блок:mat_control_bouts"),
     ) &&
     /control_bouts_too_close_to_start/.test(comparison21.matrixDraft.explanation.riskImpact),
   "21-day comparison should show controlled volume and rejected control/LMV blocks",
@@ -2045,23 +2045,23 @@ assert(
 assert(
   comparison10.summary.safeToPreview &&
     !constructorDraftBlocks(comparison10.matrixDraft).some((block) =>
-      block.localLoadZones.includes("matrix:leg_lmv") ||
-      block.localLoadZones.includes("matrix:spp") ||
-      block.localLoadZones.includes("matrix:mat_control_bouts"),
+      block.localLoadZones.includes("блок:leg_lmv") ||
+      block.localLoadZones.includes("блок:spp") ||
+      block.localLoadZones.includes("блок:mat_control_bouts"),
     ) &&
     constructorDraftBlocks(comparison10.matrixDraft).some((block) =>
-      block.localLoadZones.includes("matrix:mat_light_technical") ||
-      block.localLoadZones.includes("matrix:recovery") ||
-      block.localLoadZones.includes("matrix:mobility"),
+      block.localLoadZones.includes("блок:mat_light_technical") ||
+      block.localLoadZones.includes("блок:recovery") ||
+      block.localLoadZones.includes("блок:mobility"),
     ),
   "10-day comparison should show taper/direct pre-comp matrix behavior",
 );
 assert(
   comparison3.summary.safeToPreview &&
     !constructorDraftBlocks(comparison3.matrixDraft).some((block) =>
-      block.localLoadZones.includes("matrix:leg_lmv") ||
-      block.localLoadZones.includes("matrix:spp") ||
-      block.localLoadZones.includes("matrix:mat_control_bouts"),
+      block.localLoadZones.includes("блок:leg_lmv") ||
+      block.localLoadZones.includes("блок:spp") ||
+      block.localLoadZones.includes("блок:mat_control_bouts"),
     ) &&
     constructorDraftHasText(comparison3.matrixDraft, /Главный старт ближе 30|развитие/i),
   "3-day comparison should keep safety invariant green and explain close-start development ban",
@@ -2075,9 +2075,9 @@ assert(
 assert(
   comparisonWeighIn.summary.safeToPreview &&
     !constructorDraftBlocks(comparisonWeighIn.matrixDraft).some((block) =>
-      block.localLoadZones.includes("matrix:mat_control_bouts") ||
-      block.localLoadZones.includes("matrix:mat_competition_model") ||
-      block.localLoadZones.includes("matrix:spp"),
+      block.localLoadZones.includes("блок:mat_control_bouts") ||
+      block.localLoadZones.includes("блок:mat_competition_model") ||
+      block.localLoadZones.includes("блок:spp"),
     ) &&
     constructorDraftHasText(comparisonWeighIn.matrixDraft, /взвеш|weight/i),
   "Weigh-in comparison should show short activation/recovery and weight explanation",
@@ -2085,18 +2085,18 @@ assert(
 assert(
   comparisonCompetitionDay.summary.safeToPreview &&
     constructorDraftBlocks(comparisonCompetitionDay.matrixDraft).every((block) =>
-      block.localLoadZones.includes("matrix:competition_start"),
+      block.localLoadZones.includes("блок:competition_start"),
     ),
   "Competition-day comparison should select competition_start and no ordinary heavy training",
 );
 assert(
   comparisonPostCompetition.summary.safeToPreview &&
     constructorDraftBlocks(comparisonPostCompetition.matrixDraft).some((block) =>
-      block.localLoadZones.includes("matrix:post_competition_recovery") ||
-      block.localLoadZones.includes("matrix:recovery"),
+      block.localLoadZones.includes("блок:post_competition_recovery") ||
+      block.localLoadZones.includes("блок:recovery"),
     ) &&
     !constructorDraftBlocks(comparisonPostCompetition.matrixDraft).some((block) =>
-      block.localLoadZones.includes("matrix:leg_lmv"),
+      block.localLoadZones.includes("блок:leg_lmv"),
     ),
   "Post-competition comparison should select recovery and no development",
 );
@@ -2104,17 +2104,17 @@ assert(
   comparisonSecondary.summary.safeToPreview &&
     !comparisonSecondary.matrixDraft.matrix.draft.warnings.some((warning) => warning.code === "close_main_start") &&
     !constructorDraftBlocks(comparisonSecondary.matrixDraft).some((block) =>
-      block.localLoadZones.includes("matrix:leg_lmv"),
+      block.localLoadZones.includes("блок:leg_lmv"),
     ),
   "Secondary comparison should be softer than main start but still reject risky close-start blocks",
 );
 assert(
   comparisonFarDevelopment.summary.safeToPreview &&
     constructorDraftBlocks(comparisonFarDevelopment.matrixDraft).some((block) =>
-      block.localLoadZones.includes("matrix:leg_lmv"),
+      block.localLoadZones.includes("блок:leg_lmv"),
     ) &&
     constructorDraftBlocks(comparisonFarDevelopment.matrixDraft).some((block) =>
-      block.localLoadZones.includes("matrix:gpp") || block.localLoadZones.includes("matrix:spp"),
+      block.localLoadZones.includes("блок:gpp") || block.localLoadZones.includes("блок:spp"),
     ) &&
     constructorDraftSessions(comparisonFarDevelopment.matrixDraft).some((session) => session.name === "ВЕЧЕР") &&
     comparisonFarDevelopment.summary.totalDifferences >= comparisonFarDevelopment.summary.expectedDifferenceCount,
@@ -2160,9 +2160,9 @@ assert(
 );
 assert(
   !constructorDraftBlocks(preview3.matrixDraft).some((block) =>
-    block.localLoadZones.includes("matrix:leg_lmv") ||
-    block.localLoadZones.includes("matrix:spp") ||
-    block.localLoadZones.includes("matrix:mat_control_bouts"),
+    block.localLoadZones.includes("блок:leg_lmv") ||
+    block.localLoadZones.includes("блок:spp") ||
+    block.localLoadZones.includes("блок:mat_control_bouts"),
   ) &&
     constructorDraftHasText(preview3.matrixDraft, /Главный старт ближе 30|развитие/i),
   "3-day preview matrix draft should not contain heavy/development/control blocks",
@@ -2176,9 +2176,9 @@ assert(
 assert(
   previewWeighIn.safeToPreview &&
     !constructorDraftBlocks(previewWeighIn.matrixDraft).some((block) =>
-      block.localLoadZones.includes("matrix:mat_control_bouts") ||
-      block.localLoadZones.includes("matrix:mat_competition_model") ||
-      block.localLoadZones.includes("matrix:spp"),
+      block.localLoadZones.includes("блок:mat_control_bouts") ||
+      block.localLoadZones.includes("блок:mat_competition_model") ||
+      block.localLoadZones.includes("блок:spp"),
     ) &&
     constructorDraftHasText(previewWeighIn.matrixDraft, /взвеш|weight/i),
   "Weigh-in preview should keep short activation/recovery and weight-control explanation",
@@ -2186,25 +2186,25 @@ assert(
 assert(
   previewCompetitionDay.safeToPreview &&
     constructorDraftBlocks(previewCompetitionDay.matrixDraft).every((block) =>
-      block.localLoadZones.includes("matrix:competition_start"),
+      block.localLoadZones.includes("блок:competition_start"),
     ),
   "Competition-day preview should select competition_start only",
 );
 assert(
   previewPostCompetition.safeToPreview &&
     constructorDraftBlocks(previewPostCompetition.matrixDraft).some((block) =>
-      block.localLoadZones.includes("matrix:post_competition_recovery") ||
-      block.localLoadZones.includes("matrix:recovery"),
+      block.localLoadZones.includes("блок:post_competition_recovery") ||
+      block.localLoadZones.includes("блок:recovery"),
     ) &&
     !constructorDraftBlocks(previewPostCompetition.matrixDraft).some((block) =>
-      block.localLoadZones.includes("matrix:leg_lmv"),
+      block.localLoadZones.includes("блок:leg_lmv"),
     ),
   "Post-competition preview should select recovery and no development",
 );
 assert(
   previewFarDevelopment.safeToPreview &&
     constructorDraftBlocks(previewFarDevelopment.matrixDraft).some((block) =>
-      block.localLoadZones.includes("matrix:leg_lmv"),
+      block.localLoadZones.includes("блок:leg_lmv"),
     ) &&
     constructorDraftSessions(previewFarDevelopment.matrixDraft).some((session) => session.name === "ВЕЧЕР"),
   "Far-development preview should allow development and larger two-session structure",
@@ -2254,9 +2254,9 @@ assert(
 assert(
   apiPreview3.safeToPreview &&
     !constructorDraftBlocks(apiPreview3.matrixDraft).some((block) =>
-      block.localLoadZones.includes("matrix:leg_lmv") ||
-      block.localLoadZones.includes("matrix:spp") ||
-      block.localLoadZones.includes("matrix:mat_control_bouts"),
+      block.localLoadZones.includes("блок:leg_lmv") ||
+      block.localLoadZones.includes("блок:spp") ||
+      block.localLoadZones.includes("блок:mat_control_bouts"),
     ) &&
     constructorDraftHasText(apiPreview3.matrixDraft, /Главный старт ближе 30|развитие/i),
   "API preview helper D-3 scenario should keep close-start safety",
@@ -2270,9 +2270,9 @@ assert(
 assert(
   apiPreviewWeighIn.safeToPreview &&
     !constructorDraftBlocks(apiPreviewWeighIn.matrixDraft).some((block) =>
-      block.localLoadZones.includes("matrix:mat_control_bouts") ||
-      block.localLoadZones.includes("matrix:mat_competition_model") ||
-      block.localLoadZones.includes("matrix:spp"),
+      block.localLoadZones.includes("блок:mat_control_bouts") ||
+      block.localLoadZones.includes("блок:mat_competition_model") ||
+      block.localLoadZones.includes("блок:spp"),
     ) &&
     constructorDraftHasText(apiPreviewWeighIn.matrixDraft, /взвеш|weight/i),
   "API preview helper weigh-in scenario should keep weight-control safety",

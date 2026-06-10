@@ -1720,3 +1720,42 @@ The controlled exposure is checked by:
 ```bash
 npm run check:constructor-matrix-ui-gates
 ```
+
+### 15.23 Coach-ready matrix draft adapter and pilot build path
+
+Stage 31 moves the matrix output closer to a usable planning draft.
+
+The matrix adapter now translates matrix blocks into coach-readable training
+content:
+
+- the focus plan is derived from the competition calendar and matrix phase, not
+  from old free-form focus buttons;
+- close main-start windows show maintenance/transfer/activation/recovery instead
+  of development;
+- sessions contain concrete blocks with trainer-facing names;
+- active training sessions include warm-up, main work, and cool-down/control
+  blocks;
+- blocks include editable exercise rows and concrete volume prescriptions;
+- the active draft explanation no longer exposes experimental/internal wording.
+
+When all three web flags are enabled, the main constructor build action can
+attempt the matrix primary pilot path. It activates the new draft only after
+local rollout/readiness checks and server save dry-run evidence pass. If the
+scenario is not primary-allowed, the UI falls back to the current constructor
+draft and keeps the matrix result as preview evidence.
+
+Guardrails remain:
+
+- the production draft API route is unchanged;
+- the third flag defaults false;
+- D-3, travel and weigh-in remain preview/internal-only for save/assign;
+- legacy save/template/assign stays unchanged when the gate is off.
+
+This stage is covered by:
+
+```bash
+npm run build --workspace @training-platform/shared
+npm run build --workspace @training-platform/web
+npm run check:constructor-core
+npm run check:constructor-matrix-ui-gates
+```

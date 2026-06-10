@@ -2,6 +2,7 @@ import type {
   ConstructorBlockType,
   ConstructorConfidence,
   ConstructorDraft,
+  ConstructorGoalInput,
   ConstructorGoalMode,
   ConstructorGoalType,
   ConstructorInput,
@@ -10,6 +11,7 @@ import type {
   ConstructorPhase,
   ConstructorPlanBlock,
   ConstructorPlanDay,
+  ConstructorPlanExercise,
   ConstructorPlanSession,
   ConstructorPlanWeek,
   ConstructorRiskCode,
@@ -208,24 +210,288 @@ function deriveMatrixConfidence(
   return "high";
 }
 
-function volumeText(block: MatrixDrivenSelectedBlock) {
-  const duration = block.volume.durationMinutes.target > 0
-    ? `${block.volume.durationMinutes.target} мин`
-    : "соревновательный объём";
+function constructorExercise(
+  name: string,
+  notes: string,
+  values: Partial<ConstructorPlanExercise> = {},
+): ConstructorPlanExercise {
+  return {
+    name,
+    targetSets: values.targetSets ?? null,
+    targetReps: values.targetReps ?? null,
+    targetWeightKg: values.targetWeightKg ?? null,
+    targetDurationMinutes: values.targetDurationMinutes ?? null,
+    targetRpe: values.targetRpe ?? null,
+    notes,
+    displayOrder: values.displayOrder,
+  };
+}
 
-  return `${duration}; нагрузка ${block.volume.loadLevel}; интенсивность ${block.volume.intensityLevel}; ковёр ${block.volume.matVolume}`;
+function matrixBlockName(block: MatrixDrivenSelectedBlock) {
+  const names: Partial<Record<ConstructorTrainingBlockType, string>> = {
+    mat_technique: "Техника борьбы",
+    mat_tactics: "Тактические ситуации",
+    mat_competition_model: "Соревновательная модель",
+    mat_control_bouts: "Контрольные схватки",
+    mat_light_technical: "Лёгкая техника",
+    spp: "СФП с переносом в борьбу",
+    gpp: "ОФП / смена обстановки",
+    leg_lmv: "Поддержание СФП ног",
+    first_action_speed: "Короткая активация первого действия",
+    aerobic_deload: "Аэробная разгрузка",
+    mobility: "Мобилити",
+    recovery: "Восстановление",
+    sauna: "Сауна / восстановительные процедуры",
+    environment_change: "Смена обстановки",
+    travel: "Дорога / адаптация",
+    weigh_in: "Взвешивание / контроль веса",
+    competition_start: "Старт соревнования",
+    post_competition_recovery: "Восстановление после старта",
+  };
+
+  return names[block.blockType] ?? block.label;
+}
+
+function matrixBlockVolume(block: MatrixDrivenSelectedBlock) {
+  switch (block.blockType) {
+    case "mat_technique":
+      return "20-30 мин: стойка, входы, защита/спрол, партер; качество техники выше объёма";
+    case "mat_tactics":
+      return "20-25 мин: 3-4 тактические ситуации, выход из захвата, край ковра, счёт";
+    case "mat_competition_model":
+      return "2-3 моделирующих отрезка: 3 мин + 30 сек + 3 мин; пауза 4-6 мин";
+    case "mat_control_bouts":
+      return "1-2 контрольные схватки только при свежести; остановить при падении качества";
+    case "mat_light_technical":
+      return "15-25 мин: лёгкая техника без силовой борьбы и без утомления";
+    case "spp":
+      return "25-35 мин: СФП поддерживающе, без отказа, обязательно с переносом в борьбу";
+    case "gpp":
+      return "25-40 мин: ОФП или кросс/поход как смена обстановки, RPE 3-5";
+    case "leg_lmv":
+      return "2-3 упражнения по 20-25 сек, 2-3 подхода; без отказа; затем перенос во входы";
+    case "first_action_speed":
+      return "4-8 коротких включений 10-20 м или входов по сигналу; полный отдых";
+    case "aerobic_deload":
+      return "25-35 мин Z1-Z2: кросс, велосипед, ходьба или поход; разговорный темп";
+    case "mobility":
+      return "10-20 мин: таз, спина, плечи, голеностоп, дыхание";
+    case "recovery":
+      return "15-30 мин восстановления: Z1, дыхание, мобилити, локальный сброс";
+    case "sauna":
+      return "сауна/процедуры только по самочувствию и весу; без тренировочного добора";
+    case "environment_change":
+      return "30-60 мин лёгкой смены обстановки: прогулка, поход, восстановительный кросс";
+    case "travel":
+      return "10-20 мин: дорога, адаптация, мобилити, сон, вода; без нагрузки";
+    case "weigh_in":
+      return "5-15 мин: вес, вода, питание, короткая активация только при свежести";
+    case "competition_start":
+      return "соревновательный день: разминка, старт, восстановление между схватками";
+    case "post_competition_recovery":
+      return "20-40 мин: восстановление, сон, питание, разбор ощущений и травм";
+    default: {
+      const duration = block.volume.durationMinutes.target > 0
+        ? `${block.volume.durationMinutes.target} мин`
+        : "соревновательный объём";
+
+      return `${duration}; нагрузка ${block.volume.loadLevel}; интенсивность ${block.volume.intensityLevel}; ковёр ${block.volume.matVolume}`;
+    }
+  }
+}
+
+function matrixBlockExercises(block: MatrixDrivenSelectedBlock): ConstructorPlanExercise[] {
+  switch (block.blockType) {
+    case "mat_technique":
+      return [
+        constructorExercise("Стойка и перемещения", "смена уровня, вход/выход из дистанции, контроль стойки", {
+          targetDurationMinutes: 8,
+          targetRpe: 3,
+          displayOrder: 0,
+        }),
+        constructorExercise("Входы в ноги под контролем", "3-4 серии по 4-6 входов, качество не ниже 4/5", {
+          targetSets: 4,
+          targetReps: 6,
+          targetRpe: 5,
+          displayOrder: 1,
+        }),
+        constructorExercise("Переход стойка -> партер", "2-3 ситуации, без силовой рубки в подводке", {
+          targetSets: 3,
+          targetDurationMinutes: 5,
+          targetRpe: 5,
+          displayOrder: 2,
+        }),
+      ];
+    case "mat_tactics":
+      return [
+        constructorExercise("Ситуация по счёту", "вести/догонять, край ковра, 30 сек до конца", {
+          targetDurationMinutes: 10,
+          targetRpe: 5,
+          displayOrder: 0,
+        }),
+        constructorExercise("Выход из захвата", "3 серии по 4-6 повторов, без потери стойки", {
+          targetSets: 3,
+          targetReps: 6,
+          targetRpe: 5,
+          displayOrder: 1,
+        }),
+      ];
+    case "mat_competition_model":
+      return [
+        constructorExercise("Модель периода", "3 мин + 30 сек + 3 мин; качество действий важнее добора", {
+          targetSets: 2,
+          targetDurationMinutes: 7,
+          targetRpe: 7,
+          displayOrder: 0,
+        }),
+        constructorExercise("Финиш после паузы", "30-45 сек активного решения без хаоса", {
+          targetSets: 3,
+          targetDurationMinutes: 1,
+          targetRpe: 7,
+          displayOrder: 1,
+        }),
+      ];
+    case "mat_control_bouts":
+      return [
+        constructorExercise("Контрольная схватка", "только при свежести; остановить при падении качества", {
+          targetSets: 1,
+          targetDurationMinutes: 6,
+          targetRpe: 8,
+          displayOrder: 0,
+        }),
+      ];
+    case "mat_light_technical":
+      return [
+        constructorExercise("Лёгкая техника", "стойка-партер без сопротивления, дыхание ровное", {
+          targetDurationMinutes: 15,
+          targetRpe: 3,
+          displayOrder: 0,
+        }),
+        constructorExercise("Короткие входы", "2-4 включения, ощущение резкости, полный отдых", {
+          targetSets: 4,
+          targetReps: 1,
+          targetRpe: 4,
+          displayOrder: 1,
+        }),
+      ];
+    case "spp":
+      return [
+        constructorExercise("СФП круг", "4-6 станций, без отказа, сохранить технику", {
+          targetSets: 4,
+          targetDurationMinutes: 4,
+          targetRpe: 6,
+          displayOrder: 0,
+        }),
+        constructorExercise("Перенос в проход", "после СФП 3 серии по 4 входа", {
+          targetSets: 3,
+          targetReps: 4,
+          targetRpe: 5,
+          displayOrder: 1,
+        }),
+      ];
+    case "gpp":
+    case "aerobic_deload":
+    case "environment_change":
+      return [
+        constructorExercise("Кросс / поход / велосипед Z1-Z2", "разговорный темп, смена обстановки", {
+          targetDurationMinutes: block.blockType === "environment_change" ? 45 : 30,
+          targetRpe: 3,
+          displayOrder: 0,
+        }),
+        constructorExercise("Мобилити после аэробной", "таз, голеностоп, спина, плечи", {
+          targetDurationMinutes: 8,
+          targetRpe: 2,
+          displayOrder: 1,
+        }),
+      ];
+    case "leg_lmv":
+      return [
+        constructorExercise("Статодинамический присед", "2-3 подхода по 20-25 сек, без отказа", {
+          targetSets: 3,
+          targetDurationMinutes: 1,
+          targetRpe: 6,
+          displayOrder: 0,
+        }),
+        constructorExercise("Сплит-присед / выпад", "2 подхода на сторону по 20 сек", {
+          targetSets: 2,
+          targetDurationMinutes: 1,
+          targetRpe: 6,
+          displayOrder: 1,
+        }),
+        constructorExercise("Проходы после локальной работы", "3 серии по 4 входа, техника не ниже 4/5", {
+          targetSets: 3,
+          targetReps: 4,
+          targetRpe: 5,
+          displayOrder: 2,
+        }),
+      ];
+    case "first_action_speed":
+      return [
+        constructorExercise("Старт 10-20 м", "4-8 повторов, отдых 90-120 сек, без добора", {
+          targetSets: 6,
+          targetReps: 1,
+          targetRpe: 5,
+          displayOrder: 0,
+        }),
+        constructorExercise("Вход в ногу по сигналу", "4-6 входов, полный возврат", {
+          targetSets: 3,
+          targetReps: 2,
+          targetRpe: 5,
+          displayOrder: 1,
+        }),
+      ];
+    case "mobility":
+    case "recovery":
+    case "sauna":
+    case "travel":
+    case "weigh_in":
+    case "post_competition_recovery":
+      return [
+        constructorExercise("Контроль состояния", "сон, вес, пульс покоя, боль/жёсткость, самочувствие", {
+          targetDurationMinutes: 5,
+          targetRpe: 1,
+          displayOrder: 0,
+        }),
+        constructorExercise("Мобилити и дыхание", "таз, спина, плечи, голеностоп", {
+          targetDurationMinutes: 10,
+          targetRpe: 2,
+          displayOrder: 1,
+        }),
+      ];
+    case "competition_start":
+      return [
+        constructorExercise("Разминка перед схваткой", "индивидуальная, без лишнего утомления", {
+          targetDurationMinutes: 15,
+          targetRpe: 4,
+          displayOrder: 0,
+        }),
+        constructorExercise("Восстановление между схватками", "вода, дыхание, питание, тактическая поправка", {
+          targetDurationMinutes: 10,
+          targetRpe: 1,
+          displayOrder: 1,
+        }),
+      ];
+    default:
+      return [
+        constructorExercise(matrixBlockName(block), "выполнить по объёму блока, тренер может уточнить вручную", {
+          targetDurationMinutes: block.volume.durationMinutes.target || null,
+          targetRpe: block.volume.loadLevel === "high" ? 7 : block.volume.loadLevel === "medium" ? 5 : 3,
+          displayOrder: 0,
+        }),
+      ];
+  }
 }
 
 function adaptBlock(block: MatrixDrivenSelectedBlock): ConstructorPlanBlock {
   return {
-    name: block.label,
+    name: matrixBlockName(block),
     type: block.blockTypeCategory as ConstructorBlockType,
     targetQuality: block.targetQuality,
-    volume: volumeText(block),
+    volume: matrixBlockVolume(block),
     localLoadZones: [
-      `matrix:${block.blockType}`,
-      `mat:${block.volume.matVolume}`,
-      `density:${block.volume.density}`,
+      `блок:${block.blockType}`,
+      `ковёр:${block.volume.matVolume}`,
+      `плотность:${block.volume.density}`,
       ...block.sourceCompatibilityCards.map((cardId) => `legacy-source:${cardId}`),
     ],
     energySystem:
@@ -236,12 +502,104 @@ function adaptBlock(block: MatrixDrivenSelectedBlock): ConstructorPlanBlock {
           : "контролируемая матричная нагрузка",
     riskFlags: block.riskTags,
     evidenceRefs: [
-      "matrix-driven-constructor",
+      "PERFORM matrix constructor",
       ...block.sourceCompatibilityCards.map((cardId) => `legacy-content:${cardId}`),
     ],
     coachEditable: true,
     volumeLocked: false,
+    exercises: matrixBlockExercises(block),
   };
+}
+
+function warmupBlock(): ConstructorPlanBlock {
+  return {
+    name: "Разминка",
+    type: "activation",
+    targetQuality: "general",
+    volume: "10-15 мин: мобилизация, стойка/перемещения, 2-3 коротких включения",
+    localLoadZones: ["общее", "нервная активация"],
+    energySystem: "активация без утомления",
+    riskFlags: [],
+    evidenceRefs: ["Europe plan analysis", "PERFORM Evidence Matrix"],
+    coachEditable: true,
+    volumeLocked: true,
+    exercises: [
+      constructorExercise("Суставная мобилизация", "шея, плечи, таз, колени, голеностоп", {
+        targetDurationMinutes: 5,
+        targetRpe: 2,
+        displayOrder: 0,
+      }),
+      constructorExercise("Стойка и перемещения", "стойка, смена уровня, шаги, развороты", {
+        targetDurationMinutes: 5,
+        targetRpe: 3,
+        displayOrder: 1,
+      }),
+      constructorExercise("Короткие включения", "2-3 ускорения/входа без утомления", {
+        targetSets: 3,
+        targetReps: 1,
+        targetRpe: 4,
+        displayOrder: 2,
+      }),
+    ],
+  };
+}
+
+function cooldownBlock(): ConstructorPlanBlock {
+  return {
+    name: "Заминка и контроль состояния",
+    type: "recovery",
+    targetQuality: "recovery",
+    volume: "8-15 мин: Z1/дыхание, мобилити, контроль веса и самочувствия",
+    localLoadZones: ["восстановление", "контроль веса", "ЦНС"],
+    energySystem: "восстановление",
+    riskFlags: [],
+    evidenceRefs: ["sleep consensus", "PERFORM Evidence Matrix"],
+    coachEditable: true,
+    volumeLocked: true,
+    exercises: [
+      constructorExercise("Z1 или ходьба", "снизить пульс, дыхание ровное", {
+        targetDurationMinutes: 6,
+        targetRpe: 2,
+        displayOrder: 0,
+      }),
+      constructorExercise("Мобилити и дыхание", "таз, спина, плечи, предплечья", {
+        targetDurationMinutes: 6,
+        targetRpe: 1,
+        displayOrder: 1,
+      }),
+      constructorExercise("Контроль состояния", "вес, сон, пульс покоя, боль/жёсткость", {
+        targetDurationMinutes: 3,
+        targetRpe: 1,
+        displayOrder: 2,
+      }),
+    ],
+  };
+}
+
+function needsSessionFrame(blocks: ConstructorPlanBlock[]) {
+  if (blocks.length === 0) {
+    return false;
+  }
+
+  return blocks.some(
+    (block) =>
+      !["recovery", "mobility"].includes(block.type) &&
+      !["travel", "weigh_in", "competition_start", "post_competition_recovery"].includes(
+        block.localLoadZones[0]?.replace("блок:", "") ?? "",
+      ),
+  );
+}
+
+function sessionNotes(matrixSession: MatrixDrivenPlanSession) {
+  const load = matrixSession.volume.loadLevel;
+  const intensity = matrixSession.volume.intensityLevel;
+
+  return [
+    matrixSession.slot === "morning" ? "Утренний блок" : "Вечерний блок",
+    `нагрузка ${load}`,
+    `интенсивность ${intensity}`,
+    ...matrixSession.explanations.slice(0, 2).map((item) => item.message),
+  ].join(" · ");
 }
 
 export function adaptMatrixDrivenSessionToConstructorSession(
@@ -249,16 +607,16 @@ export function adaptMatrixDrivenSessionToConstructorSession(
   input: ConstructorInput,
 ): ConstructorPlanSession {
   void input;
+  const mainBlocks = matrixSession.selectedBlocks.map(adaptBlock);
+  const blocks = needsSessionFrame(mainBlocks)
+    ? [warmupBlock(), ...mainBlocks, cooldownBlock()]
+    : mainBlocks;
 
   return {
     name: matrixSession.slot === "morning" ? "УТРО" : "ВЕЧЕР",
-    notes: [
-      `matrix slot=${matrixSession.slot}`,
-      `load=${matrixSession.volume.loadLevel}`,
-      ...matrixSession.explanations.slice(0, 3).map((item) => item.message),
-    ].join(" · "),
+    notes: sessionNotes(matrixSession),
     orderIndex: matrixSession.slot === "morning" ? 0 : 1,
-    blocks: matrixSession.selectedBlocks.map(adaptBlock),
+    blocks,
   };
 }
 
@@ -277,7 +635,7 @@ export function adaptMatrixDrivenDayToConstructorDay(
   return {
     dayLabel: dayLabelParts.join(" / "),
     dayIntent: [
-      `matrix day=${matrixDay.dayType}`,
+      `тип дня: ${matrixDay.dayType}`,
       matrixDay.explanations[0]?.message,
       matrixDay.riskChecks.length ? `risk checks: ${matrixDay.riskChecks.map((risk) => risk.code).join(", ")}` : null,
     ]
@@ -293,19 +651,36 @@ export function adaptMatrixDrivenDayToConstructorDay(
   };
 }
 
+function weekTypeLabel(weekType: MatrixDrivenPlanWeek["weekType"]) {
+  const labels: Record<MatrixDrivenPlanWeek["weekType"], string> = {
+    development: "развивающая неделя",
+    maintenance: "поддерживающая неделя",
+    special: "специальная борцовская неделя",
+    pre_competition: "предсоревновательная неделя",
+    deload: "разгрузочная неделя",
+    taper: "подводящая неделя",
+    competition: "соревновательная неделя",
+    recovery: "восстановительная неделя",
+    travel_logistics: "логистика и адаптация",
+    post_competition: "послестартовое восстановление",
+  };
+
+  return labels[weekType];
+}
+
 export function adaptMatrixDrivenWeekToConstructorWeek(
   matrixWeek: MatrixDrivenPlanWeek,
   input: ConstructorInput,
 ): ConstructorPlanWeek {
   return {
     weekNumber: matrixWeek.weekNumber,
-    title: `Matrix неделя ${matrixWeek.weekNumber}: ${matrixWeek.weekType}`,
+    title: `Неделя ${matrixWeek.weekNumber}: ${weekTypeLabel(matrixWeek.weekType)}`,
     phase: preparationPhaseToConstructorPhase(matrixWeek.phase),
     mainIntent: [
-      `matrix week=${matrixWeek.weekType}`,
-      `load=${matrixWeek.volume.loadLevel}`,
-      `mat=${matrixWeek.volume.matVolume}`,
-      `recovery=${matrixWeek.recoveryPriority}`,
+      weekTypeLabel(matrixWeek.weekType),
+      `нагрузка ${matrixWeek.volume.loadLevel}`,
+      `ковёр ${matrixWeek.volume.matVolume}`,
+      `восстановление ${matrixWeek.recoveryPriority}`,
     ].join(" · "),
     days: matrixWeek.days.map((day) => adaptMatrixDrivenDayToConstructorDay(day, input)),
   };
@@ -318,6 +693,94 @@ export function adaptMatrixDrivenDraftToConstructorWeeks(
   return matrixDraft.weeks.map((week) => adaptMatrixDrivenWeekToConstructorWeek(week, input));
 }
 
+function goalItem(
+  goalType: ConstructorGoalType,
+  mode: ConstructorGoalMode,
+  label: string,
+  reason: string,
+): ConstructorDraft["focusPlan"]["items"][number] {
+  return { goalType, mode, label, reason };
+}
+
+function buildMatrixFocusItems(
+  input: ConstructorInput,
+  matrixDraft: MatrixDrivenPlanDraft,
+): ConstructorDraft["focusPlan"]["items"] {
+  const days = matrixDraft.daysUntilStart;
+
+  if (matrixDraft.isMainStart && days !== null && days <= 4) {
+    return [
+      goalItem("taper_quality", "activation", "короткая предстартовая активация", "стартовое окно: только ключевые действия без добора нагрузки"),
+      goalItem("weight_management", "recovery", "контроль веса", "взвешивание, вода, питание и самочувствие важнее объёма"),
+      goalItem("recovery", "recovery", "сон и восстановление", "сохранить свежесть и снять остаточное напряжение"),
+    ];
+  }
+
+  if (matrixDraft.isMainStart && days !== null && days <= 14) {
+    return [
+      goalItem("taper_quality", "activation", "качество подводки", "снижаем объём, сохраняем резкость и уверенность"),
+      goalItem("fatigue_skill", "transfer", "лёгкая техническая уверенность", "только качество действий, без борьбы в утомление"),
+      goalItem("weight_management", "recovery", "контроль веса", "вес и восстановление задают допустимую нагрузку"),
+      goalItem("recovery", "recovery", "суперкомпенсация", "сон, свежесть, половинчатые дни и процедуры"),
+    ];
+  }
+
+  if (matrixDraft.isMainStart && days !== null && days <= 30) {
+    return [
+      goalItem("fatigue_skill", "transfer", "специальная борцовская работа", "основа активных дней: техника, ситуации и перенос СФП в борьбу"),
+      goalItem("wrestling_contact_density", "transfer", "соревновательная модель", "моделируем плотность борьбы без развивающего добора"),
+      goalItem("legs_lme", "maintenance", "поддержание СФП ног", "короткие локальные блоки без отказа и только с переносом во входы"),
+      goalItem("weight_management", "recovery", "контроль веса", "вес, сон, пульс покоя и самочувствие ограничивают нагрузку"),
+      goalItem("recovery", "recovery", "восстановление и разгрузка", "половинчатые дни, смена обстановки и снятие накопленной усталости"),
+      goalItem("taper_quality", "activation", "качество подводки", "сохранить свежесть и резкость без развития утомления"),
+    ];
+  }
+
+  if (matrixDraft.preparationPhase === "transition_recovery") {
+    return [
+      goalItem("recovery", "recovery", "восстановление после старта", "сначала сон, питание, суставы, мышечная боль и разбор"),
+      goalItem("aerobic_base", "recovery", "мягкая аэробная поддержка", "возврат к режиму без развивающего давления"),
+    ];
+  }
+
+  if (input.goals.length) {
+    return input.goals.map((item: ConstructorGoalInput) => ({
+      goalType: item.goalType,
+      mode: item.mode ?? modeForMatrixGoal(input),
+      label: item.reason ?? item.goalType,
+      reason: "Выбрано тренером и проверено matrix eligibility rules.",
+    }));
+  }
+
+  const goal = primaryGoal(input);
+
+  return [
+    goalItem(goal, modeForMatrixGoal(input), goal, "Fallback focus для matrix path."),
+  ];
+}
+
+function matrixPhaseTitle(phase: MatrixDrivenPlanDraft["preparationPhase"]) {
+  const labels: Record<MatrixDrivenPlanDraft["preparationPhase"], string> = {
+    general_preparation: "общая подготовка",
+    special_preparation: "специальная подготовка",
+    special_pre_competition: "специальная предсоревновательная подготовка",
+    direct_pre_competition: "непосредственная предсоревновательная подготовка",
+    taper: "подводка",
+    competition: "стартовое окно",
+    transition_recovery: "восстановление после старта",
+  };
+
+  return labels[phase];
+}
+
+function matrixDevelopmentAllowed(matrixDraft: MatrixDrivenPlanDraft) {
+  if (matrixDraft.isMainStart && matrixDraft.daysUntilStart !== null && matrixDraft.daysUntilStart <= 30) {
+    return false;
+  }
+
+  return matrixDraft.weeks.some((week) => week.volume.loadLevel === "high");
+}
+
 export function buildMatrixDrivenConstructorDraft(
   input: ConstructorInput,
   options?: MatrixDrivenBuilderOptions,
@@ -327,55 +790,46 @@ export function buildMatrixDrivenConstructorDraft(
   const missingData = buildMatrixMissingData(input);
   const riskFlags = uniqueRiskFlags(matrixDraft.riskChecks);
   const confidence = deriveMatrixConfidence(missingData, matrixDraft.riskChecks);
-  const goal = primaryGoal(input);
-  const goalMode = modeForMatrixGoal(input);
   const phaseMap = matrixDraft.weeks.map((week) => ({
     range:
       week.daysUntilStartRange.from !== null && week.daysUntilStartRange.to !== null
         ? `Д-${week.daysUntilStartRange.from}...Д-${week.daysUntilStartRange.to}`
         : `Неделя ${week.weekNumber}`,
     phase: preparationPhaseToConstructorPhase(week.phase),
-    title: `Matrix ${week.weekType}`,
+    title: weekTypeLabel(week.weekType),
     intent: week.explanations[0]?.message ?? week.volume.explanation,
   }));
   const selectedCards = matrixDraft.legacyCards.sourceCompatibilityCards.map((cardId) => ({
     id: cardId,
-    title: `Legacy content source: ${cardId}`,
+    title: `Источник упражнений: ${cardId}`,
     rationale: "Используется только как metadata/content hint, не как структура недели или дня.",
   }));
   const matrixRiskSummary = matrixDraft.riskChecks.length
     ? matrixDraft.riskChecks.map((risk) => `${risk.code}: ${risk.message}`).join(" ")
-    : "Matrix risk checks не нашли критичных нарушений.";
+    : "Проверка матрицы не нашла критичных нарушений.";
+  const phaseTitle = matrixPhaseTitle(matrixDraft.preparationPhase);
+  const daysText =
+    matrixDraft.daysUntilStart !== null
+      ? `${matrixDraft.daysUntilStart} дней до старта`
+      : "нет точной даты старта";
 
   return {
     generatedFrom: "matrix",
     confidence,
     understood: {
-      mainTask: `Matrix-driven constructor: ${input.competition.name}, ${matrixDraft.daysUntilStart ?? "?"} дней до старта.`,
+      mainTask: `${input.competition.name}: ${phaseTitle}, ${daysText}.`,
       interpretation:
         matrixDraft.explanations.map((item) => item.message).join(" ") ||
-        "План собран через phase → week → day → session → eligible blocks.",
+        "План собран от календаря старта: фаза → неделя → день → тренировка → допустимые блоки.",
       limitation:
-        "Это experimental matrix path: старый генератор не переключён, упражнения и финальные объёмы требуют следующего adapter-слоя.",
+        matrixDraft.isMainStart && matrixDraft.daysUntilStart !== null && matrixDraft.daysUntilStart <= 30
+          ? "Развивающие цели запрещены: план работает через поддержание, перенос, активацию, вес и восстановление."
+          : "Тренер может редактировать объёмы и упражнения перед сохранением шаблона.",
     },
     focusPlan: {
-      title: "Matrix-driven focus",
-      developmentAllowed: matrixDraft.weeks.some((week) => week.volume.loadLevel === "high"),
-      items: input.goals.length
-        ? input.goals.map((item) => ({
-            goalType: item.goalType,
-            mode: item.mode ?? goalMode,
-            label: item.reason ?? item.goalType,
-            reason: "Сохранено из входа тренера и проверено matrix path.",
-          }))
-        : [
-            {
-              goalType: goal,
-              mode: goalMode,
-              label: goal,
-              reason: "Fallback focus для matrix path.",
-            },
-          ],
+      title: "Фокус подготовки по календарю старта",
+      developmentAllowed: matrixDevelopmentAllowed(matrixDraft),
+      items: buildMatrixFocusItems(input, matrixDraft),
       phaseMap,
     },
     missingData,
@@ -387,27 +841,28 @@ export function buildMatrixDrivenConstructorDraft(
       weeks,
     },
     explanation: {
-      mainDecision: `generatedFrom=matrix; ${matrixDraft.preparationPhase}; legacyCards.usedAsStructure=${matrixDraft.legacyCards.usedAsStructure}.`,
+      mainDecision: `Новый конструктор выбрал фазу: ${phaseTitle}. Структура недель и дней построена от календаря старта, а не от фиксированной карточки.`,
       whyNow:
         matrixDraft.daysUntilStart !== null
-          ? `До старта Д-${matrixDraft.daysUntilStart}; структура собрана матрицей, а не fixed template card.`
-          : "Нет точного D-day; matrix path использует безопасную структуру skeleton.",
+          ? `До старта Д-${matrixDraft.daysUntilStart}: допустимые блоки ограничены фазой, дорогой, взвешиванием, восстановлением и ролью старта.`
+          : "Нет точного D-day; новый конструктор использует безопасную структуру с пониженной уверенностью.",
       testsImpact:
         missingData.length > 0
           ? `Не хватает данных: ${missingData.map((item) => item.code).join(", ")}.`
-          : "Данных достаточно для experimental matrix adapter smoke.",
+          : "Данных достаточно для рабочего черновика конструктора.",
       riskImpact: matrixRiskSummary,
       evidenceSummary: [
-        "generatedFrom=matrix",
-        "legacy cards are content metadata only",
+        "календарь старта",
+        "фазовая матрица PERFORM",
+        "старые карточки используются только как источники контента",
         ...matrixDraft.legacyCards.sourceCompatibilityCards.map((cardId) => `legacy-content:${cardId}`),
       ].join(", "),
       coachCanEdit: [
-        "matrix-selected blocks",
-        "volume prescription",
-        "session placement",
-        "risk replacements",
-        "legacy content hints",
+        "выбранные блоки",
+        "объёмы",
+        "упражнения",
+        "расположение утро/вечер",
+        "замены при рисках",
       ],
     },
     seasonStrategy: input.seasonStrategy ?? null,

@@ -14303,6 +14303,86 @@ export function PageClient({
         return;
       }
 
+      if (ENABLE_MATRIX_CONSTRUCTOR_SAVE_ASSIGN_PILOT) {
+        const previewOptions: ConstructorMatrixPreviewApiOptions = {
+          includeDrafts: true,
+          includeComparisonReport: true,
+          includeSafetyDetails: true,
+          explanationDepth: "normal",
+          includeInfoDifferences: constructorMatrixIncludeInfoDifferences,
+        };
+        const rolloutOptions: MatrixConstructorRolloutOptions = {
+          previewOptions,
+        };
+        const templateName = selectedConstructorCompetitionPlan?.competitionTitle
+          ? `PERFORM Matrix Pilot • ${selectedConstructorCompetitionPlan.competitionTitle}`
+          : `PERFORM Matrix Pilot • ${input.competition.name}`;
+        const [preview, rolloutDecision, serverSaveDryRun] = await Promise.all([
+          requestConstructorMatrixPreview(input, previewOptions),
+          requestConstructorMatrixRolloutDecision(input, rolloutOptions),
+          requestMatrixPrimaryPilotServerSaveDryRun(input, rolloutOptions, templateName),
+        ]);
+        const matrixDraft = getConstructorMatrixPreviewMatrixDraft(preview);
+        const pilotReadiness = evaluateMatrixPilotReadiness(input, {
+          rolloutOptions,
+        });
+        const localEligibility = canUseMatrixPrimaryPilot({
+          activeDraftSource: "matrix_primary_pilot",
+          internalUiEnabled: SHOW_INTERNAL_MATRIX_CONSTRUCTOR_UI,
+          limitedPilotEnabled: ENABLE_MATRIX_CONSTRUCTOR_LIMITED_PRIMARY_PILOT,
+          preview,
+          rolloutDecision,
+          pilotReadiness,
+          matrixDraft,
+        });
+        const serverGate = canUseMatrixPrimaryPilotWithServerEvidence({
+          serverResult: serverSaveDryRun,
+          localRolloutDecision: rolloutDecision,
+          localPilotReadiness: pilotReadiness,
+        });
+
+        setConstructorMatrixPreview(preview);
+        setConstructorMatrixPreviewInput(input);
+        setConstructorMatrixRolloutDecision(rolloutDecision);
+        setConstructorMatrixServerSaveDryRun(serverSaveDryRun);
+        setConstructorMatrixPreviewError("");
+        setConstructorMatrixRolloutError("");
+        setConstructorMatrixServerSaveDryRunError("");
+
+        if (
+          matrixDraft &&
+          localEligibility.allowed &&
+          serverGate.allowed &&
+          serverSaveDryRun.dryRun.status === "passed"
+        ) {
+          setConstructorDraft(null);
+          setConstructorTemplatePayload(null);
+          setConstructorMatrixWorkspace({
+            open: true,
+            draft: matrixDraft,
+            source: "rollout_preview",
+            readOnly: true,
+          });
+          setActiveConstructorDraftSource("matrix_primary_pilot");
+          setConstructorMessage(
+            copyFor(language, {
+              en: "New constructor draft built and passed save/assign pilot checks. Review it, then save it as a template.",
+              ru: "Черновик нового конструктора собран и прошёл pilot-проверки сохранения/назначения. Проверьте его и сохраните как шаблон.",
+              bg: "Черновата от новия конструктор е създадена и мина pilot проверките.",
+            }),
+          );
+          return;
+        }
+
+        setConstructorMessage(
+          copyFor(language, {
+            en: `New constructor is preview-only for this case (${rolloutDecision.scenario}). Building the current constructor draft instead.`,
+            ru: `Новый конструктор для этого случая пока только preview (${rolloutDecision.scenario}). Собираю черновик текущего конструктора.`,
+            bg: `Новият конструктор за този случай е само preview (${rolloutDecision.scenario}). Създавам текущата чернова.`,
+          }),
+        );
+      }
+
       const response = await apiRequest<ConstructorDraftResponse>("/plans/constructor/draft", {
         method: "POST",
         body: JSON.stringify(input),

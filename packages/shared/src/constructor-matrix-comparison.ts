@@ -117,9 +117,17 @@ function flattenedBlocks(draft: ConstructorDraft) {
 }
 
 function matrixBlockType(block: ConstructorPlanBlock) {
-  const marker = block.localLoadZones.find((zone) => zone.startsWith("matrix:"));
+  const marker = block.localLoadZones.find(
+    (zone) => zone.startsWith("блок:") || zone.startsWith("matrix:"),
+  );
 
-  return marker ? marker.slice("matrix:".length) : null;
+  if (!marker) {
+    return null;
+  }
+
+  return marker.startsWith("блок:")
+    ? marker.slice("блок:".length)
+    : marker.slice("matrix:".length);
 }
 
 function matrixBlockTypes(draft: MatrixDrivenConstructorDraft) {
