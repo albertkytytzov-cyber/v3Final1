@@ -20,8 +20,10 @@ import {
   type MatrixPrimaryPilotEligibility,
   matrixPrimaryPilotDisabledReasonText,
 } from "../../lib/constructor-matrix-primary-pilot";
+import type { MatrixPrimaryPilotSaveDryRunResult } from "../../lib/constructor-matrix-save-dry-run";
 import type { Language } from "../../lib/i18n";
 import { MatrixDraftReadOnlyView } from "./MatrixDraftReadOnlyView";
+import { MatrixPrimaryPilotSaveDryRunCard } from "./MatrixPrimaryPilotSaveDryRunCard";
 import { MatrixReviewExportActions } from "./MatrixReviewExportActions";
 
 type MatrixPreviewWorkspaceProps = {
@@ -38,6 +40,7 @@ type MatrixPreviewWorkspaceProps = {
   preview: ConstructorMatrixPreviewResponse | null;
   readiness: MatrixPilotReadinessResult | null;
   matrixPrimaryPilotEligibility: MatrixPrimaryPilotEligibility;
+  matrixPrimaryPilotSaveDryRun: MatrixPrimaryPilotSaveDryRunResult;
   rolloutDecision: MatrixConstructorRolloutDecision | null;
   workspace: ConstructorMatrixWorkspaceState;
 };
@@ -56,6 +59,7 @@ export function MatrixPreviewWorkspace({
   preview,
   readiness,
   matrixPrimaryPilotEligibility,
+  matrixPrimaryPilotSaveDryRun,
   rolloutDecision,
   workspace,
 }: MatrixPreviewWorkspaceProps) {
@@ -269,6 +273,11 @@ export function MatrixPreviewWorkspace({
               ))}
             </ul>
           </details>
+
+          <MatrixPrimaryPilotSaveDryRunCard
+            language={language}
+            result={matrixPrimaryPilotSaveDryRun}
+          />
         </div>
       ) : null}
 

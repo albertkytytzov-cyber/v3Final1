@@ -372,6 +372,25 @@ smoke must additionally cover:
 The pilot helper must not store state, send telemetry, write DB, or change the
 production constructor draft route.
 
+## Pilot-safe save dry-run
+
+Stage 20 adds a dry-run check for `matrix_primary_pilot`. This is UI/internal
+validation only.
+
+Browser smoke should cover:
+
+- both flags off: no dry-run UI;
+- internal UI on + pilot flag off: no dry-run UI;
+- both flags on before activation: dry-run status is `waiting`;
+- both flags on after activating `matrix_primary_pilot`: dry-run can show
+  `passed` for eligible D-90/post-competition payloads;
+- D-3/travel/weigh-in remain unable to activate primary pilot, so dry-run does
+  not become passed through those flows;
+- real save/template/assign remains disabled for `matrix_primary_pilot`.
+
+Dry-run validates a generated `PlanTemplatePayload` candidate but does not save
+or expose the payload to save handlers.
+
 ## Что не проверяется
 
 Fixtures не делают full snapshot:

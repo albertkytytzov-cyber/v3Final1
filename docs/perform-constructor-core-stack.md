@@ -1423,3 +1423,41 @@ guard.
 Stage 19 does not change shared constructor core, API contracts, DB, mobile,
 telemetry/storage, rollout policy, close-main-start rules, `mergeWeeks`,
 `selectTemplateCards`, or `pickSourceWeekForPhase`.
+
+### 15.12 Pilot-safe save dry-run validation
+
+Stage 20 adds dry-run validation for `matrix_primary_pilot` without enabling
+real save.
+
+Files:
+
+- `apps/web/app/lib/constructor-matrix-save-dry-run.ts`;
+- `apps/web/app/components/constructor/MatrixPrimaryPilotSaveDryRunCard.tsx`.
+
+The dry-run builds a `PlanTemplatePayload` candidate in memory from the active
+matrix pilot draft and validates:
+
+- matrix primary pilot is active;
+- Stage 19 eligibility passed;
+- template payload can be built;
+- days, sessions, and blocks exist;
+- block names/notes are not empty;
+- rows are exercise rows;
+- session execution/device link mode remains block-based;
+- old `Контроль`/`control` column marker is absent;
+- internal matrix/debug fields are not present in the payload;
+- real save remains disabled for the pilot source.
+
+Returned UI data is a summary/checklist only. The helper does not call API,
+write DB, write storage, emit telemetry, assign a plan, or return a payload for
+save/template handlers.
+
+This stage is still internal UI only and remains behind:
+
+```bash
+NEXT_PUBLIC_INTERNAL_MATRIX_CONSTRUCTOR_UI=true
+NEXT_PUBLIC_MATRIX_CONSTRUCTOR_LIMITED_PRIMARY_PILOT=true
+```
+
+Passing dry-run is a readiness signal for future server-side guarded pilot work,
+not production permission.

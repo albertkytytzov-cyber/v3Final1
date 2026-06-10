@@ -19,6 +19,7 @@ import {
   matrixUiCopyFor,
 } from "../../lib/constructor-matrix-ui";
 import type { MatrixPrimaryPilotEligibility } from "../../lib/constructor-matrix-primary-pilot";
+import type { MatrixPrimaryPilotSaveDryRunResult } from "../../lib/constructor-matrix-save-dry-run";
 import type { Language } from "../../lib/i18n";
 import { MatrixPilotReadinessCard } from "./MatrixPilotReadinessCard";
 import { MatrixPreviewWorkspace } from "./MatrixPreviewWorkspace";
@@ -47,6 +48,7 @@ type MatrixConstructorPreviewPanelProps = {
   pilotReadiness: MatrixPilotReadinessResult | null;
   pilotReadinessError: string;
   matrixPrimaryPilotEligibility: MatrixPrimaryPilotEligibility;
+  matrixPrimaryPilotSaveDryRun: MatrixPrimaryPilotSaveDryRunResult;
   rolloutDecision: MatrixConstructorRolloutDecision | null;
   rolloutError: string;
   selectedCoachAthleteAvailable: boolean;
@@ -77,6 +79,7 @@ export function MatrixConstructorPreviewPanel({
   pilotReadiness,
   pilotReadinessError,
   matrixPrimaryPilotEligibility,
+  matrixPrimaryPilotSaveDryRun,
   rolloutDecision,
   rolloutError,
   selectedCoachAthleteAvailable,
@@ -615,6 +618,7 @@ export function MatrixConstructorPreviewPanel({
         preview={preview}
         readiness={pilotReadiness}
         matrixPrimaryPilotEligibility={matrixPrimaryPilotEligibility}
+        matrixPrimaryPilotSaveDryRun={matrixPrimaryPilotSaveDryRun}
         rolloutDecision={rolloutDecision}
         workspace={workspace}
       />

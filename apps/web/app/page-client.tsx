@@ -208,6 +208,7 @@ import {
   isConstructorDraftSaveAllowed,
 } from "./lib/constructor-matrix-ui";
 import { canUseMatrixPrimaryPilot } from "./lib/constructor-matrix-primary-pilot";
+import { buildMatrixPrimaryPilotSaveDryRun } from "./lib/constructor-matrix-save-dry-run";
 import {
   isInternalMatrixConstructorUiEnabled,
   isMatrixConstructorLimitedPrimaryPilotEnabled,
@@ -15678,6 +15679,23 @@ export function PageClient({
       constructorMatrixRolloutDecision,
     ],
   );
+  const constructorMatrixPrimaryPilotSaveDryRun = useMemo(
+    () =>
+      buildMatrixPrimaryPilotSaveDryRun({
+        activeDraftSource: activeConstructorDraftSource,
+        draft: constructorMatrixWorkspace.draft,
+        eligibility: constructorMatrixPrimaryPilotEligibility,
+        templateName: selectedConstructorCompetitionPlan?.competitionTitle
+          ? `PERFORM Matrix Primary Pilot Dry Run • ${selectedConstructorCompetitionPlan.competitionTitle}`
+          : "PERFORM Matrix Primary Pilot Dry Run",
+      }),
+    [
+      activeConstructorDraftSource,
+      constructorMatrixPrimaryPilotEligibility,
+      constructorMatrixWorkspace.draft,
+      selectedConstructorCompetitionPlan?.competitionTitle,
+    ],
+  );
   const constructorMatrixWorkspaceCanOpen =
     SHOW_INTERNAL_MATRIX_CONSTRUCTOR_UI &&
     canOpenConstructorMatrixWorkspace({
@@ -22458,6 +22476,7 @@ export function PageClient({
                     pilotReadiness={constructorMatrixPilotReadinessState.readiness}
                     pilotReadinessError={constructorMatrixPilotReadinessState.error}
                     matrixPrimaryPilotEligibility={constructorMatrixPrimaryPilotEligibility}
+                    matrixPrimaryPilotSaveDryRun={constructorMatrixPrimaryPilotSaveDryRun}
                     rolloutDecision={constructorMatrixRolloutDecision}
                     rolloutError={constructorMatrixRolloutError}
                     selectedCoachAthleteAvailable={Boolean(selectedCoachAthlete)}

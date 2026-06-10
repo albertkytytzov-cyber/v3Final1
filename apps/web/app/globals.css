@@ -6654,6 +6654,59 @@ td {
   text-transform: uppercase;
 }
 
+.constructor-matrix-save-dry-run-card {
+  border-color: rgba(37, 99, 235, 0.18);
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.constructor-matrix-save-dry-run-card.is-passed {
+  border-color: rgba(20, 184, 166, 0.28);
+  background: rgba(240, 253, 250, 0.7);
+}
+
+.constructor-matrix-save-dry-run-card.is-blocked {
+  border-color: rgba(239, 68, 68, 0.26);
+  background: rgba(254, 242, 242, 0.68);
+}
+
+.constructor-matrix-save-dry-run-card.is-waiting {
+  border-color: rgba(148, 163, 184, 0.24);
+  background: rgba(248, 250, 252, 0.78);
+}
+
+.constructor-matrix-save-dry-run-badge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.9);
+  font-size: 0.72rem;
+  font-weight: 950;
+  line-height: 1.15;
+  text-transform: uppercase;
+}
+
+.constructor-matrix-save-dry-run-badge.is-passed {
+  border-color: rgba(20, 184, 166, 0.32);
+  color: #0f766e;
+}
+
+.constructor-matrix-save-dry-run-badge.is-blocked {
+  border-color: rgba(239, 68, 68, 0.28);
+  color: #991b1b;
+}
+
+.constructor-matrix-save-dry-run-badge.is-waiting {
+  border-color: rgba(100, 116, 139, 0.22);
+  color: #475569;
+}
+
+.constructor-matrix-save-dry-run-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
 .constructor-matrix-workspace-overview {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
@@ -13048,6 +13101,7 @@ td {
   .constructor-matrix-rollout-grid,
   .constructor-matrix-pilot-grid,
   .constructor-matrix-pilot-counts,
+  .constructor-matrix-save-dry-run-grid,
   .constructor-matrix-candidate-grid,
   .constructor-matrix-load-grid,
   .constructor-matrix-workspace-overview,

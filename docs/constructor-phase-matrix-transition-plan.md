@@ -3038,3 +3038,87 @@ Stage 19 does not change:
 - `selectTemplateCards`;
 - `pickSourceWeekForPhase`;
 - legacy save/template/assign behavior.
+
+## 31. Stage 20: Pilot-safe save dry-run validation
+
+Stage 20 adds a dry-run validation layer for `matrix_primary_pilot`.
+It answers one question only:
+
+> If this matrix primary pilot draft were converted into a template payload,
+> would the payload be structurally safe and compatible?
+
+It still does **not** enable real matrix save/assign.
+
+### 31.1 Helper
+
+Pure web helper:
+
+- `apps/web/app/lib/constructor-matrix-save-dry-run.ts`;
+- `buildMatrixPrimaryPilotSaveDryRun(...)`.
+
+The helper:
+
+- accepts active draft source, matrix draft, and Stage 19 eligibility;
+- builds `PlanTemplatePayload` in memory using `buildConstructorTemplatePayload`;
+- returns only status, summary, checklist, blockers, and notes;
+- does not return the full payload to UI actions;
+- does not call API;
+- does not write DB/storage/telemetry.
+
+### 31.2 Validation checklist
+
+Dry-run checks:
+
+- active source is `matrix_primary_pilot`;
+- Stage 19 primary pilot eligibility passed;
+- matrix draft exists;
+- template payload builds;
+- payload has days;
+- payload has sessions;
+- payload has blocks;
+- block names are not empty;
+- block notes are not empty;
+- rows are exercise rows;
+- sessions use `executionMode=by_blocks` and `deviceLinkMode=block`;
+- old `Контроль`/`control` column marker is absent;
+- internal matrix fields are absent from the payload;
+- real save remains disabled for the pilot source.
+
+Statuses:
+
+- `waiting`: pilot action has not activated `matrix_primary_pilot`;
+- `passed`: payload candidate is structurally compatible;
+- `blocked`: hard dry-run blockers exist.
+
+### 31.3 UI
+
+UI component:
+
+- `apps/web/app/components/constructor/MatrixPrimaryPilotSaveDryRunCard.tsx`.
+
+The card is rendered only inside the internal matrix workspace when
+`NEXT_PUBLIC_MATRIX_CONSTRUCTOR_LIMITED_PRIMARY_PILOT=true`.
+
+It shows:
+
+- dry-run status;
+- payload summary counts;
+- blockers;
+- checklist details;
+- explicit note that no save/assign/DB/storage/telemetry/production-route change happens.
+
+### 31.4 What remains unchanged
+
+Stage 20 does not change:
+
+- production `/api/v1/plans/constructor/draft`;
+- `buildPerformConstructorDraft(input)`;
+- DB schema;
+- mobile contracts;
+- telemetry/storage;
+- real save/template/assign;
+- rollout policy;
+- close-main-start primary rules.
+
+Passing dry-run is evidence for future guarded server-side work, not permission
+to save matrix as a real template today.
