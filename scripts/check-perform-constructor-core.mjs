@@ -1390,6 +1390,12 @@ const rolloutInputMainStartD10 = matrixPlanInput({
   phase: "taper",
 });
 const rolloutMainStartD10 = decideMatrixConstructorRollout(rolloutInputMainStartD10);
+const rolloutInputMainStartD4 = matrixPlanInput({
+  daysToStart: 4,
+  cycleLengthDays: 4,
+  phase: "start_window",
+});
+const rolloutMainStartD4 = decideMatrixConstructorRollout(rolloutInputMainStartD4);
 const rolloutInputMainStartD3 = matrixPlanInput({
   daysToStart: 3,
   cycleLengthDays: 3,
@@ -1425,12 +1431,14 @@ const readinessWeighIn = evaluateMatrixPilotReadiness(rolloutInputWeighIn);
 const readinessMainStartD28 = evaluateMatrixPilotReadiness(rolloutInputMainStartD28);
 const readinessMainStartD21 = evaluateMatrixPilotReadiness(rolloutInputMainStartD21);
 const readinessMainStartD10 = evaluateMatrixPilotReadiness(rolloutInputMainStartD10);
+const readinessMainStartD4 = evaluateMatrixPilotReadiness(rolloutInputMainStartD4);
 const readinessMainStartD3 = evaluateMatrixPilotReadiness(rolloutInputMainStartD3);
 const readinessCompetitionDay = evaluateMatrixPilotReadiness(rolloutInputCompetitionDay);
 const readinessUnknown = evaluateMatrixPilotReadiness(rolloutInputUnknown);
 const readinessFarDevelopmentSummary = summarizeMatrixPilotReadiness(readinessFarDevelopment);
 const readinessD3Blockers = getMatrixPilotReadinessBlockers(readinessMainStartD3);
 const matrixIfAllowedFarDevelopment = buildMatrixConstructorDraftIfAllowed(rolloutInputFarDevelopment);
+const matrixIfAllowedD4 = buildMatrixConstructorDraftIfAllowed(rolloutInputMainStartD4);
 const matrixIfAllowedD3Fallback = buildMatrixConstructorDraftIfAllowed(
   matrixPlanInput({
     daysToStart: 3,
@@ -2315,6 +2323,7 @@ for (const [label, decision, expectedScenario] of [
   ["D-28", rolloutMainStartD28, "main_start_d28_preview"],
   ["D-21", rolloutMainStartD21, "main_start_d21_preview"],
   ["D-10", rolloutMainStartD10, "main_start_d10_preview"],
+  ["D-4", rolloutMainStartD4, "main_start_d4_start_window"],
 ]) {
   assert(
     decision.scenario === expectedScenario &&
@@ -2386,6 +2395,7 @@ for (const [label, readiness, expectedScenario] of [
   ["D-28", readinessMainStartD28, "main_start_d28_preview"],
   ["D-21", readinessMainStartD21, "main_start_d21_preview"],
   ["D-10", readinessMainStartD10, "main_start_d10_preview"],
+  ["D-4", readinessMainStartD4, "main_start_d4_start_window"],
 ]) {
   assert(
     readiness.status === "ready_for_limited_primary_pilot" &&
@@ -2428,6 +2438,13 @@ assert(
     matrixIfAllowedFarDevelopment.draft?.generatedFrom === "matrix" &&
     matrixIfAllowedFarDevelopment.decision.matrixPrimaryAllowed,
   "buildMatrixConstructorDraftIfAllowed should return matrix draft for primary-allowed far development",
+);
+assert(
+  matrixIfAllowedD4.source === "matrix" &&
+    matrixIfAllowedD4.draft?.generatedFrom === "matrix" &&
+    matrixIfAllowedD4.decision.scenario === "main_start_d4_start_window" &&
+    matrixIfAllowedD4.decision.matrixPrimaryAllowed,
+  "buildMatrixConstructorDraftIfAllowed should return matrix draft for D-4 start-window primary pilot",
 );
 assert(
   matrixIfAllowedD3Fallback.source === "legacy_fallback" &&
@@ -2860,6 +2877,7 @@ console.log(
           d28: rolloutMainStartD28.mode,
           d21: rolloutMainStartD21.mode,
           d10: rolloutMainStartD10.mode,
+          d4: rolloutMainStartD4.mode,
           d3: rolloutMainStartD3.mode,
         },
         logisticsModes: {
@@ -2879,6 +2897,7 @@ console.log(
           d28: readinessMainStartD28.status,
           d21: readinessMainStartD21.status,
           d10: readinessMainStartD10.status,
+          d4: readinessMainStartD4.status,
         },
         internalCandidates: {
           travel: readinessTravel.status,

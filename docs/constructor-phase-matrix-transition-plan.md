@@ -3722,7 +3722,8 @@ guards are green:
 
 - `main_start_d28_preview`;
 - `main_start_d21_preview`;
-- `main_start_d10_preview`.
+- `main_start_d10_preview`;
+- `main_start_d4_start_window`.
 
 This is intentionally a pilot gate, not a global default. The trainer-facing
 build action may activate and save the matrix draft only when:
@@ -3748,9 +3749,9 @@ The following scenarios remain not saveable/assignable as matrix primary:
 - `secondary_start_preview`;
 - `unknown` / `unsafe` inputs.
 
-This matches the coaching logic: D-28/D-21/D-10 can still be a controllable
-preparation plan, while the final D-3/start/logistics window must stay
-conservative and review-only.
+This matches the coaching logic: D-28/D-21/D-10 are controllable preparation
+windows, and D-4 is an exact start-window plan with very low load. The final
+D-3/start/logistics window must stay conservative and review-only.
 
 ### 43.3 Checks
 

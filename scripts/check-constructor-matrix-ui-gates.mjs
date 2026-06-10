@@ -1,4 +1,5 @@
 import {
+  buildConstructorMatrixPreviewResponse,
   buildMatrixDrivenConstructorDraft,
   buildMatrixPrimaryPilotSaveDryRun,
   decideMatrixConstructorRollout,
@@ -15,6 +16,8 @@ function assert(condition, message) {
 
 const gateModule = await import("../apps/web/app/lib/constructor-matrix-primary-pilot-server-gate.ts");
 const { canUseMatrixPrimaryPilotWithServerEvidence } = gateModule.default ?? gateModule;
+const localPilotModule = await import("../apps/web/app/lib/constructor-matrix-primary-pilot.ts");
+const { canUseMatrixPrimaryPilot } = localPilotModule.default ?? localPilotModule;
 const matrixUiModule = await import("../apps/web/app/lib/constructor-matrix-ui.ts");
 const { isConstructorDraftSaveAllowed } = matrixUiModule.default ?? matrixUiModule;
 const featureFlagsModule = await import("../apps/web/app/lib/feature-flags.ts");
@@ -345,6 +348,7 @@ function fixtureById(id) {
 
 function serverResponseForFixture(id) {
   const fixture = fixtureById(id);
+  const preview = buildConstructorMatrixPreviewResponse(fixture.input, previewOptions);
   const rolloutDecision = decideMatrixConstructorRollout(fixture.input, rolloutOptions);
   const pilotReadiness = evaluateMatrixPilotReadiness(fixture.input, { rolloutOptions });
   const primaryPilotEligible =
@@ -368,6 +372,7 @@ function serverResponseForFixture(id) {
     generatedFrom: "matrix_primary_pilot_server_save_dry_run",
     generatedAt: new Date("2026-06-10T12:00:00.000Z").toISOString(),
     dryRun,
+    preview,
     rolloutDecision,
     pilotReadiness,
     notes: ["constructor matrix UI gate regression check"],
@@ -376,8 +381,19 @@ function serverResponseForFixture(id) {
 
 function gateForFixture(id) {
   const serverResult = serverResponseForFixture(id);
+  const matrixDraft = serverResult.preview.matrixDraft ?? serverResult.preview.comparisonReport?.matrixDraft ?? null;
+
   return {
     serverResult,
+    localEligibility: canUseMatrixPrimaryPilot({
+      activeDraftSource: "matrix_primary_pilot",
+      internalUiEnabled: true,
+      limitedPilotEnabled: true,
+      preview: serverResult.preview,
+      rolloutDecision: serverResult.rolloutDecision,
+      pilotReadiness: serverResult.pilotReadiness,
+      matrixDraft,
+    }),
     gate: canUseMatrixPrimaryPilotWithServerEvidence({
       serverResult,
       localRolloutDecision: serverResult.rolloutDecision,
@@ -408,6 +424,11 @@ const cases = [
     reason: null,
   },
   {
+    id: "main_start_d4_start_window",
+    allowed: true,
+    reason: null,
+  },
+  {
     id: "main_start_d3_final_activation",
     allowed: false,
     reason: "server_dry_run_blocked",
@@ -425,8 +446,12 @@ const cases = [
 ];
 
 const results = cases.map((testCase) => {
-  const { serverResult, gate } = gateForFixture(testCase.id);
+  const { serverResult, localEligibility, gate } = gateForFixture(testCase.id);
 
+  assert(
+    localEligibility.allowed === testCase.allowed,
+    `${testCase.id}: expected local eligibility allowed=${testCase.allowed}, got ${localEligibility.allowed}/${localEligibility.reason}`,
+  );
   assert(
     gate.allowed === testCase.allowed,
     `${testCase.id}: expected allowed=${testCase.allowed}, got ${gate.allowed}`,
@@ -439,6 +464,7 @@ const results = cases.map((testCase) => {
   return {
     id: testCase.id,
     allowed: gate.allowed,
+    localAllowed: localEligibility.allowed,
     reason: gate.reason,
     dryRun: serverResult.dryRun.status,
     rollout: serverResult.rolloutDecision.mode,

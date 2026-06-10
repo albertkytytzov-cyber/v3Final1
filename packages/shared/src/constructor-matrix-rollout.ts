@@ -22,6 +22,7 @@ export type MatrixConstructorRolloutScenario =
   | "main_start_d28_preview"
   | "main_start_d21_preview"
   | "main_start_d10_preview"
+  | "main_start_d4_start_window"
   | "main_start_d3_preview"
   | "competition_day_preview"
   | "unknown"
@@ -121,6 +122,7 @@ const DEFAULT_PRIMARY_ALLOWLIST: MatrixConstructorRolloutScenario[] = [
   "main_start_d28_preview",
   "main_start_d21_preview",
   "main_start_d10_preview",
+  "main_start_d4_start_window",
 ];
 
 const DEFAULT_INTERNAL_ALLOWLIST: MatrixConstructorRolloutScenario[] = [
@@ -334,6 +336,26 @@ function recommendedActionForMode(mode: MatrixConstructorRolloutMode): MatrixCon
   }
 }
 
+function scenarioTrainerLabel(scenario: MatrixConstructorRolloutScenario) {
+  const labels: Record<MatrixConstructorRolloutScenario, string> = {
+    far_development_week: "дальний развивающий период",
+    post_competition_recovery: "восстановление после старта",
+    travel_day: "день дороги",
+    weigh_in_day: "день взвешивания",
+    secondary_start_preview: "второстепенный старт",
+    main_start_d28_preview: "главный старт: Д-28",
+    main_start_d21_preview: "главный старт: Д-21",
+    main_start_d10_preview: "главный старт: Д-10",
+    main_start_d4_start_window: "главный старт: Д-4, стартовое окно",
+    main_start_d3_preview: "главный старт: Д-3",
+    competition_day_preview: "день соревнования",
+    unknown: "сценарий не определён",
+    unsafe: "небезопасный сценарий",
+  };
+
+  return labels[scenario];
+}
+
 export function classifyConstructorRolloutScenario(
   input: ConstructorInput,
   preview?: ReturnType<typeof buildConstructorComparisonPreview>,
@@ -374,6 +396,7 @@ export function classifyConstructorRolloutScenario(
 
   if (isMainStart && days !== null) {
     if (days <= 3) return "main_start_d3_preview";
+    if (days <= 4) return "main_start_d4_start_window";
     if (days <= 10) return "main_start_d10_preview";
     if (days <= 21) return "main_start_d21_preview";
     if (days <= 30) return "main_start_d28_preview";
@@ -574,54 +597,58 @@ export function buildMatrixRolloutDecisionExplanation(
 ): MatrixConstructorRolloutExplanation {
   const hardBlockers = decision.blockers.filter(isHardBlocker);
   const reasons = [
-    `Scenario: ${decision.scenario}.`,
-    `Preview safety: ${decision.safeToPreview ? "green" : "not green"}.`,
-    `Legacy default path: ${decision.defaultPathUnchanged ? "unchanged" : "changed"}.`,
+    `Сценарий подготовки: ${scenarioTrainerLabel(decision.scenario)}.`,
+    `Проверка безопасности нового плана: ${
+      decision.safeToPreview ? "пройдена" : "требует внимания"
+    }.`,
+    `Текущий конструктор: ${
+      decision.defaultPathUnchanged ? "не изменён" : "защита текущего черновика изменилась"
+    }.`,
   ];
 
   if (decision.matrixPrimaryAllowed) {
-    reasons.push("Matrix primary is allowed only for this explicit allowlisted scenario.");
+    reasons.push("Новый план разрешён только для этого явно проверенного сценария.");
   }
 
   if (hardBlockers.length > 0) {
-    reasons.push(`Hard blockers: ${hardBlockers.map((item) => item.code).join(", ")}.`);
+    reasons.push(`Есть блокирующие ограничения: ${hardBlockers.map((item) => item.code).join(", ")}.`);
   } else if (decision.blockers.length > 0) {
-    reasons.push(`Advisory blockers: ${decision.blockers.map((item) => item.code).join(", ")}.`);
+    reasons.push(`Есть предупреждения: ${decision.blockers.map((item) => item.code).join(", ")}.`);
   } else {
-    reasons.push("No rollout blockers were found.");
+    reasons.push("Блокирующих ограничений не найдено.");
   }
 
   switch (decision.mode) {
     case "matrix_allowed_for_primary":
       return {
-        headline: "Matrix primary is allowed for this explicitly allowlisted low-risk scenario.",
+        headline: "Новый конструктор можно применить для этого проверенного сценария.",
         reasons,
-        nextStep: "Use matrix only through an explicit internal/helper path; do not change the legacy default route.",
+        nextStep: "Проверьте черновик и сохраните его как шаблон только после безопасной проверки.",
       };
     case "matrix_allowed_for_internal":
       return {
-        headline: "Matrix can be used internally, but not as the primary production result.",
+        headline: "Новый конструктор можно открыть для внутренней проверки, но не назначать спортсмену.",
         reasons,
-        nextStep: "Keep this scenario in internal QA until enough real feedback is collected.",
+        nextStep: "Сравните новый вариант с текущим черновиком и оставьте его в зоне проверки.",
       };
     case "preview_only":
       return {
-        headline: "Matrix is safe enough to preview, but not allowed as primary.",
+        headline: "Новый конструктор можно посмотреть, но нельзя применять как рабочий черновик.",
         reasons,
-        nextStep: "Show side-by-side preview only and keep legacy as the default generated plan.",
+        nextStep: "Используйте сравнение; рабочим остаётся текущий черновик.",
       };
     case "blocked":
       return {
-        headline: "Matrix rollout is blocked for this input.",
+        headline: "Новый конструктор заблокирован для этих вводных.",
         reasons,
-        nextStep: "Use the legacy constructor and fix blockers before any matrix preview/primary use.",
+        nextStep: "Используйте текущий конструктор и устраните ограничения перед повторной проверкой.",
       };
     case "legacy_only":
     default:
       return {
-        headline: "Use the legacy constructor for this input.",
+        headline: "Для этих вводных пока используется текущий конструктор.",
         reasons,
-        nextStep: "Keep matrix disabled unless the scenario is added to the controlled allowlist.",
+        nextStep: "Новый конструктор появится только после добавления сценария в проверенный список.",
       };
   }
 }

@@ -1059,7 +1059,7 @@ Decision:
 
 Current controlled policy:
 
-- primary: `far_development_week`, `post_competition_recovery`, `main_start_d28_preview`, `main_start_d21_preview`, `main_start_d10_preview`;
+- primary: `far_development_week`, `post_competition_recovery`, `main_start_d28_preview`, `main_start_d21_preview`, `main_start_d10_preview`, `main_start_d4_start_window`;
 - internal only: `travel_day`, `weigh_in_day`;
 - preview only: `D-3` main-start final activation, competition day and secondary close starts;
 - legacy/block: unknown, unsafe, comparison errors, legacy guard failures, input mutation, forbidden structural legacy usage.
@@ -1346,12 +1346,12 @@ It is a shared/check/docs layer only. It does not add a new endpoint or UI, does
 
 Current pilot policy:
 
-- far development, post-competition recovery and main-start `D-28`/`D-21`/`D-10` windows can become limited primary pilot candidates when safety/comparison/rollout checks pass;
+- far development, post-competition recovery and main-start `D-28`/`D-21`/`D-10`/`D-4` windows can become limited primary pilot candidates when safety/comparison/rollout checks pass;
 - travel and weigh-in can become internal pilot candidates only;
 - `D-3`, competition day and secondary close starts remain preview-only;
 - unknown or unsafe cases are blocked or require review.
 
-`scripts/check-perform-constructor-core.mjs` now validates the readiness matrix across D-90, post-competition, travel, weigh-in, D-28/D-21/D-10/D-3, competition day, and unknown/bad inputs.
+`scripts/check-perform-constructor-core.mjs` now validates the readiness matrix across D-90, post-competition, travel, weigh-in, D-28/D-21/D-10/D-4/D-3, competition day, and unknown/bad inputs.
 
 ### 15.10 Pilot readiness in internal matrix UI
 
@@ -1496,7 +1496,7 @@ This route is still a dry-run:
 Expected controlled-pilot behavior:
 
 - D-90 allowlisted primary scenario can pass the server dry-run;
-- D-28/D-21/D-10 main-start scenarios can pass the server dry-run when safety, comparison, rollout and readiness are green;
+- D-28/D-21/D-10/D-4 main-start scenarios can pass the server dry-run when safety, comparison, rollout and readiness are green;
 - D-3 close main-start stays preview-only/blocked for primary save;
 - travel and weigh-in stay internal-only and cannot pass primary pilot save dry-run.
 

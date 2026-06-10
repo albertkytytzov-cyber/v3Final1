@@ -132,6 +132,11 @@ export function constructorMatrixScenarioLabel(language: Language, scenario?: st
       ru: "Главный старт: Д-10",
       bg: "Основен старт: Д-10",
     }),
+    main_start_d4_start_window: matrixUiCopyFor(language, {
+      en: "Main start: D-4",
+      ru: "Главный старт: Д-4",
+      bg: "Основен старт: Д-4",
+    }),
     main_start_d3_preview: matrixUiCopyFor(language, {
       en: "Main start: D-3",
       ru: "Главный старт: Д-3",

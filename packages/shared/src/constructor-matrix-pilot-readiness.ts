@@ -102,6 +102,7 @@ const LIMITED_PRIMARY_PILOT_SCENARIOS = new Set<MatrixPilotReadinessScenario>([
   "main_start_d28_preview",
   "main_start_d21_preview",
   "main_start_d10_preview",
+  "main_start_d4_start_window",
 ]);
 
 const INTERNAL_PILOT_SCENARIOS = new Set<MatrixPilotReadinessScenario>([
@@ -155,6 +156,11 @@ const DEFAULT_FIXTURE_COVERAGE: Record<MatrixPilotReadinessScenario, MatrixPilot
     covered: true,
     expectationsPassed: true,
     note: "Covered by preview-regression fixture main_start_d10_taper.",
+  },
+  main_start_d4_start_window: {
+    covered: true,
+    expectationsPassed: true,
+    note: "Covered by preview-regression fixture main_start_d4_start_window.",
   },
   main_start_d3_preview: {
     covered: true,

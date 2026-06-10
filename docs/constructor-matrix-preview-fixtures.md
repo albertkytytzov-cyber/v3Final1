@@ -84,19 +84,20 @@ TypeScript-документация формата экспортируется 
 
 ## Какие сценарии покрыты
 
-Текущий pack содержит 11 synthetic fixtures:
+Текущий pack содержит 12 synthetic fixtures:
 
 1. `main_start_d28_special_pre_competition`
 2. `main_start_d21_controlled_volume`
 3. `main_start_d10_taper`
-4. `main_start_d3_final_activation`
-5. `travel_day`
-6. `weigh_in_day`
-7. `competition_day`
-8. `post_competition_day`
-9. `secondary_start_d10`
-10. `far_development_week_d90`
-11. `missing_readiness_data`
+4. `main_start_d4_start_window`
+5. `main_start_d3_final_activation`
+6. `travel_day`
+7. `weigh_in_day`
+8. `competition_day`
+9. `post_competition_day`
+10. `secondary_start_d10`
+11. `far_development_week_d90`
+12. `missing_readiness_data`
 
 ## Какие инварианты проверяет runner
 
@@ -153,11 +154,12 @@ Fixture pack остаётся preview/safety базой, а `check-perform-const
 - `main_start_d28` -> `scenario=main_start_d28_preview`, `mode=matrix_allowed_for_primary`;
 - `main_start_d21` -> `scenario=main_start_d21_preview`, `mode=matrix_allowed_for_primary`;
 - `main_start_d10` -> `scenario=main_start_d10_preview`, `mode=matrix_allowed_for_primary`;
+- `main_start_d4` -> `scenario=main_start_d4_start_window`, `mode=matrix_allowed_for_primary`;
 - `main_start_d3` -> `scenario=main_start_d3_preview`, `mode=preview_only`;
 - `competition_day` -> `scenario=competition_day_preview`, `mode=preview_only`;
 - `unknown` -> `legacy_only` или `blocked` с явным blocker;
 - `explicitly_disabled` -> `blocked`;
-- `buildMatrixConstructorDraftIfAllowed` returns matrix only for primary-allowed far development and falls back/blocks close main-start scenarios;
+- `buildMatrixConstructorDraftIfAllowed` returns matrix for primary-allowed far development and main-start D-28/D-21/D-10/D-4, while D-3 still falls back/blocks;
 - rollout decision не мутирует input;
 - default `buildPerformConstructorDraft` остаётся legacy.
 
@@ -302,7 +304,7 @@ Stage 17 adds a shared readiness checklist for matrix pilot decisions:
 
 The checklist reuses the same preview/rollout scenarios covered by this fixture pack and classifies them as:
 
-- limited primary pilot candidates: far development, post-competition recovery, D-28/D-21/D-10 main-start windows;
+- limited primary pilot candidates: far development, post-competition recovery, D-28/D-21/D-10/D-4 main-start windows;
 - internal pilot candidates: travel day, weigh-in day;
 - preview-only: D-3 main-start final activation, secondary close starts and competition day;
 - blocked/needs-review: unknown or unsafe inputs.
@@ -310,7 +312,7 @@ The checklist reuses the same preview/rollout scenarios covered by this fixture 
 The fixture runner still does not snapshot UI. Instead, `scripts/check-perform-constructor-core.mjs` validates readiness behavior:
 
 - D-90 and post-competition are `ready_for_limited_primary_pilot`;
-- D-28/D-21/D-10 main-start windows are `ready_for_limited_primary_pilot`;
+- D-28/D-21/D-10/D-4 main-start windows are `ready_for_limited_primary_pilot`;
 - travel and weigh-in are `ready_for_internal_pilot`;
 - D-3 and competition day remain `preview_only`;
 - unknown/bad inputs return `blocked` or `needs_review`;
@@ -450,8 +452,8 @@ Stage 24 adds `npm run check:constructor-matrix-ui-gates`.
 The check uses the fixture pack to verify:
 
 - `far_development_week_d90` can pass the server gate;
-- `main_start_d28_special_pre_competition`, `main_start_d21_controlled_volume`
-  and `main_start_d10_taper` can pass the server gate;
+- `main_start_d28_special_pre_competition`, `main_start_d21_controlled_volume`,
+  `main_start_d10_taper` and `main_start_d4_start_window` can pass the server gate;
 - `main_start_d3_final_activation` remains preview-only;
 - `travel_day` and `weigh_in_day` remain internal-only;
 - missing server evidence, server errors, and server rollout/readiness mismatch

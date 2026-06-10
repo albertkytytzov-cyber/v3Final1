@@ -345,6 +345,22 @@ export const constructorPreviewFixtures = [
     },
   }),
   fixture({
+    id: "main_start_d4_start_window",
+    title: "Main start D-4 start window",
+    description: "Four days before a main start must build the exact start-window length, not a 7/10-day legacy draft.",
+    input: makeInput({
+      fixtureId: "main-d4",
+      daysToStart: 4,
+      cycleLengthDays: 4,
+      weightCutRequired: true,
+    }),
+    matrix: {
+      forbiddenSelectedBlockTypes: noCloseHeavyBlocks,
+      requiredAnySelectedBlockTypes: [["mat_light_technical", "recovery", "mobility", "weigh_in"]],
+      requiredExplanationKeywords: ["Главный старт ближе 30", "развитие"],
+    },
+  }),
+  fixture({
     id: "main_start_d3_final_activation",
     title: "Main start D-3 final activation",
     description: "Final start window should allow only light activation/recovery and explain development ban.",

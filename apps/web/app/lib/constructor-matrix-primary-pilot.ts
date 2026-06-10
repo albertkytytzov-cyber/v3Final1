@@ -40,6 +40,7 @@ const MATRIX_PRIMARY_PILOT_ALLOWED_SCENARIOS = new Set<MatrixConstructorRolloutS
   "main_start_d28_preview",
   "main_start_d21_preview",
   "main_start_d10_preview",
+  "main_start_d4_start_window",
 ]);
 
 function failedSafetyErrorCount(preview?: ConstructorMatrixPreviewResponse | null) {
