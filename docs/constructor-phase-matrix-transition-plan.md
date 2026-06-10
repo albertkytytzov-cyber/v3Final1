@@ -2488,3 +2488,77 @@ Stage 13 не меняет:
 6. `Вернуться к legacy draft` возвращает legacy draft и save as template.
 7. D-3/main start остаётся `preview_only`, workspace/activation disabled.
 8. Console errors отсутствуют.
+
+## 25. Stage 14: Matrix constructor UI decomposition
+
+Stage 14 не добавляет новый продуктовый flow. Это refactor-only слой после controlled activation, чтобы `apps/web/app/page-client.tsx` оставался orchestration container, а matrix UI не превращал страницу в god-file.
+
+### 25.1 Что вынесено
+
+Pure UI helpers вынесены в:
+
+```text
+apps/web/app/lib/constructor-matrix-ui.ts
+```
+
+React UI вынесен в:
+
+```text
+apps/web/app/components/constructor/MatrixConstructorPreviewPanel.tsx
+apps/web/app/components/constructor/MatrixRolloutDecisionCard.tsx
+apps/web/app/components/constructor/MatrixPreviewWorkspace.tsx
+apps/web/app/components/constructor/MatrixInternalDraftBanner.tsx
+apps/web/app/components/constructor/MatrixDraftReadOnlyView.tsx
+```
+
+`page-client.tsx` оставляет у себя:
+
+- constructor form state;
+- legacy draft state;
+- matrix preview / rollout / workspace state;
+- `activeConstructorDraftSource`;
+- high-level handlers;
+- API calls;
+- save/template guards.
+
+### 25.2 Поведение Stage 13 сохранено
+
+Stage 14 сохраняет 1-в-1:
+
+- legacy draft остаётся default;
+- matrix activation только manual;
+- `matrix_internal` остаётся read-only;
+- save/template/assign скрыты или заблокированы для matrix source;
+- `handleSaveConstructorTemplate` продолжает иметь defensive guard;
+- workspace доступен только через тот же controlled rollout gate;
+- D-3/main start остаётся preview-only;
+- возврат к legacy не делает API-запросов и не мутирует draft.
+
+### 25.3 Что не изменено
+
+Stage 14 не меняет:
+
+- `buildPerformConstructorDraft(input)`;
+- production `POST /api/v1/plans/constructor/draft`;
+- internal API contracts;
+- DB schema;
+- mobile contracts;
+- `mergeWeeks`;
+- `selectTemplateCards`;
+- `pickSourceWeekForPhase`;
+- rollout allowlist/policy;
+- save/template/assign semantics;
+- localStorage/sessionStorage/telemetry.
+
+### 25.4 Manual verification target
+
+Для stage 14 нужно проверить тот же affected flow:
+
+1. Legacy draft generation и save template доступны как раньше.
+2. Internal matrix preview запускается из новой component panel.
+3. D-90/far development открывает read-only workspace.
+4. Activation показывает matrix draft в основной draft-зоне.
+5. Save/template/assign hidden/disabled для `matrix_internal`.
+6. Return to legacy восстанавливает legacy draft и save button.
+7. D-3/main start остаётся preview-only и не открывает workspace.
+8. Console errors отсутствуют.

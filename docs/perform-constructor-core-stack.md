@@ -1237,3 +1237,33 @@ Read-only contract:
 - no DB writes, localStorage/sessionStorage writes, mobile contract changes, or production API changes.
 
 This is still an internal QA step, not a rollout of matrix as the default constructor.
+
+### 15.6 Matrix constructor UI decomposition
+
+Stage 14 decomposes the internal matrix constructor UI without changing behavior.
+
+The web page remains the orchestration container:
+
+- form state;
+- legacy draft state;
+- matrix preview state;
+- rollout decision state;
+- active draft source;
+- high-level handlers and API calls.
+
+Extracted UI/helpers:
+
+- `apps/web/app/lib/constructor-matrix-ui.ts`;
+- `MatrixConstructorPreviewPanel`;
+- `MatrixRolloutDecisionCard`;
+- `MatrixPreviewWorkspace`;
+- `MatrixInternalDraftBanner`;
+- `MatrixDraftReadOnlyView`.
+
+Behavior is intentionally unchanged from Stage 13:
+
+- legacy draft is the default source;
+- matrix internal draft is manual and read-only;
+- save/template/assign remain unavailable for `matrix_internal`;
+- rollout policy, safety guards, preview-only windows, and legacy fallback are unchanged;
+- no production route, DB, mobile, localStorage/sessionStorage, telemetry, `mergeWeeks`, `selectTemplateCards`, or `pickSourceWeekForPhase` changes.

@@ -247,6 +247,19 @@ Manual UI verification для activation:
 
 Fixture runner остаётся data-safety источником. Stage 13 intentionally does not add snapshot testing for the React UI state and does not write matrix activation to DB, localStorage or sessionStorage.
 
+## Matrix UI decomposition
+
+Stage 14 выносит internal matrix UI из `page-client.tsx` в focused components/helpers:
+
+- preview panel;
+- rollout decision card;
+- read-only workspace;
+- active internal draft banner;
+- draft read-only renderer;
+- pure UI helper functions.
+
+Fixture runner не меняется и по-прежнему проверяет data-safety инварианты. UI decomposition intentionally does not add React snapshot fixtures and does not change activation, rollout, save/template/assign, DB, storage, mobile, or production draft behavior.
+
 ## Что не проверяется
 
 Fixtures не делают full snapshot:
