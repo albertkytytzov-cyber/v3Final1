@@ -2841,3 +2841,126 @@ Manual QA остаётся checklist item, но не считается hard blo
 - summary includes status, blockers, and checklist counts.
 
 Stage 17 intentionally does not add browser UI. Manual UI smoke remains relevant only for Stage 15/16 flag-gated panel.
+
+## 29. Stage 18: Pilot readiness in internal UI
+
+Stage 18 показывает Stage 17 readiness result внутри gated internal matrix constructor UI.
+
+Это display-only слой. Он не включает matrix primary, не меняет main Generate, не меняет production draft route, не пишет DB/storage/telemetry и не меняет rollout policy.
+
+### 29.1 Где показывается
+
+UI-компонент:
+
+```text
+apps/web/app/components/constructor/MatrixPilotReadinessCard.tsx
+```
+
+Карточка вставлена рядом с:
+
+- rollout decision;
+- review export;
+- matrix workspace controls.
+
+Readiness считается на клиенте через shared helper `evaluateMatrixPilotReadiness(input, options?)`.
+
+Новый API endpoint не добавлен.
+
+### 29.2 Flag behavior
+
+Stage 18 наследует Stage 15 flag:
+
+```bash
+NEXT_PUBLIC_INTERNAL_MATRIX_CONSTRUCTOR_UI=true
+```
+
+Flag off:
+
+- matrix UI hidden;
+- pilot readiness UI hidden;
+- internal matrix requests не запускаются;
+- legacy constructor работает как раньше.
+
+Flag on:
+
+- internal matrix panel visible;
+- preview/rollout работают как раньше;
+- readiness card показывает статус, counts, blockers и checklist details.
+
+### 29.3 Status display
+
+Badge statuses:
+
+- `ready_for_limited_primary_pilot`;
+- `ready_for_internal_pilot`;
+- `internal_only`;
+- `preview_only`;
+- `blocked`;
+- `needs_review`.
+
+Карточка показывает:
+
+- scenario;
+- rollout mode;
+- recommended action;
+- checklist pass/warning/fail/n/a counts;
+- blocker count;
+- `safeToPreview`;
+- `defaultPathUnchanged`;
+- human-readable meaning;
+- collapsed checklist details;
+- blockers.
+
+### 29.4 QA export
+
+Stage 16 review export теперь включает safe readiness summary:
+
+- status;
+- scenario;
+- rollout mode;
+- recommended action;
+- matrixPrimaryAllowed;
+- checklist counts;
+- blocker count;
+- blocker codes.
+
+Export по-прежнему не включает:
+
+- athlete name;
+- email/phone/user id/athlete id;
+- personal notes;
+- raw input;
+- raw draft;
+- raw readiness object;
+- checklist evidence;
+- DB identifiers.
+
+### 29.5 Что не изменено
+
+Stage 18 не меняет:
+
+- `buildPerformConstructorDraft(input)`;
+- `selectTemplateCards`;
+- `mergeWeeks`;
+- `pickSourceWeekForPhase`;
+- production `/api/v1/plans/constructor/draft`;
+- DB schema;
+- telemetry/storage;
+- mobile contracts;
+- save/template/assign;
+- rollout allowlist/policy;
+- close main start primary policy.
+
+### 29.6 Manual browser verification target
+
+1. Flag off: matrix/readiness UI hidden, legacy draft/save работает.
+2. Flag on: matrix UI visible.
+3. Preview/rollout loaded: readiness card visible.
+4. D-90: status `ready_for_limited_primary_pilot`, matrix save остаётся disabled.
+5. Post-competition: status `ready_for_limited_primary_pilot`.
+6. Travel/weigh-in: status `ready_for_internal_pilot` или internal-only по policy.
+7. D-3: status `preview_only`, activation remains disabled.
+8. QA export includes safe readiness summary and no PII/raw evidence.
+9. Console errors отсутствуют.
+
+Следующий PR: internal pilot runbook/checklist или controlled limited primary switch для `ready_for_limited_primary_pilot`, всё ещё behind explicit flag. Не full replacement of `mergeWeeks`.

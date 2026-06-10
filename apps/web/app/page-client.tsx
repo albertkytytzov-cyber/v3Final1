@@ -9500,6 +9500,8 @@ export function PageClient({
   const [constructorMessage, setConstructorMessage] = useState("");
   const [constructorMatrixPreview, setConstructorMatrixPreview] =
     useState<ConstructorMatrixPreviewResponse | null>(null);
+  const [constructorMatrixPreviewInput, setConstructorMatrixPreviewInput] =
+    useState<ConstructorInput | null>(null);
   const [constructorMatrixRolloutDecision, setConstructorMatrixRolloutDecision] =
     useState<MatrixConstructorRolloutDecision | null>(null);
   const [constructorMatrixWorkspace, setConstructorMatrixWorkspace] =
@@ -9513,11 +9515,13 @@ export function PageClient({
     useState(false);
   useEffect(() => {
     setConstructorMatrixWorkspace(CLOSED_CONSTRUCTOR_MATRIX_WORKSPACE);
+    setConstructorMatrixPreviewInput(null);
     setActiveConstructorDraftSource("legacy");
   }, [constructorForm]);
   useEffect(() => {
     if (!SHOW_INTERNAL_MATRIX_CONSTRUCTOR_UI) {
       setConstructorMatrixPreview(null);
+      setConstructorMatrixPreviewInput(null);
       setConstructorMatrixRolloutDecision(null);
       setConstructorMatrixWorkspace(CLOSED_CONSTRUCTOR_MATRIX_WORKSPACE);
       setActiveConstructorDraftSource("legacy");
@@ -14239,6 +14243,7 @@ export function PageClient({
     setConstructorMessage("");
     setErrorMessage("");
     setConstructorMatrixWorkspace(CLOSED_CONSTRUCTOR_MATRIX_WORKSPACE);
+    setConstructorMatrixPreviewInput(null);
     setActiveConstructorDraftSource("legacy");
 
     try {
@@ -14307,6 +14312,7 @@ export function PageClient({
     setConstructorMatrixPreviewError("");
     setConstructorMatrixRolloutError("");
     setConstructorMatrixPreview(null);
+    setConstructorMatrixPreviewInput(input);
     setConstructorMatrixRolloutDecision(null);
     setConstructorMatrixWorkspace(CLOSED_CONSTRUCTOR_MATRIX_WORKSPACE);
     setActiveConstructorDraftSource("legacy");
@@ -22346,6 +22352,7 @@ export function PageClient({
                     preview={constructorMatrixPreview}
                     previewBusy={constructorMatrixPreviewBusy}
                     previewError={constructorMatrixPreviewError}
+                    previewInput={constructorMatrixPreviewInput}
                     rolloutDecision={constructorMatrixRolloutDecision}
                     rolloutError={constructorMatrixRolloutError}
                     selectedCoachAthleteAvailable={Boolean(selectedCoachAthlete)}

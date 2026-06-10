@@ -6325,6 +6325,96 @@ td {
   color: #475569;
 }
 
+.constructor-matrix-pilot-readiness-card {
+  border-color: rgba(59, 130, 246, 0.2);
+  background: rgba(239, 246, 255, 0.62);
+}
+
+.constructor-matrix-pilot-readiness-card.is-compact {
+  background: rgba(248, 250, 252, 0.82);
+}
+
+.constructor-matrix-pilot-readiness-badge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  max-width: 100%;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.86);
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 950;
+  line-height: 1.15;
+  text-transform: uppercase;
+}
+
+.constructor-matrix-pilot-readiness-badge.is-ready-primary {
+  border-color: rgba(20, 184, 166, 0.4);
+  background: rgba(204, 251, 241, 0.92);
+  color: #0f766e;
+}
+
+.constructor-matrix-pilot-readiness-badge.is-ready-internal {
+  border-color: rgba(37, 99, 235, 0.3);
+  background: rgba(219, 234, 254, 0.9);
+  color: #1d4ed8;
+}
+
+.constructor-matrix-pilot-readiness-badge.is-internal-only,
+.constructor-matrix-pilot-readiness-badge.is-needs-review {
+  border-color: rgba(245, 158, 11, 0.32);
+  background: rgba(255, 251, 235, 0.94);
+  color: #92400e;
+}
+
+.constructor-matrix-pilot-readiness-badge.is-preview-only {
+  border-color: rgba(100, 116, 139, 0.26);
+  background: rgba(248, 250, 252, 0.96);
+  color: #475569;
+}
+
+.constructor-matrix-pilot-readiness-badge.is-blocked {
+  border-color: rgba(239, 68, 68, 0.32);
+  background: rgba(254, 242, 242, 0.94);
+  color: #991b1b;
+}
+
+.constructor-matrix-pilot-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.constructor-matrix-pilot-counts {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.constructor-matrix-pilot-section {
+  display: grid;
+  gap: 8px;
+}
+
+.constructor-matrix-pilot-section > strong {
+  color: var(--ink);
+  font-size: 0.84rem;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.constructor-matrix-pilot-checklist {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.constructor-matrix-pilot-checklist summary {
+  cursor: pointer;
+  color: var(--ink);
+  font-size: 0.84rem;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
 .constructor-matrix-readonly-badge {
   border-color: rgba(20, 184, 166, 0.28);
   background: rgba(240, 253, 250, 0.94);
@@ -12919,6 +13009,8 @@ td {
   .constructor-matrix-count-grid,
   .constructor-matrix-decision-grid,
   .constructor-matrix-rollout-grid,
+  .constructor-matrix-pilot-grid,
+  .constructor-matrix-pilot-counts,
   .constructor-matrix-candidate-grid,
   .constructor-matrix-load-grid,
   .constructor-matrix-workspace-overview,

@@ -318,6 +318,34 @@ The fixture runner still does not snapshot UI. Instead, `scripts/check-perform-c
 
 Stage 17 does not add endpoint/UI behavior, write DB/storage/telemetry, save or assign matrix drafts, or change rollout policy.
 
+## Pilot readiness in internal UI
+
+Stage 18 renders the Stage 17 readiness result in the internal matrix UI:
+
+- status badge;
+- scenario / rollout mode / recommended action;
+- checklist counts;
+- blockers;
+- collapsed checklist details;
+- trainer/QA meaning text.
+
+The UI is behind the same flag:
+
+```bash
+NEXT_PUBLIC_INTERNAL_MATRIX_CONSTRUCTOR_UI=true
+```
+
+The fixture runner remains data-safety oriented and does not snapshot React UI. Browser smoke must cover:
+
+- flag off: matrix/readiness UI hidden;
+- flag on: readiness card visible after preview/rollout;
+- D-90 and post-competition show limited-primary readiness;
+- travel/weigh-in show internal readiness;
+- D-3 remains preview-only and activation stays disabled;
+- review export includes safe readiness summary and no PII/raw evidence.
+
+Stage 18 does not add an endpoint, write DB/storage/telemetry, save or assign matrix drafts, or change rollout policy.
+
 ## Что не проверяется
 
 Fixtures не делают full snapshot:

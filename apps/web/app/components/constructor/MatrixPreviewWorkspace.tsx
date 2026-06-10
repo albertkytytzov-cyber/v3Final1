@@ -4,6 +4,7 @@ import type {
   ConstructorDraft,
   ConstructorMatrixPreviewResponse,
   MatrixConstructorRolloutDecision,
+  MatrixPilotReadinessResult,
 } from "@training-platform/shared";
 import {
   type ActiveConstructorDraftSource,
@@ -29,6 +30,7 @@ type MatrixPreviewWorkspaceProps = {
   onReturnToLegacyDraft: () => void;
   phaseLabel: (phase: ConstructorDraft["plan"]["weeks"][number]["phase"]) => string;
   preview: ConstructorMatrixPreviewResponse | null;
+  readiness: MatrixPilotReadinessResult | null;
   rolloutDecision: MatrixConstructorRolloutDecision | null;
   workspace: ConstructorMatrixWorkspaceState;
 };
@@ -43,6 +45,7 @@ export function MatrixPreviewWorkspace({
   onReturnToLegacyDraft,
   phaseLabel,
   preview,
+  readiness,
   rolloutDecision,
   workspace,
 }: MatrixPreviewWorkspaceProps) {
@@ -110,6 +113,7 @@ export function MatrixPreviewWorkspace({
         contextLabel="workspace"
         language={language}
         preview={preview}
+        readiness={readiness}
         rolloutDecision={rolloutDecision}
         workspaceDraft={draft}
       />

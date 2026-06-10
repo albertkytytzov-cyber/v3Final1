@@ -2,9 +2,13 @@
 
 import type {
   ConstructorDraft,
+  ConstructorInput,
   ConstructorMatrixPreviewResponse,
   MatrixConstructorRolloutDecision,
+  MatrixPilotReadinessResult,
 } from "@training-platform/shared";
+import { evaluateMatrixPilotReadiness } from "@training-platform/shared";
+import { useMemo } from "react";
 import {
   type ActiveConstructorDraftSource,
   type ConstructorMatrixWorkspaceState,
@@ -18,6 +22,7 @@ import {
   matrixUiCopyFor,
 } from "../../lib/constructor-matrix-ui";
 import type { Language } from "../../lib/i18n";
+import { MatrixPilotReadinessCard } from "./MatrixPilotReadinessCard";
 import { MatrixPreviewWorkspace } from "./MatrixPreviewWorkspace";
 import { MatrixReviewExportActions } from "./MatrixReviewExportActions";
 import { MatrixRolloutDecisionCard } from "./MatrixRolloutDecisionCard";
@@ -39,6 +44,7 @@ type MatrixConstructorPreviewPanelProps = {
   preview: ConstructorMatrixPreviewResponse | null;
   previewBusy: boolean;
   previewError: string;
+  previewInput: ConstructorInput | null;
   rolloutDecision: MatrixConstructorRolloutDecision | null;
   rolloutError: string;
   selectedCoachAthleteAvailable: boolean;
@@ -64,6 +70,7 @@ export function MatrixConstructorPreviewPanel({
   preview,
   previewBusy,
   previewError,
+  previewInput,
   rolloutDecision,
   rolloutError,
   selectedCoachAthleteAvailable,
@@ -87,6 +94,42 @@ export function MatrixConstructorPreviewPanel({
     matrixDraft,
   });
   const rolloutBadgeLabel = constructorMatrixRolloutLabel(language, rolloutDecision?.mode);
+  const pilotReadinessState = useMemo<{
+    readiness: MatrixPilotReadinessResult | null;
+    error: string;
+  }>(() => {
+    if (!preview || !rolloutDecision || !previewInput) {
+      return { readiness: null, error: "" };
+    }
+
+    try {
+      return {
+        readiness: evaluateMatrixPilotReadiness(previewInput, {
+          rolloutOptions: {
+            previewOptions: {
+              includeDrafts: true,
+              includeComparisonReport: true,
+              includeSafetyDetails: true,
+              includeInfoDifferences,
+            },
+          },
+        }),
+        error: "",
+      };
+    } catch (error) {
+      return {
+        readiness: null,
+        error:
+          error instanceof Error
+            ? error.message
+            : matrixUiCopyFor(language, {
+                en: "Pilot readiness evaluation failed.",
+                ru: "Pilot readiness evaluation не прошёл.",
+                bg: "Pilot readiness evaluation не мина.",
+              }),
+      };
+    }
+  }, [includeInfoDifferences, language, preview, previewInput, rolloutDecision]);
 
   return (
     <>
@@ -174,6 +217,21 @@ export function MatrixConstructorPreviewPanel({
             </strong>
             <p>{rolloutError}</p>
           </div>
+        ) : null}
+
+        {!preview ? (
+          <MatrixPilotReadinessCard
+            compact
+            error={matrixUiCopyFor(language, {
+              en: "Pilot readiness unavailable until preview and rollout decision are loaded.",
+              ru: "Pilot readiness недоступен, пока не загружены preview и rollout decision.",
+              bg: "Pilot readiness не е наличен преди preview и rollout decision.",
+            })}
+            language={language}
+            loading={previewBusy}
+            onRetry={selectedCoachAthleteAvailable ? onBuildPreview : undefined}
+            readiness={null}
+          />
         ) : null}
 
         {preview ? (
@@ -275,10 +333,30 @@ export function MatrixConstructorPreviewPanel({
               workspaceUnavailableReason={workspaceUnavailableReason}
             />
 
+            <MatrixPilotReadinessCard
+              defaultPathUnchanged={preview.defaultPathUnchanged}
+              error={
+                pilotReadinessState.error ||
+                (!rolloutDecision
+                  ? matrixUiCopyFor(language, {
+                      en: "Pilot readiness unavailable until rollout decision is loaded.",
+                      ru: "Pilot readiness недоступен, пока не загружен rollout decision.",
+                      bg: "Pilot readiness не е наличен преди rollout decision.",
+                    })
+                  : "")
+              }
+              language={language}
+              loading={previewBusy}
+              onRetry={onBuildPreview}
+              readiness={pilotReadinessState.readiness}
+              safeToPreview={preview.safeToPreview}
+            />
+
             <MatrixReviewExportActions
               contextLabel="preview / rollout"
               language={language}
               preview={preview}
+              readiness={pilotReadinessState.readiness}
               rolloutDecision={rolloutDecision}
             />
 
@@ -564,6 +642,7 @@ export function MatrixConstructorPreviewPanel({
         onReturnToLegacyDraft={onReturnToLegacyDraft}
         phaseLabel={phaseLabel}
         preview={preview}
+        readiness={pilotReadinessState.readiness}
         rolloutDecision={rolloutDecision}
         workspace={workspace}
       />

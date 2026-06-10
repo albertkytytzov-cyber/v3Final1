@@ -3,6 +3,8 @@ import type {
   ConstructorMatrixPreviewResponse,
   MatrixConstructorRolloutDecision,
   MatrixConstructorRolloutMode,
+  MatrixPilotReadinessResult,
+  MatrixPilotReadinessStatus,
 } from "@training-platform/shared";
 import type { Language } from "./i18n";
 
@@ -239,6 +241,132 @@ export function constructorMatrixRolloutLabel(
       }),
     } satisfies Record<MatrixConstructorRolloutMode, string>
   )[mode];
+}
+
+export function getPilotReadinessBadgeTone(status?: MatrixPilotReadinessStatus | null) {
+  return (
+    {
+      ready_for_limited_primary_pilot: "is-ready-primary",
+      ready_for_internal_pilot: "is-ready-internal",
+      internal_only: "is-internal-only",
+      preview_only: "is-preview-only",
+      blocked: "is-blocked",
+      needs_review: "is-needs-review",
+    } satisfies Record<MatrixPilotReadinessStatus, string>
+  )[status ?? "needs_review"];
+}
+
+export function getPilotReadinessLabel(
+  language: Language,
+  status?: MatrixPilotReadinessStatus | null,
+) {
+  if (!status) {
+    return matrixUiCopyFor(language, {
+      en: "Not available",
+      ru: "Недоступно",
+      bg: "Не е налично",
+    });
+  }
+
+  return (
+    {
+      ready_for_limited_primary_pilot: matrixUiCopyFor(language, {
+        en: "Ready for limited primary pilot",
+        ru: "Готов к limited primary pilot",
+        bg: "Ready for limited primary pilot",
+      }),
+      ready_for_internal_pilot: matrixUiCopyFor(language, {
+        en: "Ready for internal pilot",
+        ru: "Готов к internal pilot",
+        bg: "Ready for internal pilot",
+      }),
+      internal_only: matrixUiCopyFor(language, {
+        en: "Internal only",
+        ru: "Только internal",
+        bg: "Internal only",
+      }),
+      preview_only: matrixUiCopyFor(language, {
+        en: "Preview only",
+        ru: "Только preview",
+        bg: "Preview only",
+      }),
+      blocked: matrixUiCopyFor(language, {
+        en: "Blocked",
+        ru: "Заблокировано",
+        bg: "Blocked",
+      }),
+      needs_review: matrixUiCopyFor(language, {
+        en: "Needs review",
+        ru: "Нужна проверка",
+        bg: "Needs review",
+      }),
+    } satisfies Record<MatrixPilotReadinessStatus, string>
+  )[status];
+}
+
+export function getPilotReadinessMeaning(
+  language: Language,
+  status?: MatrixPilotReadinessStatus | null,
+) {
+  if (!status) {
+    return matrixUiCopyFor(language, {
+      en: "Run the internal preview and rollout decision first.",
+      ru: "Сначала запустите internal preview и rollout decision.",
+      bg: "Първо пуснете internal preview и rollout decision.",
+    });
+  }
+
+  return (
+    {
+      ready_for_limited_primary_pilot: matrixUiCopyFor(language, {
+        en: "This scenario is a limited primary pilot candidate, but matrix is still not the default and cannot be saved from this internal UI.",
+        ru: "Этот сценарий подходит для limited primary pilot, но matrix всё равно не становится default и не сохраняется из internal UI.",
+        bg: "Този сценарий е кандидат за limited primary pilot, но matrix не става default и не се записва от internal UI.",
+      }),
+      ready_for_internal_pilot: matrixUiCopyFor(language, {
+        en: "This scenario is ready for internal QA only. It stays read-only and does not become production primary.",
+        ru: "Этот сценарий готов только для internal QA. Он остаётся read-only и не становится production primary.",
+        bg: "Този сценарий е готов само за internal QA. Остава read-only и не става production primary.",
+      }),
+      internal_only: matrixUiCopyFor(language, {
+        en: "Matrix can be inspected internally, but it is not ready for limited primary usage.",
+        ru: "Matrix можно смотреть внутренне, но для limited primary он ещё не готов.",
+        bg: "Matrix може да се гледа вътрешно, но не е готов за limited primary.",
+      }),
+      preview_only: matrixUiCopyFor(language, {
+        en: "Matrix stays side-by-side preview only. Activation and primary usage remain disabled.",
+        ru: "Matrix остаётся только side-by-side preview. Activation и primary usage отключены.",
+        bg: "Matrix остава само side-by-side preview. Activation и primary usage са изключени.",
+      }),
+      blocked: matrixUiCopyFor(language, {
+        en: "Matrix has blockers for this scenario. Keep the legacy draft.",
+        ru: "Для этого сценария у matrix есть blockers. Оставляем legacy draft.",
+        bg: "Matrix има blockers за този сценарий. Остава legacy draft.",
+      }),
+      needs_review: matrixUiCopyFor(language, {
+        en: "The scenario needs manual review before it can enter a pilot.",
+        ru: "Сценарию нужна ручная проверка перед пилотом.",
+        bg: "Сценарият има нужда от ръчна проверка преди pilot.",
+      }),
+    } satisfies Record<MatrixPilotReadinessStatus, string>
+  )[status];
+}
+
+export function summarizePilotReadinessCounts(readiness?: MatrixPilotReadinessResult | null) {
+  const counts = readiness?.summary.checklistCounts ?? {
+    pass: 0,
+    warning: 0,
+    fail: 0,
+    not_applicable: 0,
+  };
+
+  return [
+    { label: "pass", value: counts.pass },
+    { label: "warning", value: counts.warning },
+    { label: "fail", value: counts.fail },
+    { label: "n/a", value: counts.not_applicable },
+    { label: "blockers", value: readiness?.summary.blockerCount ?? 0 },
+  ];
 }
 
 export function collectConstructorMatrixCandidateSummary(

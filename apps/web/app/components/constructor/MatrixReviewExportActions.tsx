@@ -5,6 +5,7 @@ import type {
   ConstructorDraft,
   ConstructorMatrixPreviewResponse,
   MatrixConstructorRolloutDecision,
+  MatrixPilotReadinessResult,
 } from "@training-platform/shared";
 import { matrixUiCopyFor } from "../../lib/constructor-matrix-ui";
 import { buildConstructorMatrixReviewPackage } from "../../lib/constructor-matrix-review-export";
@@ -14,6 +15,7 @@ type MatrixReviewExportActionsProps = {
   contextLabel: string;
   language: Language;
   preview: ConstructorMatrixPreviewResponse | null;
+  readiness?: MatrixPilotReadinessResult | null;
   rolloutDecision: MatrixConstructorRolloutDecision | null;
   workspaceDraft?: ConstructorDraft | null;
 };
@@ -49,6 +51,7 @@ export function MatrixReviewExportActions({
   contextLabel,
   language,
   preview,
+  readiness,
   rolloutDecision,
   workspaceDraft,
 }: MatrixReviewExportActionsProps) {
@@ -71,6 +74,7 @@ export function MatrixReviewExportActions({
       const reviewPackage = buildConstructorMatrixReviewPackage({
         generatedAt: new Date().toISOString(),
         preview,
+        readiness,
         rolloutDecision,
         workspaceDraft,
       });

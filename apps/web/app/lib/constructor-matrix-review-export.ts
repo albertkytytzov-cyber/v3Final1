@@ -2,6 +2,7 @@ import type {
   ConstructorDraft,
   ConstructorMatrixPreviewResponse,
   MatrixConstructorRolloutDecision,
+  MatrixPilotReadinessResult,
 } from "@training-platform/shared";
 
 type ReviewCountSummary = {
@@ -76,6 +77,16 @@ export type ConstructorMatrixReviewExportPayload = {
       affected: string;
     }[];
   };
+  pilotReadiness: {
+    status: MatrixPilotReadinessResult["status"];
+    scenario: MatrixPilotReadinessResult["scenario"];
+    rolloutMode: MatrixPilotReadinessResult["rolloutMode"];
+    recommendedAction: MatrixPilotReadinessResult["recommendedAction"];
+    matrixPrimaryAllowed: boolean;
+    checklistCounts: MatrixPilotReadinessResult["summary"]["checklistCounts"];
+    blockerCount: number;
+    blockerCodes: string[];
+  } | null;
   privacy: {
     anonymized: true;
     note: string;
@@ -91,6 +102,7 @@ export type ConstructorMatrixReviewPackage = {
 type BuildConstructorMatrixReviewPackageParams = {
   generatedAt: string;
   preview: ConstructorMatrixPreviewResponse;
+  readiness?: MatrixPilotReadinessResult | null;
   rolloutDecision?: MatrixConstructorRolloutDecision | null;
   workspaceDraft?: ConstructorDraft | null;
 };
@@ -252,6 +264,20 @@ export function buildConstructorMatrixReviewMarkdown(
     "## Matrix vs Legacy Differences",
     markdownList(differences),
     "",
+    "## Pilot Readiness",
+    payload.pilotReadiness
+      ? [
+          `- Status: ${payload.pilotReadiness.status}`,
+          `- Scenario: ${payload.pilotReadiness.scenario}`,
+          `- Rollout mode: ${payload.pilotReadiness.rolloutMode}`,
+          `- Recommended action: ${payload.pilotReadiness.recommendedAction}`,
+          `- Matrix primary allowed: ${payload.pilotReadiness.matrixPrimaryAllowed ? "yes" : "no"}`,
+          `- Checklist pass/warning/fail/n/a: ${payload.pilotReadiness.checklistCounts.pass}/${payload.pilotReadiness.checklistCounts.warning}/${payload.pilotReadiness.checklistCounts.fail}/${payload.pilotReadiness.checklistCounts.not_applicable}`,
+          `- Blocker count: ${payload.pilotReadiness.blockerCount}`,
+          `- Blocker codes: ${payload.pilotReadiness.blockerCodes.join(", ") || "none"}`,
+        ].join("\n")
+      : "- not included",
+    "",
     "## Privacy",
     payload.privacy.note,
   ].join("\n");
@@ -260,6 +286,7 @@ export function buildConstructorMatrixReviewMarkdown(
 export function buildConstructorMatrixReviewPackage({
   generatedAt,
   preview,
+  readiness,
   rolloutDecision,
   workspaceDraft,
 }: BuildConstructorMatrixReviewPackageParams): ConstructorMatrixReviewPackage {
@@ -353,9 +380,21 @@ export function buildConstructorMatrixReviewPackage({
         affected: affectedLabel(difference.affected),
       })),
     },
+    pilotReadiness: readiness
+      ? {
+          status: readiness.status,
+          scenario: readiness.scenario,
+          rolloutMode: readiness.rolloutMode,
+          recommendedAction: readiness.recommendedAction,
+          matrixPrimaryAllowed: readiness.matrixPrimaryAllowed,
+          checklistCounts: readiness.summary.checklistCounts,
+          blockerCount: readiness.summary.blockerCount,
+          blockerCodes: readiness.blockers.map((blocker) => sanitizeReviewText(blocker.id)),
+        }
+      : null,
     privacy: {
       anonymized: true,
-      note: "This internal review export intentionally includes only rollout, safety, structural counts, explanations, and comparison summaries. Identity, contact, notes, raw input, raw draft, and database fields are excluded.",
+      note: "This internal review export intentionally includes only rollout, readiness summary, safety, structural counts, explanations, and comparison summaries. Identity, contact, personal notes, source payload details, and database fields are excluded.",
     },
   };
 

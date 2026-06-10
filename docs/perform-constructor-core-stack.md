@@ -1352,3 +1352,36 @@ Current pilot policy:
 - unknown or unsafe cases are blocked or require review.
 
 `scripts/check-perform-constructor-core.mjs` now validates the readiness matrix across D-90, post-competition, travel, weigh-in, D-28/D-21/D-10/D-3, competition day, and unknown/bad inputs.
+
+### 15.10 Pilot readiness in internal matrix UI
+
+Stage 18 surfaces pilot readiness inside the existing flag-gated internal matrix constructor UI.
+
+UI component:
+
+- `apps/web/app/components/constructor/MatrixPilotReadinessCard.tsx`
+
+Web helpers:
+
+- `getPilotReadinessBadgeTone(status)`;
+- `getPilotReadinessLabel(language, status)`;
+- `getPilotReadinessMeaning(language, status)`;
+- `summarizePilotReadinessCounts(readiness)`.
+
+The UI uses client-side shared evaluation through `evaluateMatrixPilotReadiness(input, options?)`. No new endpoint is added.
+
+The card shows:
+
+- status badge;
+- scenario, rollout mode, recommended action;
+- checklist counts;
+- blockers;
+- `safeToPreview` and `defaultPathUnchanged`;
+- collapsed checklist details;
+- a trainer/QA meaning text.
+
+Stage 16 review export now includes only a safe readiness summary: status, scenario, rollout mode, recommended action, matrixPrimaryAllowed, checklist counts, blocker count, and blocker codes.
+
+It still excludes raw input, raw draft, raw readiness evidence, athlete identity, notes, DB IDs, and contact data.
+
+Stage 18 remains controlled by `NEXT_PUBLIC_INTERNAL_MATRIX_CONSTRUCTOR_UI`. With the flag off, readiness UI is not rendered and no internal matrix requests are started. With the flag on, preview, rollout, workspace, activation, return-to-legacy, save/template/assign guards, and rollout policy are unchanged.
