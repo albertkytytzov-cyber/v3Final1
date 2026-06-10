@@ -15,6 +15,8 @@
 - `docs/europe-2026-plan-analysis.md`
 - `docs/perform-constructor-json-schema.json`
 - `docs/perform-constructor-mvp-test-report.md`
+- `docs/constructor-phase-matrix-transition-plan.md`
+- `docs/constructor-matrix-preview-fixtures.md`
 
 ## 1. Главный принцип
 
@@ -957,3 +959,708 @@ coachEditable
 3. Добавить редактирование дня/блока.
 4. Добавить сохранение draft как шаблона.
 5. После подтверждения тренером разрешить назначение спортсмену.
+
+## 15. Matrix-Driven Migration Status
+
+Текущий migration plan зафиксирован в `docs/constructor-phase-matrix-transition-plan.md`.
+
+На 2026-06-09 добавлены отдельные shared-слои:
+
+- `constructor-matrix.ts` — правила фаз, недель, дней, eligibility и block library;
+- `constructor-matrix-skeleton.ts` — matrix-driven week/day/session skeleton;
+- `constructor-matrix-plan-builder.ts` — отдельный matrix draft builder с selected blocks, volume rules, risk checks и explanations.
+- `constructor-matrix-adapter.ts` — controlled adapter `buildMatrixDrivenConstructorDraft`, который переводит matrix draft в constructor-compatible output без переключения legacy default path.
+- `constructor-matrix-comparison.ts` — dual-run comparison layer для legacy vs matrix draft, safety invariants, legacy default guard и summary для internal preview.
+- `constructor-matrix-preview.ts` — internal preview builder `buildConstructorComparisonPreview`, который возвращает side-by-side legacy draft, matrix draft, comparison report, summary, safety status, warnings и notes.
+- `constructor-matrix-rollout.ts` — controlled rollout gate `decideMatrixConstructorRollout`, который классифицирует scenario, проверяет allowlist/blockers и решает: legacy only, preview only, internal matrix, primary matrix или blocked.
+- `scripts/fixtures/constructor/preview-regression-fixtures.mjs` — synthetic regression fixture pack для matrix preview.
+- `scripts/constructor-preview-fixture-runner.mjs` — fixture runner для safety, block, risk, explanation и legacy-default инвариантов.
+- `POST /api/v1/plans/constructor/internal/matrix-preview` — internal/debug endpoint для matrix-vs-legacy preview с теми же auth/athlete-access guard'ами, что и production constructor draft route.
+- `POST /api/v1/plans/constructor/internal/matrix-rollout-decision` — internal/debug endpoint для rollout decision без DB writes и без production route changes.
+- `apps/web/app/page-client.tsx` — collapsed internal panel `Matrix preview / internal`, который вызывает endpoint и показывает side-by-side QA без изменения основного draft flow.
+
+Старый `buildPerformConstructorDraft` не переключён по умолчанию.
+
+### 15.1 Internal comparison preview
+
+Preview-режим нужен для QA и будущей side-by-side панели, а не для production rollout.
+
+Вызов:
+
+```text
+buildConstructorComparisonPreview(input, options?)
+```
+
+Output:
+
+- `generatedFrom: "legacy_matrix_comparison_preview"`;
+- `mode: "comparison_preview"`;
+- `legacyDraft`;
+- `matrixDraft`;
+- `comparisonReport`;
+- `summary`;
+- `safety`;
+- `safetyInvariants`;
+- `legacyDefaultGuard`;
+- `safeToPreview`;
+- `defaultPathUnchanged`;
+- `warnings`;
+- `notes`.
+
+Опции:
+
+- `includeDrafts`;
+- `includeComparisonReport`;
+- `includeSafetyDetails`;
+- `explanationDepth`;
+- `failOnMatrixSafetyError`;
+- `matrixOptions`;
+- `includeInfoDifferences`.
+
+Как читать:
+
+- `safeToPreview = true` означает, что matrix draft можно показывать внутренне рядом с legacy;
+- `expectedDifferenceCount` означает ожидаемые отличия, а не ошибку;
+- `safety.matrixSafetyPassed` проверяет close-start, travel, weigh-in, competition, post-competition и marker rules;
+- `safety.defaultPathUnchanged` подтверждает, что обычный legacy path не переключён;
+- `warnings` показывает structured warning/error/info список.
+
+На текущем этапе production API и DB не изменены. UI получил только internal/experimental панель. Preview не пишет в базу, не создаёт шаблон и не назначает план спортсмену.
+
+Regression fixtures запускаются через `npm run check:constructor-core` и описаны в `docs/constructor-matrix-preview-fixtures.md`.
+
+Обычный `POST /api/v1/plans/constructor/draft` не изменён. Internal endpoint принимает `{ input, options }`, возвращает preview object и не пишет в DB.
+
+Internal UI показывает summary, safety, week density, matrix decision explanation, differences и optional raw JSON. Это не rollout matrix path: основной `buildPerformConstructorDraft(input)` остаётся legacy default.
+
+### 15.2 Controlled matrix rollout gate
+
+Rollout gate нужен после preview, потому что `safeToPreview=true` не равно “можно сделать matrix
+основным production draft”.
+
+Вызов:
+
+```text
+decideMatrixConstructorRollout(input, options?)
+```
+
+Decision:
+
+- `mode`;
+- `scenario`;
+- `allowlisted`;
+- `safeToPreview`;
+- `defaultPathUnchanged`;
+- `matrixPrimaryAllowed`;
+- `blockers`;
+- `previewSummary`;
+- `explanation`;
+- `recommendedAction`.
+
+Initial policy:
+
+- primary: `far_development_week`, `post_competition_recovery`;
+- internal only: `travel_day`, `weigh_in_day`;
+- preview only: close main-start windows `D-28`, `D-21`, `D-10`, `D-3`, competition day and secondary close starts;
+- legacy/block: unknown, unsafe, comparison errors, legacy guard failures, input mutation, forbidden structural legacy usage.
+
+Explicit helper:
+
+```text
+buildMatrixConstructorDraftIfAllowed(input, options?)
+```
+
+Default helper policy returns matrix only for `matrix_allowed_for_primary`.
+For close main-start scenarios it returns legacy fallback unless fallback is disabled, in which case it
+returns blocked result.
+
+This layer intentionally does not:
+
+- switch `buildPerformConstructorDraft`;
+- change `POST /api/v1/plans/constructor/draft`;
+- write rollout decisions to DB;
+- add telemetry;
+- change mobile contracts.
+
+### 15.3 Rollout decision in internal UI
+
+Stage 11 подключает rollout gate к existing internal preview panel.
+
+UI:
+
+```text
+apps/web/app/page-client.tsx
+```
+
+Styles:
+
+```text
+apps/web/app/globals.css
+```
+
+Internal panel now calls:
+
+```http
+POST /api/v1/plans/constructor/internal/matrix-preview
+POST /api/v1/plans/constructor/internal/matrix-rollout-decision
+```
+
+Decision block shows:
+
+- mode/scenario;
+- badge;
+- recommended action;
+- matrixPrimaryAllowed;
+- safeToPreview/default guard status;
+- blockers;
+- explanation.
+
+Badges:
+
+- `Matrix primary allowed`;
+- `Matrix internal only`;
+- `Preview only`;
+- `Legacy default`;
+- `Blocked`.
+
+Read-only candidate is visible only when rollout mode is:
+
+- `matrix_allowed_for_primary`;
+- `matrix_allowed_for_internal`.
+
+Candidate is explicitly internal/read-only and is not connected to:
+
+- `constructorDraft`;
+- `constructorTemplatePayload`;
+- save as template;
+- assign plan;
+- DB writes;
+- mobile contracts.
+
+Close main-start windows remain preview-only.
+
+### 15.4 Internal matrix preview workspace
+
+Stage 12 adds a read-only internal workspace inside the constructor matrix preview panel.
+
+Purpose:
+
+- allow a coach/admin QA user to inspect the matrix candidate in the same visual shape as a draft;
+- keep the legacy draft visible and unchanged;
+- prevent saving, assigning, or turning the matrix candidate into a template.
+
+Open action:
+
+```text
+Показать matrix-кандидат в preview workspace
+```
+
+Allowed rollout modes:
+
+- `matrix_allowed_for_primary`;
+- `matrix_allowed_for_internal`.
+
+Additional guards:
+
+- matrix draft exists;
+- `safeToPreview=true`;
+- `defaultPathUnchanged=true`;
+- no safety errors;
+- no rollout error blockers;
+- `matrixPrimaryAllowed=true` unless the mode is `matrix_allowed_for_internal`.
+
+Workspace badges:
+
+- read-only;
+- not saved;
+- does not replace legacy;
+- rollout mode badge.
+
+Workspace content:
+
+- rollout mode/scenario/recommended action;
+- safety/default status;
+- weeks/days/sessions/blocks counts;
+- explanation why this is not the main draft;
+- risk flags;
+- weeks, days, sessions and blocks in draft-compatible display.
+
+Read-only policy:
+
+- no `constructorTemplatePayload` update;
+- no `handleSaveConstructorTemplate` usage;
+- no save/template/assign buttons;
+- no DB writes;
+- no localStorage/sessionStorage;
+- no mobile contract changes.
+
+The production route remains:
+
+```http
+POST /api/v1/plans/constructor/draft
+```
+
+and still uses `buildPerformConstructorDraft(input)`.
+
+### 15.5 Controlled internal matrix draft activation
+
+Stage 13 allows an opened matrix workspace draft to become the active internal UI draft.
+
+Action:
+
+```text
+Использовать matrix как internal draft
+```
+
+State:
+
+```ts
+type ActiveConstructorDraftSource = "legacy" | "matrix_internal";
+```
+
+Rules:
+
+- default source is always `legacy`;
+- activation is manual and only available inside an opened internal matrix workspace;
+- allowed only for `matrix_allowed_for_primary` and `matrix_allowed_for_internal`;
+- safe preview, unchanged default path, no safety errors, and no rollout error blockers are required;
+- changing constructor inputs, rebuilding legacy draft, or rerunning matrix preview resets source to `legacy`;
+- closing the matrix workspace also returns to `legacy`.
+
+Read-only contract:
+
+- the main draft panel can render the matrix candidate for review;
+- the panel shows `matrix_internal · read-only`;
+- save/template/assign controls are hidden or disabled;
+- `handleSaveConstructorTemplate` has a defensive source guard;
+- `constructorTemplatePayload` is still produced only by the legacy draft flow;
+- no DB writes, localStorage/sessionStorage writes, mobile contract changes, or production API changes.
+
+This is still an internal QA step, not a rollout of matrix as the default constructor.
+
+### 15.6 Matrix constructor UI decomposition
+
+Stage 14 decomposes the internal matrix constructor UI without changing behavior.
+
+The web page remains the orchestration container:
+
+- form state;
+- legacy draft state;
+- matrix preview state;
+- rollout decision state;
+- active draft source;
+- high-level handlers and API calls.
+
+Extracted UI/helpers:
+
+- `apps/web/app/lib/constructor-matrix-ui.ts`;
+- `MatrixConstructorPreviewPanel`;
+- `MatrixRolloutDecisionCard`;
+- `MatrixPreviewWorkspace`;
+- `MatrixInternalDraftBanner`;
+- `MatrixDraftReadOnlyView`.
+
+Behavior is intentionally unchanged from Stage 13:
+
+- legacy draft is the default source;
+- matrix internal draft is manual and read-only;
+- save/template/assign remain unavailable for `matrix_internal`;
+- rollout policy, safety guards, preview-only windows, and legacy fallback are unchanged;
+- no production route, DB, mobile, localStorage/sessionStorage, telemetry, `mergeWeeks`, `selectTemplateCards`, or `pickSourceWeekForPhase` changes.
+
+### 15.7 Internal matrix constructor UI visibility flag
+
+Stage 15 gates the internal matrix UI behind an explicit web feature flag:
+
+```bash
+NEXT_PUBLIC_INTERNAL_MATRIX_CONSTRUCTOR_UI=true
+```
+
+Enabled values are `1`, `true`, `enabled`, and `on`. Missing or any other value means the flag is off.
+
+When the flag is off:
+
+- the internal matrix preview panel is not rendered;
+- matrix preview actions are unavailable;
+- workspace open and internal activation handlers return early;
+- `matrix_internal` cannot become the active visible draft source;
+- legacy constructor generation, save as template, assign flow, and production draft behavior remain unchanged.
+
+When the flag is on, Stage 14 behavior is unchanged.
+
+This flag is web-only UI visibility. It does not change shared constructor core, rollout policy, API contracts, DB schema, mobile contracts, storage, or telemetry.
+
+### 15.8 Internal matrix constructor review export
+
+Stage 16 adds an internal-only review export layer for matrix preview feedback.
+
+Helper:
+
+- `apps/web/app/lib/constructor-matrix-review-export.ts`
+
+UI:
+
+- `Copy review summary`;
+- `Copy review JSON`;
+- local success/error state inside the internal matrix panel/workspace.
+
+The export includes only anonymized review data:
+
+- rollout mode, scenario, allowlisted state, blockers, recommended action;
+- safety/risk summary;
+- legacy/matrix week/day/session/block counts;
+- matrix explanation;
+- matrix vs legacy difference summary;
+- generatedAt timestamp.
+
+It intentionally excludes athlete name, email, phone, user id, athlete id, personal notes, DB identifiers, raw constructor input, and raw draft payload.
+
+Stage 16 is still controlled by `NEXT_PUBLIC_INTERNAL_MATRIX_CONSTRUCTOR_UI`. With the flag off, the export UI is not rendered. With the flag on, Stage 14/15 preview, rollout, workspace, activation, and return-to-legacy behavior are unchanged.
+
+No DB, API contract, rollout policy, production draft route, mobile, localStorage/sessionStorage, telemetry, or matrix default behavior changes are introduced.
+
+### 15.9 Matrix constructor pilot readiness checklist
+
+Stage 17 adds a shared readiness evaluator for matrix pilot decisions:
+
+- `packages/shared/src/constructor-matrix-pilot-readiness.ts`
+
+Primary functions:
+
+- `evaluateMatrixPilotReadiness(input, options?)`;
+- `buildMatrixPilotReadinessChecklist(input, preview, rolloutDecision, options?)`;
+- `summarizeMatrixPilotReadiness(readiness)`;
+- `getMatrixPilotReadinessBlockers(readiness)`;
+- `classifyMatrixPilotReadinessScenario(input, rolloutDecision)`.
+
+The readiness layer classifies scenarios into:
+
+- `ready_for_internal_pilot`;
+- `ready_for_limited_primary_pilot`;
+- `internal_only`;
+- `preview_only`;
+- `blocked`;
+- `needs_review`.
+
+It is a shared/check/docs layer only. It does not add a new endpoint or UI, does not persist anything, and does not change the production draft route, DB, telemetry/storage, mobile contracts, rollout policy, matrix default behavior, or legacy save/template/assign flow.
+
+Current pilot policy:
+
+- far development and post-competition recovery can become limited primary pilot candidates when safety/comparison/rollout checks pass;
+- travel and weigh-in can become internal pilot candidates only;
+- close main start windows and competition day remain preview-only;
+- unknown or unsafe cases are blocked or require review.
+
+`scripts/check-perform-constructor-core.mjs` now validates the readiness matrix across D-90, post-competition, travel, weigh-in, D-28/D-21/D-10/D-3, competition day, and unknown/bad inputs.
+
+### 15.10 Pilot readiness in internal matrix UI
+
+Stage 18 surfaces pilot readiness inside the existing flag-gated internal matrix constructor UI.
+
+UI component:
+
+- `apps/web/app/components/constructor/MatrixPilotReadinessCard.tsx`
+
+Web helpers:
+
+- `getPilotReadinessBadgeTone(status)`;
+- `getPilotReadinessLabel(language, status)`;
+- `getPilotReadinessMeaning(language, status)`;
+- `summarizePilotReadinessCounts(readiness)`.
+
+The UI uses client-side shared evaluation through `evaluateMatrixPilotReadiness(input, options?)`. No new endpoint is added.
+
+The card shows:
+
+- status badge;
+- scenario, rollout mode, recommended action;
+- checklist counts;
+- blockers;
+- `safeToPreview` and `defaultPathUnchanged`;
+- collapsed checklist details;
+- a trainer/QA meaning text.
+
+Stage 16 review export now includes only a safe readiness summary: status, scenario, rollout mode, recommended action, matrixPrimaryAllowed, checklist counts, blocker count, and blocker codes.
+
+It still excludes raw input, raw draft, raw readiness evidence, athlete identity, notes, DB IDs, and contact data.
+
+Stage 18 remains controlled by `NEXT_PUBLIC_INTERNAL_MATRIX_CONSTRUCTOR_UI`. With the flag off, readiness UI is not rendered and no internal matrix requests are started. With the flag on, preview, rollout, workspace, activation, return-to-legacy, save/template/assign guards, and rollout policy are unchanged.
+
+### 15.11 Limited matrix primary pilot switch
+
+Stage 19 adds an explicit UI-only limited primary pilot switch. It is controlled
+by:
+
+```bash
+NEXT_PUBLIC_INTERNAL_MATRIX_CONSTRUCTOR_UI=true
+NEXT_PUBLIC_MATRIX_CONSTRUCTOR_LIMITED_PRIMARY_PILOT=true
+```
+
+The second flag only works when the internal matrix UI flag is enabled. It does
+not affect the production draft route by itself.
+
+The web helper:
+
+- `apps/web/app/lib/constructor-matrix-primary-pilot.ts`;
+- `canUseMatrixPrimaryPilot(...)`.
+
+The helper allows the action only when:
+
+- readiness is `ready_for_limited_primary_pilot`;
+- rollout mode is `matrix_allowed_for_primary`;
+- scenario is `far_development_week` or `post_competition_recovery`;
+- preview is safe and the legacy default path is unchanged;
+- safety/comparison checks have no errors;
+- rollout/readiness blockers are empty;
+- matrix did not use legacy templates as structure;
+- a matrix draft exists.
+
+The UI can label the active source as `matrix_primary_pilot`, but this is still
+not the default production path. The draft remains unsaved, unassigned, and
+blocked from save/template/assign flows by the existing constructor draft source
+guard.
+
+Stage 19 does not change shared constructor core, API contracts, DB, mobile,
+telemetry/storage, rollout policy, close-main-start rules, `mergeWeeks`,
+`selectTemplateCards`, or `pickSourceWeekForPhase`.
+
+### 15.12 Pilot-safe save dry-run validation
+
+Stage 20 adds dry-run validation for `matrix_primary_pilot` without enabling
+real save.
+
+Files:
+
+- `apps/web/app/lib/constructor-matrix-save-dry-run.ts`;
+- `apps/web/app/components/constructor/MatrixPrimaryPilotSaveDryRunCard.tsx`.
+
+The dry-run builds a `PlanTemplatePayload` candidate in memory from the active
+matrix pilot draft and validates:
+
+- matrix primary pilot is active;
+- Stage 19 eligibility passed;
+- template payload can be built;
+- days, sessions, and blocks exist;
+- block names/notes are not empty;
+- rows are exercise rows;
+- session execution/device link mode remains block-based;
+- old `Контроль`/`control` column marker is absent;
+- internal matrix/debug fields are not present in the payload;
+- real save remains disabled for the pilot source.
+
+Returned UI data is a summary/checklist only. The helper does not call API,
+write DB, write storage, emit telemetry, assign a plan, or return a payload for
+save/template handlers.
+
+This stage is still internal UI only and remains behind:
+
+```bash
+NEXT_PUBLIC_INTERNAL_MATRIX_CONSTRUCTOR_UI=true
+NEXT_PUBLIC_MATRIX_CONSTRUCTOR_LIMITED_PRIMARY_PILOT=true
+```
+
+Passing dry-run is a readiness signal for future server-side guarded pilot work,
+not production permission.
+
+### 15.13 Server-side primary pilot save dry-run
+
+Stage 21 moves the pilot-safe dry-run checklist into shared code and exposes it
+through an internal API route:
+
+```text
+POST /api/v1/plans/constructor/internal/matrix-primary-pilot-save-dry-run
+```
+
+Shared file:
+
+- `packages/shared/src/constructor-matrix-save-dry-run.ts`
+
+API behavior:
+
+- requires coach/admin access;
+- checks athlete access;
+- recomputes rollout decision server-side;
+- recomputes pilot readiness server-side;
+- builds a matrix draft candidate server-side;
+- runs the shared dry-run checklist;
+- returns validation evidence only.
+
+This route is still a dry-run:
+
+- no template is created;
+- no plan is assigned;
+- no DB/storage/telemetry write happens;
+- production `/api/v1/plans/constructor/draft` remains the legacy route;
+- real save/template/assign remains disabled for `matrix_primary_pilot`.
+
+Expected controlled-pilot behavior:
+
+- D-90 allowlisted primary scenario can pass the server dry-run;
+- D-3 close main-start stays preview-only/blocked for primary save;
+- travel and weigh-in stay internal-only and cannot pass primary pilot save dry-run.
+
+### 15.14 Internal UI server dry-run evidence
+
+Stage 22 surfaces the Stage 21 server dry-run inside the internal matrix
+workspace.
+
+When both flags are enabled:
+
+```bash
+NEXT_PUBLIC_INTERNAL_MATRIX_CONSTRUCTOR_UI=true
+NEXT_PUBLIC_MATRIX_CONSTRUCTOR_LIMITED_PRIMARY_PILOT=true
+```
+
+the matrix preview action also requests:
+
+```text
+POST /api/v1/plans/constructor/internal/matrix-primary-pilot-save-dry-run
+```
+
+The primary pilot panel then shows:
+
+- local dry-run status;
+- server dry-run status;
+- server rollout scenario/mode;
+- server pilot readiness;
+- server request error, if present.
+
+When the limited pilot flag is off, this server evidence is not requested or
+shown. Save/template/assign remains disabled for matrix pilot sources.
+
+### 15.15 Server evidence activation gate
+
+Stage 23 makes server evidence mandatory before the internal workspace can
+activate `matrix_primary_pilot`.
+
+The activation button is enabled only when local pilot eligibility passes and
+the server dry-run agrees:
+
+- server dry-run exists and status is `passed`;
+- server rollout mode is `matrix_allowed_for_primary`;
+- server rollout has `matrixPrimaryAllowed: true`;
+- server rollout blockers are empty;
+- server pilot readiness is `ready_for_limited_primary_pilot`;
+- server pilot readiness blockers are empty;
+- server scenario matches the local preview scenario.
+
+The workspace shows a dedicated server checklist and a human-readable disabled
+reason when evidence is missing, blocked, or inconsistent.
+
+This is still an internal read-only gate. It does not change the production
+draft route, template saving, assignment, DB schema, telemetry, storage, mobile
+contracts, or rollout policy.
+
+### 15.16 Matrix UI gate regression check
+
+Stage 24 adds an automated regression check for the server evidence activation
+gate:
+
+```bash
+npm run check:constructor-matrix-ui-gates
+```
+
+The check is included in root `npm run check` and covers:
+
+- D-90 allowlisted primary pilot server evidence;
+- D-3 preview-only blocking;
+- travel/weigh-in internal-only blocking;
+- missing server evidence;
+- server dry-run error;
+- server rollout/readiness mismatch.
+
+This keeps the primary pilot UI gate tied to explicit evidence and prevents a
+future UI-only refactor from accidentally enabling `matrix_primary_pilot`
+without a passing server dry-run.
+
+### 15.17 Read-only source persistence guard
+
+Stage 25 extends `npm run check:constructor-matrix-ui-gates` to verify the
+constructor draft source persistence rule:
+
+- `legacy` is save-capable;
+- `matrix_internal` is read-only;
+- `matrix_primary_pilot` is read-only.
+
+This protects the controlled pilot from accidentally turning a review-only
+matrix candidate into a template/save path while preserving the legacy save
+flow.
+
+### 15.18 Controlled exposure/default guard
+
+Stage 26 extends `npm run check:constructor-matrix-ui-gates` to verify the
+limited matrix pilot remains controlled by explicit flags and cannot become
+visible or persistent by accident:
+
+- internal matrix UI is off by default;
+- the limited primary pilot flag is ignored unless the internal UI flag is also
+  explicitly enabled;
+- matrix preview/workspace/activation UI remains gated;
+- matrix UI state is not stored in `localStorage` or `sessionStorage`;
+- production `/api/v1/plans/constructor/draft` remains legacy-backed;
+- internal matrix API endpoints remain coach/admin + athlete-access guarded.
+
+This is a regression guard only. It does not change rollout policy, matrix draft
+logic, save/template/assign behavior, DB schema, API contracts, mobile
+contracts, or the production constructor route.
+
+### 15.19 Review export evidence regression
+
+Stage 27 adds `npm run check:constructor-matrix-review-export` and includes it
+in the root `npm run check` chain.
+
+The check builds internal review export packages for the key pilot scenarios:
+
+- D-90 limited primary candidate;
+- D-3 preview-only close-start blocker;
+- travel day internal-only context;
+- weigh-in day internal-only context.
+
+It verifies the export contains rollout mode, scenario, recommended action,
+readiness status, structural counts, JSON, markdown and anonymized privacy
+metadata. It also checks that athlete identity, coach notes, raw season/plan
+ids, email-like values, phone-like values and UUID-like values are not exported.
+
+This keeps the manual feedback package safe and useful without changing
+production constructor behavior, rollout policy, DB/API contracts, storage,
+telemetry, save/template/assign behavior, or mobile contracts.
+
+### 15.20 Production rollout smoke checklist
+
+Stage 28 adds `docs/constructor-matrix-production-rollout.md` and guards it
+with `npm run check:constructor-matrix-production-rollout`.
+
+The checklist defines the production evidence required before calling the
+controlled matrix pilot deployed:
+
+- flag-off smoke: legacy constructor works and matrix UI is hidden;
+- flag-on smoke: internal matrix preview/workspace/export works, but
+  `matrix_internal` and `matrix_primary_pilot` remain read-only;
+- rollback smoke: disabling flags and rebuilding hides matrix UI and preserves
+  legacy generation.
+
+It also records the required pre-deploy checks, production health checks,
+scenario checks for D-90/D-3/travel/weigh-in, review export copy checks, and
+save/template/assign guard verification.
+
+This is an operational checklist only. It does not change constructor behavior,
+rollout policy, DB/API contracts, storage, telemetry, mobile contracts, or
+production save/template/assign behavior.
+
+### 15.21 Production flag wiring
+
+Stage 29 wires the existing matrix pilot flags into the self-host web Docker
+build:
+
+- `apps/web/Dockerfile` accepts the matrix flags as build args and exposes them
+  to the Next.js build stage;
+- `docker-compose.yml` passes both flags as web build args and runtime env with
+  false defaults;
+- `.env.example` documents both flags as false by default.
+
+This is required because `NEXT_PUBLIC_*` values are embedded into the client
+bundle at build time. The wiring is guarded by
+`npm run check:constructor-matrix-production-rollout`.
+
+The defaults remain false, so production stays legacy-only unless the operator
+explicitly enables the internal pilot flags and rebuilds/redeploys web.

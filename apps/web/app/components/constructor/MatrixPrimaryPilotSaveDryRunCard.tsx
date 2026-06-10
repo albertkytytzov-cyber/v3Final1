@@ -1,0 +1,204 @@
+"use client";
+
+import type { MatrixPrimaryPilotServerSaveDryRunResponse } from "@training-platform/shared";
+import type { MatrixPrimaryPilotSaveDryRunResult } from "../../lib/constructor-matrix-save-dry-run";
+import { matrixUiCopyFor } from "../../lib/constructor-matrix-ui";
+import type { Language } from "../../lib/i18n";
+
+type MatrixPrimaryPilotSaveDryRunCardProps = {
+  language: Language;
+  result: MatrixPrimaryPilotSaveDryRunResult;
+  serverResult?: MatrixPrimaryPilotServerSaveDryRunResponse | null;
+  serverError?: string;
+};
+
+function statusLabel(language: Language, status: MatrixPrimaryPilotSaveDryRunResult["status"]) {
+  const labels = {
+    waiting: matrixUiCopyFor(language, {
+      en: "waiting for pilot activation",
+      ru: "ожидает pilot activation",
+      bg: "чака pilot activation",
+    }),
+    passed: matrixUiCopyFor(language, {
+      en: "dry-run passed",
+      ru: "dry-run пройден",
+      bg: "dry-run премина",
+    }),
+    blocked: matrixUiCopyFor(language, {
+      en: "dry-run blocked",
+      ru: "dry-run заблокирован",
+      bg: "dry-run блокиран",
+    }),
+  } satisfies Record<MatrixPrimaryPilotSaveDryRunResult["status"], string>;
+
+  return labels[status];
+}
+function statusTone(status: MatrixPrimaryPilotSaveDryRunResult["status"]) {
+  switch (status) {
+    case "passed":
+      return "is-passed";
+    case "blocked":
+      return "is-blocked";
+    case "waiting":
+    default:
+      return "is-waiting";
+  }
+}
+
+export function MatrixPrimaryPilotSaveDryRunCard({
+  language,
+  result,
+  serverResult,
+  serverError = "",
+}: MatrixPrimaryPilotSaveDryRunCardProps) {
+  const serverDryRun = serverResult?.dryRun ?? null;
+
+  return (
+    <article className={`constructor-matrix-preview-card constructor-matrix-save-dry-run-card ${statusTone(result.status)}`}>
+      <div className="summary-topline">
+        <strong>
+          {matrixUiCopyFor(language, {
+            en: "Pilot-safe save dry-run",
+            ru: "Pilot-safe save dry-run",
+            bg: "Pilot-safe save dry-run",
+          })}
+        </strong>
+        <span className={`constructor-matrix-save-dry-run-badge ${statusTone(result.status)}`}>
+          {statusLabel(language, result.status)}
+        </span>
+      </div>
+      <p className="constructor-matrix-rollout-note">
+        {matrixUiCopyFor(language, {
+          en: "This validates the matrix primary pilot as a future template payload candidate. It does not save, assign, write DB, write storage, or change the production route.",
+          ru: "Это проверяет matrix primary pilot как будущий template payload candidate. Не сохраняет, не назначает, не пишет в DB/storage и не меняет production route.",
+          bg: "Това валидира matrix primary pilot като бъдещ template payload candidate. Не записва, не назначава, не пише в DB/storage и не променя production route.",
+        })}
+      </p>
+
+      {result.summary ? (
+        <div className="constructor-matrix-count-grid constructor-matrix-save-dry-run-grid">
+          {[
+            ["days", result.summary.dayCount],
+            ["sessions", result.summary.sessionCount],
+            ["blocks", result.summary.blockCount],
+            ["exercises", result.summary.exerciseCount],
+            ["top blocks", result.summary.topLevelBlockCount],
+          ].map(([label, value]) => (
+            <span key={label}>
+              <small>{label}</small>
+              <strong>{value}</strong>
+            </span>
+          ))}
+        </div>
+      ) : null}
+
+      {result.blockers.length ? (
+        <section className="constructor-matrix-pilot-section">
+          <strong>
+            {matrixUiCopyFor(language, {
+              en: "Blockers",
+              ru: "Блокеры",
+              bg: "Блокери",
+            })}
+          </strong>
+          <ul className="constructor-matrix-difference-list">
+            {result.blockers.map((item) => (
+              <li
+                className={`constructor-matrix-difference constructor-matrix-severity-${item.severity}`}
+                key={item.id}
+              >
+                <div>
+                  <strong>{item.id}</strong>
+                  <span>{item.severity}</span>
+                </div>
+                <p>{item.label}</p>
+                {item.evidence.length ? <small>{item.evidence.join(" · ")}</small> : null}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      <details className="constructor-matrix-pilot-checklist">
+        <summary>
+          {matrixUiCopyFor(language, {
+            en: "Dry-run checklist",
+            ru: "Dry-run checklist",
+            bg: "Dry-run checklist",
+          })}
+        </summary>
+        <ul className="constructor-matrix-preview-list">
+          {result.checks.map((item) => (
+            <li key={item.id}>
+              <strong>{item.label}</strong>
+              <span>
+                {item.passed ? "pass" : "stop"} · {item.severity}
+                {item.evidence.length ? ` · ${item.evidence.join(" · ")}` : ""}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </details>
+
+      <section className="constructor-matrix-server-dry-run">
+        <div className="summary-topline">
+          <strong>
+            {matrixUiCopyFor(language, {
+              en: "Server dry-run evidence",
+              ru: "Server dry-run evidence",
+              bg: "Server dry-run evidence",
+            })}
+          </strong>
+          <span className={`constructor-matrix-save-dry-run-badge ${statusTone(serverDryRun?.status ?? "waiting")}`}>
+            {serverError
+              ? matrixUiCopyFor(language, {
+                  en: "server check failed",
+                  ru: "server check не прошёл",
+                  bg: "server check не мина",
+                })
+              : serverDryRun
+                ? statusLabel(language, serverDryRun.status)
+                : matrixUiCopyFor(language, {
+                    en: "not requested",
+                    ru: "не запрошено",
+                    bg: "не е заявено",
+                  })}
+          </span>
+        </div>
+        <p className="constructor-matrix-rollout-note">
+          {matrixUiCopyFor(language, {
+            en: "The server recomputes rollout, readiness and matrix draft before validating the same save payload candidate. This is still dry-run only.",
+            ru: "Сервер заново считает rollout, readiness и matrix draft перед проверкой того же save payload candidate. Это всё ещё только dry-run.",
+            bg: "Сървърът пресмята rollout, readiness и matrix draft преди проверката на save payload candidate. Това още е само dry-run.",
+          })}
+        </p>
+
+        {serverError ? (
+          <p className="constructor-matrix-server-dry-run-error">{serverError}</p>
+        ) : serverResult ? (
+          <div className="constructor-matrix-count-grid constructor-matrix-save-dry-run-grid">
+            {[
+              ["scenario", serverResult.rolloutDecision.scenario],
+              ["rollout", serverResult.rolloutDecision.mode],
+              ["readiness", serverResult.pilotReadiness.status],
+              ["server status", serverResult.dryRun.status],
+            ].map(([label, value]) => (
+              <span key={label}>
+                <small>{label}</small>
+                <strong>{value}</strong>
+              </span>
+            ))}
+          </div>
+        ) : (
+          <p className="constructor-matrix-rollout-note">
+            {matrixUiCopyFor(language, {
+              en: "Run matrix preview with limited pilot flag enabled to request server evidence.",
+              ru: "Запустите matrix preview с включённым limited pilot flag, чтобы получить server evidence.",
+              bg: "Пуснете matrix preview с включен limited pilot flag, за да получите server evidence.",
+            })}
+          </p>
+        )}
+      </section>
+    </article>
+  );
+}

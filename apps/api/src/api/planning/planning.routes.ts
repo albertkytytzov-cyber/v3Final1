@@ -1,7 +1,12 @@
 import type { FastifyInstance } from "fastify";
 import {
   buildConstructorTemplatePayload,
+  buildConstructorMatrixPreviewResponse,
+  buildMatrixDrivenConstructorDraft,
+  buildMatrixPrimaryPilotSaveDryRun,
+  decideMatrixConstructorRollout,
   buildPerformConstructorDraft,
+  evaluateMatrixPilotReadiness,
 } from "@training-platform/shared";
 import {
   autoAssignMicrocycle,
@@ -25,6 +30,9 @@ import {
   parseAssignedPlanBody,
   parseAutoAssignMicrocycleBody,
   parseConstructorDraftBody,
+  parseConstructorMatrixPreviewBody,
+  parseConstructorMatrixRolloutDecisionBody,
+  parseMatrixPrimaryPilotSaveDryRunBody,
   parsePlanningAthleteDateQuery,
   parsePlanTemplateBody,
   parseTemplatePackQuery,
@@ -126,6 +134,127 @@ export function registerPlanningRoutes(
         draft,
         `PERFORM Constructor • ${body.competition.name}`,
       ),
+    };
+  });
+
+  app.post("/api/v1/plans/constructor/internal/matrix-preview", async (request) => {
+    const user = await dependencies.guards.requireUser(request);
+
+    if (user.role !== "coach" && user.role !== "admin") {
+      throw dependencies.httpError(
+        403,
+        "Only coach or admin accounts can build constructor preview",
+      );
+    }
+
+    let body;
+    try {
+      body = parseConstructorMatrixPreviewBody(request.body);
+    } catch (error) {
+      throw dependencies.httpError(400, (error as Error).message);
+    }
+
+    await dependencies.guards.assertAthleteAccess(user, body.input.athlete.athleteId);
+
+    // Internal/experimental preview only: no DB writes, no template creation and no production route changes.
+    return buildConstructorMatrixPreviewResponse(body.input, body.options);
+  });
+
+  app.post("/api/v1/plans/constructor/internal/matrix-rollout-decision", async (request) => {
+    const user = await dependencies.guards.requireUser(request);
+
+    if (user.role !== "coach" && user.role !== "admin") {
+      throw dependencies.httpError(
+        403,
+        "Only coach or admin accounts can build constructor rollout decisions",
+      );
+    }
+
+    let body;
+    try {
+      body = parseConstructorMatrixRolloutDecisionBody(request.body);
+    } catch (error) {
+      throw dependencies.httpError(400, (error as Error).message);
+    }
+
+    await dependencies.guards.assertAthleteAccess(user, body.input.athlete.athleteId);
+
+    // Internal decision only: no DB writes, no template creation and no production route changes.
+    return decideMatrixConstructorRollout(body.input, body.options);
+  });
+
+  app.post("/api/v1/plans/constructor/internal/matrix-primary-pilot-save-dry-run", async (request) => {
+    const user = await dependencies.guards.requireUser(request);
+
+    if (user.role !== "coach" && user.role !== "admin") {
+      throw dependencies.httpError(
+        403,
+        "Only coach or admin accounts can run constructor save dry-runs",
+      );
+    }
+
+    let body;
+    try {
+      body = parseMatrixPrimaryPilotSaveDryRunBody(request.body);
+    } catch (error) {
+      throw dependencies.httpError(400, (error as Error).message);
+    }
+
+    await dependencies.guards.assertAthleteAccess(user, body.input.athlete.athleteId);
+
+    const rolloutDecision = decideMatrixConstructorRollout(body.input, body.rolloutOptions);
+    const pilotReadiness = evaluateMatrixPilotReadiness(body.input, {
+      rolloutOptions: body.rolloutOptions,
+    });
+    const primaryPilotEligible =
+      rolloutDecision.mode === "matrix_allowed_for_primary" &&
+      rolloutDecision.matrixPrimaryAllowed &&
+      rolloutDecision.blockers.length === 0 &&
+      pilotReadiness.status === "ready_for_limited_primary_pilot" &&
+      pilotReadiness.blockers.length === 0;
+    let matrixDraft: ReturnType<typeof buildMatrixDrivenConstructorDraft> | null = null;
+    let matrixDraftError = "";
+
+    try {
+      matrixDraft = buildMatrixDrivenConstructorDraft(
+        body.input,
+        body.rolloutOptions?.previewOptions?.matrixOptions,
+      );
+    } catch (error) {
+      matrixDraftError = error instanceof Error ? error.message : String(error);
+    }
+
+    const dryRun = buildMatrixPrimaryPilotSaveDryRun({
+      activeDraftSource: "matrix_primary_pilot",
+      draft: matrixDraft,
+      primaryPilotEligible: primaryPilotEligible && Boolean(matrixDraft),
+      eligibilityReason: primaryPilotEligible
+        ? matrixDraftError || null
+        : `${rolloutDecision.mode}/${pilotReadiness.status}`,
+      eligibilityEvidence: [
+        `scenario=${rolloutDecision.scenario}`,
+        `rolloutMode=${rolloutDecision.mode}`,
+        `matrixPrimaryAllowed=${rolloutDecision.matrixPrimaryAllowed}`,
+        `readiness=${pilotReadiness.status}`,
+        `rolloutBlockers=${rolloutDecision.blockers.length}`,
+        `readinessBlockers=${pilotReadiness.blockers.length}`,
+        ...(matrixDraftError ? [`matrixDraftError=${matrixDraftError}`] : []),
+      ],
+      templateName:
+        body.templateName ?? `PERFORM Matrix Primary Pilot Dry Run • ${body.input.competition.name}`,
+    });
+
+    // Internal dry-run only: no DB writes, no template creation and no production route changes.
+    return {
+      generatedFrom: "matrix_primary_pilot_server_save_dry_run",
+      generatedAt: new Date().toISOString(),
+      dryRun,
+      rolloutDecision,
+      pilotReadiness,
+      notes: [
+        "Internal server-side dry-run only.",
+        "This route does not create templates, assign plans, write DB/storage/telemetry, or change the production constructor route.",
+      ],
     };
   });
 

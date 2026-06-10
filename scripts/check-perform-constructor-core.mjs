@@ -1,9 +1,30 @@
 import {
+  buildConstructorComparisonPreview,
+  buildConstructorMatrixPreviewResponse,
   buildConstructorTemplatePayload,
+  buildMatrixConstructorDraftIfAllowed,
+  buildMatrixDrivenConstructorDraft,
+  buildMatrixDrivenPlanDraft,
+  buildMatrixDrivenWeekSkeleton,
   buildPerformConstructorDraft,
   buildSeasonStrategySnapshot,
+  classifyConstructorTemplateCard,
+  compareLegacyAndMatrixConstructorDrafts,
   CONSTRUCTOR_TEMPLATE_CARDS,
+  CONSTRUCTOR_TRAINING_BLOCK_LIBRARY,
+  decideMatrixConstructorRollout,
+  evaluateMatrixPilotReadiness,
+  explainBlockEligibility,
+  filterAllowedTrainingBlocks,
+  getMatrixPilotReadinessBlockers,
+  getAllowedSessionSlots,
+  getDayTypeForContext,
+  getForbiddenBlockReasons,
+  getWeekTypeForContext,
+  isTrainingBlockAllowed,
+  summarizeMatrixPilotReadiness,
 } from "@training-platform/shared";
+import { runConstructorPreviewFixtures } from "./constructor-preview-fixture-runner.mjs";
 
 function assert(condition, message) {
   if (!condition) {
@@ -79,6 +100,136 @@ function sessionHasMatBlock(session) {
       block.type === "technical" ||
       /борьб|техник|стойк|партер|вход|захват/i.test(`${block.name} ${block.volume}`),
   );
+}
+
+function matrixBlock(type) {
+  const block = CONSTRUCTOR_TRAINING_BLOCK_LIBRARY.find((item) => item.type === type);
+
+  assert(block, `Expected constructor matrix block "${type}"`);
+
+  return block;
+}
+
+function matrixReasonCodes(block, context) {
+  return getForbiddenBlockReasons(block, context).map((reason) => reason.code);
+}
+
+function skeletonDays(skeleton) {
+  return skeleton.weeks.flatMap((week) => week.days);
+}
+
+function skeletonSessions(skeleton) {
+  return skeletonDays(skeleton).flatMap((day) => day.sessions);
+}
+
+function skeletonAllowedBlockTypes(skeleton) {
+  return new Set(skeletonSessions(skeleton).flatMap((session) => session.allowedBlockTypes));
+}
+
+function skeletonForbiddenCandidate(skeleton, blockType) {
+  return skeletonSessions(skeleton)
+    .flatMap((session) => session.blockCandidates)
+    .find((candidate) => candidate.blockType === blockType && !candidate.allowed);
+}
+
+function skeletonHasExplanation(skeleton, pattern) {
+  const messages = [
+    ...skeleton.explanations.map((item) => item.message),
+    ...skeleton.weeks.flatMap((week) => week.explanations.map((item) => item.message)),
+    ...skeletonDays(skeleton).flatMap((day) => day.explanations.map((item) => item.message)),
+    ...skeletonSessions(skeleton).flatMap((session) => session.explanations.map((item) => item.message)),
+  ];
+
+  return messages.some((message) => pattern.test(message));
+}
+
+function readinessItem(readiness, id) {
+  return readiness.checklist.find((item) => item.id === id);
+}
+
+function readinessCriticalItemsPass(readiness) {
+  return readiness.checklist
+    .filter((item) => item.severity === "error")
+    .every((item) => item.status === "pass" || item.status === "not_applicable");
+}
+
+function matrixDraftDays(draft) {
+  return draft.weeks.flatMap((week) => week.days);
+}
+
+function matrixDraftSessions(draft) {
+  return matrixDraftDays(draft).flatMap((day) => day.sessions);
+}
+
+function matrixDraftBlocks(draft) {
+  return matrixDraftSessions(draft).flatMap((session) => session.selectedBlocks);
+}
+
+function matrixDraftBlockTypes(draft) {
+  return new Set(matrixDraftBlocks(draft).map((block) => block.blockType));
+}
+
+function matrixDraftRiskCodes(draft) {
+  return new Set(draft.riskChecks.map((risk) => risk.code));
+}
+
+function matrixDraftHasExplanation(draft, pattern) {
+  const messages = [
+    ...draft.explanations.map((item) => item.message),
+    ...draft.weeks.flatMap((week) => week.explanations.map((item) => item.message)),
+    ...matrixDraftDays(draft).flatMap((day) => day.explanations.map((item) => item.message)),
+    ...matrixDraftSessions(draft).flatMap((session) => session.explanations.map((item) => item.message)),
+    ...matrixDraftBlocks(draft).flatMap((block) => block.explanations.map((item) => item.message)),
+  ];
+
+  return messages.some((message) => pattern.test(message));
+}
+
+function constructorDraftDays(draft) {
+  return draft.plan.weeks.flatMap((week) => week.days);
+}
+
+function constructorDraftSessions(draft) {
+  return constructorDraftDays(draft).flatMap((day) => day.sessions ?? []);
+}
+
+function constructorDraftBlocks(draft) {
+  return constructorDraftSessions(draft).flatMap((session) => session.blocks);
+}
+
+function constructorDraftHasText(draft, pattern) {
+  const texts = [
+    draft.understood.mainTask,
+    draft.understood.interpretation,
+    draft.understood.limitation,
+    draft.explanation.mainDecision,
+    draft.explanation.whyNow,
+    draft.explanation.riskImpact,
+    draft.explanation.evidenceSummary,
+    ...draft.selectedCards.flatMap((card) => [card.id, card.title, card.rationale]),
+    ...draft.plan.weeks.flatMap((week) => [
+      week.title,
+      week.mainIntent,
+      ...week.days.flatMap((day) => [
+        day.dayLabel,
+        day.dayIntent,
+        day.readinessGate,
+        ...(day.sessions ?? []).flatMap((session) => [
+          session.name,
+          session.notes,
+          ...session.blocks.flatMap((block) => [
+            block.name,
+            block.volume,
+            block.energySystem,
+            ...block.localLoadZones,
+            ...block.evidenceRefs,
+          ]),
+        ]),
+      ]),
+    ]),
+  ];
+
+  return texts.some((text) => pattern.test(String(text)));
 }
 
 function sessionHasPhysicalSupport(session) {
@@ -576,10 +727,1706 @@ const fourDayStartMatDays = fourDayStartDays.filter((day) =>
 const fourDayStartTargets = new Set(
   fourDayStartDays.flatMap((day) => day.blocks.map((block) => block.targetQuality)),
 );
+const matrixBlocks = {
+  legLmv: matrixBlock("leg_lmv"),
+  spp: matrixBlock("spp"),
+  matCompetitionModel: matrixBlock("mat_competition_model"),
+  matControlBouts: matrixBlock("mat_control_bouts"),
+  matLightTechnical: matrixBlock("mat_light_technical"),
+  firstActionSpeed: matrixBlock("first_action_speed"),
+  gpp: matrixBlock("gpp"),
+  mobility: matrixBlock("mobility"),
+  recovery: matrixBlock("recovery"),
+  travel: matrixBlock("travel"),
+  weighIn: matrixBlock("weigh_in"),
+  postCompetitionRecovery: matrixBlock("post_competition_recovery"),
+};
+const mainStart28Context = {
+  preparationPhase: "special_pre_competition",
+  competitionRole: "main_peak",
+  daysUntilStart: 28,
+  isMainStart: true,
+  weekType: "pre_competition",
+  dayType: "competition_model",
+  sessionSlot: "morning",
+};
+const mainStart21Context = {
+  preparationPhase: "special_pre_competition",
+  competitionRole: "main_peak",
+  daysUntilStart: 21,
+  isMainStart: true,
+  weekType: "pre_competition",
+  dayType: "spp_day",
+  sessionSlot: "morning",
+};
+const mainStart10Context = {
+  preparationPhase: "direct_pre_competition",
+  competitionRole: "main_peak",
+  daysUntilStart: 10,
+  isMainStart: true,
+  weekType: "taper",
+  dayType: "light_training",
+  sessionSlot: "morning",
+};
+const mainStart3Context = {
+  preparationPhase: "competition",
+  competitionRole: "main_peak",
+  daysUntilStart: 3,
+  isMainStart: true,
+  weekType: "competition",
+  dayType: "light_training",
+  sessionSlot: "morning",
+};
+const travelContext = {
+  preparationPhase: "direct_pre_competition",
+  competitionRole: "main_peak",
+  daysUntilStart: 6,
+  isMainStart: true,
+  isTravelDay: true,
+  sessionSlot: "morning",
+};
+const weighInContext = {
+  preparationPhase: "competition",
+  competitionRole: "main_peak",
+  daysUntilStart: 1,
+  isMainStart: true,
+  isWeighInDay: true,
+  sessionSlot: "morning",
+};
+const postCompetitionContext = {
+  preparationPhase: "transition_recovery",
+  competitionRole: "main_peak",
+  daysUntilStart: -1,
+  isMainStart: true,
+  isPostCompetitionDay: true,
+  sessionSlot: "morning",
+};
+const secondaryDevelopmentContext = {
+  preparationPhase: "special_preparation",
+  competitionRole: "secondary_peak",
+  daysUntilStart: 21,
+  isMainStart: false,
+  weekType: "development",
+  dayType: "gpp_day",
+  sessionSlot: "morning",
+};
+const farDevelopmentContext = {
+  preparationPhase: "general_preparation",
+  competitionRole: "main_peak",
+  daysUntilStart: 90,
+  isMainStart: true,
+  weekType: "development",
+  dayType: "heavy_training",
+  sessionSlot: "morning",
+};
+const matrixTemplateCompatibility = CONSTRUCTOR_TEMPLATE_CARDS.map((card) =>
+  classifyConstructorTemplateCard(card.id),
+);
+const skeleton28 = buildMatrixDrivenWeekSkeleton({
+  competitionRole: "main_peak",
+  isMainStart: true,
+  daysUntilStart: 28,
+  cycleLengthDays: 28,
+  preparationPhase: "special_pre_competition",
+  startDate: "2026-07-06",
+  weighInDate: "2026-07-05",
+  travelRequired: true,
+});
+const skeleton21 = buildMatrixDrivenWeekSkeleton({
+  competitionRole: "main_peak",
+  isMainStart: true,
+  daysUntilStart: 21,
+  cycleLengthDays: 21,
+  preparationPhase: "special_pre_competition",
+  startDate: "2026-07-06",
+  weighInDate: "2026-07-05",
+});
+const skeleton10 = buildMatrixDrivenWeekSkeleton({
+  competitionRole: "main_peak",
+  isMainStart: true,
+  daysUntilStart: 10,
+  cycleLengthDays: 10,
+  preparationPhase: "direct_pre_competition",
+  startDate: "2026-07-06",
+  weighInDate: "2026-07-05",
+});
+const skeleton3 = buildMatrixDrivenWeekSkeleton({
+  competitionRole: "main_peak",
+  isMainStart: true,
+  daysUntilStart: 3,
+  cycleLengthDays: 3,
+  preparationPhase: "competition",
+  startDate: "2026-07-06",
+  weighInDate: "2026-07-05",
+});
+const skeletonTravel = buildMatrixDrivenWeekSkeleton({
+  competitionRole: "main_peak",
+  isMainStart: true,
+  daysUntilStart: 2,
+  cycleLengthDays: 1,
+  preparationPhase: "competition",
+  startDate: "2026-07-06",
+  weighInDate: "2026-07-05",
+  travelRequired: true,
+});
+const skeletonWeighIn = buildMatrixDrivenWeekSkeleton({
+  competitionRole: "main_peak",
+  isMainStart: true,
+  daysUntilStart: 1,
+  cycleLengthDays: 1,
+  preparationPhase: "competition",
+  startDate: "2026-07-06",
+  weighInDate: "2026-07-05",
+});
+const skeletonCompetitionDay = buildMatrixDrivenWeekSkeleton({
+  competitionRole: "main_peak",
+  isMainStart: true,
+  daysUntilStart: 0,
+  cycleLengthDays: 1,
+  preparationPhase: "competition",
+  startDate: "2026-07-06",
+});
+const skeletonPostCompetition = buildMatrixDrivenWeekSkeleton({
+  competitionRole: "main_peak",
+  isMainStart: true,
+  daysUntilStart: -1,
+  cycleLengthDays: 1,
+  preparationPhase: "transition_recovery",
+  startDate: "2026-07-06",
+});
+const skeletonSecondary = buildMatrixDrivenWeekSkeleton({
+  competitionRole: "secondary_peak",
+  isMainStart: false,
+  daysUntilStart: 45,
+  cycleLengthDays: 7,
+  preparationPhase: "special_preparation",
+  startDate: "2026-07-24",
+});
+const skeletonFarDevelopment = buildMatrixDrivenWeekSkeleton({
+  competitionRole: "main_peak",
+  isMainStart: true,
+  daysUntilStart: 90,
+  cycleLengthDays: 7,
+  preparationPhase: "general_preparation",
+  startDate: "2026-09-06",
+});
+const skeletonFromConstructorInput = buildMatrixDrivenWeekSkeleton({
+  ...monthPreparationInput,
+  competition: {
+    ...monthPreparationInput.competition,
+    name: "Чемпионат Европы",
+    startDate: "2026-07-06",
+    weighInDate: "2026-07-05",
+    travelRequired: true,
+  },
+  athlete: {
+    ...monthPreparationInput.athlete,
+    athleteId: "athlete-olga-demo",
+    fullName: "Popova Olga",
+  },
+  context: {
+    ...monthPreparationInput.context,
+    currentPhase: "development",
+    cycleLengthDays: 30,
+  },
+  seasonStrategy: europe28SeasonStrategy,
+});
+function matrixPlanInput({
+  daysToStart,
+  cycleLengthDays,
+  phase,
+  role = "main_peak",
+  priority = "A",
+  level = "continental",
+  travelRequired = false,
+  startDate = "2026-07-06",
+  weighInDate = "2026-07-05",
+}) {
+  return {
+    ...monthPreparationInput,
+    competition: {
+      ...monthPreparationInput.competition,
+      name: role === "main_peak" ? "Чемпионат Европы" : "Контрольный старт",
+      priority,
+      level,
+      startDate,
+      weighInDate,
+      travelRequired,
+    },
+    context: {
+      ...monthPreparationInput.context,
+      currentPhase: phase,
+      cycleLengthDays,
+      sessionsPerWeek: 6,
+      sessionsPerDay: 2,
+    },
+    seasonStrategy: {
+      ...europe28SeasonStrategy,
+      currentWindow: {
+        ...europe28SeasonStrategy.currentWindow,
+        daysToStart,
+        cycleLengthDays,
+        phase,
+      },
+      targetCompetition: {
+        ...europe28SeasonStrategy.targetCompetition,
+        role,
+      },
+    },
+  };
+}
+const matrixDraft28 = buildMatrixDrivenPlanDraft(
+  matrixPlanInput({
+    daysToStart: 28,
+    cycleLengthDays: 28,
+    phase: "special_preparation",
+    travelRequired: true,
+  }),
+);
+const matrixDraft21 = buildMatrixDrivenPlanDraft(
+  matrixPlanInput({
+    daysToStart: 21,
+    cycleLengthDays: 21,
+    phase: "special_preparation",
+  }),
+);
+const matrixDraft10 = buildMatrixDrivenPlanDraft(
+  matrixPlanInput({
+    daysToStart: 10,
+    cycleLengthDays: 10,
+    phase: "taper",
+  }),
+);
+const matrixDraft3 = buildMatrixDrivenPlanDraft(
+  matrixPlanInput({
+    daysToStart: 3,
+    cycleLengthDays: 3,
+    phase: "start_window",
+  }),
+);
+const matrixDraftTravel = buildMatrixDrivenPlanDraft(
+  matrixPlanInput({
+    daysToStart: 2,
+    cycleLengthDays: 1,
+    phase: "start_window",
+    travelRequired: true,
+  }),
+);
+const matrixDraftWeighIn = buildMatrixDrivenPlanDraft(
+  matrixPlanInput({
+    daysToStart: 1,
+    cycleLengthDays: 1,
+    phase: "start_window",
+  }),
+);
+const matrixDraftCompetitionDay = buildMatrixDrivenPlanDraft(
+  matrixPlanInput({
+    daysToStart: 0,
+    cycleLengthDays: 1,
+    phase: "start_window",
+    weighInDate: "2026-07-05",
+  }),
+);
+const matrixDraftPostCompetition = buildMatrixDrivenPlanDraft(
+  matrixPlanInput({
+    daysToStart: -1,
+    cycleLengthDays: 1,
+    phase: "recovery",
+    startDate: "2026-07-06",
+    weighInDate: "2026-07-05",
+  }),
+);
+const matrixDraftSecondary = buildMatrixDrivenPlanDraft(
+  matrixPlanInput({
+    daysToStart: 21,
+    cycleLengthDays: 7,
+    phase: "special_preparation",
+    role: "secondary_peak",
+    priority: "B",
+    level: "national",
+  }),
+);
+const matrixDraftFarDevelopment = buildMatrixDrivenPlanDraft(
+  matrixPlanInput({
+    daysToStart: 90,
+    cycleLengthDays: 7,
+    phase: "base",
+    role: "main_peak",
+    priority: "A",
+    level: "continental",
+    startDate: "2026-09-06",
+    weighInDate: "2026-09-05",
+  }),
+  { explanationDepth: "detailed" },
+);
+const matrixDraftSkeletonOnly = buildMatrixDrivenPlanDraft(
+  matrixPlanInput({
+    daysToStart: 28,
+    cycleLengthDays: 28,
+    phase: "special_preparation",
+  }),
+  { mode: "skeleton_only" },
+);
+const matrixConstructorDraft28 = buildMatrixDrivenConstructorDraft(
+  matrixPlanInput({
+    daysToStart: 28,
+    cycleLengthDays: 28,
+    phase: "special_preparation",
+    travelRequired: true,
+  }),
+);
+const matrixConstructorDraft21 = buildMatrixDrivenConstructorDraft(
+  matrixPlanInput({
+    daysToStart: 21,
+    cycleLengthDays: 21,
+    phase: "special_preparation",
+  }),
+);
+const matrixConstructorDraft10 = buildMatrixDrivenConstructorDraft(
+  matrixPlanInput({
+    daysToStart: 10,
+    cycleLengthDays: 10,
+    phase: "taper",
+  }),
+);
+const matrixConstructorDraft3 = buildMatrixDrivenConstructorDraft(
+  matrixPlanInput({
+    daysToStart: 3,
+    cycleLengthDays: 3,
+    phase: "start_window",
+  }),
+);
+const matrixConstructorDraftTravel = buildMatrixDrivenConstructorDraft(
+  matrixPlanInput({
+    daysToStart: 2,
+    cycleLengthDays: 1,
+    phase: "start_window",
+    travelRequired: true,
+  }),
+);
+const matrixConstructorDraftWeighIn = buildMatrixDrivenConstructorDraft(
+  matrixPlanInput({
+    daysToStart: 1,
+    cycleLengthDays: 1,
+    phase: "start_window",
+  }),
+);
+const matrixConstructorDraftCompetitionDay = buildMatrixDrivenConstructorDraft(
+  matrixPlanInput({
+    daysToStart: 0,
+    cycleLengthDays: 1,
+    phase: "start_window",
+  }),
+);
+const matrixConstructorDraftPostCompetition = buildMatrixDrivenConstructorDraft(
+  matrixPlanInput({
+    daysToStart: -1,
+    cycleLengthDays: 1,
+    phase: "recovery",
+  }),
+);
+const matrixConstructorDraftSecondary = buildMatrixDrivenConstructorDraft(
+  matrixPlanInput({
+    daysToStart: 21,
+    cycleLengthDays: 7,
+    phase: "special_preparation",
+    role: "secondary_peak",
+    priority: "B",
+    level: "national",
+  }),
+);
+const matrixConstructorDraftFarDevelopment = buildMatrixDrivenConstructorDraft(
+  matrixPlanInput({
+    daysToStart: 90,
+    cycleLengthDays: 7,
+    phase: "base",
+    role: "main_peak",
+    priority: "A",
+    level: "continental",
+    startDate: "2026-09-06",
+    weighInDate: "2026-09-05",
+  }),
+);
+const comparison28 = compareLegacyAndMatrixConstructorDrafts(
+  matrixPlanInput({
+    daysToStart: 28,
+    cycleLengthDays: 28,
+    phase: "special_preparation",
+    travelRequired: true,
+  }),
+);
+const comparison21 = compareLegacyAndMatrixConstructorDrafts(
+  matrixPlanInput({
+    daysToStart: 21,
+    cycleLengthDays: 21,
+    phase: "special_preparation",
+  }),
+);
+const comparison10 = compareLegacyAndMatrixConstructorDrafts(
+  matrixPlanInput({
+    daysToStart: 10,
+    cycleLengthDays: 10,
+    phase: "taper",
+  }),
+);
+const comparison3 = compareLegacyAndMatrixConstructorDrafts(
+  matrixPlanInput({
+    daysToStart: 3,
+    cycleLengthDays: 3,
+    phase: "start_window",
+  }),
+);
+const comparisonTravel = compareLegacyAndMatrixConstructorDrafts(
+  matrixPlanInput({
+    daysToStart: 2,
+    cycleLengthDays: 1,
+    phase: "start_window",
+    travelRequired: true,
+  }),
+);
+const comparisonWeighIn = compareLegacyAndMatrixConstructorDrafts(
+  matrixPlanInput({
+    daysToStart: 1,
+    cycleLengthDays: 1,
+    phase: "start_window",
+  }),
+);
+const comparisonCompetitionDay = compareLegacyAndMatrixConstructorDrafts(
+  matrixPlanInput({
+    daysToStart: 0,
+    cycleLengthDays: 1,
+    phase: "start_window",
+  }),
+);
+const comparisonPostCompetition = compareLegacyAndMatrixConstructorDrafts(
+  matrixPlanInput({
+    daysToStart: -1,
+    cycleLengthDays: 1,
+    phase: "recovery",
+  }),
+);
+const comparisonSecondary = compareLegacyAndMatrixConstructorDrafts(
+  matrixPlanInput({
+    daysToStart: 21,
+    cycleLengthDays: 7,
+    phase: "special_preparation",
+    role: "secondary_peak",
+    priority: "B",
+    level: "national",
+  }),
+);
+const comparisonFarDevelopment = compareLegacyAndMatrixConstructorDrafts(
+  matrixPlanInput({
+    daysToStart: 90,
+    cycleLengthDays: 7,
+    phase: "base",
+    role: "main_peak",
+    priority: "A",
+    level: "continental",
+    startDate: "2026-09-06",
+    weighInDate: "2026-09-05",
+  }),
+  { includeInfo: true },
+);
+const previewInput28 = matrixPlanInput({
+  daysToStart: 28,
+  cycleLengthDays: 28,
+  phase: "special_preparation",
+  travelRequired: true,
+});
+const previewInput28Snapshot = JSON.stringify(previewInput28);
+const previewLegacyBefore = buildPerformConstructorDraft(previewInput28);
+const preview28 = buildConstructorComparisonPreview(previewInput28);
+const previewLegacyAfter = buildPerformConstructorDraft(previewInput28);
+const preview3 = buildConstructorComparisonPreview(
+  matrixPlanInput({
+    daysToStart: 3,
+    cycleLengthDays: 3,
+    phase: "start_window",
+  }),
+  { explanationDepth: "detailed" },
+);
+const preview10 = buildConstructorComparisonPreview(
+  matrixPlanInput({
+    daysToStart: 10,
+    cycleLengthDays: 10,
+    phase: "taper",
+  }),
+);
+const previewTravel = buildConstructorComparisonPreview(
+  matrixPlanInput({
+    daysToStart: 2,
+    cycleLengthDays: 1,
+    phase: "start_window",
+    travelRequired: true,
+  }),
+);
+const previewWeighIn = buildConstructorComparisonPreview(
+  matrixPlanInput({
+    daysToStart: 1,
+    cycleLengthDays: 1,
+    phase: "start_window",
+  }),
+);
+const previewCompetitionDay = buildConstructorComparisonPreview(
+  matrixPlanInput({
+    daysToStart: 0,
+    cycleLengthDays: 1,
+    phase: "start_window",
+  }),
+);
+const previewPostCompetition = buildConstructorComparisonPreview(
+  matrixPlanInput({
+    daysToStart: -1,
+    cycleLengthDays: 1,
+    phase: "recovery",
+  }),
+);
+const previewFarDevelopment = buildConstructorComparisonPreview(
+  matrixPlanInput({
+    daysToStart: 90,
+    cycleLengthDays: 7,
+    phase: "base",
+    role: "main_peak",
+    priority: "A",
+    level: "continental",
+    startDate: "2026-09-06",
+    weighInDate: "2026-09-05",
+  }),
+  { includeInfoDifferences: true },
+);
+const previewNoDrafts = buildConstructorComparisonPreview(previewInput28, {
+  includeDrafts: false,
+  includeSafetyDetails: false,
+});
+const previewNoReport = buildConstructorComparisonPreview(previewInput28, {
+  includeDrafts: false,
+  includeComparisonReport: false,
+  includeSafetyDetails: false,
+  explanationDepth: "short",
+});
+const apiPreviewInput28Snapshot = JSON.stringify(previewInput28);
+const apiPreviewNoDrafts = buildConstructorMatrixPreviewResponse(previewInput28, {
+  includeDrafts: false,
+  includeComparisonReport: true,
+  includeSafetyDetails: false,
+  explanationDepth: "normal",
+});
+const apiPreviewNoReport = buildConstructorMatrixPreviewResponse(previewInput28, {
+  includeDrafts: false,
+  includeComparisonReport: false,
+  includeSafetyDetails: false,
+  explanationDepth: "short",
+});
+const apiPreview3 = buildConstructorMatrixPreviewResponse(
+  matrixPlanInput({
+    daysToStart: 3,
+    cycleLengthDays: 3,
+    phase: "start_window",
+  }),
+  { explanationDepth: "detailed" },
+);
+const apiPreviewTravel = buildConstructorMatrixPreviewResponse(
+  matrixPlanInput({
+    daysToStart: 2,
+    cycleLengthDays: 1,
+    phase: "start_window",
+    travelRequired: true,
+  }),
+);
+const apiPreviewWeighIn = buildConstructorMatrixPreviewResponse(
+  matrixPlanInput({
+    daysToStart: 1,
+    cycleLengthDays: 1,
+    phase: "start_window",
+  }),
+);
+const rolloutInputFarDevelopment = matrixPlanInput({
+  daysToStart: 90,
+  cycleLengthDays: 7,
+  phase: "base",
+  role: "main_peak",
+  priority: "A",
+  level: "continental",
+  startDate: "2026-09-06",
+  weighInDate: "2026-09-05",
+});
+const rolloutInputFarDevelopmentSnapshot = JSON.stringify(rolloutInputFarDevelopment);
+const rolloutFarDevelopment = decideMatrixConstructorRollout(rolloutInputFarDevelopment);
+const rolloutInputPostCompetition = matrixPlanInput({
+  daysToStart: -1,
+  cycleLengthDays: 1,
+  phase: "recovery",
+});
+const rolloutPostCompetition = decideMatrixConstructorRollout(rolloutInputPostCompetition);
+const rolloutInputTravel = matrixPlanInput({
+  daysToStart: 2,
+  cycleLengthDays: 1,
+  phase: "start_window",
+  travelRequired: true,
+});
+const rolloutTravel = decideMatrixConstructorRollout(rolloutInputTravel);
+const rolloutInputWeighIn = matrixPlanInput({
+  daysToStart: 1,
+  cycleLengthDays: 1,
+  phase: "start_window",
+});
+const rolloutWeighIn = decideMatrixConstructorRollout(rolloutInputWeighIn);
+const rolloutInputMainStartD28 = matrixPlanInput({
+  daysToStart: 28,
+  cycleLengthDays: 28,
+  phase: "special_preparation",
+});
+const rolloutMainStartD28 = decideMatrixConstructorRollout(rolloutInputMainStartD28);
+const rolloutInputMainStartD21 = matrixPlanInput({
+  daysToStart: 21,
+  cycleLengthDays: 21,
+  phase: "special_preparation",
+});
+const rolloutMainStartD21 = decideMatrixConstructorRollout(rolloutInputMainStartD21);
+const rolloutInputMainStartD10 = matrixPlanInput({
+  daysToStart: 10,
+  cycleLengthDays: 10,
+  phase: "taper",
+});
+const rolloutMainStartD10 = decideMatrixConstructorRollout(rolloutInputMainStartD10);
+const rolloutInputMainStartD3 = matrixPlanInput({
+  daysToStart: 3,
+  cycleLengthDays: 3,
+  phase: "start_window",
+});
+const rolloutMainStartD3 = decideMatrixConstructorRollout(rolloutInputMainStartD3);
+const rolloutInputCompetitionDay = matrixPlanInput({
+  daysToStart: 0,
+  cycleLengthDays: 1,
+  phase: "start_window",
+});
+const rolloutCompetitionDay = decideMatrixConstructorRollout(rolloutInputCompetitionDay);
+const rolloutInputUnknown = matrixPlanInput({
+  daysToStart: 45,
+  cycleLengthDays: 7,
+  phase: "special_preparation",
+  role: "main_peak",
+  priority: "A",
+  level: "continental",
+  startDate: "2026-08-20",
+  weighInDate: "2026-08-19",
+});
+const rolloutUnknown = decideMatrixConstructorRollout(rolloutInputUnknown);
+const rolloutDisabled = decideMatrixConstructorRollout(rolloutInputFarDevelopment, {
+  disabled: true,
+  disabledReason: "Synthetic rollout disabled check.",
+});
+const readinessInputFarDevelopmentSnapshot = JSON.stringify(rolloutInputFarDevelopment);
+const readinessFarDevelopment = evaluateMatrixPilotReadiness(rolloutInputFarDevelopment);
+const readinessPostCompetition = evaluateMatrixPilotReadiness(rolloutInputPostCompetition);
+const readinessTravel = evaluateMatrixPilotReadiness(rolloutInputTravel);
+const readinessWeighIn = evaluateMatrixPilotReadiness(rolloutInputWeighIn);
+const readinessMainStartD28 = evaluateMatrixPilotReadiness(rolloutInputMainStartD28);
+const readinessMainStartD21 = evaluateMatrixPilotReadiness(rolloutInputMainStartD21);
+const readinessMainStartD10 = evaluateMatrixPilotReadiness(rolloutInputMainStartD10);
+const readinessMainStartD3 = evaluateMatrixPilotReadiness(rolloutInputMainStartD3);
+const readinessCompetitionDay = evaluateMatrixPilotReadiness(rolloutInputCompetitionDay);
+const readinessUnknown = evaluateMatrixPilotReadiness(rolloutInputUnknown);
+const readinessFarDevelopmentSummary = summarizeMatrixPilotReadiness(readinessFarDevelopment);
+const readinessD3Blockers = getMatrixPilotReadinessBlockers(readinessMainStartD3);
+const matrixIfAllowedFarDevelopment = buildMatrixConstructorDraftIfAllowed(rolloutInputFarDevelopment);
+const matrixIfAllowedD3Fallback = buildMatrixConstructorDraftIfAllowed(
+  matrixPlanInput({
+    daysToStart: 3,
+    cycleLengthDays: 3,
+    phase: "start_window",
+  }),
+);
+const matrixIfAllowedD3Blocked = buildMatrixConstructorDraftIfAllowed(
+  matrixPlanInput({
+    daysToStart: 3,
+    cycleLengthDays: 3,
+    phase: "start_window",
+  }),
+  {
+    fallbackToLegacy: false,
+    requirePrimaryAllowed: true,
+  },
+);
 
 assert(CONSTRUCTOR_TEMPLATE_CARDS.length >= 6, "Expected first constructor template cards");
 assert(draft.plan.weeks.length > 0, "Draft must contain plan weeks");
 assert(draft.selectedCards.length > 0, "Draft must select at least one template card");
+assert(
+  CONSTRUCTOR_TRAINING_BLOCK_LIBRARY.length >= 18,
+  "Matrix block library should include the initial constructor blocks",
+);
+assert(
+  matrixTemplateCompatibility.every((item) => item.controlsGeneration === false),
+  "Fixed template cards must be inventory sources only, not generation controllers",
+);
+assert(
+  matrixTemplateCompatibility.every((item) => item.trainingBlockTypes.length > 0),
+  "Every existing fixed template card should be classified into block-library sources",
+);
+assert(
+  getWeekTypeForContext(mainStart28Context) === "pre_competition",
+  "28 days to main start should resolve to a pre-competition week type",
+);
+assert(
+  getDayTypeForContext(mainStart28Context) === "competition_model",
+  "Explicit matrix day type should be preserved for 28-day scenario",
+);
+assert(
+  !isTrainingBlockAllowed(matrixBlocks.legLmv, mainStart28Context),
+  "28 days to main start must not allow development-heavy leg LMV",
+);
+assert(
+  matrixReasonCodes(matrixBlocks.legLmv, mainStart28Context).includes(
+    "development_forbidden_before_main_start",
+  ),
+  "28-day leg LMV rejection should explicitly mention development ban before main start",
+);
+assert(
+  isTrainingBlockAllowed(matrixBlocks.matCompetitionModel, mainStart28Context),
+  "28 days to main start should allow special competition-model work",
+);
+assert(
+  filterAllowedTrainingBlocks(Object.values(matrixBlocks), mainStart28Context).some(
+    (block) => block.type === "mat_competition_model",
+  ),
+  "Matrix filtering should keep allowed special work for 28-day main-start context",
+);
+assert(
+  isTrainingBlockAllowed(matrixBlocks.spp, mainStart21Context),
+  "21 days to main start should allow SPP only as maintenance/transfer",
+);
+assert(
+  !isTrainingBlockAllowed(matrixBlocks.legLmv, mainStart21Context),
+  "21 days to main start should forbid heavy leg LMV",
+);
+assert(
+  !isTrainingBlockAllowed(matrixBlocks.matControlBouts, mainStart21Context),
+  "21-day default SPP day should not allow control bouts unless a competition-model day is explicitly selected",
+);
+assert(
+  !isTrainingBlockAllowed(matrixBlocks.legLmv, mainStart10Context),
+  "10 days to main start should forbid development leg LMV during taper",
+);
+assert(
+  !isTrainingBlockAllowed(matrixBlocks.spp, mainStart10Context),
+  "10 days to main start should forbid SPP in taper week/day context",
+);
+assert(
+  isTrainingBlockAllowed(matrixBlocks.matLightTechnical, mainStart10Context),
+  "10 days to main start should allow light technical work",
+);
+assert(
+  isTrainingBlockAllowed(matrixBlocks.recovery, mainStart10Context),
+  "10 days to main start should allow recovery",
+);
+assert(
+  getAllowedSessionSlots(mainStart3Context).length === 1 &&
+    getAllowedSessionSlots(mainStart3Context)[0] === "morning",
+  "3 days to main start should allow only a short single-session slot",
+);
+assert(
+  isTrainingBlockAllowed(matrixBlocks.matLightTechnical, mainStart3Context),
+  "3 days to main start should allow only light technical confidence work",
+);
+assert(
+  isTrainingBlockAllowed(matrixBlocks.recovery, mainStart3Context),
+  "3 days to main start should allow recovery",
+);
+assert(
+  !isTrainingBlockAllowed(matrixBlocks.legLmv, mainStart3Context),
+  "3 days to main start should forbid heavy blocks",
+);
+assert(
+  /развитие запрещено/i.test(explainBlockEligibility(matrixBlocks.legLmv, mainStart3Context).message),
+  "3-day rejection explanation should explicitly say development is forbidden",
+);
+assert(getWeekTypeForContext(travelContext) === "travel_logistics", "Travel day should resolve to logistics week");
+assert(getDayTypeForContext(travelContext) === "travel", "Travel day should resolve to travel day type");
+assert(
+  isTrainingBlockAllowed(matrixBlocks.mobility, travelContext),
+  "Travel day should allow mobility/light activation",
+);
+assert(
+  !isTrainingBlockAllowed(matrixBlocks.matCompetitionModel, travelContext),
+  "Travel day should forbid heavy or medium competition-model work",
+);
+assert(
+  matrixReasonCodes(matrixBlocks.matCompetitionModel, travelContext).includes("heavy_load_on_travel_day"),
+  "Travel-day rejection should explain logistics limitation",
+);
+assert(getDayTypeForContext(weighInContext) === "weigh_in", "Weigh-in flag should resolve to weigh-in day type");
+assert(
+  isTrainingBlockAllowed(matrixBlocks.weighIn, weighInContext),
+  "Weigh-in day should allow weight-control activation",
+);
+assert(
+  !isTrainingBlockAllowed(matrixBlocks.matCompetitionModel, weighInContext),
+  "Weigh-in day should forbid heavy or medium load",
+);
+assert(
+  matrixReasonCodes(matrixBlocks.matCompetitionModel, weighInContext).includes(
+    "heavy_load_on_weigh_in_day",
+  ),
+  "Weigh-in rejection should explain weight-control priority",
+);
+assert(
+  isTrainingBlockAllowed(matrixBlocks.postCompetitionRecovery, postCompetitionContext),
+  "Post-competition day should allow recovery",
+);
+assert(
+  !isTrainingBlockAllowed(matrixBlocks.gpp, postCompetitionContext),
+  "Post-competition day should forbid development-oriented GPP",
+);
+assert(
+  isTrainingBlockAllowed(matrixBlocks.gpp, secondaryDevelopmentContext),
+  "Secondary start should allow softer explicit development context when trainer selects it",
+);
+assert(
+  isTrainingBlockAllowed(matrixBlocks.legLmv, farDevelopmentContext),
+  "Far-from-start development week should allow development blocks",
+);
+assert(skeleton28.generatedFrom === "matrix", "Skeleton should explicitly mark matrix generation source");
+assert(skeleton28.weeks.length === 4, `28-day skeleton should build four calendar weeks, got ${skeleton28.weeks.length}`);
+assert(skeleton28.weeks[0]?.weekType === "pre_competition", "28-day skeleton should start as pre-competition");
+assert(
+  skeleton28.weeks.some((week) => week.weekType === "taper"),
+  "28-day skeleton should include taper weeks as days get closer to start",
+);
+assert(
+  skeleton28.warnings.some((warning) => warning.code === "fixed_templates_not_controlling"),
+  "Skeleton should warn that fixed template cards do not control structure",
+);
+assert(
+  skeletonHasExplanation(skeleton28, /fixed templates не выбирают структуру/i),
+  "Skeleton explanations should state that fixed templates are not structural controllers",
+);
+assert(
+  skeletonAllowedBlockTypes(skeleton28).has("mat_competition_model"),
+  "28-day skeleton should allow special competition-model work",
+);
+assert(
+  Boolean(skeletonForbiddenCandidate(skeleton28, "leg_lmv")),
+  "28-day skeleton should include leg LMV only as a forbidden candidate, not an allowed block",
+);
+assert(
+  skeletonForbiddenCandidate(skeleton28, "leg_lmv").sourceCompatibilityCards.includes("legs_lme_21"),
+  "Forbidden skeleton candidates should still expose old-card compatibility metadata",
+);
+assert(
+  skeletonFromConstructorInput.daysUntilStart === 28 &&
+    skeletonFromConstructorInput.preparationPhase === "special_pre_competition",
+  "Skeleton builder should accept current ConstructorInput with SeasonStrategySnapshot",
+);
+assert(
+  skeleton21.weeks[0]?.recoveryPriority === "mandatory",
+  "21-day skeleton should raise recovery priority above far-start development",
+);
+assert(
+  Boolean(skeletonForbiddenCandidate(skeleton21, "leg_lmv")),
+  "21-day skeleton should keep heavy leg LMV forbidden/limited",
+);
+assert(
+  skeletonSessions(skeleton21).some((session) => session.forbiddenBlockTypes.includes("mat_control_bouts")),
+  "21-day skeleton should limit control bouts outside explicit competition-model slots",
+);
+assert(
+  skeleton10.weeks.every((week) => week.weekType === "taper" || week.weekType === "competition"),
+  "10-day skeleton should stay in taper/competition structure",
+);
+assert(
+  !skeletonAllowedBlockTypes(skeleton10).has("leg_lmv") &&
+    !skeletonAllowedBlockTypes(skeleton10).has("spp"),
+  "10-day skeleton should forbid development/heavy SPP blocks",
+);
+assert(
+  skeletonAllowedBlockTypes(skeleton10).has("mat_light_technical") &&
+    skeletonAllowedBlockTypes(skeleton10).has("recovery") &&
+    skeletonAllowedBlockTypes(skeleton10).has("mobility"),
+  "10-day skeleton should allow light technical, recovery and mobility",
+);
+assert(
+  skeleton3.weeks.length === 1 &&
+    skeletonDays(skeleton3).every((day) => day.sessions.length === 1),
+  "3-day skeleton should be one short-session start-window week",
+);
+assert(
+  skeletonAllowedBlockTypes(skeleton3).has("mat_light_technical") &&
+    skeletonAllowedBlockTypes(skeleton3).has("recovery"),
+  "3-day skeleton should allow light technical and recovery",
+);
+assert(
+  !skeletonAllowedBlockTypes(skeleton3).has("leg_lmv") &&
+    !skeletonAllowedBlockTypes(skeleton3).has("mat_control_bouts"),
+  "3-day skeleton should forbid heavy LMV and control bouts",
+);
+assert(
+  skeletonHasExplanation(skeleton3, /развитие запрещено/i),
+  "3-day skeleton should explicitly explain the development ban",
+);
+assert(
+  skeletonDays(skeletonTravel)[0]?.dayType === "travel",
+  "Travel skeleton should mark travel day type",
+);
+assert(
+  skeletonAllowedBlockTypes(skeletonTravel).has("mobility") &&
+    !skeletonAllowedBlockTypes(skeletonTravel).has("mat_competition_model"),
+  "Travel skeleton should allow mobility and forbid heavy/medium competition model work",
+);
+assert(
+  skeletonHasExplanation(skeletonTravel, /дороги/i),
+  "Travel skeleton should explain logistics limitation",
+);
+assert(
+  skeletonDays(skeletonWeighIn)[0]?.dayType === "weigh_in",
+  "Weigh-in skeleton should mark weigh-in day type",
+);
+assert(
+  skeletonAllowedBlockTypes(skeletonWeighIn).has("weigh_in") &&
+    !skeletonAllowedBlockTypes(skeletonWeighIn).has("mat_competition_model"),
+  "Weigh-in skeleton should allow weight-control activation and forbid heavy/medium load",
+);
+assert(
+  skeletonHasExplanation(skeletonWeighIn, /взвешивания/i),
+  "Weigh-in skeleton should explain weight-control priority",
+);
+assert(
+  skeletonDays(skeletonCompetitionDay)[0]?.dayType === "competition" &&
+    skeletonAllowedBlockTypes(skeletonCompetitionDay).has("competition_start"),
+  "Competition-day skeleton should allow competition_start block",
+);
+assert(
+  skeletonDays(skeletonCompetitionDay)[0]?.sessions.length === 1 &&
+    !skeletonAllowedBlockTypes(skeletonCompetitionDay).has("leg_lmv"),
+  "Competition-day skeleton should not look like an ordinary training day",
+);
+assert(
+  skeletonDays(skeletonPostCompetition)[0]?.dayType === "post_competition" &&
+    skeletonAllowedBlockTypes(skeletonPostCompetition).has("post_competition_recovery"),
+  "Post-competition skeleton should allow post-competition recovery",
+);
+assert(
+  !skeletonAllowedBlockTypes(skeletonPostCompetition).has("gpp"),
+  "Post-competition skeleton should forbid development-oriented GPP",
+);
+assert(
+  !skeletonSecondary.warnings.some((warning) => warning.code === "close_main_start"),
+  "Secondary-start skeleton should not apply main-start close-window warning",
+);
+assert(
+  skeletonFarDevelopment.weeks[0]?.weekType === "development" &&
+    skeletonAllowedBlockTypes(skeletonFarDevelopment).has("leg_lmv") &&
+    skeletonAllowedBlockTypes(skeletonFarDevelopment).has("gpp"),
+  "Far-start development skeleton should allow development blocks, SPP/GPP and bigger workload",
+);
+assert(
+  skeletonSessions(skeletonFarDevelopment).some((session) => session.slot === "evening"),
+  "Far-start development skeleton should allow two-session days where the matrix permits them",
+);
+assert(matrixDraft28.generatedFrom === "matrix", "Matrix-driven plan draft should mark matrix generation");
+assert(
+  matrixDraft28.legacyCards.usedAsStructure === false,
+  "Matrix-driven plan draft must not use legacy cards as week/day structure",
+);
+assert(
+  matrixDraft28.weeks.length > 0 &&
+    matrixDraftDays(matrixDraft28).length > 0 &&
+    matrixDraftSessions(matrixDraft28).length > 0,
+  "Matrix-driven plan draft should contain weeks, days and sessions",
+);
+assert(
+  matrixDraft28.explanations.length > 0 &&
+    matrixDraftRiskCodes(matrixDraft28).size > 0,
+  "Matrix-driven plan draft should expose explanations and risk check results",
+);
+assert(
+  matrixDraftBlockTypes(matrixDraft28).has("mat_competition_model"),
+  "28-day matrix draft should select special competition-model work when allowed",
+);
+assert(
+  !matrixDraftBlockTypes(matrixDraft28).has("leg_lmv"),
+  "28-day matrix draft should not select development-heavy leg LMV before main start",
+);
+assert(
+  matrixDraftRiskCodes(matrixDraft28).has("main_start_development_forbidden") ||
+    matrixDraftRiskCodes(matrixDraft28).has("heavy_lmv_too_close_to_start"),
+  "28-day matrix draft should risk-check development/heavy LMV rejection",
+);
+assert(
+  matrixDraftHasExplanation(matrixDraft28, /главный старт|development|старые карточки/i),
+  "28-day matrix draft should explain main-start phase and legacy-card metadata usage",
+);
+assert(
+  !matrixDraftBlockTypes(matrixDraft21).has("leg_lmv") &&
+    !matrixDraftBlockTypes(matrixDraft21).has("mat_control_bouts"),
+  "21-day matrix draft should not select heavy leg LMV or control bouts by default",
+);
+assert(
+  matrixDraftRiskCodes(matrixDraft21).has("control_bouts_too_close_to_start"),
+  "21-day matrix draft should expose rejected control bouts risk",
+);
+assert(
+  matrixDraftBlocks(matrixDraft21).every((block) => block.volume.loadLevel !== "high"),
+  "21-day matrix draft should keep volume controlled",
+);
+assert(
+  !matrixDraftBlockTypes(matrixDraft10).has("leg_lmv") &&
+    !matrixDraftBlockTypes(matrixDraft10).has("spp") &&
+    !matrixDraftBlockTypes(matrixDraft10).has("mat_control_bouts"),
+  "10-day matrix draft should not select heavy development, SPP or control bouts",
+);
+assert(
+  matrixDraftBlockTypes(matrixDraft10).has("mat_light_technical") &&
+    (matrixDraftBlockTypes(matrixDraft10).has("recovery") || matrixDraftBlockTypes(matrixDraft10).has("mobility")),
+  "10-day matrix draft should select light technical and recovery/mobility work",
+);
+assert(
+  matrixDraftBlocks(matrixDraft10).every((block) => ["very_low", "low"].includes(block.volume.loadLevel)),
+  "10-day matrix draft should keep low/very-low taper volume",
+);
+assert(
+  !matrixDraftBlockTypes(matrixDraft3).has("leg_lmv") &&
+    !matrixDraftBlockTypes(matrixDraft3).has("mat_control_bouts") &&
+    !matrixDraftBlockTypes(matrixDraft3).has("spp"),
+  "3-day matrix draft should not select heavy or control blocks",
+);
+assert(
+  matrixDraftBlockTypes(matrixDraft3).has("mat_light_technical") ||
+    matrixDraftBlockTypes(matrixDraft3).has("weigh_in") ||
+    matrixDraftBlockTypes(matrixDraft3).has("recovery"),
+  "3-day matrix draft should select only light activation/recovery blocks",
+);
+assert(
+  matrixDraftHasExplanation(matrixDraft3, /развитие запрещено|Главный старт ближе 30/i),
+  "3-day matrix draft should explain development ban near main start",
+);
+assert(
+  !matrixDraftBlocks(matrixDraftTravel).some((block) => ["medium", "high"].includes(block.volume.loadLevel)),
+  "Travel-day matrix draft should not select heavy load",
+);
+assert(
+  matrixDraftBlockTypes(matrixDraftTravel).has("mobility") ||
+    matrixDraftBlockTypes(matrixDraftTravel).has("recovery"),
+  "Travel-day matrix draft should select mobility/recovery/light travel logic",
+);
+assert(
+  matrixDraftRiskCodes(matrixDraftTravel).has("heavy_load_on_travel_day"),
+  "Travel-day matrix draft should risk-check heavy travel load rejection",
+);
+assert(
+  !matrixDraftBlockTypes(matrixDraftWeighIn).has("mat_control_bouts") &&
+    !matrixDraftBlockTypes(matrixDraftWeighIn).has("mat_competition_model") &&
+    !matrixDraftBlockTypes(matrixDraftWeighIn).has("spp"),
+  "Weigh-in matrix draft should not select mat/control bouts or SPP",
+);
+assert(
+  matrixDraftBlockTypes(matrixDraftWeighIn).has("weigh_in") ||
+    matrixDraftBlockTypes(matrixDraftWeighIn).has("recovery"),
+  "Weigh-in matrix draft should select short activation/recovery",
+);
+assert(
+  matrixDraftBlockTypes(matrixDraftCompetitionDay).has("competition_start"),
+  "Competition-day matrix draft should select competition_start",
+);
+assert(
+  matrixDraftBlocks(matrixDraftCompetitionDay).every((block) => block.blockType === "competition_start"),
+  "Competition-day matrix draft should not select ordinary training load",
+);
+assert(
+  matrixDraftBlockTypes(matrixDraftPostCompetition).has("post_competition_recovery") ||
+    matrixDraftBlockTypes(matrixDraftPostCompetition).has("recovery"),
+  "Post-competition matrix draft should select recovery",
+);
+assert(
+  !matrixDraftBlockTypes(matrixDraftPostCompetition).has("leg_lmv") &&
+    !matrixDraftBlockTypes(matrixDraftPostCompetition).has("mat_control_bouts"),
+  "Post-competition matrix draft should not select development/contact stress",
+);
+assert(
+  !matrixDraftSecondary.warnings.some((warning) => warning.code === "close_main_start"),
+  "Secondary-start matrix draft should keep softer role-specific warnings than main start",
+);
+assert(
+  !matrixDraftBlockTypes(matrixDraftSecondary).has("leg_lmv"),
+  "Secondary close-start matrix draft should still cut obvious risky heavy LMV",
+);
+assert(
+  matrixDraftBlockTypes(matrixDraftFarDevelopment).has("leg_lmv") &&
+    (matrixDraftBlockTypes(matrixDraftFarDevelopment).has("gpp") ||
+      matrixDraftBlockTypes(matrixDraftFarDevelopment).has("spp")),
+  "Far-start matrix draft should allow development and SPP/GPP blocks",
+);
+assert(
+  matrixDraftBlocks(matrixDraftFarDevelopment).some((block) => block.volume.loadLevel === "high") &&
+    matrixDraftSessions(matrixDraftFarDevelopment).some((session) => session.slot === "evening"),
+  "Far-start matrix draft should allow larger workload and two-session days",
+);
+assert(
+  matrixDraftSkeletonOnly.mode === "skeleton_only" &&
+    matrixDraftSkeletonOnly.weeks.length === 0 &&
+    matrixDraftSkeletonOnly.skeleton.weeks.length > 0,
+  "Skeleton-only matrix option should not build plan weeks",
+);
+assert(
+  matrixConstructorDraft28.generatedFrom === "matrix" &&
+    matrixConstructorDraft28.matrix.draft.generatedFrom === "matrix",
+  "Controlled matrix adapter should return matrix-generated constructor draft",
+);
+assert(
+  matrixConstructorDraft28.plan.weeks.length > 0 &&
+    constructorDraftDays(matrixConstructorDraft28).length > 0 &&
+    constructorDraftSessions(matrixConstructorDraft28).length > 0,
+  "Controlled matrix adapter should expose constructor-compatible weeks, days and sessions",
+);
+assert(
+  constructorDraftBlocks(matrixConstructorDraft28).length > 0,
+  "Controlled matrix adapter should convert selected matrix blocks into ConstructorPlanBlock entries",
+);
+assert(
+  matrixConstructorDraft28.matrix.legacyCards.usedAsStructure === false &&
+    constructorDraftHasText(matrixConstructorDraft28, /generatedFrom=matrix|legacy cards are content metadata only/i),
+  "Controlled matrix adapter should explain matrix generation and legacy metadata-only behavior",
+);
+assert(
+  matrixConstructorDraft28.riskFlags.length > 0 &&
+    /main_start_development_forbidden|heavy_lmv_too_close_to_start/.test(matrixConstructorDraft28.explanation.riskImpact),
+  "Controlled matrix adapter should preserve matrix risk checks in constructor-compatible output",
+);
+assert(
+  !constructorDraftBlocks(matrixConstructorDraft28).some((block) =>
+    block.localLoadZones.includes("matrix:leg_lmv"),
+  ),
+  "28-day adapted matrix draft should not include heavy leg LMV",
+);
+assert(
+  constructorDraftBlocks(matrixConstructorDraft28).some((block) =>
+    block.localLoadZones.includes("matrix:mat_competition_model"),
+  ),
+  "28-day adapted matrix draft should include special competition-model work",
+);
+assert(
+  !constructorDraftBlocks(matrixConstructorDraft21).some((block) =>
+    block.localLoadZones.includes("matrix:leg_lmv") || block.localLoadZones.includes("matrix:mat_control_bouts"),
+  ),
+  "21-day adapted matrix draft should not include heavy LMV or control bouts",
+);
+assert(
+  /control_bouts_too_close_to_start/.test(matrixConstructorDraft21.explanation.riskImpact),
+  "21-day adapted matrix draft should retain control-bout rejection risk",
+);
+assert(
+  !constructorDraftBlocks(matrixConstructorDraft10).some((block) =>
+    block.localLoadZones.includes("matrix:leg_lmv") ||
+    block.localLoadZones.includes("matrix:spp") ||
+    block.localLoadZones.includes("matrix:mat_control_bouts"),
+  ),
+  "10-day adapted matrix draft should not include heavy development/SPP/control bouts",
+);
+assert(
+  constructorDraftBlocks(matrixConstructorDraft10).some((block) =>
+    block.localLoadZones.includes("matrix:mat_light_technical") ||
+    block.localLoadZones.includes("matrix:recovery") ||
+    block.localLoadZones.includes("matrix:mobility"),
+  ),
+  "10-day adapted matrix draft should include light technical/recovery work",
+);
+assert(
+  !constructorDraftBlocks(matrixConstructorDraft3).some((block) =>
+    block.localLoadZones.includes("matrix:leg_lmv") ||
+    block.localLoadZones.includes("matrix:spp") ||
+    block.localLoadZones.includes("matrix:mat_control_bouts"),
+  ),
+  "3-day adapted matrix draft should not include heavy/control/development blocks",
+);
+assert(
+  constructorDraftHasText(matrixConstructorDraft3, /Главный старт ближе 30|развитие/i),
+  "3-day adapted matrix draft should explain development ban near main start",
+);
+assert(
+  constructorDraftBlocks(matrixConstructorDraftTravel).every((block) => !/нагрузка high|нагрузка medium/.test(block.volume)) &&
+    constructorDraftBlocks(matrixConstructorDraftTravel).some((block) =>
+      block.localLoadZones.includes("matrix:mobility") || block.localLoadZones.includes("matrix:recovery"),
+    ),
+  "Travel adapted matrix draft should keep light logistics blocks",
+);
+assert(
+  constructorDraftHasText(matrixConstructorDraftTravel, /travel|дорог|logistics/i),
+  "Travel adapted matrix draft should preserve logistics explanation",
+);
+assert(
+  !constructorDraftBlocks(matrixConstructorDraftWeighIn).some((block) =>
+    block.localLoadZones.includes("matrix:mat_control_bouts") ||
+    block.localLoadZones.includes("matrix:mat_competition_model") ||
+    block.localLoadZones.includes("matrix:spp"),
+  ),
+  "Weigh-in adapted matrix draft should not include mat/control/SFP blocks",
+);
+assert(
+  constructorDraftHasText(matrixConstructorDraftWeighIn, /взвеш|weight/i),
+  "Weigh-in adapted matrix draft should preserve weight-control explanation",
+);
+assert(
+  constructorDraftBlocks(matrixConstructorDraftCompetitionDay).every((block) =>
+    block.localLoadZones.includes("matrix:competition_start"),
+  ),
+  "Competition-day adapted matrix draft should only include competition_start",
+);
+assert(
+  constructorDraftBlocks(matrixConstructorDraftPostCompetition).some((block) =>
+    block.localLoadZones.includes("matrix:post_competition_recovery") ||
+    block.localLoadZones.includes("matrix:recovery"),
+  ) &&
+    !constructorDraftBlocks(matrixConstructorDraftPostCompetition).some((block) =>
+      block.localLoadZones.includes("matrix:leg_lmv"),
+    ),
+  "Post-competition adapted matrix draft should include recovery and no development",
+);
+assert(
+  !matrixConstructorDraftSecondary.matrix.draft.warnings.some((warning) => warning.code === "close_main_start") &&
+    !constructorDraftBlocks(matrixConstructorDraftSecondary).some((block) =>
+      block.localLoadZones.includes("matrix:leg_lmv"),
+    ),
+  "Secondary adapted matrix draft should be softer than main start but still cut risky close-start LMV",
+);
+assert(
+  constructorDraftBlocks(matrixConstructorDraftFarDevelopment).some((block) =>
+    block.localLoadZones.includes("matrix:leg_lmv"),
+  ) &&
+    constructorDraftBlocks(matrixConstructorDraftFarDevelopment).some((block) =>
+      block.localLoadZones.includes("matrix:gpp") || block.localLoadZones.includes("matrix:spp"),
+    ) &&
+    constructorDraftSessions(matrixConstructorDraftFarDevelopment).some((session) => session.name === "ВЕЧЕР"),
+  "Far development adapted matrix draft should allow development, SPP/GPP and two-session days",
+);
+assert(
+  draft.generatedFrom === undefined &&
+    draft.plan.weeks.length > 0 &&
+    draft.selectedCards.length > 0,
+  "Default buildPerformConstructorDraft should remain legacy-compatible and not become matrix by default",
+);
+assert(
+  comparison28.generatedFrom === "legacy_matrix_comparison" &&
+    comparison28.legacyDraft.plan.weeks.length > 0 &&
+    comparison28.matrixDraft.generatedFrom === "matrix",
+  "Comparison report should dual-run legacy and matrix drafts",
+);
+assert(
+  comparison28.summary.safeToPreview &&
+    comparison28.summary.legacyDefaultUnchanged &&
+    comparison28.summary.expectedDifferenceCount > 0,
+  "28-day comparison should be safe to preview and mark expected legacy/matrix differences",
+);
+assert(
+  comparison28.matrixSafetyInvariants.every((item) => item.passed || item.severity !== "error"),
+  "28-day comparison should pass matrix safety invariants",
+);
+assert(
+  comparison28.differences.some((item) => item.category === "legacy_template_dependency"),
+  "28-day comparison should explicitly report legacy template dependency difference",
+);
+assert(
+  !constructorDraftBlocks(comparison28.matrixDraft).some((block) =>
+    block.localLoadZones.includes("matrix:leg_lmv"),
+  ) &&
+    constructorDraftBlocks(comparison28.matrixDraft).some((block) =>
+      block.localLoadZones.includes("matrix:mat_competition_model"),
+    ),
+  "28-day comparison matrix draft should keep special work and reject heavy development",
+);
+assert(
+  comparison21.summary.safeToPreview &&
+    !constructorDraftBlocks(comparison21.matrixDraft).some((block) =>
+      block.localLoadZones.includes("matrix:leg_lmv") || block.localLoadZones.includes("matrix:mat_control_bouts"),
+    ) &&
+    /control_bouts_too_close_to_start/.test(comparison21.matrixDraft.explanation.riskImpact),
+  "21-day comparison should show controlled volume and rejected control/LMV blocks",
+);
+assert(
+  comparison10.summary.safeToPreview &&
+    !constructorDraftBlocks(comparison10.matrixDraft).some((block) =>
+      block.localLoadZones.includes("matrix:leg_lmv") ||
+      block.localLoadZones.includes("matrix:spp") ||
+      block.localLoadZones.includes("matrix:mat_control_bouts"),
+    ) &&
+    constructorDraftBlocks(comparison10.matrixDraft).some((block) =>
+      block.localLoadZones.includes("matrix:mat_light_technical") ||
+      block.localLoadZones.includes("matrix:recovery") ||
+      block.localLoadZones.includes("matrix:mobility"),
+    ),
+  "10-day comparison should show taper/direct pre-comp matrix behavior",
+);
+assert(
+  comparison3.summary.safeToPreview &&
+    !constructorDraftBlocks(comparison3.matrixDraft).some((block) =>
+      block.localLoadZones.includes("matrix:leg_lmv") ||
+      block.localLoadZones.includes("matrix:spp") ||
+      block.localLoadZones.includes("matrix:mat_control_bouts"),
+    ) &&
+    constructorDraftHasText(comparison3.matrixDraft, /Главный старт ближе 30|развитие/i),
+  "3-day comparison should keep safety invariant green and explain close-start development ban",
+);
+assert(
+  comparisonTravel.summary.safeToPreview &&
+    constructorDraftBlocks(comparisonTravel.matrixDraft).every((block) => !/нагрузка high|нагрузка medium/.test(block.volume)) &&
+    constructorDraftHasText(comparisonTravel.matrixDraft, /travel|дорог|logistics/i),
+  "Travel comparison should show no heavy load and logistics explanation",
+);
+assert(
+  comparisonWeighIn.summary.safeToPreview &&
+    !constructorDraftBlocks(comparisonWeighIn.matrixDraft).some((block) =>
+      block.localLoadZones.includes("matrix:mat_control_bouts") ||
+      block.localLoadZones.includes("matrix:mat_competition_model") ||
+      block.localLoadZones.includes("matrix:spp"),
+    ) &&
+    constructorDraftHasText(comparisonWeighIn.matrixDraft, /взвеш|weight/i),
+  "Weigh-in comparison should show short activation/recovery and weight explanation",
+);
+assert(
+  comparisonCompetitionDay.summary.safeToPreview &&
+    constructorDraftBlocks(comparisonCompetitionDay.matrixDraft).every((block) =>
+      block.localLoadZones.includes("matrix:competition_start"),
+    ),
+  "Competition-day comparison should select competition_start and no ordinary heavy training",
+);
+assert(
+  comparisonPostCompetition.summary.safeToPreview &&
+    constructorDraftBlocks(comparisonPostCompetition.matrixDraft).some((block) =>
+      block.localLoadZones.includes("matrix:post_competition_recovery") ||
+      block.localLoadZones.includes("matrix:recovery"),
+    ) &&
+    !constructorDraftBlocks(comparisonPostCompetition.matrixDraft).some((block) =>
+      block.localLoadZones.includes("matrix:leg_lmv"),
+    ),
+  "Post-competition comparison should select recovery and no development",
+);
+assert(
+  comparisonSecondary.summary.safeToPreview &&
+    !comparisonSecondary.matrixDraft.matrix.draft.warnings.some((warning) => warning.code === "close_main_start") &&
+    !constructorDraftBlocks(comparisonSecondary.matrixDraft).some((block) =>
+      block.localLoadZones.includes("matrix:leg_lmv"),
+    ),
+  "Secondary comparison should be softer than main start but still reject risky close-start blocks",
+);
+assert(
+  comparisonFarDevelopment.summary.safeToPreview &&
+    constructorDraftBlocks(comparisonFarDevelopment.matrixDraft).some((block) =>
+      block.localLoadZones.includes("matrix:leg_lmv"),
+    ) &&
+    constructorDraftBlocks(comparisonFarDevelopment.matrixDraft).some((block) =>
+      block.localLoadZones.includes("matrix:gpp") || block.localLoadZones.includes("matrix:spp"),
+    ) &&
+    constructorDraftSessions(comparisonFarDevelopment.matrixDraft).some((session) => session.name === "ВЕЧЕР") &&
+    comparisonFarDevelopment.summary.totalDifferences >= comparisonFarDevelopment.summary.expectedDifferenceCount,
+  "Far-development comparison should allow development/SPP/GPP and summarize expected differences",
+);
+assert(
+  comparison28.legacyDefaultInvariants.every((item) => item.passed || item.severity !== "error") &&
+    comparison28.legacyDraft.generatedFrom === undefined,
+  "Legacy default guard should confirm buildPerformConstructorDraft remains legacy by default",
+);
+assert(
+  preview28.generatedFrom === "legacy_matrix_comparison_preview" &&
+    preview28.mode === "comparison_preview" &&
+    preview28.legacyDraft?.plan.weeks.length > 0 &&
+    preview28.matrixDraft?.generatedFrom === "matrix" &&
+    preview28.comparisonReport?.generatedFrom === "legacy_matrix_comparison" &&
+    preview28.summary.previewMode === "comparison_preview" &&
+    preview28.safetyInvariants?.length > 0 &&
+    preview28.legacyDefaultGuard?.every((item) => item.passed || item.severity !== "error"),
+  "Preview smoke should return legacy draft, matrix draft, comparison report, summary and green legacy guard",
+);
+assert(
+  previewLegacyBefore.generatedFrom === undefined &&
+    previewLegacyAfter.generatedFrom === undefined &&
+    previewLegacyBefore.plan.weeks.length === previewLegacyAfter.plan.weeks.length &&
+    JSON.stringify(previewInput28) === previewInput28Snapshot,
+  "Preview should not mutate input or change legacy default output shape",
+);
+assert(
+  preview28.safeToPreview &&
+    preview28.safety.safeToPreview &&
+    preview28.safety.matrixSafetyPassed &&
+    preview28.defaultPathUnchanged &&
+    preview28.summary.expectedDifferenceCount > 0,
+  "28-day preview should be safe and keep expected differences as non-errors",
+);
+assert(
+  preview10.safeToPreview &&
+    preview3.safeToPreview &&
+    preview3.summary.safeToPreview &&
+    preview3.notes.some((note) => /Top comparison differences|Input summary/i.test(note)),
+  "10-day and 3-day previews should be safe, and detailed preview should include explanations",
+);
+assert(
+  !constructorDraftBlocks(preview3.matrixDraft).some((block) =>
+    block.localLoadZones.includes("matrix:leg_lmv") ||
+    block.localLoadZones.includes("matrix:spp") ||
+    block.localLoadZones.includes("matrix:mat_control_bouts"),
+  ) &&
+    constructorDraftHasText(preview3.matrixDraft, /Главный старт ближе 30|развитие/i),
+  "3-day preview matrix draft should not contain heavy/development/control blocks",
+);
+assert(
+  previewTravel.safeToPreview &&
+    constructorDraftBlocks(previewTravel.matrixDraft).every((block) => !/нагрузка high|нагрузка medium/.test(block.volume)) &&
+    constructorDraftHasText(previewTravel.matrixDraft, /travel|дорог|logistics/i),
+  "Travel preview should keep light logistics load and explanation",
+);
+assert(
+  previewWeighIn.safeToPreview &&
+    !constructorDraftBlocks(previewWeighIn.matrixDraft).some((block) =>
+      block.localLoadZones.includes("matrix:mat_control_bouts") ||
+      block.localLoadZones.includes("matrix:mat_competition_model") ||
+      block.localLoadZones.includes("matrix:spp"),
+    ) &&
+    constructorDraftHasText(previewWeighIn.matrixDraft, /взвеш|weight/i),
+  "Weigh-in preview should keep short activation/recovery and weight-control explanation",
+);
+assert(
+  previewCompetitionDay.safeToPreview &&
+    constructorDraftBlocks(previewCompetitionDay.matrixDraft).every((block) =>
+      block.localLoadZones.includes("matrix:competition_start"),
+    ),
+  "Competition-day preview should select competition_start only",
+);
+assert(
+  previewPostCompetition.safeToPreview &&
+    constructorDraftBlocks(previewPostCompetition.matrixDraft).some((block) =>
+      block.localLoadZones.includes("matrix:post_competition_recovery") ||
+      block.localLoadZones.includes("matrix:recovery"),
+    ) &&
+    !constructorDraftBlocks(previewPostCompetition.matrixDraft).some((block) =>
+      block.localLoadZones.includes("matrix:leg_lmv"),
+    ),
+  "Post-competition preview should select recovery and no development",
+);
+assert(
+  previewFarDevelopment.safeToPreview &&
+    constructorDraftBlocks(previewFarDevelopment.matrixDraft).some((block) =>
+      block.localLoadZones.includes("matrix:leg_lmv"),
+    ) &&
+    constructorDraftSessions(previewFarDevelopment.matrixDraft).some((session) => session.name === "ВЕЧЕР"),
+  "Far-development preview should allow development and larger two-session structure",
+);
+assert(
+  previewNoDrafts.legacyDraft === undefined &&
+    previewNoDrafts.matrixDraft === undefined &&
+    previewNoDrafts.comparisonReport?.legacyDraft === undefined &&
+    previewNoDrafts.comparisonReport?.matrixDraft === undefined &&
+    previewNoDrafts.safetyInvariants === undefined &&
+    previewNoDrafts.legacyDefaultGuard === undefined &&
+    previewNoDrafts.summary.includedDrafts === false &&
+    previewNoDrafts.summary.includedSafetyDetails === false,
+  "Preview includeDrafts/includeSafetyDetails false should omit full drafts and safety details",
+);
+assert(
+  previewNoReport.comparisonReport === undefined &&
+    previewNoReport.legacyDraft === undefined &&
+    previewNoReport.matrixDraft === undefined &&
+    previewNoReport.summary.includedComparisonReport === false &&
+    previewNoReport.summary.includedDrafts === false &&
+    previewNoReport.notes.length === 2,
+  "Preview includeComparisonReport false should keep summary/safety but omit report and drafts",
+);
+assert(
+  apiPreviewNoDrafts.generatedFrom === "legacy_matrix_comparison_preview" &&
+    apiPreviewNoDrafts.safeToPreview &&
+    apiPreviewNoDrafts.defaultPathUnchanged &&
+    apiPreviewNoDrafts.summary.includedDrafts === false &&
+    apiPreviewNoDrafts.summary.includedComparisonReport === true &&
+    apiPreviewNoDrafts.summary.includedSafetyDetails === false &&
+    apiPreviewNoDrafts.legacyDraft === undefined &&
+    apiPreviewNoDrafts.matrixDraft === undefined &&
+    apiPreviewNoDrafts.comparisonReport?.legacyDraft === undefined &&
+    apiPreviewNoDrafts.comparisonReport?.matrixDraft === undefined &&
+    JSON.stringify(previewInput28) === apiPreviewInput28Snapshot,
+  "API preview response helper should support includeDrafts=false without mutating input",
+);
+assert(
+  apiPreviewNoReport.generatedFrom === "legacy_matrix_comparison_preview" &&
+    apiPreviewNoReport.safeToPreview &&
+    apiPreviewNoReport.summary.includedComparisonReport === false &&
+    apiPreviewNoReport.comparisonReport === undefined &&
+    apiPreviewNoReport.notes.length === 2,
+  "API preview response helper should support includeComparisonReport=false",
+);
+assert(
+  apiPreview3.safeToPreview &&
+    !constructorDraftBlocks(apiPreview3.matrixDraft).some((block) =>
+      block.localLoadZones.includes("matrix:leg_lmv") ||
+      block.localLoadZones.includes("matrix:spp") ||
+      block.localLoadZones.includes("matrix:mat_control_bouts"),
+    ) &&
+    constructorDraftHasText(apiPreview3.matrixDraft, /Главный старт ближе 30|развитие/i),
+  "API preview helper D-3 scenario should keep close-start safety",
+);
+assert(
+  apiPreviewTravel.safeToPreview &&
+    constructorDraftBlocks(apiPreviewTravel.matrixDraft).every((block) => !/нагрузка high|нагрузка medium/.test(block.volume)) &&
+    constructorDraftHasText(apiPreviewTravel.matrixDraft, /travel|дорог|logistics/i),
+  "API preview helper travel scenario should keep logistics safety",
+);
+assert(
+  apiPreviewWeighIn.safeToPreview &&
+    !constructorDraftBlocks(apiPreviewWeighIn.matrixDraft).some((block) =>
+      block.localLoadZones.includes("matrix:mat_control_bouts") ||
+      block.localLoadZones.includes("matrix:mat_competition_model") ||
+      block.localLoadZones.includes("matrix:spp"),
+    ) &&
+    constructorDraftHasText(apiPreviewWeighIn.matrixDraft, /взвеш|weight/i),
+  "API preview helper weigh-in scenario should keep weight-control safety",
+);
+assert(
+  rolloutFarDevelopment.scenario === "far_development_week" &&
+    rolloutFarDevelopment.mode === "matrix_allowed_for_primary" &&
+    rolloutFarDevelopment.matrixPrimaryAllowed === true &&
+    rolloutFarDevelopment.recommendedAction === "allow_matrix_primary" &&
+    rolloutFarDevelopment.blockers.length === 0,
+  `Far-development rollout should allow matrix primary without blockers, got ${rolloutFarDevelopment.scenario}/${rolloutFarDevelopment.mode}/${rolloutFarDevelopment.blockers.map((item) => item.code).join(",")}`,
+);
+assert(
+  JSON.stringify(rolloutInputFarDevelopment) === rolloutInputFarDevelopmentSnapshot,
+  "Rollout decision should not mutate the input",
+);
+assert(
+  rolloutPostCompetition.scenario === "post_competition_recovery" &&
+    rolloutPostCompetition.mode === "matrix_allowed_for_primary" &&
+    rolloutPostCompetition.matrixPrimaryAllowed === true &&
+    rolloutPostCompetition.blockers.length === 0,
+  `Post-competition rollout should allow recovery matrix primary without blockers, got ${rolloutPostCompetition.scenario}/${rolloutPostCompetition.mode}/${rolloutPostCompetition.blockers.map((item) => item.code).join(",")}`,
+);
+assert(
+  rolloutTravel.scenario === "travel_day" &&
+    rolloutTravel.mode === "matrix_allowed_for_internal" &&
+    rolloutTravel.matrixPrimaryAllowed === false &&
+    rolloutTravel.recommendedAction === "allow_internal_matrix_primary" &&
+    rolloutTravel.blockers.length === 0,
+  `Travel rollout should stay internal-only without blockers, got ${rolloutTravel.scenario}/${rolloutTravel.mode}/${rolloutTravel.blockers.map((item) => item.code).join(",")}`,
+);
+assert(
+  rolloutWeighIn.scenario === "weigh_in_day" &&
+    rolloutWeighIn.mode === "matrix_allowed_for_internal" &&
+    rolloutWeighIn.matrixPrimaryAllowed === false &&
+    rolloutWeighIn.blockers.length === 0,
+  `Weigh-in rollout should stay internal-only without blockers, got ${rolloutWeighIn.scenario}/${rolloutWeighIn.mode}/${rolloutWeighIn.blockers.map((item) => item.code).join(",")}`,
+);
+for (const [label, decision, expectedScenario] of [
+  ["D-28", rolloutMainStartD28, "main_start_d28_preview"],
+  ["D-21", rolloutMainStartD21, "main_start_d21_preview"],
+  ["D-10", rolloutMainStartD10, "main_start_d10_preview"],
+  ["D-3", rolloutMainStartD3, "main_start_d3_preview"],
+]) {
+  assert(
+    decision.scenario === expectedScenario &&
+      decision.mode === "preview_only" &&
+      decision.matrixPrimaryAllowed === false &&
+      decision.recommendedAction === "show_preview_only" &&
+      decision.blockers.some((item) => item.code === "main_start_too_close_for_primary"),
+    `${label} rollout should be preview-only with main-start primary blocker, got ${decision.scenario}/${decision.mode}/${decision.blockers.map((item) => item.code).join(",")}`,
+  );
+}
+assert(
+  rolloutCompetitionDay.scenario === "competition_day_preview" &&
+    rolloutCompetitionDay.mode === "preview_only" &&
+    rolloutCompetitionDay.matrixPrimaryAllowed === false &&
+    rolloutCompetitionDay.blockers.some((item) => item.code === "competition_day_primary_not_enabled"),
+  `Competition-day rollout should stay preview-only, got ${rolloutCompetitionDay.scenario}/${rolloutCompetitionDay.mode}/${rolloutCompetitionDay.blockers.map((item) => item.code).join(",")}`,
+);
+assert(
+  rolloutUnknown.scenario === "unknown" &&
+    (rolloutUnknown.mode === "legacy_only" || rolloutUnknown.mode === "blocked") &&
+    rolloutUnknown.matrixPrimaryAllowed === false &&
+    rolloutUnknown.blockers.some((item) => item.code === "unknown_scenario" || item.code === "not_allowlisted"),
+  `Unknown rollout should fall back to legacy/block with an explicit blocker, got ${rolloutUnknown.scenario}/${rolloutUnknown.mode}/${rolloutUnknown.blockers.map((item) => item.code).join(",")}`,
+);
+assert(
+  rolloutDisabled.mode === "blocked" &&
+    rolloutDisabled.recommendedAction === "block_matrix" &&
+    rolloutDisabled.blockers.some((item) => item.code === "explicitly_disabled"),
+  "Explicitly disabled rollout should block matrix",
+);
+assert(
+  readinessFarDevelopment.status === "ready_for_limited_primary_pilot" &&
+    readinessFarDevelopment.scenario === "far_development_week" &&
+    readinessFarDevelopment.rolloutMode === "matrix_allowed_for_primary" &&
+    readinessCriticalItemsPass(readinessFarDevelopment),
+  `Far-development readiness should be limited-primary ready, got ${readinessFarDevelopment.status}/${readinessFarDevelopment.scenario}`,
+);
+assert(
+  JSON.stringify(rolloutInputFarDevelopment) === readinessInputFarDevelopmentSnapshot,
+  "Pilot readiness evaluation should not mutate the input",
+);
+assert(
+  readinessPostCompetition.status === "ready_for_limited_primary_pilot" &&
+    readinessPostCompetition.scenario === "post_competition_recovery" &&
+    readinessCriticalItemsPass(readinessPostCompetition),
+  `Post-competition readiness should be limited-primary ready, got ${readinessPostCompetition.status}/${readinessPostCompetition.scenario}`,
+);
+assert(
+  readinessTravel.status === "ready_for_internal_pilot" &&
+    readinessTravel.scenario === "travel_day" &&
+    readinessItem(readinessTravel, "logistics_load_is_light")?.status === "pass",
+  `Travel readiness should be internal-pilot ready with light logistics load, got ${readinessTravel.status}/${readinessTravel.scenario}`,
+);
+assert(
+  readinessWeighIn.status === "ready_for_internal_pilot" &&
+    readinessWeighIn.scenario === "weigh_in_day" &&
+    readinessItem(readinessWeighIn, "logistics_load_is_light")?.status === "pass",
+  `Weigh-in readiness should be internal-pilot ready with light logistics load, got ${readinessWeighIn.status}/${readinessWeighIn.scenario}`,
+);
+for (const [label, readiness, expectedScenario] of [
+  ["D-28", readinessMainStartD28, "main_start_d28_preview"],
+  ["D-21", readinessMainStartD21, "main_start_d21_preview"],
+  ["D-10", readinessMainStartD10, "main_start_d10_preview"],
+  ["D-3", readinessMainStartD3, "main_start_d3_preview"],
+]) {
+  assert(
+    readiness.status === "preview_only" &&
+      readiness.scenario === expectedScenario &&
+      readinessItem(readiness, "close_main_start_policy_respected")?.status === "pass" &&
+      readiness.matrixPrimaryAllowed === false,
+    `${label} readiness should remain preview-only with close-main-start policy respected, got ${readiness.status}/${readiness.scenario}`,
+  );
+}
+assert(
+  readinessCompetitionDay.status === "preview_only" &&
+    readinessCompetitionDay.scenario === "competition_day_preview" &&
+    readinessCompetitionDay.matrixPrimaryAllowed === false,
+  `Competition-day readiness should remain preview-only, got ${readinessCompetitionDay.status}/${readinessCompetitionDay.scenario}`,
+);
+assert(
+  readinessUnknown.status === "blocked" || readinessUnknown.status === "needs_review",
+  `Unknown readiness should be blocked or needs_review, got ${readinessUnknown.status}`,
+);
+assert(
+  readinessFarDevelopmentSummary.status === readinessFarDevelopment.status &&
+    readinessFarDevelopmentSummary.blockerCount === readinessFarDevelopment.blockers.length &&
+    readinessFarDevelopmentSummary.checklistCounts.pass > 0,
+  "Pilot readiness summary should include status, blocker count and checklist counts",
+);
+assert(
+  readinessD3Blockers.some((item) => item.id === "main_start_too_close_for_primary"),
+  "D-3 readiness blockers should include the close-main-start rollout blocker",
+);
+assert(
+  matrixIfAllowedFarDevelopment.source === "matrix" &&
+    matrixIfAllowedFarDevelopment.draft?.generatedFrom === "matrix" &&
+    matrixIfAllowedFarDevelopment.decision.matrixPrimaryAllowed,
+  "buildMatrixConstructorDraftIfAllowed should return matrix draft for primary-allowed far development",
+);
+assert(
+  matrixIfAllowedD3Fallback.source === "legacy_fallback" &&
+    matrixIfAllowedD3Fallback.draft?.generatedFrom === undefined &&
+    matrixIfAllowedD3Fallback.decision.mode === "preview_only",
+  "buildMatrixConstructorDraftIfAllowed should return legacy fallback for D-3 by default",
+);
+assert(
+  matrixIfAllowedD3Blocked.source === "blocked" &&
+    matrixIfAllowedD3Blocked.draft === null &&
+    matrixIfAllowedD3Blocked.blocked === true,
+  "buildMatrixConstructorDraftIfAllowed should return blocked result for D-3 when fallback is disabled",
+);
 assert(
   draft.missingData.every((item) => item.code !== "speed_tests"),
   "Speed tests should be satisfied in the Europe preparation scenario",
@@ -922,10 +2769,17 @@ assert(
   `4-day start whyNow should explain why load cannot be added: ${fourDayStartDraft.explanation.whyNow}`,
 );
 
+const constructorPreviewFixtureResult = runConstructorPreviewFixtures();
+
 console.log(
   JSON.stringify(
     {
       status: "ok",
+      previewFixturePack: {
+        status: constructorPreviewFixtureResult.status,
+        fixtureCount: constructorPreviewFixtureResult.fixtureCount,
+        fixtureIds: constructorPreviewFixtureResult.fixtureIds,
+      },
       confidence: draft.confidence,
       selectedCards: draft.selectedCards.map((card) => card.id),
       missingData: draft.missingData.map((item) => item.code),
@@ -981,6 +2835,48 @@ console.log(
         targets: Array.from(fourDayStartTargets),
         focus: fourDayStartDraft.focusPlan.items.map((item) => item.goalType),
         phaseMap: fourDayStartDraft.focusPlan.phaseMap.map((phase) => phase.range),
+      },
+      matrixRolloutGate: {
+        farDevelopment: {
+          scenario: rolloutFarDevelopment.scenario,
+          mode: rolloutFarDevelopment.mode,
+          matrixPrimaryAllowed: rolloutFarDevelopment.matrixPrimaryAllowed,
+        },
+        closeMainStartModes: {
+          d28: rolloutMainStartD28.mode,
+          d21: rolloutMainStartD21.mode,
+          d10: rolloutMainStartD10.mode,
+          d3: rolloutMainStartD3.mode,
+        },
+        logisticsModes: {
+          travel: rolloutTravel.mode,
+          weighIn: rolloutWeighIn.mode,
+        },
+        helperSources: {
+          farDevelopment: matrixIfAllowedFarDevelopment.source,
+          d3Default: matrixIfAllowedD3Fallback.source,
+          d3Blocked: matrixIfAllowedD3Blocked.source,
+        },
+      },
+      matrixPilotReadiness: {
+        limitedPrimaryCandidates: {
+          farDevelopment: readinessFarDevelopment.status,
+          postCompetition: readinessPostCompetition.status,
+        },
+        internalCandidates: {
+          travel: readinessTravel.status,
+          weighIn: readinessWeighIn.status,
+        },
+        previewOnly: {
+          d28: readinessMainStartD28.status,
+          d21: readinessMainStartD21.status,
+          d10: readinessMainStartD10.status,
+          d3: readinessMainStartD3.status,
+          competitionDay: readinessCompetitionDay.status,
+        },
+        unknown: readinessUnknown.status,
+        farDevelopmentChecklistCounts: readinessFarDevelopmentSummary.checklistCounts,
+        d3Blockers: readinessD3Blockers.map((item) => item.id),
       },
     },
     null,

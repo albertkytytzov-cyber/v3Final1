@@ -103,6 +103,7 @@ function isPlanningView(value: string | undefined): value is PlanningStudioView 
     value === "season" ||
     value === "mesocycle" ||
     value === "preparation" ||
+    value === "constructor" ||
     value === "templates" ||
     value === "weekly"
   );

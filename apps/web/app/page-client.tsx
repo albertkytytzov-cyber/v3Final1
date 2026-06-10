@@ -21,6 +21,12 @@ import {
   type ConstructorGoalMode,
   type ConstructorGoalType,
   type ConstructorInput,
+  type ConstructorMatrixPreviewApiOptions,
+  type ConstructorMatrixPreviewResponse,
+  type MatrixConstructorRolloutDecision,
+  type MatrixConstructorRolloutOptions,
+  type MatrixPrimaryPilotServerSaveDryRunResponse,
+  type MatrixPilotReadinessResult,
   type ConstructorPhase,
   type CreateCompetitionPayload,
   type CreateCompetitionPlanPayload,
@@ -91,6 +97,7 @@ import {
   buildConstructorTemplatePayload,
   buildPerformConstructorDraft,
   buildSeasonStrategySnapshot,
+  evaluateMatrixPilotReadiness,
   estimateTrainingActualLoad,
   estimateTrainingBlockLoad,
   estimateTrainingBlocksLoad,
@@ -110,6 +117,7 @@ import {
   type ReactNode,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -186,12 +194,36 @@ import { AthleteWorkspace } from "./components/athlete-workspace";
 import { CoachDashboard } from "./components/coach-dashboard";
 import { PlanningStudio } from "./components/planning-studio";
 import { OfflineSyncCenter } from "./components/offline-sync-center";
+import { MatrixConstructorPreviewPanel } from "./components/constructor/MatrixConstructorPreviewPanel";
+import { MatrixDraftReadOnlyView } from "./components/constructor/MatrixDraftReadOnlyView";
+import { MatrixInternalDraftBanner } from "./components/constructor/MatrixInternalDraftBanner";
+import {
+  CLOSED_CONSTRUCTOR_MATRIX_WORKSPACE,
+  type ActiveConstructorDraftSource,
+  type ConstructorMatrixWorkspaceState,
+  canActivateConstructorMatrixInternalDraft,
+  canOpenConstructorMatrixWorkspace,
+  constructorMatrixWorkspaceUnavailableReason as getConstructorMatrixWorkspaceUnavailableReason,
+  getConstructorMatrixPreviewMatrixDraft,
+  getConstructorMatrixSafetyErrorCount,
+  isConstructorDraftSaveAllowed,
+} from "./lib/constructor-matrix-ui";
+import { canUseMatrixPrimaryPilot } from "./lib/constructor-matrix-primary-pilot";
+import { canUseMatrixPrimaryPilotWithServerEvidence } from "./lib/constructor-matrix-primary-pilot-server-gate";
+import { buildMatrixPrimaryPilotSaveDryRun } from "./lib/constructor-matrix-save-dry-run";
+import {
+  isInternalMatrixConstructorUiEnabled,
+  isMatrixConstructorLimitedPrimaryPilotEnabled,
+} from "./lib/feature-flags";
 
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api/v1";
 const mobileAppDownloadUrl =
   process.env.NEXT_PUBLIC_MOBILE_APP_DOWNLOAD_URL?.trim() ||
   "/downloads/perform-mobile-android.apk";
 const SHOW_OFFLINE_CENTER_NAV = false;
+const SHOW_INTERNAL_MATRIX_CONSTRUCTOR_UI = isInternalMatrixConstructorUiEnabled();
+const ENABLE_MATRIX_CONSTRUCTOR_LIMITED_PRIMARY_PILOT =
+  isMatrixConstructorLimitedPrimaryPilotEnabled();
 const DISPLAY_TIME_ZONE = "Europe/Sofia";
 type CoachPeriodPresetDays = 7 | 15 | 30;
 type ConstructorDraftResponse = {
@@ -1186,6 +1218,46 @@ async function apiRequest<T>(path: string, options?: RequestInit): Promise<T> {
   }
 
   return (await response.json()) as T;
+}
+
+function requestConstructorMatrixPreview(
+  input: ConstructorInput,
+  options: ConstructorMatrixPreviewApiOptions,
+) {
+  return apiRequest<ConstructorMatrixPreviewResponse>(
+    "/plans/constructor/internal/matrix-preview",
+    {
+      method: "POST",
+      body: JSON.stringify({ input, options }),
+    },
+  );
+}
+
+function requestConstructorMatrixRolloutDecision(
+  input: ConstructorInput,
+  options: MatrixConstructorRolloutOptions,
+) {
+  return apiRequest<MatrixConstructorRolloutDecision>(
+    "/plans/constructor/internal/matrix-rollout-decision",
+    {
+      method: "POST",
+      body: JSON.stringify({ input, options }),
+    },
+  );
+}
+
+function requestMatrixPrimaryPilotServerSaveDryRun(
+  input: ConstructorInput,
+  rolloutOptions: MatrixConstructorRolloutOptions,
+  templateName?: string,
+) {
+  return apiRequest<MatrixPrimaryPilotServerSaveDryRunResponse>(
+    "/plans/constructor/internal/matrix-primary-pilot-save-dry-run",
+    {
+      method: "POST",
+      body: JSON.stringify({ input, rolloutOptions, templateName }),
+    },
+  );
 }
 
 function copyFor(language: Language, values: Record<Language, string>) {
@@ -9452,6 +9524,46 @@ export function PageClient({
     useState<PlanTemplatePayload | null>(null);
   const [constructorBusy, setConstructorBusy] = useState(false);
   const [constructorMessage, setConstructorMessage] = useState("");
+  const [constructorMatrixPreview, setConstructorMatrixPreview] =
+    useState<ConstructorMatrixPreviewResponse | null>(null);
+  const [constructorMatrixPreviewInput, setConstructorMatrixPreviewInput] =
+    useState<ConstructorInput | null>(null);
+  const [constructorMatrixRolloutDecision, setConstructorMatrixRolloutDecision] =
+    useState<MatrixConstructorRolloutDecision | null>(null);
+  const [constructorMatrixServerSaveDryRun, setConstructorMatrixServerSaveDryRun] =
+    useState<MatrixPrimaryPilotServerSaveDryRunResponse | null>(null);
+  const [constructorMatrixWorkspace, setConstructorMatrixWorkspace] =
+    useState<ConstructorMatrixWorkspaceState>(CLOSED_CONSTRUCTOR_MATRIX_WORKSPACE);
+  const [activeConstructorDraftSource, setActiveConstructorDraftSource] =
+    useState<ActiveConstructorDraftSource>("legacy");
+  const [constructorMatrixPreviewBusy, setConstructorMatrixPreviewBusy] = useState(false);
+  const [constructorMatrixPreviewError, setConstructorMatrixPreviewError] = useState("");
+  const [constructorMatrixRolloutError, setConstructorMatrixRolloutError] = useState("");
+  const [constructorMatrixServerSaveDryRunError, setConstructorMatrixServerSaveDryRunError] =
+    useState("");
+  const [constructorMatrixIncludeInfoDifferences, setConstructorMatrixIncludeInfoDifferences] =
+    useState(false);
+  useEffect(() => {
+    setConstructorMatrixWorkspace(CLOSED_CONSTRUCTOR_MATRIX_WORKSPACE);
+    setConstructorMatrixPreviewInput(null);
+    setConstructorMatrixServerSaveDryRun(null);
+    setConstructorMatrixServerSaveDryRunError("");
+    setActiveConstructorDraftSource("legacy");
+  }, [constructorForm]);
+  useEffect(() => {
+    if (!SHOW_INTERNAL_MATRIX_CONSTRUCTOR_UI) {
+      setConstructorMatrixPreview(null);
+      setConstructorMatrixPreviewInput(null);
+      setConstructorMatrixRolloutDecision(null);
+      setConstructorMatrixServerSaveDryRun(null);
+      setConstructorMatrixWorkspace(CLOSED_CONSTRUCTOR_MATRIX_WORKSPACE);
+      setActiveConstructorDraftSource("legacy");
+      setConstructorMatrixPreviewBusy(false);
+      setConstructorMatrixPreviewError("");
+      setConstructorMatrixRolloutError("");
+      setConstructorMatrixServerSaveDryRunError("");
+    }
+  }, []);
   const [seasonDisplayMode, setSeasonDisplayMode] =
     useState<SeasonDisplayMode>("hybrid");
   const [seasonEditorMode, setSeasonEditorMode] = useState<SeasonEditorMode>(
@@ -14164,6 +14276,9 @@ export function PageClient({
     setConstructorBusy(true);
     setConstructorMessage("");
     setErrorMessage("");
+    setConstructorMatrixWorkspace(CLOSED_CONSTRUCTOR_MATRIX_WORKSPACE);
+    setConstructorMatrixPreviewInput(null);
+    setActiveConstructorDraftSource("legacy");
 
     try {
       if (isPreviewMode) {
@@ -14208,7 +14323,168 @@ export function PageClient({
     }
   }
 
+  async function handleBuildConstructorMatrixPreview() {
+    if (!SHOW_INTERNAL_MATRIX_CONSTRUCTOR_UI) {
+      return;
+    }
+
+    const input = buildConstructorInputFromForm();
+
+    if (!input) {
+      return;
+    }
+
+    const options: ConstructorMatrixPreviewApiOptions = {
+      includeDrafts: true,
+      includeComparisonReport: true,
+      includeSafetyDetails: true,
+      explanationDepth: "normal",
+      includeInfoDifferences: constructorMatrixIncludeInfoDifferences,
+    };
+
+    setConstructorMatrixPreviewBusy(true);
+    setConstructorMatrixPreviewError("");
+    setConstructorMatrixRolloutError("");
+    setConstructorMatrixServerSaveDryRunError("");
+    setConstructorMatrixPreview(null);
+    setConstructorMatrixPreviewInput(input);
+    setConstructorMatrixRolloutDecision(null);
+    setConstructorMatrixServerSaveDryRun(null);
+    setConstructorMatrixWorkspace(CLOSED_CONSTRUCTOR_MATRIX_WORKSPACE);
+    setActiveConstructorDraftSource("legacy");
+
+    try {
+      const rolloutOptions: MatrixConstructorRolloutOptions = {
+        previewOptions: options,
+      };
+      const serverDryRunRequest = ENABLE_MATRIX_CONSTRUCTOR_LIMITED_PRIMARY_PILOT
+        ? requestMatrixPrimaryPilotServerSaveDryRun(
+            input,
+            rolloutOptions,
+            selectedConstructorCompetitionPlan?.competitionTitle
+              ? `PERFORM Matrix Primary Pilot Dry Run • ${selectedConstructorCompetitionPlan.competitionTitle}`
+              : "PERFORM Matrix Primary Pilot Dry Run",
+          )
+        : Promise.resolve(null);
+      const [previewResult, rolloutResult, serverDryRunResult] = await Promise.allSettled([
+        requestConstructorMatrixPreview(input, options),
+        requestConstructorMatrixRolloutDecision(input, rolloutOptions),
+        serverDryRunRequest,
+      ]);
+
+      if (previewResult.status === "fulfilled") {
+        setConstructorMatrixPreview(previewResult.value);
+      } else {
+        const message =
+          previewResult.reason instanceof Error
+            ? previewResult.reason.message
+            : String(previewResult.reason);
+
+        setConstructorMatrixPreviewError(message);
+      }
+
+      if (rolloutResult.status === "fulfilled") {
+        setConstructorMatrixRolloutDecision(rolloutResult.value);
+      } else {
+        const message =
+          rolloutResult.reason instanceof Error
+            ? rolloutResult.reason.message
+            : String(rolloutResult.reason);
+
+        setConstructorMatrixRolloutError(message);
+      }
+
+      if (serverDryRunResult.status === "fulfilled") {
+        setConstructorMatrixServerSaveDryRun(serverDryRunResult.value);
+      } else {
+        const message =
+          serverDryRunResult.reason instanceof Error
+            ? serverDryRunResult.reason.message
+            : String(serverDryRunResult.reason);
+
+        setConstructorMatrixServerSaveDryRunError(message);
+      }
+    } finally {
+      setConstructorMatrixPreviewBusy(false);
+    }
+  }
+
+  function handleOpenConstructorMatrixWorkspace() {
+    if (
+      !SHOW_INTERNAL_MATRIX_CONSTRUCTOR_UI ||
+      !canOpenConstructorMatrixWorkspace({
+        decision: constructorMatrixRolloutDecision,
+        preview: constructorMatrixPreview,
+        matrixDraft: constructorMatrixPreviewMatrixDraft,
+        safetyErrorCount: constructorMatrixPreviewSafetyErrorCount,
+      }) ||
+      !constructorMatrixPreviewMatrixDraft
+    ) {
+      return;
+    }
+
+    setConstructorMatrixWorkspace({
+      open: true,
+      draft: constructorMatrixPreviewMatrixDraft,
+      source: "rollout_preview",
+      readOnly: true,
+    });
+    setActiveConstructorDraftSource("legacy");
+  }
+
+  function handleCloseConstructorMatrixWorkspace() {
+    setConstructorMatrixWorkspace(CLOSED_CONSTRUCTOR_MATRIX_WORKSPACE);
+    setActiveConstructorDraftSource("legacy");
+  }
+
+  function handleActivateConstructorMatrixInternalDraft() {
+    if (
+      !SHOW_INTERNAL_MATRIX_CONSTRUCTOR_UI ||
+      !canActivateConstructorMatrixInternalDraft({
+        workspace: constructorMatrixWorkspace,
+        decision: constructorMatrixRolloutDecision,
+        preview: constructorMatrixPreview,
+        matrixDraft: constructorMatrixPreviewMatrixDraft,
+        safetyErrorCount: constructorMatrixPreviewSafetyErrorCount,
+      })
+    ) {
+      return;
+    }
+
+    setActiveConstructorDraftSource("matrix_internal");
+  }
+
+  function handleActivateConstructorMatrixPrimaryPilotDraft() {
+    if (
+      !SHOW_INTERNAL_MATRIX_CONSTRUCTOR_UI ||
+      !ENABLE_MATRIX_CONSTRUCTOR_LIMITED_PRIMARY_PILOT ||
+      !constructorMatrixPrimaryPilotEligibility.allowed ||
+      !constructorMatrixPrimaryPilotServerGate.allowed ||
+      !constructorMatrixWorkspace.open ||
+      !constructorMatrixWorkspace.draft
+    ) {
+      return;
+    }
+
+    setActiveConstructorDraftSource("matrix_primary_pilot");
+  }
+
+  function handleReturnToLegacyConstructorDraft() {
+    setActiveConstructorDraftSource("legacy");
+  }
+
   async function handleSaveConstructorTemplate() {
+    if (!isConstructorDraftSaveAllowed(activeConstructorDraftSource)) {
+      setConstructorMessage(
+        copyFor(language, {
+          en: "Matrix internal draft is read-only and cannot be saved as a template.",
+          ru: "Matrix internal draft доступен только read-only и не сохраняется как шаблон.",
+          bg: "Matrix internal draft е само read-only и не се записва като шаблон.",
+        }),
+      );
+      return;
+    }
+
     if (!constructorTemplatePayload) {
       setConstructorMessage(
         copyFor(language, {
@@ -15362,13 +15638,153 @@ export function PageClient({
         constructorSeasonStrategySnapshot.targetCompetition.role ?? "-"
       }`
     : copyFor(language, { en: "No target start", ru: "Целевой старт не выбран", bg: "Няма целеви старт" });
-  const constructorConfidenceLabel = constructorDraft
+  const activeConstructorDraftIsMatrixCandidate =
+    SHOW_INTERNAL_MATRIX_CONSTRUCTOR_UI &&
+    (activeConstructorDraftSource === "matrix_internal" ||
+      activeConstructorDraftSource === "matrix_primary_pilot") &&
+    constructorMatrixWorkspace.open &&
+    Boolean(constructorMatrixWorkspace.draft);
+  const activeConstructorDraftIsMatrixPrimaryPilot =
+    activeConstructorDraftSource === "matrix_primary_pilot" &&
+    activeConstructorDraftIsMatrixCandidate;
+  const activeConstructorDraft = activeConstructorDraftIsMatrixCandidate
+    ? constructorMatrixWorkspace.draft
+    : constructorDraft;
+  const constructorConfidenceLabel = activeConstructorDraft
     ? ({
         high: copyFor(language, { en: "High", ru: "Высокая", bg: "Висока" }),
         medium: copyFor(language, { en: "Medium", ru: "Средняя", bg: "Средна" }),
         low: copyFor(language, { en: "Low", ru: "Низкая", bg: "Ниска" }),
-      } satisfies Record<ConstructorDraft["confidence"], string>)[constructorDraft.confidence]
+      } satisfies Record<ConstructorDraft["confidence"], string>)[activeConstructorDraft.confidence]
     : "-";
+  const constructorMatrixPreviewMatrixDraft = getConstructorMatrixPreviewMatrixDraft(
+    constructorMatrixPreview,
+  );
+  const constructorMatrixPreviewSafetyErrorCount =
+    getConstructorMatrixSafetyErrorCount(constructorMatrixPreview);
+  const constructorMatrixPilotReadinessState = useMemo<{
+    readiness: MatrixPilotReadinessResult | null;
+    error: string;
+  }>(() => {
+    if (
+      !SHOW_INTERNAL_MATRIX_CONSTRUCTOR_UI ||
+      !constructorMatrixPreview ||
+      !constructorMatrixRolloutDecision ||
+      !constructorMatrixPreviewInput
+    ) {
+      return { readiness: null, error: "" };
+    }
+
+    try {
+      return {
+        readiness: evaluateMatrixPilotReadiness(constructorMatrixPreviewInput, {
+          rolloutOptions: {
+            previewOptions: {
+              includeDrafts: true,
+              includeComparisonReport: true,
+              includeSafetyDetails: true,
+              includeInfoDifferences: constructorMatrixIncludeInfoDifferences,
+            },
+          },
+        }),
+        error: "",
+      };
+    } catch (error) {
+      return {
+        readiness: null,
+        error:
+          error instanceof Error
+            ? error.message
+            : copyFor(language, {
+                en: "Pilot readiness evaluation failed.",
+                ru: "Pilot readiness evaluation не прошёл.",
+                bg: "Pilot readiness evaluation не мина.",
+              }),
+      };
+    }
+  }, [
+    constructorMatrixIncludeInfoDifferences,
+    constructorMatrixPreview,
+    constructorMatrixPreviewInput,
+    constructorMatrixRolloutDecision,
+    language,
+  ]);
+  const constructorMatrixPrimaryPilotEligibility = useMemo(
+    () =>
+      canUseMatrixPrimaryPilot({
+        activeDraftSource: activeConstructorDraftSource,
+        internalUiEnabled: SHOW_INTERNAL_MATRIX_CONSTRUCTOR_UI,
+        limitedPilotEnabled: ENABLE_MATRIX_CONSTRUCTOR_LIMITED_PRIMARY_PILOT,
+        preview: constructorMatrixPreview,
+        rolloutDecision: constructorMatrixRolloutDecision,
+        pilotReadiness: constructorMatrixPilotReadinessState.readiness,
+        matrixDraft: constructorMatrixPreviewMatrixDraft,
+      }),
+    [
+      activeConstructorDraftSource,
+      constructorMatrixPilotReadinessState.readiness,
+      constructorMatrixPreview,
+      constructorMatrixPreviewMatrixDraft,
+      constructorMatrixRolloutDecision,
+    ],
+  );
+  const constructorMatrixPrimaryPilotSaveDryRun = useMemo(
+    () =>
+      buildMatrixPrimaryPilotSaveDryRun({
+        activeDraftSource: activeConstructorDraftSource,
+        draft: constructorMatrixWorkspace.draft,
+        eligibility: constructorMatrixPrimaryPilotEligibility,
+        templateName: selectedConstructorCompetitionPlan?.competitionTitle
+          ? `PERFORM Matrix Primary Pilot Dry Run • ${selectedConstructorCompetitionPlan.competitionTitle}`
+          : "PERFORM Matrix Primary Pilot Dry Run",
+      }),
+    [
+      activeConstructorDraftSource,
+      constructorMatrixPrimaryPilotEligibility,
+      constructorMatrixWorkspace.draft,
+      selectedConstructorCompetitionPlan?.competitionTitle,
+    ],
+  );
+  const constructorMatrixPrimaryPilotServerGate = useMemo(
+    () =>
+      canUseMatrixPrimaryPilotWithServerEvidence({
+        serverResult: constructorMatrixServerSaveDryRun,
+        serverError: constructorMatrixServerSaveDryRunError,
+        localRolloutDecision: constructorMatrixRolloutDecision,
+        localPilotReadiness: constructorMatrixPilotReadinessState.readiness,
+      }),
+    [
+      constructorMatrixPilotReadinessState.readiness,
+      constructorMatrixRolloutDecision,
+      constructorMatrixServerSaveDryRun,
+      constructorMatrixServerSaveDryRunError,
+    ],
+  );
+  const constructorMatrixWorkspaceCanOpen =
+    SHOW_INTERNAL_MATRIX_CONSTRUCTOR_UI &&
+    canOpenConstructorMatrixWorkspace({
+      decision: constructorMatrixRolloutDecision,
+      preview: constructorMatrixPreview,
+      matrixDraft: constructorMatrixPreviewMatrixDraft,
+      safetyErrorCount: constructorMatrixPreviewSafetyErrorCount,
+    });
+  const constructorMatrixInternalDraftCanActivate =
+    SHOW_INTERNAL_MATRIX_CONSTRUCTOR_UI &&
+    canActivateConstructorMatrixInternalDraft({
+      workspace: constructorMatrixWorkspace,
+      decision: constructorMatrixRolloutDecision,
+      preview: constructorMatrixPreview,
+      matrixDraft: constructorMatrixPreviewMatrixDraft,
+      safetyErrorCount: constructorMatrixPreviewSafetyErrorCount,
+    });
+  const constructorMatrixWorkspaceUnavailableReason =
+    getConstructorMatrixWorkspaceUnavailableReason({
+      language,
+      decision: constructorMatrixRolloutDecision,
+      preview: constructorMatrixPreview,
+      matrixDraft: constructorMatrixPreviewMatrixDraft,
+      safetyErrorCount: constructorMatrixPreviewSafetyErrorCount,
+    });
   const topOverviewItems = [
     {
       label: t("athlete"),
@@ -21930,33 +22346,33 @@ export function PageClient({
                     <strong>{constructorCalendarSourceText}</strong>
                     <p>{constructorPhaseRecommendationText}</p>
                   </div>
-                  {constructorDraft ? (
+                  {activeConstructorDraft ? (
                     <>
                       <div className="constructor-decision-card">
-                        <strong>{constructorDraft.understood.mainTask}</strong>
-                        <p>{constructorDraft.understood.interpretation}</p>
-                        <small>{constructorDraft.understood.limitation}</small>
+                        <strong>{activeConstructorDraft.understood.mainTask}</strong>
+                        <p>{activeConstructorDraft.understood.interpretation}</p>
+                        <small>{activeConstructorDraft.understood.limitation}</small>
                       </div>
                       <div className="constructor-focus-card">
                         <div className="summary-topline">
-                          <strong>{constructorDraft.focusPlan.title}</strong>
+                          <strong>{activeConstructorDraft.focusPlan.title}</strong>
                           <span>
-                            {constructorDraft.focusPlan.developmentAllowed
+                            {activeConstructorDraft.focusPlan.developmentAllowed
                               ? copyFor(language, { en: "Development allowed", ru: "Развитие разрешено", bg: "Развитието е разрешено" })
                               : copyFor(language, { en: "No development load", ru: "Развитие запрещено", bg: "Без развиващо натоварване" })}
                           </span>
                         </div>
                         <div className="constructor-focus-list">
-                          {constructorDraft.focusPlan.items.map((item) => (
+                          {activeConstructorDraft.focusPlan.items.map((item) => (
                             <span key={`${item.goalType}-${item.mode}`}>
                               <strong>{item.label}</strong>
                               <small>{constructorGoalModeLabel(item.mode)}</small>
                             </span>
                           ))}
                         </div>
-                        {constructorDraft.focusPlan.phaseMap.length ? (
+                        {activeConstructorDraft.focusPlan.phaseMap.length ? (
                           <div className="constructor-phase-map">
-                            {constructorDraft.focusPlan.phaseMap.map((phase) => (
+                            {activeConstructorDraft.focusPlan.phaseMap.map((phase) => (
                               <article key={`${phase.range}-${phase.title}`}>
                                 <span>{phase.range}</span>
                                 <strong>{phase.title}</strong>
@@ -21969,25 +22385,25 @@ export function PageClient({
                       <div className="constructor-mini-grid">
                         <article>
                           <span>{copyFor(language, { en: "Cards", ru: "Методики", bg: "Методики" })}</span>
-                          <strong>{constructorDraft.selectedCards.length}</strong>
+                          <strong>{activeConstructorDraft.selectedCards.length}</strong>
                           <p>
-                            {constructorDraft.selectedCards.map((card) => card.title).join(", ") ||
+                            {activeConstructorDraft.selectedCards.map((card) => card.title).join(", ") ||
                               ui("notGenerated")}
                           </p>
                         </article>
                         <article>
                           <span>{copyFor(language, { en: "Missing", ru: "Не хватает", bg: "Липсва" })}</span>
-                          <strong>{constructorDraft.missingData.length}</strong>
+                          <strong>{activeConstructorDraft.missingData.length}</strong>
                           <p>
-                            {constructorDraft.missingData[0]?.message ??
+                            {activeConstructorDraft.missingData[0]?.message ??
                               copyFor(language, { en: "Enough data for a draft.", ru: "Данных достаточно для черновика.", bg: "Данните стигат за чернова." })}
                           </p>
                         </article>
                         <article>
                           <span>{copyFor(language, { en: "Risks", ru: "Риски", bg: "Рискове" })}</span>
-                          <strong>{constructorDraft.riskFlags.length}</strong>
+                          <strong>{activeConstructorDraft.riskFlags.length}</strong>
                           <p>
-                            {constructorDraft.riskFlags[0]?.message ??
+                            {activeConstructorDraft.riskFlags[0]?.message ??
                               copyFor(language, { en: "No critical risks detected.", ru: "Критичных рисков не найдено.", bg: "Няма критични рискове." })}
                           </p>
                         </article>
@@ -21995,15 +22411,15 @@ export function PageClient({
                       <div className="constructor-explanation-list">
                         <div>
                           <span>{copyFor(language, { en: "Decision", ru: "Решение", bg: "Решение" })}</span>
-                          <p>{constructorDraft.explanation.mainDecision}</p>
+                          <p>{activeConstructorDraft.explanation.mainDecision}</p>
                         </div>
                         <div>
                           <span>{copyFor(language, { en: "Why now", ru: "Почему сейчас", bg: "Защо сега" })}</span>
-                          <p>{constructorDraft.explanation.whyNow}</p>
+                          <p>{activeConstructorDraft.explanation.whyNow}</p>
                         </div>
                         <div>
                           <span>{copyFor(language, { en: "Evidence", ru: "Доказательная база", bg: "Доказателства" })}</span>
-                          <p>{constructorDraft.explanation.evidenceSummary}</p>
+                          <p>{activeConstructorDraft.explanation.evidenceSummary}</p>
                         </div>
                       </div>
                     </>
@@ -22028,95 +22444,65 @@ export function PageClient({
                       })}
                     </strong>
                     <span>
-                      {constructorDraft
-                        ? `${constructorDraft.plan.cycleLengthDays} ${copyFor(language, { en: "days", ru: "дней", bg: "дни" })}`
+                      {activeConstructorDraft
+                        ? `${activeConstructorDraft.plan.cycleLengthDays} ${copyFor(language, { en: "days", ru: "дней", bg: "дни" })}`
                         : ui("notGenerated")}
                     </span>
                   </div>
-                  {constructorDraft ? (
+                  {activeConstructorDraft ? (
                     <>
-                      <div className="constructor-week-list">
-                        {constructorDraft.plan.weeks.map((week) => (
-                          <article className="constructor-week-card" key={`${week.weekNumber}-${week.title}`}>
-                            <div className="summary-topline">
-                              <strong>{week.title}</strong>
-                              <span>{constructorPhaseLabel(week.phase)}</span>
-                            </div>
-                            <p>{week.mainIntent}</p>
-                            <div className="constructor-day-list">
-                              {week.days.map((day) => (
-                                <div className="constructor-day-row" key={`${week.weekNumber}-${day.dayLabel}-${day.dayIntent}`}>
-                                  <div>
-                                    <strong>{day.dayLabel}</strong>
-                                    <span>{day.dayIntent}</span>
-                                  </div>
-                                  <small>{day.readinessGate}</small>
-                                  {(day.sessions?.length
-                                    ? day.sessions
-                                    : [
-                                        {
-                                          name: day.dayIntent,
-                                          notes: day.readinessGate,
-                                          orderIndex: 0,
-                                          blocks: day.blocks,
-                                        },
-                                      ]).map((session) => (
-                                    <div className="constructor-session-preview" key={`${day.dayLabel}-${session.name}`}>
-                                      <div className="summary-topline">
-                                        <strong>{session.name}</strong>
-                                        <span>{session.notes}</span>
-                                      </div>
-                                      <ul>
-                                        {session.blocks.map((block) => (
-                                          <li key={`${day.dayLabel}-${session.name}-${block.name}`}>
-                                            <span>{block.name}</span>
-                                            <strong>{block.volume}</strong>
-                                            {block.exercises?.length ? (
-                                              <small>
-                                                {block.exercises
-                                                  .slice(0, 3)
-                                                  .map((exercise) => {
-                                                    const details = [
-                                                      exercise.targetSets ? `${exercise.targetSets} сер.` : "",
-                                                      exercise.targetReps ? `${exercise.targetReps} повт.` : "",
-                                                      exercise.targetDurationMinutes
-                                                        ? `${exercise.targetDurationMinutes} мин`
-                                                        : "",
-                                                      exercise.targetRpe ? `RPE ${exercise.targetRpe}` : "",
-                                                    ]
-                                                      .filter(Boolean)
-                                                      .join(" / ");
-
-                                                    return details
-                                                      ? `${exercise.name} (${details})`
-                                                      : exercise.name;
-                                                  })
-                                                  .join("; ")}
-                                              </small>
-                                            ) : null}
-                                          </li>
-                                        ))}
-                                      </ul>
-                                    </div>
-                                  ))}
-                                </div>
-                              ))}
-                            </div>
-                          </article>
-                        ))}
-                      </div>
-                      <button
-                        className="primary-button"
-                        disabled={constructorBusy || !constructorTemplatePayload}
-                        onClick={handleSaveConstructorTemplate}
-                        type="button"
-                      >
-                        {copyFor(language, {
-                          en: "Save as template",
-                          ru: "Сохранить как шаблон",
-                          bg: "Запази като шаблон",
-                        })}
-                      </button>
+                      {activeConstructorDraftIsMatrixCandidate ? (
+                        <MatrixInternalDraftBanner
+                          activeDraftSource={activeConstructorDraftSource}
+                          language={language}
+                          onReturnToLegacyDraft={handleReturnToLegacyConstructorDraft}
+                        />
+                      ) : (
+                        <div className="constructor-active-draft-source-row">
+                          <span className="constructor-active-draft-badge">
+                            {copyFor(language, {
+                              en: "legacy draft",
+                              ru: "legacy draft",
+                              bg: "legacy draft",
+                            })}
+                          </span>
+                        </div>
+                      )}
+                      <MatrixDraftReadOnlyView
+                        draft={activeConstructorDraft}
+                        keyPrefix={
+                          activeConstructorDraftIsMatrixCandidate ? "matrix-active" : "legacy-active"
+                        }
+                        phaseLabel={constructorPhaseLabel}
+                      />
+                      {activeConstructorDraftIsMatrixCandidate ? (
+                        <p className="constructor-matrix-save-guard-note">
+                          {copyFor(language, {
+                            en: activeConstructorDraftIsMatrixPrimaryPilot
+                              ? "Save/template/assign actions are disabled for matrix_primary_pilot. This is a limited pilot view, not the default production path."
+                              : "Save/template/assign actions are disabled for matrix_internal. Return to legacy draft to save a template.",
+                            ru: activeConstructorDraftIsMatrixPrimaryPilot
+                              ? "Save/template/assign отключены для matrix_primary_pilot. Это limited pilot view, а не default production path."
+                              : "Save/template/assign отключены для matrix_internal. Вернитесь к legacy draft, чтобы сохранить шаблон.",
+                            bg: activeConstructorDraftIsMatrixPrimaryPilot
+                              ? "Save/template/assign са изключени за matrix_primary_pilot. Това е limited pilot view, не default production path."
+                              : "Save/template/assign са изключени за matrix_internal. Върнете legacy draft, за да запазите шаблон.",
+                          })}
+                        </p>
+                      ) : (
+                        <button
+                          className="primary-button"
+                          disabled={constructorBusy || !constructorTemplatePayload}
+                          onClick={handleSaveConstructorTemplate}
+                          type="button"
+                        >
+                          {copyFor(language, {
+                            en: "Save as template",
+                            ru: "Сохранить как шаблон",
+                            bg: "Запази като шаблон",
+                          })}
+                        </button>
+                      )}
                     </>
                   ) : (
                     <p className="placeholder-copy">
@@ -22128,6 +22514,44 @@ export function PageClient({
                     </p>
                   )}
                 </div>
+
+                {SHOW_INTERNAL_MATRIX_CONSTRUCTOR_UI ? (
+                  <MatrixConstructorPreviewPanel
+                    activeDraftSource={activeConstructorDraftSource}
+                    activationDisabledReason={constructorMatrixWorkspaceUnavailableReason}
+                    canActivateMatrixInternalDraft={constructorMatrixInternalDraftCanActivate}
+                    includeInfoDifferences={constructorMatrixIncludeInfoDifferences}
+                    language={language}
+                    limitedPrimaryPilotEnabled={ENABLE_MATRIX_CONSTRUCTOR_LIMITED_PRIMARY_PILOT}
+                    loadingLabel={ui("loading")}
+                    onActivateMatrixInternalDraft={handleActivateConstructorMatrixInternalDraft}
+                    onActivateMatrixPrimaryPilotDraft={
+                      handleActivateConstructorMatrixPrimaryPilotDraft
+                    }
+                    onBuildPreview={handleBuildConstructorMatrixPreview}
+                    onCloseWorkspace={handleCloseConstructorMatrixWorkspace}
+                    onIncludeInfoDifferencesChange={setConstructorMatrixIncludeInfoDifferences}
+                    onOpenWorkspace={handleOpenConstructorMatrixWorkspace}
+                    onReturnToLegacyDraft={handleReturnToLegacyConstructorDraft}
+                    phaseLabel={constructorPhaseLabel}
+                    preview={constructorMatrixPreview}
+                    previewBusy={constructorMatrixPreviewBusy}
+                    previewError={constructorMatrixPreviewError}
+                    pilotReadiness={constructorMatrixPilotReadinessState.readiness}
+                    pilotReadinessError={constructorMatrixPilotReadinessState.error}
+                    matrixPrimaryPilotEligibility={constructorMatrixPrimaryPilotEligibility}
+                    matrixPrimaryPilotSaveDryRun={constructorMatrixPrimaryPilotSaveDryRun}
+                    matrixPrimaryPilotServerGate={constructorMatrixPrimaryPilotServerGate}
+                    matrixPrimaryPilotServerSaveDryRun={constructorMatrixServerSaveDryRun}
+                    matrixPrimaryPilotServerSaveDryRunError={constructorMatrixServerSaveDryRunError}
+                    rolloutDecision={constructorMatrixRolloutDecision}
+                    rolloutError={constructorMatrixRolloutError}
+                    selectedCoachAthleteAvailable={Boolean(selectedCoachAthlete)}
+                    workspace={constructorMatrixWorkspace}
+                    workspaceCanOpen={constructorMatrixWorkspaceCanOpen}
+                    workspaceUnavailableReason={constructorMatrixWorkspaceUnavailableReason}
+                  />
+                ) : null}
               </section>
             ) : null}
 

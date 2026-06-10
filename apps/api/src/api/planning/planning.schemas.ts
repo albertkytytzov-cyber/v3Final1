@@ -6,6 +6,10 @@ import {
 import type {
   AssignedPlanPayload,
   AutoAssignMicrocyclePayload,
+  ConstructorMatrixPreviewRequest,
+  ConstructorMatrixPreviewApiOptions,
+  MatrixConstructorRolloutOptions,
+  MatrixPrimaryPilotServerSaveDryRunRequest,
   ConstructorInput,
   PlanBlockInput,
   PlanDayInput,
@@ -115,6 +119,180 @@ function toDayInput(value: unknown): PlanDayInput {
     notes: typeof day.notes === "string" ? day.notes : "",
     orderIndex: Number(day.orderIndex ?? 0),
     sessions,
+  };
+}
+
+function parseConstructorMatrixPreviewOptions(
+  value: unknown,
+): ConstructorMatrixPreviewApiOptions {
+  const payload = (value ?? {}) as Partial<ConstructorMatrixPreviewApiOptions>;
+  const options: ConstructorMatrixPreviewApiOptions = {};
+
+  if (typeof payload.includeDrafts === "boolean") {
+    options.includeDrafts = payload.includeDrafts;
+  }
+
+  if (typeof payload.includeComparisonReport === "boolean") {
+    options.includeComparisonReport = payload.includeComparisonReport;
+  }
+
+  if (typeof payload.includeSafetyDetails === "boolean") {
+    options.includeSafetyDetails = payload.includeSafetyDetails;
+  }
+
+  if (
+    payload.explanationDepth === "short" ||
+    payload.explanationDepth === "normal" ||
+    payload.explanationDepth === "detailed"
+  ) {
+    options.explanationDepth = payload.explanationDepth;
+  }
+
+  if (typeof payload.failOnMatrixSafetyError === "boolean") {
+    options.failOnMatrixSafetyError = payload.failOnMatrixSafetyError;
+  }
+
+  if (typeof payload.includeInfoDifferences === "boolean") {
+    options.includeInfoDifferences = payload.includeInfoDifferences;
+  }
+
+  if (payload.matrixOptions && typeof payload.matrixOptions === "object") {
+    const matrixOptions = payload.matrixOptions as NonNullable<
+      ConstructorMatrixPreviewApiOptions["matrixOptions"]
+    >;
+    const sanitizedMatrixOptions: NonNullable<
+      ConstructorMatrixPreviewApiOptions["matrixOptions"]
+    > = {};
+
+    if (matrixOptions.mode === "draft" || matrixOptions.mode === "skeleton_only") {
+      sanitizedMatrixOptions.mode = matrixOptions.mode;
+    }
+
+    if (typeof matrixOptions.useLegacyCardsAsContentLibrary === "boolean") {
+      sanitizedMatrixOptions.useLegacyCardsAsContentLibrary =
+        matrixOptions.useLegacyCardsAsContentLibrary;
+    }
+
+    if (typeof matrixOptions.includeForbiddenCandidates === "boolean") {
+      sanitizedMatrixOptions.includeForbiddenCandidates =
+        matrixOptions.includeForbiddenCandidates;
+    }
+
+    if (
+      matrixOptions.explanationDepth === "short" ||
+      matrixOptions.explanationDepth === "normal" ||
+      matrixOptions.explanationDepth === "detailed"
+    ) {
+      sanitizedMatrixOptions.explanationDepth = matrixOptions.explanationDepth;
+    }
+
+    options.matrixOptions = sanitizedMatrixOptions;
+  }
+
+  return options;
+}
+
+export function parseConstructorMatrixPreviewBody(
+  body: unknown,
+): ConstructorMatrixPreviewRequest {
+  const payload = (body ?? {}) as {
+    input?: unknown;
+    options?: unknown;
+  };
+
+  if (!payload.input) {
+    throw new Error("input is required");
+  }
+
+  return {
+    input: parseConstructorDraftBody(payload.input),
+    options: parseConstructorMatrixPreviewOptions(payload.options),
+  };
+}
+
+function readStringArray(value: unknown) {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : undefined;
+}
+
+function parseConstructorMatrixRolloutOptions(
+  value: unknown,
+): MatrixConstructorRolloutOptions {
+  const payload = (value ?? {}) as Partial<MatrixConstructorRolloutOptions>;
+  const options: MatrixConstructorRolloutOptions = {};
+
+  if (payload.previewOptions && typeof payload.previewOptions === "object") {
+    options.previewOptions = parseConstructorMatrixPreviewOptions(payload.previewOptions);
+  }
+
+  if (typeof payload.disabled === "boolean") {
+    options.disabled = payload.disabled;
+  }
+
+  if (typeof payload.disabledReason === "string") {
+    options.disabledReason = payload.disabledReason;
+  }
+
+  const forbiddenRiskCodes = readStringArray(payload.forbiddenRiskCodes);
+  if (forbiddenRiskCodes) {
+    options.forbiddenRiskCodes = forbiddenRiskCodes as MatrixConstructorRolloutOptions["forbiddenRiskCodes"];
+  }
+
+  const primaryAllowlist = readStringArray(payload.primaryAllowlist);
+  if (primaryAllowlist) {
+    options.primaryAllowlist = primaryAllowlist as MatrixConstructorRolloutOptions["primaryAllowlist"];
+  }
+
+  const internalAllowlist = readStringArray(payload.internalAllowlist);
+  if (internalAllowlist) {
+    options.internalAllowlist = internalAllowlist as MatrixConstructorRolloutOptions["internalAllowlist"];
+  }
+
+  const previewAllowlist = readStringArray(payload.previewAllowlist);
+  if (previewAllowlist) {
+    options.previewAllowlist = previewAllowlist as MatrixConstructorRolloutOptions["previewAllowlist"];
+  }
+
+  return options;
+}
+
+export function parseConstructorMatrixRolloutDecisionBody(body: unknown): {
+  input: ConstructorInput;
+  options?: MatrixConstructorRolloutOptions;
+} {
+  const payload = (body ?? {}) as {
+    input?: unknown;
+    options?: unknown;
+  };
+
+  if (!payload.input) {
+    throw new Error("input is required");
+  }
+
+  return {
+    input: parseConstructorDraftBody(payload.input),
+    options: parseConstructorMatrixRolloutOptions(payload.options),
+  };
+}
+
+export function parseMatrixPrimaryPilotSaveDryRunBody(
+  body: unknown,
+): MatrixPrimaryPilotServerSaveDryRunRequest {
+  const payload = (body ?? {}) as {
+    input?: unknown;
+    rolloutOptions?: unknown;
+    templateName?: unknown;
+  };
+
+  if (!payload.input) {
+    throw new Error("input is required");
+  }
+
+  return {
+    input: parseConstructorDraftBody(payload.input),
+    rolloutOptions: parseConstructorMatrixRolloutOptions(payload.rolloutOptions),
+    templateName: typeof payload.templateName === "string" ? payload.templateName : undefined,
   };
 }
 
