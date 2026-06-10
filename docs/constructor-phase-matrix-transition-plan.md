@@ -3354,3 +3354,33 @@ Stage 24 does not change:
 - matrix default behavior.
 
 It only adds regression coverage for the existing internal UI gate.
+
+## 36. Stage 25: Read-only source persistence guard
+
+Stage 25 extends the automated matrix UI gate check with an explicit
+save/template guard for active constructor draft sources.
+
+The invariant is:
+
+- `legacy` remains save-capable;
+- `matrix_internal` is read-only and cannot enter save/template flow;
+- `matrix_primary_pilot` is read-only and cannot enter save/template flow.
+
+This is checked by:
+
+```bash
+npm run check:constructor-matrix-ui-gates
+```
+
+### 36.1 Why this matters
+
+The limited primary pilot can show a matrix draft in the main draft panel after
+server evidence passes, but it must still behave as a review-only candidate. The
+coach can inspect it and return to legacy, but cannot save it as a template or
+assign it through the constructor draft path.
+
+### 36.2 Guardrails
+
+Stage 25 does not add a persistence path. It only verifies that the existing
+`matrix_internal` and `matrix_primary_pilot` sources stay blocked from
+save/template flow while legacy behavior remains unchanged.

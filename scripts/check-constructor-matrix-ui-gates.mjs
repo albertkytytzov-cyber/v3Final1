@@ -14,6 +14,8 @@ function assert(condition, message) {
 
 const gateModule = await import("../apps/web/app/lib/constructor-matrix-primary-pilot-server-gate.ts");
 const { canUseMatrixPrimaryPilotWithServerEvidence } = gateModule.default ?? gateModule;
+const matrixUiModule = await import("../apps/web/app/lib/constructor-matrix-ui.ts");
+const { isConstructorDraftSaveAllowed } = matrixUiModule.default ?? matrixUiModule;
 
 const previewOptions = {
   includeDrafts: true,
@@ -153,6 +155,21 @@ assert(
   `Expected server evidence mismatch reason, got ${mismatchGate.reason}`,
 );
 
+const saveAllowed = {
+  legacy: isConstructorDraftSaveAllowed("legacy"),
+  matrix_internal: isConstructorDraftSaveAllowed("matrix_internal"),
+  matrix_primary_pilot: isConstructorDraftSaveAllowed("matrix_primary_pilot"),
+};
+assert(saveAllowed.legacy, "Legacy constructor draft must remain save-capable");
+assert(
+  !saveAllowed.matrix_internal,
+  "matrix_internal draft must remain read-only and blocked from save/template flow",
+);
+assert(
+  !saveAllowed.matrix_primary_pilot,
+  "matrix_primary_pilot draft must remain read-only and blocked from save/template flow",
+);
+
 console.log(
   JSON.stringify(
     {
@@ -170,6 +187,7 @@ console.log(
         allowed: mismatchGate.allowed,
         reason: mismatchGate.reason,
       },
+      saveAllowed,
     },
     null,
     2,

@@ -457,6 +457,19 @@ The check uses the fixture pack to verify:
 This gives the fixture pack an explicit UI-gate regression layer without
 snapshotting the full rendered draft.
 
+## Read-only source persistence guard
+
+Stage 25 extends `npm run check:constructor-matrix-ui-gates` with source-level
+save rules:
+
+- `legacy` must stay save-capable;
+- `matrix_internal` must stay read-only;
+- `matrix_primary_pilot` must stay read-only.
+
+The check is intentionally small: it protects the constructor draft source
+contract without adding browser snapshots or enabling any persistence path for
+matrix candidates.
+
 ## Что не проверяется
 
 Fixtures не делают full snapshot:

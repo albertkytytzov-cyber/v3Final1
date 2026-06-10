@@ -1572,3 +1572,16 @@ The check is included in root `npm run check` and covers:
 This keeps the primary pilot UI gate tied to explicit evidence and prevents a
 future UI-only refactor from accidentally enabling `matrix_primary_pilot`
 without a passing server dry-run.
+
+### 15.17 Read-only source persistence guard
+
+Stage 25 extends `npm run check:constructor-matrix-ui-gates` to verify the
+constructor draft source persistence rule:
+
+- `legacy` is save-capable;
+- `matrix_internal` is read-only;
+- `matrix_primary_pilot` is read-only.
+
+This protects the controlled pilot from accidentally turning a review-only
+matrix candidate into a template/save path while preserving the legacy save
+flow.
