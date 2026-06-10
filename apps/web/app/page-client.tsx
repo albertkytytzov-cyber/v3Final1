@@ -25,6 +25,7 @@ import {
   type ConstructorMatrixPreviewResponse,
   type MatrixConstructorRolloutDecision,
   type MatrixConstructorRolloutOptions,
+  type MatrixPrimaryPilotServerSaveDryRunResponse,
   type MatrixPilotReadinessResult,
   type ConstructorPhase,
   type CreateCompetitionPayload,
@@ -1240,6 +1241,20 @@ function requestConstructorMatrixRolloutDecision(
     {
       method: "POST",
       body: JSON.stringify({ input, options }),
+    },
+  );
+}
+
+function requestMatrixPrimaryPilotServerSaveDryRun(
+  input: ConstructorInput,
+  rolloutOptions: MatrixConstructorRolloutOptions,
+  templateName?: string,
+) {
+  return apiRequest<MatrixPrimaryPilotServerSaveDryRunResponse>(
+    "/plans/constructor/internal/matrix-primary-pilot-save-dry-run",
+    {
+      method: "POST",
+      body: JSON.stringify({ input, rolloutOptions, templateName }),
     },
   );
 }
@@ -9514,6 +9529,8 @@ export function PageClient({
     useState<ConstructorInput | null>(null);
   const [constructorMatrixRolloutDecision, setConstructorMatrixRolloutDecision] =
     useState<MatrixConstructorRolloutDecision | null>(null);
+  const [constructorMatrixServerSaveDryRun, setConstructorMatrixServerSaveDryRun] =
+    useState<MatrixPrimaryPilotServerSaveDryRunResponse | null>(null);
   const [constructorMatrixWorkspace, setConstructorMatrixWorkspace] =
     useState<ConstructorMatrixWorkspaceState>(CLOSED_CONSTRUCTOR_MATRIX_WORKSPACE);
   const [activeConstructorDraftSource, setActiveConstructorDraftSource] =
@@ -9521,11 +9538,15 @@ export function PageClient({
   const [constructorMatrixPreviewBusy, setConstructorMatrixPreviewBusy] = useState(false);
   const [constructorMatrixPreviewError, setConstructorMatrixPreviewError] = useState("");
   const [constructorMatrixRolloutError, setConstructorMatrixRolloutError] = useState("");
+  const [constructorMatrixServerSaveDryRunError, setConstructorMatrixServerSaveDryRunError] =
+    useState("");
   const [constructorMatrixIncludeInfoDifferences, setConstructorMatrixIncludeInfoDifferences] =
     useState(false);
   useEffect(() => {
     setConstructorMatrixWorkspace(CLOSED_CONSTRUCTOR_MATRIX_WORKSPACE);
     setConstructorMatrixPreviewInput(null);
+    setConstructorMatrixServerSaveDryRun(null);
+    setConstructorMatrixServerSaveDryRunError("");
     setActiveConstructorDraftSource("legacy");
   }, [constructorForm]);
   useEffect(() => {
@@ -9533,11 +9554,13 @@ export function PageClient({
       setConstructorMatrixPreview(null);
       setConstructorMatrixPreviewInput(null);
       setConstructorMatrixRolloutDecision(null);
+      setConstructorMatrixServerSaveDryRun(null);
       setConstructorMatrixWorkspace(CLOSED_CONSTRUCTOR_MATRIX_WORKSPACE);
       setActiveConstructorDraftSource("legacy");
       setConstructorMatrixPreviewBusy(false);
       setConstructorMatrixPreviewError("");
       setConstructorMatrixRolloutError("");
+      setConstructorMatrixServerSaveDryRunError("");
     }
   }, []);
   const [seasonDisplayMode, setSeasonDisplayMode] =
@@ -14321,18 +14344,31 @@ export function PageClient({
     setConstructorMatrixPreviewBusy(true);
     setConstructorMatrixPreviewError("");
     setConstructorMatrixRolloutError("");
+    setConstructorMatrixServerSaveDryRunError("");
     setConstructorMatrixPreview(null);
     setConstructorMatrixPreviewInput(input);
     setConstructorMatrixRolloutDecision(null);
+    setConstructorMatrixServerSaveDryRun(null);
     setConstructorMatrixWorkspace(CLOSED_CONSTRUCTOR_MATRIX_WORKSPACE);
     setActiveConstructorDraftSource("legacy");
 
     try {
-      const [previewResult, rolloutResult] = await Promise.allSettled([
+      const rolloutOptions: MatrixConstructorRolloutOptions = {
+        previewOptions: options,
+      };
+      const serverDryRunRequest = ENABLE_MATRIX_CONSTRUCTOR_LIMITED_PRIMARY_PILOT
+        ? requestMatrixPrimaryPilotServerSaveDryRun(
+            input,
+            rolloutOptions,
+            selectedConstructorCompetitionPlan?.competitionTitle
+              ? `PERFORM Matrix Primary Pilot Dry Run • ${selectedConstructorCompetitionPlan.competitionTitle}`
+              : "PERFORM Matrix Primary Pilot Dry Run",
+          )
+        : Promise.resolve(null);
+      const [previewResult, rolloutResult, serverDryRunResult] = await Promise.allSettled([
         requestConstructorMatrixPreview(input, options),
-        requestConstructorMatrixRolloutDecision(input, {
-          previewOptions: options,
-        }),
+        requestConstructorMatrixRolloutDecision(input, rolloutOptions),
+        serverDryRunRequest,
       ]);
 
       if (previewResult.status === "fulfilled") {
@@ -14355,6 +14391,17 @@ export function PageClient({
             : String(rolloutResult.reason);
 
         setConstructorMatrixRolloutError(message);
+      }
+
+      if (serverDryRunResult.status === "fulfilled") {
+        setConstructorMatrixServerSaveDryRun(serverDryRunResult.value);
+      } else {
+        const message =
+          serverDryRunResult.reason instanceof Error
+            ? serverDryRunResult.reason.message
+            : String(serverDryRunResult.reason);
+
+        setConstructorMatrixServerSaveDryRunError(message);
       }
     } finally {
       setConstructorMatrixPreviewBusy(false);
@@ -22477,6 +22524,8 @@ export function PageClient({
                     pilotReadinessError={constructorMatrixPilotReadinessState.error}
                     matrixPrimaryPilotEligibility={constructorMatrixPrimaryPilotEligibility}
                     matrixPrimaryPilotSaveDryRun={constructorMatrixPrimaryPilotSaveDryRun}
+                    matrixPrimaryPilotServerSaveDryRun={constructorMatrixServerSaveDryRun}
+                    matrixPrimaryPilotServerSaveDryRunError={constructorMatrixServerSaveDryRunError}
                     rolloutDecision={constructorMatrixRolloutDecision}
                     rolloutError={constructorMatrixRolloutError}
                     selectedCoachAthleteAvailable={Boolean(selectedCoachAthlete)}

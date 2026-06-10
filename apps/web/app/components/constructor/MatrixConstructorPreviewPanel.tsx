@@ -4,6 +4,7 @@ import type {
   ConstructorDraft,
   ConstructorMatrixPreviewResponse,
   MatrixConstructorRolloutDecision,
+  MatrixPrimaryPilotServerSaveDryRunResponse,
   MatrixPilotReadinessResult,
 } from "@training-platform/shared";
 import {
@@ -49,6 +50,8 @@ type MatrixConstructorPreviewPanelProps = {
   pilotReadinessError: string;
   matrixPrimaryPilotEligibility: MatrixPrimaryPilotEligibility;
   matrixPrimaryPilotSaveDryRun: MatrixPrimaryPilotSaveDryRunResult;
+  matrixPrimaryPilotServerSaveDryRun: MatrixPrimaryPilotServerSaveDryRunResponse | null;
+  matrixPrimaryPilotServerSaveDryRunError: string;
   rolloutDecision: MatrixConstructorRolloutDecision | null;
   rolloutError: string;
   selectedCoachAthleteAvailable: boolean;
@@ -80,6 +83,8 @@ export function MatrixConstructorPreviewPanel({
   pilotReadinessError,
   matrixPrimaryPilotEligibility,
   matrixPrimaryPilotSaveDryRun,
+  matrixPrimaryPilotServerSaveDryRun,
+  matrixPrimaryPilotServerSaveDryRunError,
   rolloutDecision,
   rolloutError,
   selectedCoachAthleteAvailable,
@@ -619,6 +624,8 @@ export function MatrixConstructorPreviewPanel({
         readiness={pilotReadiness}
         matrixPrimaryPilotEligibility={matrixPrimaryPilotEligibility}
         matrixPrimaryPilotSaveDryRun={matrixPrimaryPilotSaveDryRun}
+        matrixPrimaryPilotServerSaveDryRun={matrixPrimaryPilotServerSaveDryRun}
+        matrixPrimaryPilotServerSaveDryRunError={matrixPrimaryPilotServerSaveDryRunError}
         rolloutDecision={rolloutDecision}
         workspace={workspace}
       />

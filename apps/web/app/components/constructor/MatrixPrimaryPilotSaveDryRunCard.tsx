@@ -1,5 +1,6 @@
 "use client";
 
+import type { MatrixPrimaryPilotServerSaveDryRunResponse } from "@training-platform/shared";
 import type { MatrixPrimaryPilotSaveDryRunResult } from "../../lib/constructor-matrix-save-dry-run";
 import { matrixUiCopyFor } from "../../lib/constructor-matrix-ui";
 import type { Language } from "../../lib/i18n";
@@ -7,6 +8,8 @@ import type { Language } from "../../lib/i18n";
 type MatrixPrimaryPilotSaveDryRunCardProps = {
   language: Language;
   result: MatrixPrimaryPilotSaveDryRunResult;
+  serverResult?: MatrixPrimaryPilotServerSaveDryRunResponse | null;
+  serverError?: string;
 };
 
 function statusLabel(language: Language, status: MatrixPrimaryPilotSaveDryRunResult["status"]) {
@@ -45,7 +48,11 @@ function statusTone(status: MatrixPrimaryPilotSaveDryRunResult["status"]) {
 export function MatrixPrimaryPilotSaveDryRunCard({
   language,
   result,
+  serverResult,
+  serverError = "",
 }: MatrixPrimaryPilotSaveDryRunCardProps) {
+  const serverDryRun = serverResult?.dryRun ?? null;
+
   return (
     <article className={`constructor-matrix-preview-card constructor-matrix-save-dry-run-card ${statusTone(result.status)}`}>
       <div className="summary-topline">
@@ -132,6 +139,66 @@ export function MatrixPrimaryPilotSaveDryRunCard({
           ))}
         </ul>
       </details>
+
+      <section className="constructor-matrix-server-dry-run">
+        <div className="summary-topline">
+          <strong>
+            {matrixUiCopyFor(language, {
+              en: "Server dry-run evidence",
+              ru: "Server dry-run evidence",
+              bg: "Server dry-run evidence",
+            })}
+          </strong>
+          <span className={`constructor-matrix-save-dry-run-badge ${statusTone(serverDryRun?.status ?? "waiting")}`}>
+            {serverError
+              ? matrixUiCopyFor(language, {
+                  en: "server check failed",
+                  ru: "server check не прошёл",
+                  bg: "server check не мина",
+                })
+              : serverDryRun
+                ? statusLabel(language, serverDryRun.status)
+                : matrixUiCopyFor(language, {
+                    en: "not requested",
+                    ru: "не запрошено",
+                    bg: "не е заявено",
+                  })}
+          </span>
+        </div>
+        <p className="constructor-matrix-rollout-note">
+          {matrixUiCopyFor(language, {
+            en: "The server recomputes rollout, readiness and matrix draft before validating the same save payload candidate. This is still dry-run only.",
+            ru: "Сервер заново считает rollout, readiness и matrix draft перед проверкой того же save payload candidate. Это всё ещё только dry-run.",
+            bg: "Сървърът пресмята rollout, readiness и matrix draft преди проверката на save payload candidate. Това още е само dry-run.",
+          })}
+        </p>
+
+        {serverError ? (
+          <p className="constructor-matrix-server-dry-run-error">{serverError}</p>
+        ) : serverResult ? (
+          <div className="constructor-matrix-count-grid constructor-matrix-save-dry-run-grid">
+            {[
+              ["scenario", serverResult.rolloutDecision.scenario],
+              ["rollout", serverResult.rolloutDecision.mode],
+              ["readiness", serverResult.pilotReadiness.status],
+              ["server status", serverResult.dryRun.status],
+            ].map(([label, value]) => (
+              <span key={label}>
+                <small>{label}</small>
+                <strong>{value}</strong>
+              </span>
+            ))}
+          </div>
+        ) : (
+          <p className="constructor-matrix-rollout-note">
+            {matrixUiCopyFor(language, {
+              en: "Run matrix preview with limited pilot flag enabled to request server evidence.",
+              ru: "Запустите matrix preview с включённым limited pilot flag, чтобы получить server evidence.",
+              bg: "Пуснете matrix preview с включен limited pilot flag, за да получите server evidence.",
+            })}
+          </p>
+        )}
+      </section>
     </article>
   );
 }

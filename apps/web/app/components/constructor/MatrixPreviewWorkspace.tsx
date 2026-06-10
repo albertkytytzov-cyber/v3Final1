@@ -4,6 +4,7 @@ import type {
   ConstructorDraft,
   ConstructorMatrixPreviewResponse,
   MatrixConstructorRolloutDecision,
+  MatrixPrimaryPilotServerSaveDryRunResponse,
   MatrixPilotReadinessResult,
 } from "@training-platform/shared";
 import {
@@ -41,6 +42,8 @@ type MatrixPreviewWorkspaceProps = {
   readiness: MatrixPilotReadinessResult | null;
   matrixPrimaryPilotEligibility: MatrixPrimaryPilotEligibility;
   matrixPrimaryPilotSaveDryRun: MatrixPrimaryPilotSaveDryRunResult;
+  matrixPrimaryPilotServerSaveDryRun: MatrixPrimaryPilotServerSaveDryRunResponse | null;
+  matrixPrimaryPilotServerSaveDryRunError: string;
   rolloutDecision: MatrixConstructorRolloutDecision | null;
   workspace: ConstructorMatrixWorkspaceState;
 };
@@ -60,6 +63,8 @@ export function MatrixPreviewWorkspace({
   readiness,
   matrixPrimaryPilotEligibility,
   matrixPrimaryPilotSaveDryRun,
+  matrixPrimaryPilotServerSaveDryRun,
+  matrixPrimaryPilotServerSaveDryRunError,
   rolloutDecision,
   workspace,
 }: MatrixPreviewWorkspaceProps) {
@@ -277,6 +282,8 @@ export function MatrixPreviewWorkspace({
           <MatrixPrimaryPilotSaveDryRunCard
             language={language}
             result={matrixPrimaryPilotSaveDryRun}
+            serverError={matrixPrimaryPilotServerSaveDryRunError}
+            serverResult={matrixPrimaryPilotServerSaveDryRun}
           />
         </div>
       ) : null}

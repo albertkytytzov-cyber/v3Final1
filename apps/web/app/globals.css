@@ -6707,6 +6707,24 @@ td {
   grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
+.constructor-matrix-server-dry-run {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  border-top: 1px solid rgba(15, 118, 110, 0.14);
+  padding-top: 14px;
+}
+
+.constructor-matrix-server-dry-run-error {
+  margin: 0;
+  border: 1px solid rgba(239, 68, 68, 0.24);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: rgba(254, 242, 242, 0.82);
+  color: #991b1b;
+  font-weight: 850;
+}
+
 .constructor-matrix-workspace-overview {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }

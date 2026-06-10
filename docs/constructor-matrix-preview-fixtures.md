@@ -408,6 +408,18 @@ Smoke expectations:
 - no DB/API production save route is called;
 - production constructor draft remains legacy.
 
+## Internal UI server evidence
+
+Stage 22 adds UI visibility for the server dry-run evidence:
+
+- both flags off: no matrix UI and no server dry-run request;
+- internal UI on + limited pilot off: matrix preview works, but no server dry-run
+  request is made;
+- both flags on: matrix preview requests server dry-run evidence;
+- primary pilot panel shows local dry-run plus server dry-run;
+- server error is displayed as review evidence and does not enable save;
+- save/template/assign remains disabled for `matrix_primary_pilot`.
+
 Dry-run validates a generated `PlanTemplatePayload` candidate but does not save
 or expose the payload to save handlers.
 

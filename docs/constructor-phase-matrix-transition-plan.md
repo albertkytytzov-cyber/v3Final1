@@ -3200,3 +3200,63 @@ id and does not write anything to the database.
 
 Stage 21 is a backend validation gate for controlled pilot readiness, not a
 production save switch.
+
+## 33. Stage 22: Surface server dry-run evidence in internal UI
+
+Stage 22 connects the internal matrix workspace UI to the Stage 21 server
+dry-run route.
+
+This still does **not** enable real matrix save/assign.
+
+### 33.1 UI request
+
+When both feature flags are enabled:
+
+```bash
+NEXT_PUBLIC_INTERNAL_MATRIX_CONSTRUCTOR_UI=true
+NEXT_PUBLIC_MATRIX_CONSTRUCTOR_LIMITED_PRIMARY_PILOT=true
+```
+
+the internal matrix preview flow also requests:
+
+```text
+POST /api/v1/plans/constructor/internal/matrix-primary-pilot-save-dry-run
+```
+
+The request uses the same constructor input and rollout options as the internal
+matrix preview/rollout decision.
+
+When the limited pilot flag is off:
+
+- server dry-run is not requested;
+- legacy generation remains unchanged;
+- matrix preview behavior remains Stage 18/19 behavior.
+
+### 33.2 UI evidence
+
+The matrix primary pilot panel shows:
+
+- local dry-run result;
+- server dry-run result;
+- server rollout scenario;
+- server rollout mode;
+- server pilot readiness status;
+- server error, if the dry-run request failed.
+
+This makes the pilot UI explicit about whether the browser and server agree on
+save-readiness before any future guarded save work.
+
+### 33.3 Guardrails
+
+Stage 22 does not change:
+
+- production `/api/v1/plans/constructor/draft`;
+- `/api/v1/plans/templates`;
+- DB schema;
+- mobile contracts;
+- telemetry/storage;
+- real save/template/assign;
+- matrix default behavior.
+
+Server evidence is a review signal only. It is not a permission to save matrix
+as a real template.

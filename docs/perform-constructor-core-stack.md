@@ -1498,3 +1498,32 @@ Expected controlled-pilot behavior:
 - D-90 allowlisted primary scenario can pass the server dry-run;
 - D-3 close main-start stays preview-only/blocked for primary save;
 - travel and weigh-in stay internal-only and cannot pass primary pilot save dry-run.
+
+### 15.14 Internal UI server dry-run evidence
+
+Stage 22 surfaces the Stage 21 server dry-run inside the internal matrix
+workspace.
+
+When both flags are enabled:
+
+```bash
+NEXT_PUBLIC_INTERNAL_MATRIX_CONSTRUCTOR_UI=true
+NEXT_PUBLIC_MATRIX_CONSTRUCTOR_LIMITED_PRIMARY_PILOT=true
+```
+
+the matrix preview action also requests:
+
+```text
+POST /api/v1/plans/constructor/internal/matrix-primary-pilot-save-dry-run
+```
+
+The primary pilot panel then shows:
+
+- local dry-run status;
+- server dry-run status;
+- server rollout scenario/mode;
+- server pilot readiness;
+- server request error, if present.
+
+When the limited pilot flag is off, this server evidence is not requested or
+shown. Save/template/assign remains disabled for matrix pilot sources.
