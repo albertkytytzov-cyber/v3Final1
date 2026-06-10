@@ -2,9 +2,12 @@
 
 import type { MatrixConstructorRolloutDecision } from "@training-platform/shared";
 import {
+  constructorMatrixActionLabel,
   constructorMatrixRolloutBadgeClass,
   constructorMatrixRolloutLabel,
   constructorMatrixRolloutSupportText,
+  constructorMatrixModeLabel,
+  constructorMatrixScenarioLabel,
   matrixUiCopyFor,
 } from "../../lib/constructor-matrix-ui";
 import type { Language } from "../../lib/i18n";
@@ -34,7 +37,7 @@ export function MatrixRolloutDecisionCard({
           {matrixUiCopyFor(language, {
             en: "Use decision",
             ru: "Решение по применению",
-            bg: "Rollout decision",
+            bg: "Решение за приложение",
           })}
         </strong>
         {decision ? (
@@ -59,14 +62,17 @@ export function MatrixRolloutDecisionCard({
         <>
           <div className="constructor-matrix-count-grid constructor-matrix-rollout-grid">
             {[
-              ["mode", decision.mode],
+              [
+                matrixUiCopyFor(language, { en: "mode", ru: "режим", bg: "режим" }),
+                constructorMatrixModeLabel(language, decision.mode),
+              ],
               [
                 matrixUiCopyFor(language, { en: "scenario", ru: "сценарий", bg: "сценарий" }),
-                decision.scenario,
+                constructorMatrixScenarioLabel(language, decision.scenario),
               ],
               [
                 matrixUiCopyFor(language, { en: "action", ru: "действие", bg: "действие" }),
-                decision.recommendedAction,
+                constructorMatrixActionLabel(language, decision.recommendedAction),
               ],
               [
                 matrixUiCopyFor(language, { en: "apply", ru: "применение", bg: "прилагане" }),
@@ -75,9 +81,9 @@ export function MatrixRolloutDecisionCard({
                   : matrixUiCopyFor(language, { en: "not allowed", ru: "не разрешено", bg: "не разрешено" }),
               ],
               [
-                matrixUiCopyFor(language, { en: "allowlist", ru: "доступ", bg: "достъп" }),
+                matrixUiCopyFor(language, { en: "allowed case", ru: "разрешённый случай", bg: "разрешен случай" }),
                 decision.allowlisted
-                  ? matrixUiCopyFor(language, { en: "yes", ru: "есть", bg: "да" })
+                  ? matrixUiCopyFor(language, { en: "yes", ru: "да", bg: "да" })
                   : matrixUiCopyFor(language, { en: "no", ru: "нет", bg: "не" }),
               ],
               [
@@ -87,7 +93,7 @@ export function MatrixRolloutDecisionCard({
                   : matrixUiCopyFor(language, { en: "stop", ru: "стоп", bg: "стоп" }),
               ],
               [
-                matrixUiCopyFor(language, { en: "blockers", ru: "блокеры", bg: "блокери" }),
+                matrixUiCopyFor(language, { en: "limits", ru: "ограничения", bg: "ограничения" }),
                 decision.blockers.length,
               ],
             ].map(([label, value]) => (
@@ -141,15 +147,15 @@ export function MatrixRolloutDecisionCard({
               {matrixUiCopyFor(language, {
                 en: "Open new plan variant",
                 ru: "Открыть новый вариант плана",
-                bg: "Покажи matrix кандидата в preview workspace",
+                bg: "Отвори новия вариант на плана",
               })}
             </button>
             <p className="constructor-matrix-rollout-note">
               {workspaceCanOpen
                 ? matrixUiCopyFor(language, {
-                    en: "Available for review. It will not save, assign, or replace the current draft until the safety gate allows it.",
-                    ru: "Доступно для проверки. Не сохраняет, не назначает и не заменяет текущий черновик, пока это не разрешит safety-gate.",
-                    bg: "Достъпно само като read-only internal workspace. Не записва, не назначава и не заменя legacy draft.",
+                en: "Available for review. It will not save, assign, or replace the current draft until the safety gate allows it.",
+                    ru: "Доступно для проверки. Не сохраняет, не назначает и не заменяет текущий черновик, пока это не разрешит проверка безопасности.",
+                    bg: "Достъпно е за проверка. Не записва, не назначава и не заменя текущата чернова, докато проверката за безопасност не го разреши.",
                   })
                 : workspaceUnavailableReason}
             </p>
@@ -158,9 +164,9 @@ export function MatrixRolloutDecisionCard({
       ) : (
         <p>
           {matrixUiCopyFor(language, {
-            en: "Rollout gate will appear after the internal comparison request finishes.",
+            en: "The use decision will appear after the comparison finishes.",
             ru: "Решение по применению появится после сравнения нового конструктора.",
-            bg: "Rollout gate ще се появи след internal comparison request.",
+            bg: "Решението за приложение ще се появи след сравнението на новия конструктор.",
           })}
         </p>
       )}

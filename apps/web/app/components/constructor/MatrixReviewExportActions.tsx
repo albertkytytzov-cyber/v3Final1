@@ -62,9 +62,9 @@ export function MatrixReviewExportActions({
       setCopyStatus({
         tone: "error",
         message: matrixUiCopyFor(language, {
-          en: "Run matrix preview first.",
+          en: "Run comparison first.",
           ru: "Сначала запустите сравнение нового конструктора.",
-          bg: "Първо пуснете matrix preview.",
+          bg: "Първо пуснете сравнението на новия конструктор.",
         }),
       });
       return;
@@ -83,7 +83,7 @@ export function MatrixReviewExportActions({
       setCopyStatus({
         tone: "success",
         message:
-          kind === "markdown"
+              kind === "markdown"
             ? matrixUiCopyFor(language, {
                 en: "Review summary copied.",
                 ru: "Сводка проверки скопирована.",
@@ -117,7 +117,7 @@ export function MatrixReviewExportActions({
           {matrixUiCopyFor(language, {
             en: "Review package",
             ru: "Пакет проверки",
-            bg: "Internal review export",
+            bg: "Пакет за проверка",
           })}
         </strong>
         <span>{contextLabel}</span>

@@ -74,6 +74,166 @@ export function matrixUiCopyFor(language: Language, values: Record<Language, str
   return values[language];
 }
 
+export function constructorMatrixYesNoLabel(language: Language, value?: boolean | null) {
+  if (value === null || value === undefined) {
+    return "-";
+  }
+
+  return value
+    ? matrixUiCopyFor(language, { en: "yes", ru: "да", bg: "да" })
+    : matrixUiCopyFor(language, { en: "no", ru: "нет", bg: "не" });
+}
+
+export function constructorMatrixCheckLabel(language: Language, value?: boolean | null) {
+  if (value === null || value === undefined) {
+    return "-";
+  }
+
+  return value
+    ? matrixUiCopyFor(language, { en: "passed", ru: "пройдена", bg: "премина" })
+    : matrixUiCopyFor(language, { en: "attention", ru: "требует внимания", bg: "внимание" });
+}
+
+export function constructorMatrixModeLabel(
+  language: Language,
+  mode?: MatrixConstructorRolloutMode | null,
+) {
+  return mode ? constructorMatrixRolloutLabel(language, mode) : "-";
+}
+
+export function constructorMatrixScenarioLabel(language: Language, scenario?: string | null) {
+  if (!scenario) {
+    return "-";
+  }
+
+  const labels: Record<string, string> = {
+    far_development_week: matrixUiCopyFor(language, {
+      en: "Far from start",
+      ru: "Далеко от старта",
+      bg: "Далеч от старт",
+    }),
+    post_competition_recovery: matrixUiCopyFor(language, {
+      en: "Post-competition recovery",
+      ru: "Восстановление после старта",
+      bg: "Възстановяване след старт",
+    }),
+    main_start_d28_preview: matrixUiCopyFor(language, {
+      en: "Main start: D-28",
+      ru: "Главный старт: Д-28",
+      bg: "Основен старт: Д-28",
+    }),
+    main_start_d21_preview: matrixUiCopyFor(language, {
+      en: "Main start: D-21",
+      ru: "Главный старт: Д-21",
+      bg: "Основен старт: Д-21",
+    }),
+    main_start_d10_preview: matrixUiCopyFor(language, {
+      en: "Main start: D-10",
+      ru: "Главный старт: Д-10",
+      bg: "Основен старт: Д-10",
+    }),
+    main_start_d3_preview: matrixUiCopyFor(language, {
+      en: "Main start: D-3",
+      ru: "Главный старт: Д-3",
+      bg: "Основен старт: Д-3",
+    }),
+    competition_day_preview: matrixUiCopyFor(language, {
+      en: "Competition day",
+      ru: "День соревнования",
+      bg: "Ден на състезание",
+    }),
+    secondary_start_preview: matrixUiCopyFor(language, {
+      en: "Secondary start",
+      ru: "Второстепенный старт",
+      bg: "Второстепенен старт",
+    }),
+    travel_day: matrixUiCopyFor(language, {
+      en: "Travel day",
+      ru: "День дороги",
+      bg: "Ден за пътуване",
+    }),
+    weigh_in_day: matrixUiCopyFor(language, {
+      en: "Weigh-in day",
+      ru: "День взвешивания",
+      bg: "Ден за кантар",
+    }),
+  };
+
+  return labels[scenario] ?? scenario.replaceAll("_", " ");
+}
+
+export function constructorMatrixActionLabel(language: Language, action?: string | null) {
+  if (!action) {
+    return "-";
+  }
+
+  const labels: Record<string, string> = {
+    use_matrix_primary: matrixUiCopyFor(language, {
+      en: "Use new plan",
+      ru: "Использовать новый план",
+      bg: "Използвай новия план",
+    }),
+    use_matrix_internal: matrixUiCopyFor(language, {
+      en: "Review new plan",
+      ru: "Проверить новый план",
+      bg: "Провери новия план",
+    }),
+    keep_legacy: matrixUiCopyFor(language, {
+      en: "Keep current draft",
+      ru: "Оставить текущий черновик",
+      bg: "Остави текущата чернова",
+    }),
+    preview_only: matrixUiCopyFor(language, {
+      en: "Compare only",
+      ru: "Только сравнить",
+      bg: "Само сравнение",
+    }),
+    blocked: matrixUiCopyFor(language, {
+      en: "Do not use",
+      ru: "Не применять",
+      bg: "Не използвай",
+    }),
+  };
+
+  return labels[action] ?? action.replaceAll("_", " ");
+}
+
+export function constructorMatrixReadinessStatusLabel(
+  language: Language,
+  status?: MatrixPilotReadinessStatus | null,
+) {
+  return status ? getPilotReadinessLabel(language, status) : "-";
+}
+
+export function constructorMatrixMetricLabel(language: Language, metric: string) {
+  const labels: Record<string, string> = {
+    weeks: matrixUiCopyFor(language, { en: "weeks", ru: "недели", bg: "седмици" }),
+    days: matrixUiCopyFor(language, { en: "days", ru: "дни", bg: "дни" }),
+    sessions: matrixUiCopyFor(language, { en: "sessions", ru: "тренировки", bg: "тренировки" }),
+    blocks: matrixUiCopyFor(language, { en: "blocks", ru: "блоки", bg: "блокове" }),
+    exercises: matrixUiCopyFor(language, { en: "exercises", ru: "упражнения", bg: "упражнения" }),
+    "top blocks": matrixUiCopyFor(language, { en: "main blocks", ru: "основные блоки", bg: "основни блокове" }),
+    "close-start": matrixUiCopyFor(language, { en: "start window", ru: "окно старта", bg: "стартов прозорец" }),
+    load: matrixUiCopyFor(language, { en: "load", ru: "нагрузка", bg: "натоварване" }),
+    risk: matrixUiCopyFor(language, { en: "risk", ru: "риск", bg: "риск" }),
+    why: matrixUiCopyFor(language, { en: "why", ru: "почему", bg: "защо" }),
+    matrix: matrixUiCopyFor(language, { en: "new plan", ru: "новый план", bg: "нов план" }),
+    pass: matrixUiCopyFor(language, { en: "passed", ru: "пройдено", bg: "премина" }),
+    warning: matrixUiCopyFor(language, { en: "attention", ru: "внимание", bg: "внимание" }),
+    fail: matrixUiCopyFor(language, { en: "failed", ru: "ошибка", bg: "грешка" }),
+    "n/a": matrixUiCopyFor(language, { en: "not needed", ru: "не требуется", bg: "не е нужно" }),
+    blockers: matrixUiCopyFor(language, { en: "limits", ru: "ограничения", bg: "ограничения" }),
+  };
+
+  return labels[metric] ?? metric;
+}
+
+export function constructorMatrixPassStopLabel(language: Language, passed: boolean) {
+  return passed
+    ? matrixUiCopyFor(language, { en: "passed", ru: "пройдено", bg: "премина" })
+    : matrixUiCopyFor(language, { en: "stop", ru: "стоп", bg: "стоп" });
+}
+
 export function constructorPreviewSessionsForDay(
   day: ConstructorDraft["plan"]["weeks"][number]["days"][number],
 ) {
@@ -133,6 +293,7 @@ export function getConstructorMatrixPreviewMatrixDraft(
 }
 
 export function buildConstructorPreviewDecisionSummary(
+  language: Language,
   preview: ConstructorMatrixPreviewResponse,
 ): ConstructorPreviewDecisionSummary {
   const matrixDraft = getConstructorMatrixPreviewMatrixDraft(preview);
@@ -146,38 +307,58 @@ export function buildConstructorPreviewDecisionSummary(
   const flagLabels = Array.from(
     new Set(
       flaggedDays.flatMap((day) => [
-        day.flags.travel ? "travel" : "",
-        day.flags.weighIn ? "weigh-in" : "",
-        day.flags.competition ? "competition" : "",
-        day.flags.postCompetition ? "post-start" : "",
+        day.flags.travel ? matrixUiCopyFor(language, { en: "travel", ru: "дорога", bg: "пътуване" }) : "",
+        day.flags.weighIn ? matrixUiCopyFor(language, { en: "weigh-in", ru: "взвешивание", bg: "кантар" }) : "",
+        day.flags.competition ? matrixUiCopyFor(language, { en: "competition", ru: "соревнование", bg: "състезание" }) : "",
+        day.flags.postCompetition ? matrixUiCopyFor(language, { en: "post-start", ru: "после старта", bg: "след старт" }) : "",
       ]),
     ),
   ).filter(Boolean);
   const developmentStatus = matrixDraft?.focusPlan.developmentAllowed
-    ? "development allowed"
-    : "development forbidden or limited";
+    ? matrixUiCopyFor(language, {
+        en: "development allowed",
+        ru: "развивающая работа разрешена",
+        bg: "развитието е разрешено",
+      })
+    : matrixUiCopyFor(language, {
+        en: "development forbidden or limited",
+        ru: "развитие запрещено или ограничено",
+        bg: "развитието е забранено или ограничено",
+      });
 
   return {
     items: [
       {
-        label: "phase",
-        value: matrix?.preparationPhase ?? "not included",
+        label: matrixUiCopyFor(language, { en: "phase", ru: "фаза", bg: "фаза" }),
+        value: matrix?.preparationPhase ?? matrixUiCopyFor(language, { en: "not included", ru: "нет данных", bg: "няма данни" }),
       },
       {
-        label: "role / start proximity",
+        label: matrixUiCopyFor(language, {
+          en: "role / start proximity",
+          ru: "роль старта / близость",
+          bg: "роля / близост до старт",
+        }),
         value: matrix
-          ? `${matrix.competitionRole} · D-${matrix.daysUntilStart ?? "?"} · ${
-              matrix.isMainStart ? "main start" : "non-main start"
+          ? `${matrix.competitionRole} · Д-${matrix.daysUntilStart ?? "?"} · ${
+              matrix.isMainStart
+                ? matrixUiCopyFor(language, { en: "main start", ru: "главный старт", bg: "основен старт" })
+                : matrixUiCopyFor(language, { en: "non-main start", ru: "не главный старт", bg: "не основен старт" })
             }`
-          : "not included",
+          : matrixUiCopyFor(language, { en: "not included", ru: "нет данных", bg: "няма данни" }),
       },
       {
-        label: "development rule",
+        label: matrixUiCopyFor(language, { en: "development rule", ru: "правило развития", bg: "правило за развитие" }),
         value: developmentStatus,
       },
       {
-        label: "logistics flags",
-        value: flagLabels.length ? flagLabels.join(", ") : "none in matrix days",
+        label: matrixUiCopyFor(language, { en: "logistics flags", ru: "логистика", bg: "логистика" }),
+        value: flagLabels.length
+          ? flagLabels.join(", ")
+          : matrixUiCopyFor(language, {
+              en: "none in plan days",
+              ru: "нет в днях плана",
+              bg: "няма в дните на плана",
+            }),
       },
     ],
     explanations:
@@ -310,9 +491,9 @@ export function getPilotReadinessMeaning(
 ) {
   if (!status) {
     return matrixUiCopyFor(language, {
-      en: "Run the internal preview and rollout decision first.",
+      en: "Run the comparison and use check first.",
       ru: "Сначала запустите сравнение и проверку применения нового конструктора.",
-      bg: "Първо пуснете internal preview и rollout decision.",
+      bg: "Първо пуснете сравнението и проверката за употреба.",
     });
   }
 
@@ -320,8 +501,8 @@ export function getPilotReadinessMeaning(
     {
       ready_for_limited_primary_pilot: matrixUiCopyFor(language, {
         en: "The new constructor passed the limited-use checks for this scenario. Saving is still controlled by a separate safety gate.",
-        ru: "Новый конструктор прошёл проверки для ограниченного применения в этом сценарии. Сохранение пока контролируется отдельным safety-gate.",
-        bg: "Новият конструктор мина проверките за ограничена употреба. Записът още се контролира от отделен safety-gate.",
+        ru: "Новый конструктор прошёл проверки для ограниченного применения в этом сценарии. Сохранение пока контролируется отдельной проверкой безопасности.",
+        bg: "Новият конструктор мина проверките за ограничена употреба. Записът още се контролира от отделна проверка за безопасност.",
       }),
       ready_for_internal_pilot: matrixUiCopyFor(language, {
         en: "The new constructor can be inspected, but it should not be assigned to athletes yet.",
@@ -344,15 +525,18 @@ export function getPilotReadinessMeaning(
         bg: "Новият конструктор има блокиращи проблеми. Остава текущата чернова.",
       }),
       needs_review: matrixUiCopyFor(language, {
-        en: "The scenario needs manual review before it can enter a pilot.",
-        ru: "Сценарию нужна ручная проверка перед пилотом.",
-        bg: "Сценарият има нужда от ръчна проверка преди pilot.",
+        en: "The scenario needs manual review before the new draft can be used.",
+        ru: "Сценарию нужна ручная проверка перед применением нового черновика.",
+        bg: "Сценарият има нужда от ръчна проверка преди употреба на новата чернова.",
       }),
     } satisfies Record<MatrixPilotReadinessStatus, string>
   )[status];
 }
 
-export function summarizePilotReadinessCounts(readiness?: MatrixPilotReadinessResult | null) {
+export function summarizePilotReadinessCounts(
+  language: Language,
+  readiness?: MatrixPilotReadinessResult | null,
+) {
   const counts = readiness?.summary.checklistCounts ?? {
     pass: 0,
     warning: 0,
@@ -361,11 +545,11 @@ export function summarizePilotReadinessCounts(readiness?: MatrixPilotReadinessRe
   };
 
   return [
-    { label: "pass", value: counts.pass },
-    { label: "warning", value: counts.warning },
-    { label: "fail", value: counts.fail },
-    { label: "n/a", value: counts.not_applicable },
-    { label: "blockers", value: readiness?.summary.blockerCount ?? 0 },
+    { label: constructorMatrixMetricLabel(language, "pass"), value: counts.pass },
+    { label: constructorMatrixMetricLabel(language, "warning"), value: counts.warning },
+    { label: constructorMatrixMetricLabel(language, "fail"), value: counts.fail },
+    { label: constructorMatrixMetricLabel(language, "n/a"), value: counts.not_applicable },
+    { label: constructorMatrixMetricLabel(language, "blockers"), value: readiness?.summary.blockerCount ?? 0 },
   ];
 }
 
@@ -532,41 +716,41 @@ export function constructorMatrixRolloutSupportText(
 ) {
   if (decision?.mode === "preview_only") {
     return matrixUiCopyFor(language, {
-      en: "Matrix remains preview-only for this scenario. Close main-start windows are not primary yet.",
+      en: "The new constructor remains comparison-only for this scenario. Close main-start windows are not applied automatically.",
       ru: "Новый конструктор пока доступен только для сравнения. Близкие окна главного старта ещё не разрешены для применения.",
-      bg: "Matrix остава само preview за този сценарий. Близките основни стартове още не са primary.",
+      bg: "Новият конструктор остава само за сравнение в този сценарий. Близките основни стартове още не се прилагат автоматично.",
     });
   }
 
   if (decision?.mode === "blocked") {
     return matrixUiCopyFor(language, {
-      en: "Matrix is blocked here. Use the legacy default.",
+      en: "The new constructor is blocked here. Use the current draft.",
       ru: "Новый конструктор здесь заблокирован. Используйте текущий черновик.",
-      bg: "Matrix е блокиран тук. Използвайте legacy default.",
+      bg: "Новият конструктор е блокиран тук. Използвайте текущата чернова.",
     });
   }
 
   if (decision?.mode === "legacy_only") {
     return matrixUiCopyFor(language, {
-      en: "Matrix is not enabled as primary for this scenario.",
+      en: "The new constructor is not enabled for this scenario.",
       ru: "Новый конструктор не разрешён для применения в этом сценарии.",
-      bg: "Matrix не е разрешен като primary за този сценарий.",
+      bg: "Новият конструктор не е разрешен за приложение в този сценарий.",
     });
   }
 
   if (decision?.mode === "matrix_allowed_for_internal") {
     return matrixUiCopyFor(language, {
-      en: "Matrix can be inspected as an internal candidate only.",
+      en: "The new constructor can be inspected only.",
       ru: "Новый конструктор можно открыть только для внутренней проверки.",
-      bg: "Matrix може да се гледа само като вътрешен кандидат.",
+      bg: "Новият конструктор може да се гледа само за вътрешна проверка.",
     });
   }
 
   if (decision?.mode === "matrix_allowed_for_primary") {
     return matrixUiCopyFor(language, {
-      en: "Matrix primary is allowed by the controlled gate, but this panel is still read-only.",
+      en: "The controlled check allows this new variant, but this panel is still read-only.",
       ru: "Проверка разрешает новый вариант, но применение всё ещё идёт через отдельный безопасный шаг.",
-      bg: "Controlled gate разрешава matrix primary, но този панел е read-only.",
+      bg: "Контролираната проверка разрешава новия вариант, но този панел все още е само за преглед.",
     });
   }
 
@@ -584,72 +768,72 @@ export function constructorMatrixWorkspaceUnavailableReason(params: {
 
   if (!decision) {
     return matrixUiCopyFor(language, {
-      en: "Run the internal matrix preview first.",
+      en: "Run the new constructor comparison first.",
       ru: "Сначала запустите сравнение нового конструктора.",
-      bg: "Първо пуснете internal matrix preview.",
+      bg: "Първо пуснете сравнението на новия конструктор.",
     });
   }
 
   if (!matrixDraft) {
     return matrixUiCopyFor(language, {
-      en: "Matrix draft was not returned by the preview response.",
+      en: "The new draft was not returned by the server.",
       ru: "Новый черновик не вернулся из ответа сервера.",
-      bg: "Matrix draft не е върнат в preview response.",
+      bg: "Новата чернова не се върна от сървъра.",
     });
   }
 
   if (!isConstructorMatrixWorkspaceAllowedMode(decision)) {
     if (decision.mode === "preview_only") {
       return matrixUiCopyFor(language, {
-        en: "Matrix workspace is unavailable: this start window remains preview-only.",
+        en: "The new draft cannot be opened: this start window remains comparison-only.",
         ru: "Новый черновик недоступен для открытия: это стартовое окно пока только для сравнения.",
-        bg: "Matrix workspace не е достъпен: този стартов прозорец е само preview.",
+        bg: "Новата чернова не може да се отвори: този стартов прозорец е само за сравнение.",
       });
     }
 
     return matrixUiCopyFor(language, {
-      en: "Matrix workspace is unavailable: rollout mode is legacy-only or blocked.",
+      en: "The new draft cannot be opened: this scenario uses the current constructor or is blocked.",
       ru: "Новый черновик недоступен: для этого сценария разрешён только текущий конструктор или есть блокировка.",
-      bg: "Matrix workspace не е достъпен: rollout mode е legacy-only или blocked.",
+      bg: "Новата чернова не може да се отвори: за този сценарий се използва текущият конструктор или има блокиране.",
     });
   }
 
   if (!preview?.safeToPreview || !decision.safeToPreview) {
     return matrixUiCopyFor(language, {
-      en: "Matrix workspace is unavailable: preview safety did not pass.",
+      en: "The new draft cannot be opened: safety check did not pass.",
       ru: "Новый черновик недоступен: проверка безопасности не пройдена.",
-      bg: "Matrix workspace не е достъпен: preview safety не мина.",
+      bg: "Новата чернова не може да се отвори: проверката за безопасност не премина.",
     });
   }
 
   if (!preview.defaultPathUnchanged || !decision.defaultPathUnchanged) {
     return matrixUiCopyFor(language, {
-      en: "Matrix workspace is unavailable: legacy default guard changed.",
+      en: "The new draft cannot be opened: current constructor protection changed.",
       ru: "Новый черновик недоступен: защита текущего конструктора изменилась.",
-      bg: "Matrix workspace не е достъпен: legacy default guard се промени.",
+      bg: "Новата чернова не може да се отвори: защитата на текущия конструктор се промени.",
     });
   }
 
   if (safetyErrorCount > 0) {
     return matrixUiCopyFor(language, {
-      en: "Matrix workspace is unavailable: safety blockers are present.",
+      en: "The new draft cannot be opened: safety blockers are present.",
       ru: "Новый черновик недоступен: есть блокирующие safety-ошибки.",
-      bg: "Matrix workspace не е достъпен: има safety blockers.",
+      bg: "Новата чернова не може да се отвори: има блокиращи грешки в проверката за безопасност.",
     });
   }
 
   if (decision.blockers.some((blocker) => blocker.severity === "error")) {
     return matrixUiCopyFor(language, {
-      en: "Matrix workspace is unavailable: rollout blockers are present.",
+      en: "The new draft cannot be opened: blocking limits are present.",
       ru: "Новый черновик недоступен: есть блокирующие ограничения запуска.",
-      bg: "Matrix workspace не е достъпен: има rollout blockers.",
+      bg: "Новата чернова не може да се отвори: има блокиращи ограничения.",
     });
   }
 
   return matrixUiCopyFor(language, {
-    en: "Matrix candidate can be opened only as a read-only internal workspace.",
+    en: "The new variant can be opened for review and comparison.",
     ru: "Новый вариант можно открыть для просмотра и сравнения.",
-    bg: "Matrix candidate може да се отвори само като read-only internal workspace.",
+    bg: "Новият вариант може да се отвори за преглед и сравнение.",
   });
 }
 
@@ -661,30 +845,30 @@ export function constructorMatrixWorkspaceWhyText(
     return matrixUiCopyFor(language, {
       en: "This scenario is allowed only for internal inspection, not for production primary usage.",
       ru: "Этот сценарий разрешён только для внутренней проверки, не для назначения спортсмену.",
-      bg: "Този сценарий е разрешен само за internal проверка, не за production primary.",
+      bg: "Този сценарий е разрешен само за вътрешна проверка, не за назначаване на спортист.",
     });
   }
 
   if (decision?.mode === "matrix_allowed_for_primary") {
     return matrixUiCopyFor(language, {
-      en: "The gate allows a primary candidate, but this workspace is still read-only until a separate rollout decision.",
+      en: "The safety check allows a new candidate, but saving is controlled by a separate safe step.",
       ru: "Проверка разрешила новый вариант, но сохранение включается отдельным безопасным решением.",
-      bg: "Gate разрешава primary candidate, но този workspace остава read-only до отделно rollout решение.",
+      bg: "Проверката разрешава нов вариант, но записът се контролира с отделна безопасна стъпка.",
     });
   }
 
   if (decision?.mode === "preview_only") {
     return matrixUiCopyFor(language, {
-      en: "This scenario stays preview-only, so the matrix candidate cannot become a workspace draft.",
+      en: "This scenario stays comparison-only, so the new variant cannot become a working draft.",
       ru: "Этот сценарий остаётся только для сравнения, поэтому новый вариант нельзя сделать рабочим черновиком.",
-      bg: "Този сценарий остава preview-only, затова matrix кандидатът не се отваря като workspace draft.",
+      bg: "Този сценарий остава само за сравнение, затова новият вариант не може да стане работна чернова.",
     });
   }
 
   return matrixUiCopyFor(language, {
-    en: "Legacy remains the main draft for this scenario.",
+    en: "The current draft remains the main draft for this scenario.",
     ru: "Для этого сценария основным остаётся текущий черновик.",
-    bg: "Legacy остава основната чернова за този сценарий.",
+    bg: "Текущата чернова остава основна за този сценарий.",
   });
 }
 
@@ -712,7 +896,7 @@ export function constructorMatrixWorkspaceScenarioText(
     return matrixUiCopyFor(language, {
       en: "Logistics scenario allowed only for internal review.",
       ru: "Логистический сценарий, разрешённый только для внутренней проверки.",
-      bg: "Логистичен сценарий само за internal проверка.",
+      bg: "Логистичен сценарий само за вътрешна проверка.",
     });
   }
 

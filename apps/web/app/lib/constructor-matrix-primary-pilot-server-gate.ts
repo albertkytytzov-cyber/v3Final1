@@ -74,23 +74,23 @@ export function canUseMatrixPrimaryPilotWithServerEvidence(params: {
   const evidence = [
     evidenceItem("server_result", "server result", Boolean(serverResult), Boolean(serverResult)),
     evidenceItem("server_error", "server error", !serverError, serverError || "none"),
-    evidenceItem("server_dry_run", "server dry-run", dryRun?.status === "passed", dryRun?.status),
-    evidenceItem("server_dry_run_blockers", "server dry-run blockers", (dryRun?.blockers.length ?? 0) === 0, dryRun?.blockers.length),
+    evidenceItem("server_dry_run", "server save check", dryRun?.status === "passed", dryRun?.status),
+    evidenceItem("server_dry_run_blockers", "server save blockers", (dryRun?.blockers.length ?? 0) === 0, dryRun?.blockers.length),
     evidenceItem(
       "server_rollout_mode",
-      "server rollout mode",
+      "server use mode",
       rolloutDecision?.mode === "matrix_allowed_for_primary",
       rolloutDecision?.mode,
     ),
     evidenceItem(
       "server_matrix_primary_allowed",
-      "server matrixPrimaryAllowed",
+      "server use allowed",
       rolloutDecision?.matrixPrimaryAllowed === true,
       rolloutDecision?.matrixPrimaryAllowed,
     ),
     evidenceItem(
       "server_rollout_blockers",
-      "server rollout blockers",
+      "server use blockers",
       (rolloutDecision?.blockers.length ?? 0) === 0,
       rolloutDecision?.blockers.length,
     ),
@@ -102,19 +102,19 @@ export function canUseMatrixPrimaryPilotWithServerEvidence(params: {
     ),
     evidenceItem(
       "server_readiness_primary_allowed",
-      "server readiness primaryAllowed",
+      "server readiness allows use",
       pilotReadiness?.matrixPrimaryAllowed === true,
       pilotReadiness?.matrixPrimaryAllowed,
     ),
     evidenceItem(
       "server_readiness_blockers",
-      "server readiness blockers",
+      "server readiness limits",
       (pilotReadiness?.blockers.length ?? 0) === 0,
       pilotReadiness?.blockers.length,
     ),
     evidenceItem(
       "server_rollout_readiness_scenario",
-      "server rollout/readiness scenario",
+      "server decision/readiness scenario",
       serverScenarioMatches,
       rolloutDecision && pilotReadiness
         ? `${rolloutDecision.scenario} / ${pilotReadiness.scenario}`
@@ -122,7 +122,7 @@ export function canUseMatrixPrimaryPilotWithServerEvidence(params: {
     ),
     evidenceItem(
       "server_rollout_readiness_mode",
-      "server rollout/readiness mode",
+      "server decision/readiness mode",
       serverRolloutModeMatches,
       rolloutDecision && pilotReadiness
         ? `${rolloutDecision.mode} / ${pilotReadiness.rolloutMode}`
@@ -130,7 +130,7 @@ export function canUseMatrixPrimaryPilotWithServerEvidence(params: {
     ),
     evidenceItem(
       "server_rollout_readiness_primary",
-      "server rollout/readiness primaryAllowed",
+      "server decision/readiness use allowed",
       serverPrimaryAllowedMatches,
       rolloutDecision && pilotReadiness
         ? `${rolloutDecision.matrixPrimaryAllowed} / ${pilotReadiness.matrixPrimaryAllowed}`
@@ -189,57 +189,57 @@ export function matrixPrimaryPilotServerGateReasonText(
 ) {
   if (!reason) {
     return matrixUiCopyFor(language, {
-      en: "Server evidence confirms this primary pilot candidate.",
-      ru: "Server evidence подтверждает этот primary pilot candidate.",
-      bg: "Server evidence потвърждава този primary pilot candidate.",
+      en: "The server check confirms that this new draft can be used.",
+      ru: "Серверная проверка подтверждает, что новый черновик можно использовать.",
+      bg: "Сървърната проверка потвърждава, че новата чернова може да се използва.",
     });
   }
 
   const copy = {
     server_dry_run_missing: matrixUiCopyFor(language, {
-      en: "Server dry-run evidence is missing. Run matrix preview again.",
-      ru: "Нет server dry-run evidence. Запустите matrix preview ещё раз.",
-      bg: "Липсва server dry-run evidence. Пуснете matrix preview отново.",
+      en: "The server save check is missing. Run the comparison again.",
+      ru: "Нет серверной проверки сохранения. Запустите сравнение ещё раз.",
+      bg: "Липсва сървърна проверка за запис. Пуснете сравнението отново.",
     }),
     server_dry_run_error: matrixUiCopyFor(language, {
-      en: "Server dry-run returned an error.",
-      ru: "Server dry-run вернул ошибку.",
-      bg: "Server dry-run върна грешка.",
+      en: "The server save check returned an error.",
+      ru: "Серверная проверка сохранения вернула ошибку.",
+      bg: "Сървърната проверка за запис върна грешка.",
     }),
     server_dry_run_blocked: matrixUiCopyFor(language, {
-      en: "Server dry-run did not pass.",
-      ru: "Server dry-run не пройден.",
-      bg: "Server dry-run не премина.",
+      en: "The server save check did not pass.",
+      ru: "Серверная проверка сохранения не пройдена.",
+      bg: "Сървърната проверка за запис не премина.",
     }),
     server_rollout_not_primary: matrixUiCopyFor(language, {
-      en: "Server rollout does not allow matrix primary mode.",
-      ru: "Server rollout не разрешает matrix primary mode.",
-      bg: "Server rollout не разрешава matrix primary mode.",
+      en: "The server rules do not allow using the new draft here.",
+      ru: "Серверные правила не разрешают использовать новый черновик здесь.",
+      bg: "Сървърните правила не разрешават новата чернова тук.",
     }),
     server_rollout_blockers_present: matrixUiCopyFor(language, {
-      en: "Server rollout blockers are present.",
-      ru: "Есть server rollout blockers.",
-      bg: "Има server rollout blockers.",
+      en: "The server found blocking limits.",
+      ru: "Сервер нашёл блокирующие ограничения.",
+      bg: "Сървърът намери блокиращи ограничения.",
     }),
     server_readiness_not_primary_ready: matrixUiCopyFor(language, {
-      en: "Server readiness is not ready for limited primary pilot.",
-      ru: "Server readiness не готов к limited primary pilot.",
-      bg: "Server readiness не е готов за limited primary pilot.",
+      en: "The server readiness check is not ready for limited use.",
+      ru: "Серверная проверка готовности не разрешила ограниченное применение.",
+      bg: "Сървърната проверка за готовност не разреши ограничена употреба.",
     }),
     server_readiness_blockers_present: matrixUiCopyFor(language, {
-      en: "Server readiness blockers are present.",
-      ru: "Есть server readiness blockers.",
-      bg: "Има server readiness blockers.",
+      en: "The server readiness check found blockers.",
+      ru: "Серверная проверка готовности нашла ограничения.",
+      bg: "Сървърната проверка за готовност намери ограничения.",
     }),
     server_evidence_mismatch: matrixUiCopyFor(language, {
-      en: "Server rollout and readiness evidence do not agree.",
-      ru: "Server rollout и readiness evidence не совпадают.",
-      bg: "Server rollout и readiness evidence не съвпадат.",
+      en: "Server decision and readiness check do not match.",
+      ru: "Серверное решение и проверка готовности не совпадают.",
+      bg: "Сървърното решение и проверката за готовност не съвпадат.",
     }),
     server_scenario_mismatch: matrixUiCopyFor(language, {
-      en: "Server scenario does not match the local preview scenario.",
-      ru: "Server scenario не совпадает с local preview scenario.",
-      bg: "Server scenario не съвпада с local preview scenario.",
+      en: "The server scenario does not match the local comparison.",
+      ru: "Серверный сценарий не совпадает с локальным сравнением.",
+      bg: "Сървърният сценарий не съвпада с локалното сравнение.",
     }),
   } satisfies Record<MatrixPrimaryPilotServerGateReason, string>;
 

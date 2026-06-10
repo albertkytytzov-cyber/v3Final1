@@ -203,6 +203,7 @@ import {
   type ConstructorMatrixWorkspaceState,
   canActivateConstructorMatrixInternalDraft,
   canOpenConstructorMatrixWorkspace,
+  constructorMatrixScenarioLabel,
   constructorMatrixWorkspaceUnavailableReason as getConstructorMatrixWorkspaceUnavailableReason,
   getConstructorMatrixPreviewMatrixDraft,
   getConstructorMatrixSafetyErrorCount,
@@ -14315,8 +14316,8 @@ export function PageClient({
           previewOptions,
         };
         const templateName = selectedConstructorCompetitionPlan?.competitionTitle
-          ? `PERFORM Matrix Pilot • ${selectedConstructorCompetitionPlan.competitionTitle}`
-          : `PERFORM Matrix Pilot • ${input.competition.name}`;
+          ? `PERFORM Constructor Candidate • ${selectedConstructorCompetitionPlan.competitionTitle}`
+          : `PERFORM Constructor Candidate • ${input.competition.name}`;
         const [preview, rolloutDecision, serverSaveDryRun] = await Promise.all([
           requestConstructorMatrixPreview(input, previewOptions),
           requestConstructorMatrixRolloutDecision(input, rolloutOptions),
@@ -14366,9 +14367,9 @@ export function PageClient({
           setActiveConstructorDraftSource("matrix_primary_pilot");
           setConstructorMessage(
             copyFor(language, {
-              en: "New constructor draft built and passed save/assign pilot checks. Review it, then save it as a template.",
-              ru: "Черновик нового конструктора собран и прошёл pilot-проверки сохранения/назначения. Проверьте его и сохраните как шаблон.",
-              bg: "Черновата от новия конструктор е създадена и мина pilot проверките.",
+              en: "New constructor draft built and passed safe save checks. Review it, then save it as a template.",
+              ru: "Черновик нового конструктора собран и прошёл безопасные проверки сохранения. Проверьте его и сохраните как шаблон.",
+              bg: "Черновата от новия конструктор е създадена и премина безопасните проверки за запис.",
             }),
           );
           return;
@@ -14376,9 +14377,18 @@ export function PageClient({
 
         setConstructorMessage(
           copyFor(language, {
-            en: `New constructor is preview-only for this case (${rolloutDecision.scenario}). Building the current constructor draft instead.`,
-            ru: `Новый конструктор для этого случая пока только preview (${rolloutDecision.scenario}). Собираю черновик текущего конструктора.`,
-            bg: `Новият конструктор за този случай е само preview (${rolloutDecision.scenario}). Създавам текущата чернова.`,
+            en: `The new constructor is comparison-only for this case (${constructorMatrixScenarioLabel(
+              language,
+              rolloutDecision.scenario,
+            )}). Building the current constructor draft instead.`,
+            ru: `Новый конструктор для этого случая пока только для сравнения (${constructorMatrixScenarioLabel(
+              language,
+              rolloutDecision.scenario,
+            )}). Поэтому сверху собран текущий черновик.`,
+            bg: `Новият конструктор за този случай е само за сравнение (${constructorMatrixScenarioLabel(
+              language,
+              rolloutDecision.scenario,
+            )}). Затова отгоре е създадена текущата чернова.`,
           }),
         );
       }
@@ -14445,8 +14455,8 @@ export function PageClient({
             input,
             rolloutOptions,
             selectedConstructorCompetitionPlan?.competitionTitle
-              ? `PERFORM Matrix Primary Pilot Dry Run • ${selectedConstructorCompetitionPlan.competitionTitle}`
-              : "PERFORM Matrix Primary Pilot Dry Run",
+              ? `PERFORM Constructor Candidate Check • ${selectedConstructorCompetitionPlan.competitionTitle}`
+              : "PERFORM Constructor Candidate Check",
           )
         : Promise.resolve(null);
       const [previewResult, rolloutResult, serverDryRunResult] = await Promise.allSettled([
@@ -14562,7 +14572,7 @@ export function PageClient({
         copyFor(language, {
           en: "This draft is not allowed for template saving yet.",
           ru: "Этот черновик пока нельзя сохранить как шаблон.",
-          bg: "Matrix internal draft е само read-only и не се записва като шаблон.",
+          bg: "Тази чернова засега е само за преглед и не се записва като шаблон.",
         }),
       );
       return;
@@ -15779,9 +15789,9 @@ export function PageClient({
           error instanceof Error
             ? error.message
             : copyFor(language, {
-                en: "Pilot readiness evaluation failed.",
-                ru: "Pilot readiness evaluation не прошёл.",
-                bg: "Pilot readiness evaluation не мина.",
+                en: "New constructor readiness check failed.",
+                ru: "Проверка готовности нового конструктора не прошла.",
+                bg: "Проверката за готовност на новия конструктор не премина.",
               }),
       };
     }
@@ -15818,8 +15828,8 @@ export function PageClient({
         draft: constructorMatrixWorkspace.draft,
         eligibility: constructorMatrixPrimaryPilotEligibility,
         templateName: selectedConstructorCompetitionPlan?.competitionTitle
-          ? `PERFORM Matrix Primary Pilot Dry Run • ${selectedConstructorCompetitionPlan.competitionTitle}`
-          : "PERFORM Matrix Primary Pilot Dry Run",
+          ? `PERFORM Constructor Candidate Check • ${selectedConstructorCompetitionPlan.competitionTitle}`
+          : "PERFORM Constructor Candidate Check",
       }),
     [
       activeConstructorDraftSource,
@@ -15867,8 +15877,8 @@ export function PageClient({
       return buildConstructorTemplatePayload(
         activeConstructorDraft,
         selectedConstructorCompetitionPlan?.competitionTitle
-          ? `PERFORM Matrix Pilot • ${selectedConstructorCompetitionPlan.competitionTitle}`
-          : "PERFORM Matrix Pilot",
+          ? `PERFORM Constructor Candidate • ${selectedConstructorCompetitionPlan.competitionTitle}`
+          : "PERFORM Constructor Candidate",
       );
     } catch {
       return null;
@@ -22602,14 +22612,14 @@ export function PageClient({
                         <p className="constructor-matrix-save-guard-note">
                           {copyFor(language, {
                             en: activeConstructorDraftIsMatrixPrimaryPilot
-                              ? "Saving and assignment for the new constructor are still controlled by the safe pilot gate."
+                              ? "Saving and assignment for the new constructor are still controlled by the safe check."
                               : "This new constructor draft is open for review only. Return to the current draft to save a template.",
                             ru: activeConstructorDraftIsMatrixPrimaryPilot
-                              ? "Сохранение и назначение нового конструктора пока контролируются безопасным pilot-gate."
+                              ? "Сохранение и назначение нового конструктора пока контролируются безопасной проверкой."
                               : "Этот черновик нового конструктора открыт только для проверки. Вернитесь к текущему черновику, чтобы сохранить шаблон.",
                             bg: activeConstructorDraftIsMatrixPrimaryPilot
-                              ? "Save/template/assign са изключени за matrix_primary_pilot. Това е limited pilot view, не default production path."
-                              : "Save/template/assign са изключени за matrix_internal. Върнете legacy draft, за да запазите шаблон.",
+                              ? "Записът и назначаването на новия конструктор се контролират от безопасна проверка."
+                              : "Новата чернова е само за проверка. Върнете текущата чернова, за да запазите шаблон.",
                           })}
                         </p>
                       ) : (

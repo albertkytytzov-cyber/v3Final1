@@ -13,6 +13,8 @@ import {
   buildConstructorPreviewDecisionSummary,
   buildConstructorPreviewDraftMetrics,
   collectConstructorMatrixCandidateSummary,
+  constructorMatrixCheckLabel,
+  constructorMatrixMetricLabel,
   constructorMatrixRolloutLabel,
   formatConstructorPreviewAffected,
   getConstructorMatrixPreviewMatrixDraft,
@@ -101,7 +103,7 @@ export function MatrixConstructorPreviewPanel({
   const matrixDraft = getConstructorMatrixPreviewMatrixDraft(preview);
   const matrixMetrics = buildConstructorPreviewDraftMetrics(matrixDraft);
   const candidateSummary = collectConstructorMatrixCandidateSummary(matrixDraft);
-  const previewDecision = preview ? buildConstructorPreviewDecisionSummary(preview) : null;
+  const previewDecision = preview ? buildConstructorPreviewDecisionSummary(language, preview) : null;
   const differences = preview?.comparisonReport?.differences ?? [];
   const failedSafety = preview?.safetyInvariants?.filter((item) => !item.passed) ?? [];
   const failedLegacyGuard = preview?.legacyDefaultGuard?.filter((item) => !item.passed) ?? [];
@@ -120,7 +122,7 @@ export function MatrixConstructorPreviewPanel({
               {matrixUiCopyFor(language, {
                 en: "Current vs new constructor",
                 ru: "Сравнение текущего и нового конструктора",
-                bg: "Matrix preview / internal",
+                bg: "Сравнение на текущия и новия конструктор",
               })}
             </strong>
             <span>
@@ -148,13 +150,13 @@ export function MatrixConstructorPreviewPanel({
               : preview || previewError
                 ? matrixUiCopyFor(language, {
                     en: "Compare again",
-                    ru: "Сравнить ещё раз",
-                    bg: "Повтори matrix-preview",
+                  ru: "Сравнить ещё раз",
+                    bg: "Сравни отново",
                   })
                 : matrixUiCopyFor(language, {
                     en: "Compare current vs new",
                     ru: "Сравнить текущий и новый",
-                    bg: "Сравни legacy vs matrix",
+                    bg: "Сравни текущия и новия",
                   })}
           </button>
           <label>
@@ -177,9 +179,9 @@ export function MatrixConstructorPreviewPanel({
           <div className="constructor-matrix-preview-error">
             <strong>
               {matrixUiCopyFor(language, {
-                en: "Internal preview failed",
+                en: "Comparison failed",
                 ru: "Сравнение нового конструктора не прошло",
-                bg: "Internal-preview не мина",
+                bg: "Сравнението не премина",
               })}
             </strong>
             <p>{previewError}</p>
@@ -192,7 +194,7 @@ export function MatrixConstructorPreviewPanel({
               {matrixUiCopyFor(language, {
                 en: "Rollout decision unavailable",
                 ru: "Решение по применению недоступно",
-                bg: "Rollout decision не е наличен",
+                bg: "Решението за приложение не е налично",
               })}
             </strong>
             <p>{rolloutError}</p>
@@ -203,9 +205,9 @@ export function MatrixConstructorPreviewPanel({
           <MatrixPilotReadinessCard
             compact
             error={matrixUiCopyFor(language, {
-              en: "Pilot readiness unavailable until preview and rollout decision are loaded.",
+              en: "Readiness is unavailable until comparison and use decision are loaded.",
               ru: "Статус готовности недоступен, пока не выполнено сравнение нового конструктора.",
-              bg: "Pilot readiness не е наличен преди preview и rollout decision.",
+              bg: "Готовността не е налична преди сравнението и решението за приложение.",
             })}
             language={language}
             loading={previewBusy}
@@ -224,10 +226,14 @@ export function MatrixConstructorPreviewPanel({
                 </div>
                 <div className="constructor-matrix-status-row">
                   <span className={`status-chip ${preview.safeToPreview ? "green" : "warning"}`}>
-                    safeToPreview: {preview.safeToPreview ? "yes" : "no"}
+                    {matrixUiCopyFor(language, { en: "Plan check", ru: "Проверка плана", bg: "Проверка план" })}:{" "}
+                    {constructorMatrixCheckLabel(language, preview.safeToPreview)}
                   </span>
                   <span className={`status-chip ${preview.defaultPathUnchanged ? "green" : "danger"}`}>
-                    defaultPathUnchanged: {preview.defaultPathUnchanged ? "yes" : "no"}
+                    {matrixUiCopyFor(language, { en: "Current draft", ru: "Текущий черновик", bg: "Текуща чернова" })}:{" "}
+                    {preview.defaultPathUnchanged
+                      ? matrixUiCopyFor(language, { en: "unchanged", ru: "не изменён", bg: "непроменен" })
+                      : matrixUiCopyFor(language, { en: "changed", ru: "изменён", bg: "променен" })}
                   </span>
                 </div>
                 <div className="constructor-matrix-count-grid">
@@ -295,16 +301,16 @@ export function MatrixConstructorPreviewPanel({
                     <li>
                       <strong>
                         {matrixUiCopyFor(language, {
-                          en: "No failed invariants",
-                          ru: "Нет проваленных инвариантов",
-                          bg: "Няма неуспешни инварианти",
+                          en: "No failed checks",
+                          ru: "Нет проваленных проверок",
+                          bg: "Няма неуспешни проверки",
                         })}
                       </strong>
-                      <span>
+                        <span>
                         {matrixUiCopyFor(language, {
-                          en: "Backend safety guards passed for this internal preview.",
+                          en: "Server safety checks passed for this comparison.",
                           ru: "Серверные проверки безопасности пройдены для этого сравнения.",
-                          bg: "Backend safety guards са преминали за този internal-preview.",
+                          bg: "Сървърните проверки за безопасност преминаха.",
                         })}
                       </span>
                     </li>
@@ -337,9 +343,9 @@ export function MatrixConstructorPreviewPanel({
                 pilotReadinessError ||
                 (!rolloutDecision
                   ? matrixUiCopyFor(language, {
-                      en: "Pilot readiness unavailable until rollout decision is loaded.",
-                      ru: "Готовность недоступна, пока не загружено решение по применению.",
-                      bg: "Pilot readiness не е наличен преди rollout decision.",
+                      en: "Readiness is unavailable until the application check is loaded.",
+                      ru: "Готовность недоступна, пока не загружена проверка применения.",
+                      bg: "Готовността не е налична, докато не се зареди проверката за приложение.",
                     })
                   : "")
               }
@@ -351,7 +357,11 @@ export function MatrixConstructorPreviewPanel({
             />
 
             <MatrixReviewExportActions
-              contextLabel="preview / rollout"
+              contextLabel={matrixUiCopyFor(language, {
+                en: "comparison and decision",
+                ru: "сравнение и решение",
+                bg: "сравнение и решение",
+              })}
               language={language}
               preview={preview}
               readiness={pilotReadiness}
@@ -384,10 +394,10 @@ export function MatrixConstructorPreviewPanel({
                   </div>
                   <div className="constructor-matrix-count-grid">
                     {[
-                      ["weeks", metrics.weekCount],
-                      ["days", metrics.dayCount],
-                      ["sessions", metrics.sessionCount],
-                      ["close-start", metrics.closeStartDayCount],
+                      [constructorMatrixMetricLabel(language, "weeks"), metrics.weekCount],
+                      [constructorMatrixMetricLabel(language, "days"), metrics.dayCount],
+                      [constructorMatrixMetricLabel(language, "sessions"), metrics.sessionCount],
+                      [constructorMatrixMetricLabel(language, "close-start"), metrics.closeStartDayCount],
                     ].map(([metricLabel, value]) => (
                       <span key={metricLabel}>
                         <small>{metricLabel}</small>
@@ -416,9 +426,9 @@ export function MatrixConstructorPreviewPanel({
                 <div className="summary-topline">
                   <strong>
                     {matrixUiCopyFor(language, {
-                      en: "Matrix primary candidate - read-only",
+                      en: "New plan variant - review only",
                       ru: "Новый вариант плана - только просмотр",
-                      bg: "Matrix primary candidate - read-only",
+                      bg: "Нов вариант план - само преглед",
                     })}
                   </strong>
                   <span className="constructor-matrix-readonly-badge">
@@ -433,15 +443,15 @@ export function MatrixConstructorPreviewPanel({
                   {matrixUiCopyFor(language, {
                     en: "Review candidate. It is not saved and does not replace the current draft until the coach explicitly chooses a safe apply path.",
                     ru: "Кандидат для проверки. Он не сохраняется и не заменяет текущий черновик, пока тренер явно не выберет безопасное применение.",
-                    bg: "Вътрешен read-only кандидат. Не се записва и не заменя основната чернова.",
+                    bg: "Кандидат за проверка. Не се записва и не заменя текущата чернова.",
                   })}
                 </p>
                 <div className="constructor-matrix-count-grid">
                   {[
-                    ["weeks", matrixMetrics.weekCount],
-                    ["days", matrixMetrics.dayCount],
-                    ["sessions", matrixMetrics.sessionCount],
-                    ["blocks", matrixMetrics.blockCount],
+                    [constructorMatrixMetricLabel(language, "weeks"), matrixMetrics.weekCount],
+                    [constructorMatrixMetricLabel(language, "days"), matrixMetrics.dayCount],
+                    [constructorMatrixMetricLabel(language, "sessions"), matrixMetrics.sessionCount],
+                    [constructorMatrixMetricLabel(language, "blocks"), matrixMetrics.blockCount],
                   ].map(([label, value]) => (
                     <span key={label}>
                       <small>{label}</small>
@@ -470,12 +480,12 @@ export function MatrixConstructorPreviewPanel({
                         ))
                       ) : (
                         <li>
-                          <strong>matrix</strong>
+                          <strong>{constructorMatrixMetricLabel(language, "matrix")}</strong>
                           <span>
                             {matrixUiCopyFor(language, {
                               en: "No selected block overview was returned.",
-                              ru: "Selected block overview не вернулся.",
-                              bg: "Няма selected block overview.",
+                              ru: "Нет краткого списка выбранных блоков.",
+                              bg: "Няма кратък списък с избрани блокове.",
                             })}
                           </span>
                         </li>
@@ -500,7 +510,7 @@ export function MatrixConstructorPreviewPanel({
                         ))
                       ) : (
                         <span>
-                          <small>load</small>
+                          <small>{constructorMatrixMetricLabel(language, "load")}</small>
                           <strong>-</strong>
                         </span>
                       )}
@@ -517,12 +527,12 @@ export function MatrixConstructorPreviewPanel({
                         ))
                       ) : (
                         <li>
-                          <strong>risk</strong>
+                          <strong>{constructorMatrixMetricLabel(language, "risk")}</strong>
                           <span>
                             {matrixUiCopyFor(language, {
-                              en: "No matrix risk summary was returned.",
-                              ru: "Matrix risk summary не вернулся.",
-                              bg: "Няма matrix risk summary.",
+                              en: "No risk summary was returned.",
+                              ru: "Нет краткой сводки рисков.",
+                              bg: "Няма кратка сводка на рисковете.",
                             })}
                           </span>
                         </li>
@@ -534,7 +544,7 @@ export function MatrixConstructorPreviewPanel({
                   <ul className="constructor-matrix-preview-list">
                     {candidateSummary.explanations.map((message) => (
                       <li key={message}>
-                        <strong>why</strong>
+                        <strong>{constructorMatrixMetricLabel(language, "why")}</strong>
                         <span>{message}</span>
                       </li>
                     ))}
@@ -545,19 +555,19 @@ export function MatrixConstructorPreviewPanel({
               <article className="constructor-matrix-preview-card constructor-matrix-candidate-hidden">
                 <div className="summary-topline">
                   <strong>
-                    {matrixUiCopyFor(language, {
-                      en: "Matrix primary candidate",
-                      ru: "Новый вариант плана",
-                      bg: "Matrix primary candidate",
-                    })}
+                  {matrixUiCopyFor(language, {
+                    en: "New plan variant",
+                    ru: "Новый вариант плана",
+                    bg: "Нов вариант план",
+                  })}
                   </strong>
                   <span>{rolloutBadgeLabel}</span>
                 </div>
                 <p>
                   {matrixUiCopyFor(language, {
                     en: "Candidate is hidden because the safety gate did not allow the new constructor for this scenario.",
-                    ru: "Кандидат скрыт: safety-gate не разрешил новый конструктор для этого сценария.",
-                    bg: "Кандидатът е скрит: rollout gate не разрешава matrix primary/internal usage за този сценарий.",
+                    ru: "Кандидат скрыт: проверка безопасности не разрешила новый конструктор для этого сценария.",
+                    bg: "Кандидатът е скрит: проверката за безопасност не разреши новия конструктор за този сценарий.",
                   })}
                 </p>
               </article>
@@ -567,12 +577,12 @@ export function MatrixConstructorPreviewPanel({
               <div className="summary-topline">
                 <strong>
                   {matrixUiCopyFor(language, {
-                    en: "Matrix decision explanation",
+                    en: "New constructor decision explanation",
                     ru: "Почему новый конструктор решил так",
-                    bg: "Matrix decision explanation",
+                    bg: "Обяснение на новия конструктор",
                   })}
                 </strong>
-                <span>{preview.mode}</span>
+                <span>{matrixUiCopyFor(language, { en: "comparison", ru: "сравнение", bg: "сравнение" })}</span>
               </div>
               <div className="constructor-matrix-count-grid constructor-matrix-decision-grid">
                 {previewDecision?.items.map((item) => (
@@ -586,7 +596,7 @@ export function MatrixConstructorPreviewPanel({
                 <ul className="constructor-matrix-preview-list">
                   {previewDecision.explanations.map((message) => (
                     <li key={message}>
-                        <strong>matrix</strong>
+                      <strong>{constructorMatrixMetricLabel(language, "matrix")}</strong>
                       <span>{message}</span>
                     </li>
                   ))}
@@ -594,9 +604,9 @@ export function MatrixConstructorPreviewPanel({
               ) : (
                 <p>
                   {matrixUiCopyFor(language, {
-                    en: "No matrix explanation was included in the response.",
+                    en: "No new constructor explanation was included in the response.",
                     ru: "В ответе нет отдельного объяснения нового конструктора.",
-                    bg: "Няма matrix обяснение в отговора.",
+                    bg: "В отговора няма отделно обяснение на новия конструктор.",
                   })}
                 </p>
               )}
@@ -635,14 +645,20 @@ export function MatrixConstructorPreviewPanel({
             </article>
 
             <details className="constructor-matrix-raw-json">
-              <summary>{matrixUiCopyFor(language, { en: "Raw JSON", ru: "Raw JSON", bg: "Raw JSON" })}</summary>
+              <summary>
+                {matrixUiCopyFor(language, {
+                  en: "Technical data",
+                  ru: "Технические данные",
+                  bg: "Технически данни",
+                })}
+              </summary>
               <pre>{JSON.stringify(preview, null, 2)}</pre>
             </details>
           </div>
         ) : (
           <p className="placeholder-copy">
             {matrixUiCopyFor(language, {
-              en: "Open this internal panel and run the comparison when QA needs to inspect matrix output. The current production draft is untouched.",
+              en: "Run the comparison to see the new plan variant. The current draft will not change.",
               ru: "Запустите сравнение, чтобы увидеть новый вариант плана. Текущий черновик не изменится.",
               bg: "Отворете internal панела и пуснете сравнение за QA. Текущата production чернова не се променя.",
             })}
