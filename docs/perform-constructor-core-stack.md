@@ -1057,11 +1057,11 @@ Decision:
 - `explanation`;
 - `recommendedAction`.
 
-Initial policy:
+Current controlled policy:
 
-- primary: `far_development_week`, `post_competition_recovery`;
+- primary: `far_development_week`, `post_competition_recovery`, `main_start_d28_preview`, `main_start_d21_preview`, `main_start_d10_preview`;
 - internal only: `travel_day`, `weigh_in_day`;
-- preview only: close main-start windows `D-28`, `D-21`, `D-10`, `D-3`, competition day and secondary close starts;
+- preview only: `D-3` main-start final activation, competition day and secondary close starts;
 - legacy/block: unknown, unsafe, comparison errors, legacy guard failures, input mutation, forbidden structural legacy usage.
 
 Explicit helper:
@@ -1346,9 +1346,9 @@ It is a shared/check/docs layer only. It does not add a new endpoint or UI, does
 
 Current pilot policy:
 
-- far development and post-competition recovery can become limited primary pilot candidates when safety/comparison/rollout checks pass;
+- far development, post-competition recovery and main-start `D-28`/`D-21`/`D-10` windows can become limited primary pilot candidates when safety/comparison/rollout checks pass;
 - travel and weigh-in can become internal pilot candidates only;
-- close main start windows and competition day remain preview-only;
+- `D-3`, competition day and secondary close starts remain preview-only;
 - unknown or unsafe cases are blocked or require review.
 
 `scripts/check-perform-constructor-core.mjs` now validates the readiness matrix across D-90, post-competition, travel, weigh-in, D-28/D-21/D-10/D-3, competition day, and unknown/bad inputs.
@@ -1496,6 +1496,7 @@ This route is still a dry-run:
 Expected controlled-pilot behavior:
 
 - D-90 allowlisted primary scenario can pass the server dry-run;
+- D-28/D-21/D-10 main-start scenarios can pass the server dry-run when safety, comparison, rollout and readiness are green;
 - D-3 close main-start stays preview-only/blocked for primary save;
 - travel and weigh-in stay internal-only and cannot pass primary pilot save dry-run.
 
@@ -1750,6 +1751,26 @@ Guardrails remain:
 - the third flag defaults false;
 - D-3, travel and weigh-in remain preview/internal-only for save/assign;
 - legacy save/template/assign stays unchanged when the gate is off.
+
+### 15.24 Main-start limited primary pilot
+
+Stage 32 opens the controlled primary pilot gate for the already covered
+main-start preparation windows `D-28`, `D-21` and `D-10`. These windows now
+behave like limited primary candidates only when all existing guards are green:
+matrix safety, legacy default guard, comparison, rollout, readiness and server
+save dry-run.
+
+Still blocked from save/assign:
+
+- `D-3` final activation;
+- competition day;
+- travel and weigh-in logistics scenarios;
+- secondary close starts;
+- unknown or unsafe inputs.
+
+This does not make matrix the default globally. It only lets the trainer-facing
+build action activate and save the matrix draft under the three explicit web
+flags, with the production draft API route still unchanged.
 
 This stage is covered by:
 

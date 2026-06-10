@@ -133,6 +133,8 @@ Manual browser checks:
 - with the third flag off, save/template/assign controls stay disabled for
   `matrix_internal` and `matrix_primary_pilot`;
 - return to legacy works;
+- D-28/D-21/D-10 main-start scenarios can pass as limited primary candidates
+  only when rollout/readiness/server dry-run are green;
 - D-3 close-start scenario remains preview-only;
 - travel and weigh-in scenarios remain internal-only;
 - `Copy review summary` and `Copy review JSON` work and do not include athlete
@@ -170,7 +172,8 @@ Manual browser checks:
 - verify the saved template appears in the template library;
 - assign the saved template to the selected athlete through the normal
   assignment flow;
-- confirm `matrix_internal`, D-3, travel and weigh-in still cannot save.
+- confirm `matrix_internal`, D-3, competition day, travel and weigh-in still
+  cannot save.
 
 Expected evidence to record:
 
@@ -216,6 +219,7 @@ Stop or roll back if:
 
 - matrix UI appears when flags are off;
 - D-3/travel/weigh-in can become primary production drafts;
+- D-28/D-21/D-10 can save without all three web flags and green server evidence;
 - save/template/assign becomes available for matrix sources while the third
   save/assign pilot flag is off;
 - review export leaks identity/raw ids;

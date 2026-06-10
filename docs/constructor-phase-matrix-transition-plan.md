@@ -3709,3 +3709,58 @@ npm run build --workspace @training-platform/web
 npm run check:constructor-core
 npm run check:constructor-matrix-ui-gates
 ```
+
+## 43. Stage 32: Main-start limited primary pilot gate
+
+Stage 32 moves the covered main-start preparation windows from review-only into
+the controlled limited primary pilot gate.
+
+### 43.1 What becomes primary-eligible
+
+These already-covered scenarios can become `matrix_primary_pilot` when all
+guards are green:
+
+- `main_start_d28_preview`;
+- `main_start_d21_preview`;
+- `main_start_d10_preview`.
+
+This is intentionally a pilot gate, not a global default. The trainer-facing
+build action may activate and save the matrix draft only when:
+
+- `NEXT_PUBLIC_INTERNAL_MATRIX_CONSTRUCTOR_UI=true`;
+- `NEXT_PUBLIC_MATRIX_CONSTRUCTOR_LIMITED_PRIMARY_PILOT=true`;
+- `NEXT_PUBLIC_MATRIX_CONSTRUCTOR_SAVE_ASSIGN_PILOT=true`;
+- matrix safety passes;
+- the legacy default guard stays unchanged;
+- comparison has no error-level differences;
+- rollout decision is `matrix_allowed_for_primary`;
+- readiness status is `ready_for_limited_primary_pilot`;
+- server save dry-run passes.
+
+### 43.2 What stays blocked
+
+The following scenarios remain not saveable/assignable as matrix primary:
+
+- `main_start_d3_preview`;
+- `competition_day_preview`;
+- `travel_day`;
+- `weigh_in_day`;
+- `secondary_start_preview`;
+- `unknown` / `unsafe` inputs.
+
+This matches the coaching logic: D-28/D-21/D-10 can still be a controllable
+preparation plan, while the final D-3/start/logistics window must stay
+conservative and review-only.
+
+### 43.3 Checks
+
+Required checks:
+
+```bash
+npm run build --workspace @training-platform/shared
+npm run build --workspace @training-platform/api
+npm run build --workspace @training-platform/web
+npm run check:constructor-core
+npm run check:constructor-matrix-ui-gates
+npm run check
+```

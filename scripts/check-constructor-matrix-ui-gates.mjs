@@ -393,6 +393,21 @@ const cases = [
     reason: null,
   },
   {
+    id: "main_start_d28_special_pre_competition",
+    allowed: true,
+    reason: null,
+  },
+  {
+    id: "main_start_d21_controlled_volume",
+    allowed: true,
+    reason: null,
+  },
+  {
+    id: "main_start_d10_taper",
+    allowed: true,
+    reason: null,
+  },
+  {
     id: "main_start_d3_final_activation",
     allowed: false,
     reason: "server_dry_run_blocked",

@@ -150,9 +150,9 @@ Fixture pack остаётся preview/safety базой, а `check-perform-const
 - `post_competition_day` -> `scenario=post_competition_recovery`, `mode=matrix_allowed_for_primary`;
 - `travel_day` -> `scenario=travel_day`, `mode=matrix_allowed_for_internal`;
 - `weigh_in_day` -> `scenario=weigh_in_day`, `mode=matrix_allowed_for_internal`;
-- `main_start_d28` -> `scenario=main_start_d28_preview`, `mode=preview_only`;
-- `main_start_d21` -> `scenario=main_start_d21_preview`, `mode=preview_only`;
-- `main_start_d10` -> `scenario=main_start_d10_preview`, `mode=preview_only`;
+- `main_start_d28` -> `scenario=main_start_d28_preview`, `mode=matrix_allowed_for_primary`;
+- `main_start_d21` -> `scenario=main_start_d21_preview`, `mode=matrix_allowed_for_primary`;
+- `main_start_d10` -> `scenario=main_start_d10_preview`, `mode=matrix_allowed_for_primary`;
 - `main_start_d3` -> `scenario=main_start_d3_preview`, `mode=preview_only`;
 - `competition_day` -> `scenario=competition_day_preview`, `mode=preview_only`;
 - `unknown` -> `legacy_only` или `blocked` с явным blocker;
@@ -302,16 +302,17 @@ Stage 17 adds a shared readiness checklist for matrix pilot decisions:
 
 The checklist reuses the same preview/rollout scenarios covered by this fixture pack and classifies them as:
 
-- limited primary pilot candidates: far development, post-competition recovery;
+- limited primary pilot candidates: far development, post-competition recovery, D-28/D-21/D-10 main-start windows;
 - internal pilot candidates: travel day, weigh-in day;
-- preview-only: close main start windows and competition day;
+- preview-only: D-3 main-start final activation, secondary close starts and competition day;
 - blocked/needs-review: unknown or unsafe inputs.
 
 The fixture runner still does not snapshot UI. Instead, `scripts/check-perform-constructor-core.mjs` validates readiness behavior:
 
 - D-90 and post-competition are `ready_for_limited_primary_pilot`;
+- D-28/D-21/D-10 main-start windows are `ready_for_limited_primary_pilot`;
 - travel and weigh-in are `ready_for_internal_pilot`;
-- D-28/D-21/D-10/D-3 and competition day remain `preview_only`;
+- D-3 and competition day remain `preview_only`;
 - unknown/bad inputs return `blocked` or `needs_review`;
 - readiness summary includes status, blockers, and checklist counts;
 - readiness evaluation does not mutate input.
@@ -449,6 +450,8 @@ Stage 24 adds `npm run check:constructor-matrix-ui-gates`.
 The check uses the fixture pack to verify:
 
 - `far_development_week_d90` can pass the server gate;
+- `main_start_d28_special_pre_competition`, `main_start_d21_controlled_volume`
+  and `main_start_d10_taper` can pass the server gate;
 - `main_start_d3_final_activation` remains preview-only;
 - `travel_day` and `weigh_in_day` remain internal-only;
 - missing server evidence, server errors, and server rollout/readiness mismatch
@@ -482,9 +485,9 @@ Stage 26 extends the same check with exposure invariants:
 - internal matrix endpoints remain guarded.
 
 This keeps the fixture pack focused on pilot safety instead of full visual
-snapshots: D-90 can still pass the controlled primary gate, while D-3,
-travel and weigh-in stay preview-only/internal-only according to their rollout
-decision.
+snapshots: D-90 and the covered D-28/D-21/D-10 main-start windows can pass the
+controlled primary gate, while D-3, travel and weigh-in stay
+preview-only/internal-only according to their rollout decision.
 
 ## Review export evidence regression
 

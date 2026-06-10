@@ -601,9 +601,9 @@ export function constructorMatrixWorkspaceUnavailableReason(params: {
   if (!isConstructorMatrixWorkspaceAllowedMode(decision)) {
     if (decision.mode === "preview_only") {
       return matrixUiCopyFor(language, {
-        en: "Matrix workspace is unavailable: main-start D-28/D-21/D-10/D-3 windows remain preview-only.",
-        ru: "Новый черновик недоступен для открытия: близкие окна главного старта пока только для сравнения.",
-        bg: "Matrix workspace не е достъпен: главните стартове D-28/D-21/D-10/D-3 са само preview.",
+        en: "Matrix workspace is unavailable: this start window remains preview-only.",
+        ru: "Новый черновик недоступен для открытия: это стартовое окно пока только для сравнения.",
+        bg: "Matrix workspace не е достъпен: този стартов прозорец е само preview.",
       });
     }
 

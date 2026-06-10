@@ -99,6 +99,9 @@ export interface MatrixPilotReadinessResult {
 const LIMITED_PRIMARY_PILOT_SCENARIOS = new Set<MatrixPilotReadinessScenario>([
   "far_development_week",
   "post_competition_recovery",
+  "main_start_d28_preview",
+  "main_start_d21_preview",
+  "main_start_d10_preview",
 ]);
 
 const INTERNAL_PILOT_SCENARIOS = new Set<MatrixPilotReadinessScenario>([
@@ -108,9 +111,6 @@ const INTERNAL_PILOT_SCENARIOS = new Set<MatrixPilotReadinessScenario>([
 
 const PREVIEW_ONLY_SCENARIOS = new Set<MatrixPilotReadinessScenario>([
   "secondary_start_preview",
-  "main_start_d28_preview",
-  "main_start_d21_preview",
-  "main_start_d10_preview",
   "main_start_d3_preview",
   "competition_day_preview",
 ]);

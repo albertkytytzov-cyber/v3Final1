@@ -37,6 +37,9 @@ export type MatrixPrimaryPilotEligibility = {
 const MATRIX_PRIMARY_PILOT_ALLOWED_SCENARIOS = new Set<MatrixConstructorRolloutScenario>([
   "far_development_week",
   "post_competition_recovery",
+  "main_start_d28_preview",
+  "main_start_d21_preview",
+  "main_start_d10_preview",
 ]);
 
 function failedSafetyErrorCount(preview?: ConstructorMatrixPreviewResponse | null) {

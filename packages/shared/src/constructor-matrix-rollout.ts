@@ -118,6 +118,9 @@ export interface MatrixConstructorDraftIfAllowedResult {
 const DEFAULT_PRIMARY_ALLOWLIST: MatrixConstructorRolloutScenario[] = [
   "far_development_week",
   "post_competition_recovery",
+  "main_start_d28_preview",
+  "main_start_d21_preview",
+  "main_start_d10_preview",
 ];
 
 const DEFAULT_INTERNAL_ALLOWLIST: MatrixConstructorRolloutScenario[] = [
@@ -127,9 +130,6 @@ const DEFAULT_INTERNAL_ALLOWLIST: MatrixConstructorRolloutScenario[] = [
 
 const DEFAULT_PREVIEW_ALLOWLIST: MatrixConstructorRolloutScenario[] = [
   "secondary_start_preview",
-  "main_start_d28_preview",
-  "main_start_d21_preview",
-  "main_start_d10_preview",
   "main_start_d3_preview",
   "competition_day_preview",
 ];
@@ -546,9 +546,6 @@ export function getMatrixRolloutBlockers(
   }
 
   if (
-    scenario === "main_start_d28_preview" ||
-    scenario === "main_start_d21_preview" ||
-    scenario === "main_start_d10_preview" ||
     scenario === "main_start_d3_preview"
   ) {
     blockers.push({

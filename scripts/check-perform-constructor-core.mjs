@@ -2315,17 +2315,24 @@ for (const [label, decision, expectedScenario] of [
   ["D-28", rolloutMainStartD28, "main_start_d28_preview"],
   ["D-21", rolloutMainStartD21, "main_start_d21_preview"],
   ["D-10", rolloutMainStartD10, "main_start_d10_preview"],
-  ["D-3", rolloutMainStartD3, "main_start_d3_preview"],
 ]) {
   assert(
     decision.scenario === expectedScenario &&
-      decision.mode === "preview_only" &&
-      decision.matrixPrimaryAllowed === false &&
-      decision.recommendedAction === "show_preview_only" &&
-      decision.blockers.some((item) => item.code === "main_start_too_close_for_primary"),
-    `${label} rollout should be preview-only with main-start primary blocker, got ${decision.scenario}/${decision.mode}/${decision.blockers.map((item) => item.code).join(",")}`,
+      decision.mode === "matrix_allowed_for_primary" &&
+      decision.matrixPrimaryAllowed === true &&
+      decision.recommendedAction === "allow_matrix_primary" &&
+      decision.blockers.length === 0,
+    `${label} rollout should allow limited matrix primary without blockers, got ${decision.scenario}/${decision.mode}/${decision.blockers.map((item) => item.code).join(",")}`,
   );
 }
+assert(
+  rolloutMainStartD3.scenario === "main_start_d3_preview" &&
+    rolloutMainStartD3.mode === "preview_only" &&
+    rolloutMainStartD3.matrixPrimaryAllowed === false &&
+    rolloutMainStartD3.recommendedAction === "show_preview_only" &&
+    rolloutMainStartD3.blockers.some((item) => item.code === "main_start_too_close_for_primary"),
+  `D-3 rollout should remain preview-only with main-start primary blocker, got ${rolloutMainStartD3.scenario}/${rolloutMainStartD3.mode}/${rolloutMainStartD3.blockers.map((item) => item.code).join(",")}`,
+);
 assert(
   rolloutCompetitionDay.scenario === "competition_day_preview" &&
     rolloutCompetitionDay.mode === "preview_only" &&
@@ -2379,16 +2386,23 @@ for (const [label, readiness, expectedScenario] of [
   ["D-28", readinessMainStartD28, "main_start_d28_preview"],
   ["D-21", readinessMainStartD21, "main_start_d21_preview"],
   ["D-10", readinessMainStartD10, "main_start_d10_preview"],
-  ["D-3", readinessMainStartD3, "main_start_d3_preview"],
 ]) {
   assert(
-    readiness.status === "preview_only" &&
+    readiness.status === "ready_for_limited_primary_pilot" &&
       readiness.scenario === expectedScenario &&
-      readinessItem(readiness, "close_main_start_policy_respected")?.status === "pass" &&
-      readiness.matrixPrimaryAllowed === false,
-    `${label} readiness should remain preview-only with close-main-start policy respected, got ${readiness.status}/${readiness.scenario}`,
+      readinessItem(readiness, "close_main_start_policy_respected")?.status === "not_applicable" &&
+      readiness.matrixPrimaryAllowed === true &&
+      readinessCriticalItemsPass(readiness),
+    `${label} readiness should be limited-primary ready, got ${readiness.status}/${readiness.scenario}`,
   );
 }
+assert(
+  readinessMainStartD3.status === "preview_only" &&
+    readinessMainStartD3.scenario === "main_start_d3_preview" &&
+    readinessItem(readinessMainStartD3, "close_main_start_policy_respected")?.status === "pass" &&
+    readinessMainStartD3.matrixPrimaryAllowed === false,
+  `D-3 readiness should remain preview-only with close-main-start policy respected, got ${readinessMainStartD3.status}/${readinessMainStartD3.scenario}`,
+);
 assert(
   readinessCompetitionDay.status === "preview_only" &&
     readinessCompetitionDay.scenario === "competition_day_preview" &&
@@ -2862,15 +2876,15 @@ console.log(
         limitedPrimaryCandidates: {
           farDevelopment: readinessFarDevelopment.status,
           postCompetition: readinessPostCompetition.status,
+          d28: readinessMainStartD28.status,
+          d21: readinessMainStartD21.status,
+          d10: readinessMainStartD10.status,
         },
         internalCandidates: {
           travel: readinessTravel.status,
           weighIn: readinessWeighIn.status,
         },
         previewOnly: {
-          d28: readinessMainStartD28.status,
-          d21: readinessMainStartD21.status,
-          d10: readinessMainStartD10.status,
           d3: readinessMainStartD3.status,
           competitionDay: readinessCompetitionDay.status,
         },
