@@ -14599,19 +14599,34 @@ export function PageClient({
       });
 
       setPlanningView("templates");
-      setTemplatePlanningTab("library");
+      setTemplatePlanningTab("assign");
+      setSelectedTemplateAssignMode("full");
+      setSelectedTemplateAssignDayIndexes([]);
+      setSelectedPlanTemplateIds([template.id]);
+      setAssignedPlanForm((current) => ({
+        ...current,
+        athleteId: selectedAthleteId || current.athleteId,
+        templateId: template.id,
+        startDate: getDateInputValue(),
+        dayLabel: localizedDayOneLabel(language),
+        notes: copyFor(language, {
+          en: `Assigned from constructor template: ${template.name}`,
+          ru: `Назначено из шаблона конструктора: ${template.name}`,
+          bg: `Назначено от шаблон на конструктора: ${template.name}`,
+        }),
+      }));
       setConstructorMessage(
         copyFor(language, {
-          en: `Template saved: ${template.name}.`,
-          ru: `Шаблон сохранен: ${template.name}.`,
-          bg: `Шаблонът е запазен: ${template.name}.`,
+          en: `Template saved and opened for assignment: ${template.name}.`,
+          ru: `Шаблон сохранён и открыт для назначения: ${template.name}.`,
+          bg: `Шаблонът е запазен и отворен за назначаване: ${template.name}.`,
         }),
       );
       setStatusMessage(
         copyFor(language, {
-          en: `Constructor template saved: ${template.name}.`,
-          ru: `Шаблон конструктора сохранен: ${template.name}.`,
-          bg: `Шаблонът от конструктора е запазен: ${template.name}.`,
+          en: `Constructor template saved. Check dates and assign it to the athlete: ${template.name}.`,
+          ru: `Шаблон конструктора сохранён. Проверьте даты и назначьте спортсмену: ${template.name}.`,
+          bg: `Шаблонът от конструктора е запазен. Проверете датите и го назначете на спортиста: ${template.name}.`,
         }),
       );
     } catch (error) {

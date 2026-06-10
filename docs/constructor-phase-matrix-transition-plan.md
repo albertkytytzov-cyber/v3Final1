@@ -3610,6 +3610,13 @@ following are true:
 If any condition fails, the UI remains review-only and the coach sees an
 explanation instead of a save button.
 
+When the guarded save succeeds, the result still follows the normal template
+workflow: the draft is saved through `/plans/templates`, then the UI opens
+`Planning Studio -> Шаблоны -> Назначить` with the saved template already
+selected. The selected athlete, full-plan assignment mode and current date are
+prefilled, but the plan is not assigned until the coach explicitly confirms the
+normal assignment action.
+
 ### 41.4 Guardrails
 
 Stage 30 still does not make matrix the default constructor. It does not change:
@@ -3737,6 +3744,10 @@ build action may activate and save the matrix draft only when:
 - rollout decision is `matrix_allowed_for_primary`;
 - readiness status is `ready_for_limited_primary_pilot`;
 - server save dry-run passes.
+
+After a successful guarded save, the template assignment tab opens immediately
+with the saved matrix template selected so the coach can check dates and assign
+through the existing template assignment flow.
 
 ### 43.2 What stays blocked
 

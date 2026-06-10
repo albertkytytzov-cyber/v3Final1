@@ -169,9 +169,12 @@ Manual browser checks:
   blocks, warm-up, main work, cool-down/control and editable exercise rows;
 - confirm the save button appears only for the active new constructor draft;
 - save as template;
-- verify the saved template appears in the template library;
+- verify the normal template assignment tab opens with the saved template
+  preselected;
+- verify the selected athlete, full-plan assignment mode and current start date
+  are prefilled;
 - assign the saved template to the selected athlete through the normal
-  assignment flow;
+  assignment flow after checking dates;
 - confirm `matrix_internal`, D-3, competition day, travel and weigh-in still
   cannot save.
 
