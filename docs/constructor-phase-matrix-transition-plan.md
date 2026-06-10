@@ -3466,3 +3466,50 @@ Stage 27 does not change matrix draft logic, rollout policy, API contracts,
 DB schema, mobile contracts, storage, telemetry, save/template/assign behavior,
 or production constructor generation. It only adds an automated evidence check
 for the existing internal review export.
+
+## 39. Stage 28: Production rollout smoke checklist
+
+Stage 28 adds an operational production rollout checklist for the controlled
+matrix pilot:
+
+```text
+docs/constructor-matrix-production-rollout.md
+```
+
+The checklist is guarded by:
+
+```bash
+npm run check:constructor-matrix-production-rollout
+```
+
+It is included in the root `npm run check` test chain.
+
+### 39.1 Covered rollout states
+
+The checklist requires evidence for three production states:
+
+- `flag-off`: legacy constructor works and matrix UI is hidden;
+- `flag-on`: internal matrix preview/workspace/export works without becoming
+  default or save-capable;
+- rollback: disabling flags hides matrix UI again and legacy generation still
+  works.
+
+### 39.2 Required evidence
+
+The checklist captures:
+
+- build/check commands before deploy;
+- production health and container checks after deploy;
+- `NEXT_PUBLIC_INTERNAL_MATRIX_CONSTRUCTOR_UI` and
+  `NEXT_PUBLIC_MATRIX_CONSTRUCTOR_LIMITED_PRIMARY_PILOT` flag behavior;
+- D-90, D-3, travel and weigh-in smoke scenarios;
+- review export copy checks;
+- save/template/assign disabled for matrix sources;
+- return-to-legacy and rollback verification.
+
+### 39.3 Guardrails
+
+Stage 28 does not change matrix draft logic, rollout policy, API contracts,
+DB schema, mobile contracts, storage, telemetry, save/template/assign behavior,
+or production constructor generation. It only makes the production pilot
+verification protocol explicit and regression-checked.

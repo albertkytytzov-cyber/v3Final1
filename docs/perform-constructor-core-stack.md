@@ -1624,3 +1624,25 @@ ids, email-like values, phone-like values and UUID-like values are not exported.
 This keeps the manual feedback package safe and useful without changing
 production constructor behavior, rollout policy, DB/API contracts, storage,
 telemetry, save/template/assign behavior, or mobile contracts.
+
+### 15.20 Production rollout smoke checklist
+
+Stage 28 adds `docs/constructor-matrix-production-rollout.md` and guards it
+with `npm run check:constructor-matrix-production-rollout`.
+
+The checklist defines the production evidence required before calling the
+controlled matrix pilot deployed:
+
+- flag-off smoke: legacy constructor works and matrix UI is hidden;
+- flag-on smoke: internal matrix preview/workspace/export works, but
+  `matrix_internal` and `matrix_primary_pilot` remain read-only;
+- rollback smoke: disabling flags and rebuilding hides matrix UI and preserves
+  legacy generation.
+
+It also records the required pre-deploy checks, production health checks,
+scenario checks for D-90/D-3/travel/weigh-in, review export copy checks, and
+save/template/assign guard verification.
+
+This is an operational checklist only. It does not change constructor behavior,
+rollout policy, DB/API contracts, storage, telemetry, mobile contracts, or
+production save/template/assign behavior.
