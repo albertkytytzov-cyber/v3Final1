@@ -294,6 +294,30 @@ Manual verification must cover:
 - travel/weigh-in: exported payload includes internal-only context;
 - exported JSON/markdown does not include athlete name, email, phone, user id, athlete id, personal notes, or DB identifiers.
 
+## Matrix pilot readiness checklist
+
+Stage 17 adds a shared readiness checklist for matrix pilot decisions:
+
+- `packages/shared/src/constructor-matrix-pilot-readiness.ts`.
+
+The checklist reuses the same preview/rollout scenarios covered by this fixture pack and classifies them as:
+
+- limited primary pilot candidates: far development, post-competition recovery;
+- internal pilot candidates: travel day, weigh-in day;
+- preview-only: close main start windows and competition day;
+- blocked/needs-review: unknown or unsafe inputs.
+
+The fixture runner still does not snapshot UI. Instead, `scripts/check-perform-constructor-core.mjs` validates readiness behavior:
+
+- D-90 and post-competition are `ready_for_limited_primary_pilot`;
+- travel and weigh-in are `ready_for_internal_pilot`;
+- D-28/D-21/D-10/D-3 and competition day remain `preview_only`;
+- unknown/bad inputs return `blocked` or `needs_review`;
+- readiness summary includes status, blockers, and checklist counts;
+- readiness evaluation does not mutate input.
+
+Stage 17 does not add endpoint/UI behavior, write DB/storage/telemetry, save or assign matrix drafts, or change rollout policy.
+
 ## Что не проверяется
 
 Fixtures не делают full snapshot:

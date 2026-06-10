@@ -1318,3 +1318,37 @@ It intentionally excludes athlete name, email, phone, user id, athlete id, perso
 Stage 16 is still controlled by `NEXT_PUBLIC_INTERNAL_MATRIX_CONSTRUCTOR_UI`. With the flag off, the export UI is not rendered. With the flag on, Stage 14/15 preview, rollout, workspace, activation, and return-to-legacy behavior are unchanged.
 
 No DB, API contract, rollout policy, production draft route, mobile, localStorage/sessionStorage, telemetry, or matrix default behavior changes are introduced.
+
+### 15.9 Matrix constructor pilot readiness checklist
+
+Stage 17 adds a shared readiness evaluator for matrix pilot decisions:
+
+- `packages/shared/src/constructor-matrix-pilot-readiness.ts`
+
+Primary functions:
+
+- `evaluateMatrixPilotReadiness(input, options?)`;
+- `buildMatrixPilotReadinessChecklist(input, preview, rolloutDecision, options?)`;
+- `summarizeMatrixPilotReadiness(readiness)`;
+- `getMatrixPilotReadinessBlockers(readiness)`;
+- `classifyMatrixPilotReadinessScenario(input, rolloutDecision)`.
+
+The readiness layer classifies scenarios into:
+
+- `ready_for_internal_pilot`;
+- `ready_for_limited_primary_pilot`;
+- `internal_only`;
+- `preview_only`;
+- `blocked`;
+- `needs_review`.
+
+It is a shared/check/docs layer only. It does not add a new endpoint or UI, does not persist anything, and does not change the production draft route, DB, telemetry/storage, mobile contracts, rollout policy, matrix default behavior, or legacy save/template/assign flow.
+
+Current pilot policy:
+
+- far development and post-competition recovery can become limited primary pilot candidates when safety/comparison/rollout checks pass;
+- travel and weigh-in can become internal pilot candidates only;
+- close main start windows and competition day remain preview-only;
+- unknown or unsafe cases are blocked or require review.
+
+`scripts/check-perform-constructor-core.mjs` now validates the readiness matrix across D-90, post-competition, travel, weigh-in, D-28/D-21/D-10/D-3, competition day, and unknown/bad inputs.

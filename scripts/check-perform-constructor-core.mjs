@@ -13,13 +13,16 @@ import {
   CONSTRUCTOR_TEMPLATE_CARDS,
   CONSTRUCTOR_TRAINING_BLOCK_LIBRARY,
   decideMatrixConstructorRollout,
+  evaluateMatrixPilotReadiness,
   explainBlockEligibility,
   filterAllowedTrainingBlocks,
+  getMatrixPilotReadinessBlockers,
   getAllowedSessionSlots,
   getDayTypeForContext,
   getForbiddenBlockReasons,
   getWeekTypeForContext,
   isTrainingBlockAllowed,
+  summarizeMatrixPilotReadiness,
 } from "@training-platform/shared";
 import { runConstructorPreviewFixtures } from "./constructor-preview-fixture-runner.mjs";
 
@@ -138,6 +141,16 @@ function skeletonHasExplanation(skeleton, pattern) {
   ];
 
   return messages.some((message) => pattern.test(message));
+}
+
+function readinessItem(readiness, id) {
+  return readiness.checklist.find((item) => item.id === id);
+}
+
+function readinessCriticalItemsPass(readiness) {
+  return readiness.checklist
+    .filter((item) => item.severity === "error")
+    .every((item) => item.status === "pass" || item.status === "not_applicable");
 }
 
 function matrixDraftDays(draft) {
@@ -1359,57 +1372,64 @@ const rolloutInputWeighIn = matrixPlanInput({
   phase: "start_window",
 });
 const rolloutWeighIn = decideMatrixConstructorRollout(rolloutInputWeighIn);
-const rolloutMainStartD28 = decideMatrixConstructorRollout(
-  matrixPlanInput({
-    daysToStart: 28,
-    cycleLengthDays: 28,
-    phase: "special_preparation",
-  }),
-);
-const rolloutMainStartD21 = decideMatrixConstructorRollout(
-  matrixPlanInput({
-    daysToStart: 21,
-    cycleLengthDays: 21,
-    phase: "special_preparation",
-  }),
-);
-const rolloutMainStartD10 = decideMatrixConstructorRollout(
-  matrixPlanInput({
-    daysToStart: 10,
-    cycleLengthDays: 10,
-    phase: "taper",
-  }),
-);
-const rolloutMainStartD3 = decideMatrixConstructorRollout(
-  matrixPlanInput({
-    daysToStart: 3,
-    cycleLengthDays: 3,
-    phase: "start_window",
-  }),
-);
-const rolloutCompetitionDay = decideMatrixConstructorRollout(
-  matrixPlanInput({
-    daysToStart: 0,
-    cycleLengthDays: 1,
-    phase: "start_window",
-  }),
-);
-const rolloutUnknown = decideMatrixConstructorRollout(
-  matrixPlanInput({
-    daysToStart: 45,
-    cycleLengthDays: 7,
-    phase: "special_preparation",
-    role: "main_peak",
-    priority: "A",
-    level: "continental",
-    startDate: "2026-08-20",
-    weighInDate: "2026-08-19",
-  }),
-);
+const rolloutInputMainStartD28 = matrixPlanInput({
+  daysToStart: 28,
+  cycleLengthDays: 28,
+  phase: "special_preparation",
+});
+const rolloutMainStartD28 = decideMatrixConstructorRollout(rolloutInputMainStartD28);
+const rolloutInputMainStartD21 = matrixPlanInput({
+  daysToStart: 21,
+  cycleLengthDays: 21,
+  phase: "special_preparation",
+});
+const rolloutMainStartD21 = decideMatrixConstructorRollout(rolloutInputMainStartD21);
+const rolloutInputMainStartD10 = matrixPlanInput({
+  daysToStart: 10,
+  cycleLengthDays: 10,
+  phase: "taper",
+});
+const rolloutMainStartD10 = decideMatrixConstructorRollout(rolloutInputMainStartD10);
+const rolloutInputMainStartD3 = matrixPlanInput({
+  daysToStart: 3,
+  cycleLengthDays: 3,
+  phase: "start_window",
+});
+const rolloutMainStartD3 = decideMatrixConstructorRollout(rolloutInputMainStartD3);
+const rolloutInputCompetitionDay = matrixPlanInput({
+  daysToStart: 0,
+  cycleLengthDays: 1,
+  phase: "start_window",
+});
+const rolloutCompetitionDay = decideMatrixConstructorRollout(rolloutInputCompetitionDay);
+const rolloutInputUnknown = matrixPlanInput({
+  daysToStart: 45,
+  cycleLengthDays: 7,
+  phase: "special_preparation",
+  role: "main_peak",
+  priority: "A",
+  level: "continental",
+  startDate: "2026-08-20",
+  weighInDate: "2026-08-19",
+});
+const rolloutUnknown = decideMatrixConstructorRollout(rolloutInputUnknown);
 const rolloutDisabled = decideMatrixConstructorRollout(rolloutInputFarDevelopment, {
   disabled: true,
   disabledReason: "Synthetic rollout disabled check.",
 });
+const readinessInputFarDevelopmentSnapshot = JSON.stringify(rolloutInputFarDevelopment);
+const readinessFarDevelopment = evaluateMatrixPilotReadiness(rolloutInputFarDevelopment);
+const readinessPostCompetition = evaluateMatrixPilotReadiness(rolloutInputPostCompetition);
+const readinessTravel = evaluateMatrixPilotReadiness(rolloutInputTravel);
+const readinessWeighIn = evaluateMatrixPilotReadiness(rolloutInputWeighIn);
+const readinessMainStartD28 = evaluateMatrixPilotReadiness(rolloutInputMainStartD28);
+const readinessMainStartD21 = evaluateMatrixPilotReadiness(rolloutInputMainStartD21);
+const readinessMainStartD10 = evaluateMatrixPilotReadiness(rolloutInputMainStartD10);
+const readinessMainStartD3 = evaluateMatrixPilotReadiness(rolloutInputMainStartD3);
+const readinessCompetitionDay = evaluateMatrixPilotReadiness(rolloutInputCompetitionDay);
+const readinessUnknown = evaluateMatrixPilotReadiness(rolloutInputUnknown);
+const readinessFarDevelopmentSummary = summarizeMatrixPilotReadiness(readinessFarDevelopment);
+const readinessD3Blockers = getMatrixPilotReadinessBlockers(readinessMainStartD3);
 const matrixIfAllowedFarDevelopment = buildMatrixConstructorDraftIfAllowed(rolloutInputFarDevelopment);
 const matrixIfAllowedD3Fallback = buildMatrixConstructorDraftIfAllowed(
   matrixPlanInput({
@@ -2327,6 +2347,69 @@ assert(
   "Explicitly disabled rollout should block matrix",
 );
 assert(
+  readinessFarDevelopment.status === "ready_for_limited_primary_pilot" &&
+    readinessFarDevelopment.scenario === "far_development_week" &&
+    readinessFarDevelopment.rolloutMode === "matrix_allowed_for_primary" &&
+    readinessCriticalItemsPass(readinessFarDevelopment),
+  `Far-development readiness should be limited-primary ready, got ${readinessFarDevelopment.status}/${readinessFarDevelopment.scenario}`,
+);
+assert(
+  JSON.stringify(rolloutInputFarDevelopment) === readinessInputFarDevelopmentSnapshot,
+  "Pilot readiness evaluation should not mutate the input",
+);
+assert(
+  readinessPostCompetition.status === "ready_for_limited_primary_pilot" &&
+    readinessPostCompetition.scenario === "post_competition_recovery" &&
+    readinessCriticalItemsPass(readinessPostCompetition),
+  `Post-competition readiness should be limited-primary ready, got ${readinessPostCompetition.status}/${readinessPostCompetition.scenario}`,
+);
+assert(
+  readinessTravel.status === "ready_for_internal_pilot" &&
+    readinessTravel.scenario === "travel_day" &&
+    readinessItem(readinessTravel, "logistics_load_is_light")?.status === "pass",
+  `Travel readiness should be internal-pilot ready with light logistics load, got ${readinessTravel.status}/${readinessTravel.scenario}`,
+);
+assert(
+  readinessWeighIn.status === "ready_for_internal_pilot" &&
+    readinessWeighIn.scenario === "weigh_in_day" &&
+    readinessItem(readinessWeighIn, "logistics_load_is_light")?.status === "pass",
+  `Weigh-in readiness should be internal-pilot ready with light logistics load, got ${readinessWeighIn.status}/${readinessWeighIn.scenario}`,
+);
+for (const [label, readiness, expectedScenario] of [
+  ["D-28", readinessMainStartD28, "main_start_d28_preview"],
+  ["D-21", readinessMainStartD21, "main_start_d21_preview"],
+  ["D-10", readinessMainStartD10, "main_start_d10_preview"],
+  ["D-3", readinessMainStartD3, "main_start_d3_preview"],
+]) {
+  assert(
+    readiness.status === "preview_only" &&
+      readiness.scenario === expectedScenario &&
+      readinessItem(readiness, "close_main_start_policy_respected")?.status === "pass" &&
+      readiness.matrixPrimaryAllowed === false,
+    `${label} readiness should remain preview-only with close-main-start policy respected, got ${readiness.status}/${readiness.scenario}`,
+  );
+}
+assert(
+  readinessCompetitionDay.status === "preview_only" &&
+    readinessCompetitionDay.scenario === "competition_day_preview" &&
+    readinessCompetitionDay.matrixPrimaryAllowed === false,
+  `Competition-day readiness should remain preview-only, got ${readinessCompetitionDay.status}/${readinessCompetitionDay.scenario}`,
+);
+assert(
+  readinessUnknown.status === "blocked" || readinessUnknown.status === "needs_review",
+  `Unknown readiness should be blocked or needs_review, got ${readinessUnknown.status}`,
+);
+assert(
+  readinessFarDevelopmentSummary.status === readinessFarDevelopment.status &&
+    readinessFarDevelopmentSummary.blockerCount === readinessFarDevelopment.blockers.length &&
+    readinessFarDevelopmentSummary.checklistCounts.pass > 0,
+  "Pilot readiness summary should include status, blocker count and checklist counts",
+);
+assert(
+  readinessD3Blockers.some((item) => item.id === "main_start_too_close_for_primary"),
+  "D-3 readiness blockers should include the close-main-start rollout blocker",
+);
+assert(
   matrixIfAllowedFarDevelopment.source === "matrix" &&
     matrixIfAllowedFarDevelopment.draft?.generatedFrom === "matrix" &&
     matrixIfAllowedFarDevelopment.decision.matrixPrimaryAllowed,
@@ -2774,6 +2857,26 @@ console.log(
           d3Default: matrixIfAllowedD3Fallback.source,
           d3Blocked: matrixIfAllowedD3Blocked.source,
         },
+      },
+      matrixPilotReadiness: {
+        limitedPrimaryCandidates: {
+          farDevelopment: readinessFarDevelopment.status,
+          postCompetition: readinessPostCompetition.status,
+        },
+        internalCandidates: {
+          travel: readinessTravel.status,
+          weighIn: readinessWeighIn.status,
+        },
+        previewOnly: {
+          d28: readinessMainStartD28.status,
+          d21: readinessMainStartD21.status,
+          d10: readinessMainStartD10.status,
+          d3: readinessMainStartD3.status,
+          competitionDay: readinessCompetitionDay.status,
+        },
+        unknown: readinessUnknown.status,
+        farDevelopmentChecklistCounts: readinessFarDevelopmentSummary.checklistCounts,
+        d3Blockers: readinessD3Blockers.map((item) => item.id),
       },
     },
     null,

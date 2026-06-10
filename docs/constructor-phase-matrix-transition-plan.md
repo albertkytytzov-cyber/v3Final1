@@ -2745,3 +2745,99 @@ Flag on:
 5. Export JSON/markdown не содержит PII.
 6. Return to legacy работает.
 7. Save/template/assign остаются disabled для `matrix_internal`.
+
+## 28. Stage 17: Matrix constructor pilot readiness checklist
+
+Stage 17 добавляет shared-only readiness layer для решения, можно ли конкретный matrix scenario брать в internal/limited pilot.
+
+Это не UI, не endpoint и не rollout switch. Default constructor, production draft route, DB, mobile contracts, storage, telemetry, save/template/assign и rollout policy не меняются.
+
+### 28.1 Что добавлено
+
+Shared-модуль:
+
+```text
+packages/shared/src/constructor-matrix-pilot-readiness.ts
+```
+
+Экспортируемые функции:
+
+- `evaluateMatrixPilotReadiness(input, options?)`;
+- `buildMatrixPilotReadinessChecklist(input, preview, rolloutDecision, options?)`;
+- `summarizeMatrixPilotReadiness(readiness)`;
+- `getMatrixPilotReadinessBlockers(readiness)`;
+- `classifyMatrixPilotReadinessScenario(input, rolloutDecision)`.
+
+Экспортируемые типы:
+
+- `MatrixPilotReadinessResult`;
+- `MatrixPilotReadinessStatus`;
+- `MatrixPilotReadinessChecklistItem`;
+- `MatrixPilotReadinessBlocker`;
+- `MatrixPilotReadinessScenario`;
+- `MatrixPilotReadinessOptions`.
+
+### 28.2 Readiness statuses
+
+Stage 17 uses explicit statuses:
+
+- `ready_for_internal_pilot` — matrix можно смотреть/тестировать только внутренне;
+- `ready_for_limited_primary_pilot` — matrix допустим как limited primary candidate для allowlisted scenarios;
+- `internal_only` — сценарий не готов к primary, но полезен для внутреннего review;
+- `preview_only` — только side-by-side preview, без activation/save/assign;
+- `blocked` — есть safety/contract/rollout blocker;
+- `needs_review` — данных недостаточно или scenario не покрыт.
+
+### 28.3 Scenario policy
+
+Limited primary candidates:
+
+- `far_development_week`;
+- `post_competition_recovery`.
+
+Internal pilot candidates:
+
+- `travel_day`;
+- `weigh_in_day`.
+
+Preview-only:
+
+- D-28/D-21/D-10/D-3 main start windows;
+- competition day;
+- secondary start preview.
+
+Unknown/unsafe inputs return `blocked` or `needs_review`.
+
+### 28.4 Checklist semantics
+
+Checklist проверяет:
+
+- scenario allowlist;
+- fixture coverage;
+- preview safety;
+- comparison result;
+- rollout decision;
+- legacy default guard;
+- legacy template not used as matrix structure;
+- draft shape;
+- phase map/explanation;
+- close main start safety;
+- travel/weigh-in load;
+- review export availability;
+- manual QA requirement.
+
+Manual QA остаётся checklist item, но не считается hard blocker сама по себе. Hard blockers приходят из failed safety/checklist items или rollout blockers.
+
+### 28.5 Проверки
+
+`scripts/check-perform-constructor-core.mjs` расширен readiness-регрессиями:
+
+- D-90 far development -> `ready_for_limited_primary_pilot`;
+- post competition -> `ready_for_limited_primary_pilot`;
+- travel/weigh-in -> `ready_for_internal_pilot`;
+- D-28/D-21/D-10/D-3 and competition day -> `preview_only`;
+- unknown/bad input -> `blocked` or `needs_review`;
+- mutation guard;
+- summary includes status, blockers, and checklist counts.
+
+Stage 17 intentionally does not add browser UI. Manual UI smoke remains relevant only for Stage 15/16 flag-gated panel.
