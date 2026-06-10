@@ -1550,3 +1550,25 @@ reason when evidence is missing, blocked, or inconsistent.
 This is still an internal read-only gate. It does not change the production
 draft route, template saving, assignment, DB schema, telemetry, storage, mobile
 contracts, or rollout policy.
+
+### 15.16 Matrix UI gate regression check
+
+Stage 24 adds an automated regression check for the server evidence activation
+gate:
+
+```bash
+npm run check:constructor-matrix-ui-gates
+```
+
+The check is included in root `npm run check` and covers:
+
+- D-90 allowlisted primary pilot server evidence;
+- D-3 preview-only blocking;
+- travel/weigh-in internal-only blocking;
+- missing server evidence;
+- server dry-run error;
+- server rollout/readiness mismatch.
+
+This keeps the primary pilot UI gate tied to explicit evidence and prevents a
+future UI-only refactor from accidentally enabling `matrix_primary_pilot`
+without a passing server dry-run.

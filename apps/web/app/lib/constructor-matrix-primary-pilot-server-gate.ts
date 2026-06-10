@@ -14,6 +14,7 @@ export type MatrixPrimaryPilotServerGateReason =
   | "server_rollout_blockers_present"
   | "server_readiness_not_primary_ready"
   | "server_readiness_blockers_present"
+  | "server_evidence_mismatch"
   | "server_scenario_mismatch";
 
 export type MatrixPrimaryPilotServerGateEvidenceItem = {
@@ -55,6 +56,17 @@ export function canUseMatrixPrimaryPilotWithServerEvidence(params: {
   const pilotReadiness = serverResult?.pilotReadiness ?? null;
   const localScenario = localRolloutDecision?.scenario ?? localPilotReadiness?.scenario ?? null;
   const serverScenario = rolloutDecision?.scenario ?? pilotReadiness?.scenario ?? null;
+  const serverScenarioMatches = Boolean(
+    rolloutDecision && pilotReadiness && rolloutDecision.scenario === pilotReadiness.scenario,
+  );
+  const serverRolloutModeMatches = Boolean(
+    rolloutDecision && pilotReadiness && rolloutDecision.mode === pilotReadiness.rolloutMode,
+  );
+  const serverPrimaryAllowedMatches = Boolean(
+    rolloutDecision &&
+      pilotReadiness &&
+      rolloutDecision.matrixPrimaryAllowed === pilotReadiness.matrixPrimaryAllowed,
+  );
   const scenarioMatches = Boolean(
     localScenario && serverScenario && localScenario === serverScenario,
   );
@@ -101,6 +113,30 @@ export function canUseMatrixPrimaryPilotWithServerEvidence(params: {
       pilotReadiness?.blockers.length,
     ),
     evidenceItem(
+      "server_rollout_readiness_scenario",
+      "server rollout/readiness scenario",
+      serverScenarioMatches,
+      rolloutDecision && pilotReadiness
+        ? `${rolloutDecision.scenario} / ${pilotReadiness.scenario}`
+        : null,
+    ),
+    evidenceItem(
+      "server_rollout_readiness_mode",
+      "server rollout/readiness mode",
+      serverRolloutModeMatches,
+      rolloutDecision && pilotReadiness
+        ? `${rolloutDecision.mode} / ${pilotReadiness.rolloutMode}`
+        : null,
+    ),
+    evidenceItem(
+      "server_rollout_readiness_primary",
+      "server rollout/readiness primaryAllowed",
+      serverPrimaryAllowedMatches,
+      rolloutDecision && pilotReadiness
+        ? `${rolloutDecision.matrixPrimaryAllowed} / ${pilotReadiness.matrixPrimaryAllowed}`
+        : null,
+    ),
+    evidenceItem(
       "server_scenario_match",
       "server scenario matches local",
       scenarioMatches,
@@ -130,6 +166,12 @@ export function canUseMatrixPrimaryPilotWithServerEvidence(params: {
     reason = "server_readiness_not_primary_ready";
   } else if (pilotReadiness.blockers.length > 0) {
     reason = "server_readiness_blockers_present";
+  } else if (
+    !serverScenarioMatches ||
+    !serverRolloutModeMatches ||
+    !serverPrimaryAllowedMatches
+  ) {
+    reason = "server_evidence_mismatch";
   } else if (!scenarioMatches) {
     reason = "server_scenario_mismatch";
   }
@@ -188,6 +230,11 @@ export function matrixPrimaryPilotServerGateReasonText(
       en: "Server readiness blockers are present.",
       ru: "Есть server readiness blockers.",
       bg: "Има server readiness blockers.",
+    }),
+    server_evidence_mismatch: matrixUiCopyFor(language, {
+      en: "Server rollout and readiness evidence do not agree.",
+      ru: "Server rollout и readiness evidence не совпадают.",
+      bg: "Server rollout и readiness evidence не съвпадат.",
     }),
     server_scenario_mismatch: matrixUiCopyFor(language, {
       en: "Server scenario does not match the local preview scenario.",

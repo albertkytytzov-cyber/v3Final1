@@ -3311,3 +3311,46 @@ Stage 23 does not change:
 
 Server evidence only gates the read-only `matrix_primary_pilot` view inside the
 internal workspace. It does not create a real save path.
+
+## 35. Stage 24: Automated regression coverage for server evidence gate
+
+Stage 24 adds automated coverage for the Stage 23 activation gate.
+
+The new check is:
+
+```bash
+npm run check:constructor-matrix-ui-gates
+```
+
+It is also included in the root `npm run check` test chain.
+
+### 35.1 Covered scenarios
+
+The check proves:
+
+- `far_development_week_d90` can pass the server gate;
+- `main_start_d3_final_activation` is blocked;
+- `travel_day` is blocked from primary pilot and remains internal-only;
+- `weigh_in_day` is blocked from primary pilot and remains internal-only;
+- missing server dry-run evidence blocks activation;
+- server dry-run errors block activation;
+- server rollout/readiness evidence mismatch blocks activation.
+
+### 35.2 Why this matters
+
+The controlled pilot depends on the browser and server agreeing before an
+internal read-only primary pilot view can be activated. Stage 24 makes that
+agreement a regression requirement instead of relying only on manual browser
+smoke.
+
+### 35.3 Guardrails
+
+Stage 24 does not change:
+
+- production save/assign behavior;
+- DB schema;
+- mobile contracts;
+- rollout policy;
+- matrix default behavior.
+
+It only adds regression coverage for the existing internal UI gate.

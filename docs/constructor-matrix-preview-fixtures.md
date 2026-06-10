@@ -442,6 +442,21 @@ read-only `matrix_primary_pilot` view:
 The fixture smoke should verify the server dry-run request is made only when the
 limited pilot flag is enabled and that no matrix draft is persisted.
 
+## Automated server gate regression
+
+Stage 24 adds `npm run check:constructor-matrix-ui-gates`.
+
+The check uses the fixture pack to verify:
+
+- `far_development_week_d90` can pass the server gate;
+- `main_start_d3_final_activation` remains preview-only;
+- `travel_day` and `weigh_in_day` remain internal-only;
+- missing server evidence, server errors, and server rollout/readiness mismatch
+  all block primary pilot activation.
+
+This gives the fixture pack an explicit UI-gate regression layer without
+snapshotting the full rendered draft.
+
 ## Что не проверяется
 
 Fixtures не делают full snapshot:
