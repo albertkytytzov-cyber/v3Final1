@@ -407,3 +407,40 @@ Guardrails:
 - no rollout/preview/legacy fallback changes;
 - no numeric threshold values;
 - runtime Matrix decision files must not import the review package.
+
+## 15. Matrix Review Decision Ledger
+
+Stage: Matrix Review Decision Ledger.
+
+The Matrix Review Decision Ledger completes the metadata governance chain:
+
+EvidenceDependencyRegistry -> DataDependencyGate -> ThresholdCandidateRegistry
+-> ReviewPackage -> ReviewDecisionLedger.
+
+Implemented artifact:
+
+- `packages/shared/src/constructor-matrix-review-decision-ledger.ts`;
+- `npm run check:constructor-matrix-review-decision-ledger`;
+- shared exports for ledger ids, subject lookups and summary helpers.
+
+Ledger scope:
+
+- all threshold candidates have ledger entries;
+- all high-risk data dependencies have ledger entries;
+- evidence dependencies needing review have ledger entries;
+- review package output includes a ledger summary.
+
+Guardrails:
+
+- no human approvals are recorded;
+- entries are system initial triage, audit trace or review-package queue
+  metadata;
+- `humanReviewed=false` for every entry;
+- no `reviewedBy` or `reviewedAt` fields are allowed;
+- no numeric thresholds or cutoffs are added;
+- runtime behavior, production route, rollout gates, preview behavior and
+  legacy fallback are unchanged;
+- Matrix default remains disabled.
+
+Next step: run an actual coach, medical and data-quality review pass, or move
+source gaps into a source-expansion backlog before any runtime promotion.

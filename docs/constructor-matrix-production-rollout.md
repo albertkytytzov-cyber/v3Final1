@@ -319,3 +319,27 @@ Rollout invariants:
 Any future move from candidate metadata toward runtime behavior requires a
 separate review stage, updated evidence/data dependency checks and explicit
 approval.
+
+## Matrix Review Decision Ledger rollout note
+
+Stage: Matrix Review Decision Ledger.
+
+The Review Decision Ledger is metadata-only governance, not production
+decisioning. It records system initial triage, audit trace and review-package
+queue statuses for evidence dependencies, data dependencies and threshold
+candidates.
+
+Rollout guardrails:
+
+- no human approvals are recorded;
+- all entries have `humanReviewed=false`;
+- no numeric thresholds or cutoffs are introduced;
+- no production route is changed;
+- no rollout gate is changed;
+- no preview behavior, save/template/assign behavior or legacy fallback is
+  changed;
+- Matrix default is not enabled;
+- Huawei files and SDK scripts are unrelated to this Matrix stage.
+
+Next step: actual coach, medical and data-quality review, or source expansion
+backlog, before any runtime promotion.

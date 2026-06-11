@@ -4069,3 +4069,41 @@ Reviewer queues:
 No changes are allowed to runtime behavior, production draft route, rollout
 gates, preview behavior, pilot readiness, save/template/assign, block
 selection, skeleton selection or legacy fallback.
+
+## 48. Stage: Matrix Review Decision Ledger
+
+This stage completes the metadata-only review governance chain:
+
+EvidenceDependencyRegistry -> DataDependencyGate -> ThresholdCandidateRegistry
+-> ReviewPackage -> ReviewDecisionLedger.
+
+Artifacts:
+
+- `packages/shared/src/constructor-matrix-review-decision-ledger.ts`;
+- `npm run check:constructor-matrix-review-decision-ledger`;
+- shared exports for ledger ids, subject lookups and summary helpers;
+- Review Package ledger summary metadata.
+
+The ledger records system triage statuses for:
+
+- every threshold candidate;
+- every high-risk data dependency;
+- every evidence dependency that needs review because of automation readiness,
+  review status, high-risk areas, internal case patterns, coach-school sources,
+  internal validation or gap markers.
+
+It does not record human approval. Every entry has `humanReviewed=false`, no
+`reviewedBy`, no `reviewedAt`, and no status that means runtime approval.
+
+Allowed current use remains limited to docs, review export, or risk-warning
+candidate metadata. The ledger explicitly forbids runtime hard rules, runtime
+gates, automatic weight-cut decisions, automatic hydration diagnosis,
+automatic injury-return decisions, automatic RED-S decisions, Matrix broad
+default and production rollout promotion.
+
+No changes are allowed to runtime behavior, production draft route, rollout
+gates, preview behavior, pilot readiness, save/template/assign, block
+selection, skeleton selection or legacy fallback.
+
+Next stage: real coach, medical and data-quality review pass, or source
+expansion backlog, before any runtime behavior is considered.

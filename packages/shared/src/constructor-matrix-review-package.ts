@@ -11,6 +11,13 @@ import {
   type ConstructorMatrixEvidenceRiskArea,
 } from "./constructor-matrix-evidence";
 import {
+  buildConstructorMatrixReviewDecisionLedgerSummary,
+  getConstructorMatrixReviewDecisionsForSubject,
+  type ConstructorMatrixReviewDecisionLedgerSummary,
+  type ConstructorMatrixReviewDecisionStatus,
+  type ConstructorMatrixReviewSubjectType,
+} from "./constructor-matrix-review-decision-ledger";
+import {
   CONSTRUCTOR_MATRIX_THRESHOLD_CANDIDATES,
   type ConstructorMatrixThresholdCandidate,
   type ConstructorMatrixThresholdCandidateArea,
@@ -33,6 +40,8 @@ export interface ConstructorMatrixReviewPackageRef {
   title: string;
   areas: readonly string[];
   reason: string;
+  linkedDecisionStatuses: readonly ConstructorMatrixReviewDecisionStatus[];
+  humanReviewed: false;
 }
 
 export interface ConstructorMatrixReviewPackageReviewerQueue {
@@ -113,6 +122,7 @@ export interface ConstructorMatrixReviewPackagePayload {
     requiredThresholdAreasCovered: readonly ConstructorMatrixThresholdCandidateArea[];
     requiredThresholdAreasMissing: readonly ConstructorMatrixThresholdCandidateArea[];
   };
+  reviewDecisionLedger: ConstructorMatrixReviewDecisionLedgerSummary;
   reviewerQueues: readonly ConstructorMatrixReviewPackageReviewerQueue[];
   evidenceDependencies: readonly ConstructorMatrixReviewPackageEvidenceItem[];
   dataDependencies: readonly ConstructorMatrixReviewPackageDataItem[];
@@ -274,6 +284,27 @@ function dataAreasForThreshold(candidate: ConstructorMatrixThresholdCandidate) {
   return areas;
 }
 
+function subjectTypeForLayer(
+  layer: ConstructorMatrixReviewPackageLayer,
+): ConstructorMatrixReviewSubjectType {
+  return layer;
+}
+
+function withLedgerDecisionMetadata(
+  ref: Omit<ConstructorMatrixReviewPackageRef, "linkedDecisionStatuses" | "humanReviewed">,
+): ConstructorMatrixReviewPackageRef {
+  const decisions = getConstructorMatrixReviewDecisionsForSubject(
+    subjectTypeForLayer(ref.layer),
+    ref.id,
+  );
+
+  return {
+    ...ref,
+    linkedDecisionStatuses: uniqueSorted(decisions.map((item) => item.status)),
+    humanReviewed: false,
+  };
+}
+
 function reviewersForEvidence(
   item: ConstructorMatrixEvidenceDependency,
 ): ConstructorMatrixReviewPackageReviewer[] {
@@ -372,33 +403,33 @@ function reviewersForThreshold(
 }
 
 function evidenceReviewRef(item: ConstructorMatrixEvidenceDependency): ConstructorMatrixReviewPackageRef {
-  return {
+  return withLedgerDecisionMetadata({
     layer: "evidence_dependency",
     id: item.id,
     title: item.title,
     areas: item.riskAreas,
     reason: `${item.reviewStatus} / ${item.automationReadiness}`,
-  };
+  });
 }
 
 function dataReviewRef(item: ConstructorMatrixDataDependency): ConstructorMatrixReviewPackageRef {
-  return {
+  return withLedgerDecisionMetadata({
     layer: "data_dependency",
     id: item.id,
     title: item.title,
     areas: [item.area],
     reason: `${item.currentAvailability} / ${item.missingDataBehavior}`,
-  };
+  });
 }
 
 function thresholdReviewRef(item: ConstructorMatrixThresholdCandidate): ConstructorMatrixReviewPackageRef {
-  return {
+  return withLedgerDecisionMetadata({
     layer: "threshold_candidate",
     id: item.id,
     title: item.title,
     areas: [item.area, ...dataAreasForThreshold(item)],
     reason: `${item.status} / ${item.proposedRuntimeUse}`,
-  };
+  });
 }
 
 function buildReviewerQueues(): ConstructorMatrixReviewPackageReviewerQueue[] {
@@ -506,7 +537,10 @@ function queueMarkdown(queue: ConstructorMatrixReviewPackageReviewerQueue) {
     "",
     "Items:",
     markdownList(
-      queue.items.map((item) => `${item.layer} · ${item.id} · ${item.reason}`),
+      queue.items.map(
+        (item) =>
+          `${item.layer} · ${item.id} · ${item.reason} · ledger=${item.linkedDecisionStatuses.join(", ") || "none"} · humanReviewed=${item.humanReviewed}`,
+      ),
     ),
   ].join("\n");
 }
@@ -538,6 +572,9 @@ export function buildConstructorMatrixLayerReviewMarkdown(
       `Data dependencies: ${payload.summary.dataDependencyCount}`,
       `Threshold candidates: ${payload.summary.thresholdCandidateCount}`,
       `Required threshold areas missing: ${payload.summary.requiredThresholdAreasMissing.join(", ") || "none"}`,
+      `Review decision ledger entries: ${payload.reviewDecisionLedger.totalLedgerEntries}`,
+      `Review decision threshold coverage: ${payload.reviewDecisionLedger.thresholdCandidatesCoveredCount}/${payload.reviewDecisionLedger.thresholdCandidateCount}`,
+      `Review decision humanReviewed=${payload.reviewDecisionLedger.humanReviewed}`,
     ]),
     "",
     "## Required Threshold Areas Covered",
@@ -593,6 +630,7 @@ export function buildConstructorMatrixLayerReviewPackage(params?: {
         ),
       requiredThresholdAreasMissing,
     },
+    reviewDecisionLedger: buildConstructorMatrixReviewDecisionLedgerSummary(),
     reviewerQueues: buildReviewerQueues(),
     evidenceDependencies: CONSTRUCTOR_MATRIX_EVIDENCE_DEPENDENCY_REGISTRY.map(evidenceItem),
     dataDependencies: CONSTRUCTOR_MATRIX_DATA_DEPENDENCIES.map(dataItem),

@@ -611,6 +611,27 @@ Fixture behavior is unchanged:
 - D-90, D-3, travel and weigh-in fixture behavior remains controlled by the
   existing Matrix rollout/readiness policy.
 
+## Matrix Review Decision Ledger regression
+
+Stage: Matrix Review Decision Ledger.
+
+`npm run check:constructor-matrix-review-decision-ledger` verifies the
+metadata-only ledger after the review package:
+
+- all threshold candidates are covered;
+- high-risk data dependencies are covered;
+- evidence dependencies needing review are covered;
+- every entry has `humanReviewed=false`;
+- no `reviewedBy` or `reviewedAt` fields are present;
+- no runtime constructor, API or web file imports the ledger.
+
+Preview fixture expectations are unchanged:
+
+- the ledger does not alter Matrix preview behavior;
+- no preview scenario becomes primary because of a ledger status;
+- no numeric thresholds or cutoffs are added;
+- no Matrix default, save, template or assign path is enabled.
+
 ## Что не проверяется
 
 Fixtures не делают full snapshot:

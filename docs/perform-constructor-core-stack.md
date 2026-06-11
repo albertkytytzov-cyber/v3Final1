@@ -1981,3 +1981,40 @@ Regression coverage:
 npm run check:constructor-matrix-review-package
 npm run check:constructor-core
 ```
+
+### 15.30 Matrix Review Decision Ledger
+
+Stage: Matrix Review Decision Ledger.
+
+The Review Decision Ledger adds the last metadata-only governance layer after
+the Matrix Review Package. It records machine-checkable system triage statuses
+for evidence dependencies, data dependencies and threshold candidates.
+
+Implemented:
+
+- `packages/shared/src/constructor-matrix-review-decision-ledger.ts`;
+- exported ids, subject lookup helpers and ledger summary helpers from
+  `@training-platform/shared`;
+- `npm run check:constructor-matrix-review-decision-ledger`;
+- review package metadata summary for ledger coverage and `humanReviewed=false`.
+
+Coverage:
+
+- all threshold candidates are represented;
+- high-risk data dependencies are represented;
+- evidence dependencies needing review are represented;
+- review tracks include coach, medical, data-quality, sport-science and product
+  safety where required.
+
+Guardrails:
+
+- no human approvals are fabricated;
+- all entries remain system initial triage, audit trace or review package queue
+  metadata;
+- no numeric threshold values are introduced;
+- no runtime behavior, production route, rollout gate, preview behavior,
+  save/template/assign behavior or legacy fallback is changed;
+- runtime constructor files must not import the ledger.
+
+Next step: actual coach/medical/data-quality review or source expansion before
+any runtime promotion.
