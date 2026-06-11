@@ -1,5 +1,6 @@
 import type { ConstructorDraft, ConstructorInput } from "./constructor-core";
 import { buildConstructorTemplatePayload } from "./constructor-core";
+import type { ConstructorMatrixPreviewResponse } from "./constructor-matrix-preview";
 import type { MatrixPilotReadinessResult } from "./constructor-matrix-pilot-readiness";
 import type {
   MatrixConstructorRolloutDecision,
@@ -11,7 +12,7 @@ export type MatrixPrimaryPilotDraftSource =
   | "matrix_internal"
   | "matrix_primary_pilot";
 
-type MatrixPrimaryPilotTemplatePayload = ReturnType<typeof buildConstructorTemplatePayload>;
+export type MatrixPrimaryPilotTemplatePayload = ReturnType<typeof buildConstructorTemplatePayload>;
 
 export type MatrixPrimaryPilotSaveDryRunStatus = "waiting" | "passed" | "blocked";
 
@@ -79,6 +80,20 @@ export interface MatrixPrimaryPilotServerSaveDryRunResponse {
   dryRun: MatrixPrimaryPilotSaveDryRunResult;
   rolloutDecision: MatrixConstructorRolloutDecision;
   pilotReadiness: MatrixPilotReadinessResult;
+  notes: string[];
+}
+
+export interface MatrixPrimaryPilotDraftResponse {
+  generatedFrom: "matrix_primary_pilot_server_draft";
+  generatedAt: string;
+  source: "matrix_primary_pilot" | "legacy_fallback";
+  reason: string;
+  draft: ConstructorDraft;
+  templatePayload: MatrixPrimaryPilotTemplatePayload;
+  preview: ConstructorMatrixPreviewResponse;
+  rolloutDecision: MatrixConstructorRolloutDecision;
+  pilotReadiness: MatrixPilotReadinessResult;
+  serverSaveDryRun: MatrixPrimaryPilotServerSaveDryRunResponse;
   notes: string[];
 }
 

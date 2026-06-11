@@ -25,6 +25,7 @@ import {
   type ConstructorMatrixPreviewResponse,
   type MatrixConstructorRolloutDecision,
   type MatrixConstructorRolloutOptions,
+  type MatrixPrimaryPilotDraftResponse,
   type MatrixPrimaryPilotServerSaveDryRunResponse,
   type MatrixPilotReadinessResult,
   type ConstructorPhase,
@@ -203,6 +204,7 @@ import {
   type ConstructorMatrixWorkspaceState,
   canActivateConstructorMatrixInternalDraft,
   canOpenConstructorMatrixWorkspace,
+  constructorMatrixModeLabel,
   constructorMatrixScenarioLabel,
   constructorMatrixWorkspaceUnavailableReason as getConstructorMatrixWorkspaceUnavailableReason,
   getConstructorMatrixPreviewMatrixDraft,
@@ -1257,6 +1259,20 @@ function requestMatrixPrimaryPilotServerSaveDryRun(
 ) {
   return apiRequest<MatrixPrimaryPilotServerSaveDryRunResponse>(
     "/plans/constructor/internal/matrix-primary-pilot-save-dry-run",
+    {
+      method: "POST",
+      body: JSON.stringify({ input, rolloutOptions, templateName }),
+    },
+  );
+}
+
+function requestMatrixPrimaryPilotDraft(
+  input: ConstructorInput,
+  rolloutOptions: MatrixConstructorRolloutOptions,
+  templateName?: string,
+) {
+  return apiRequest<MatrixPrimaryPilotDraftResponse>(
+    "/plans/constructor/internal/matrix-primary-pilot-draft",
     {
       method: "POST",
       body: JSON.stringify({ input, rolloutOptions, templateName }),
@@ -14318,43 +14334,25 @@ export function PageClient({
         const templateName = selectedConstructorCompetitionPlan?.competitionTitle
           ? `PERFORM Constructor Candidate • ${selectedConstructorCompetitionPlan.competitionTitle}`
           : `PERFORM Constructor Candidate • ${input.competition.name}`;
-        const [preview, rolloutDecision, serverSaveDryRun] = await Promise.all([
-          requestConstructorMatrixPreview(input, previewOptions),
-          requestConstructorMatrixRolloutDecision(input, rolloutOptions),
-          requestMatrixPrimaryPilotServerSaveDryRun(input, rolloutOptions, templateName),
-        ]);
-        const matrixDraft = getConstructorMatrixPreviewMatrixDraft(preview);
-        const pilotReadiness = evaluateMatrixPilotReadiness(input, {
+        const pilotDraft = await requestMatrixPrimaryPilotDraft(
+          input,
           rolloutOptions,
-        });
-        const localEligibility = canUseMatrixPrimaryPilot({
-          activeDraftSource: "matrix_primary_pilot",
-          internalUiEnabled: SHOW_INTERNAL_MATRIX_CONSTRUCTOR_UI,
-          limitedPilotEnabled: ENABLE_MATRIX_CONSTRUCTOR_LIMITED_PRIMARY_PILOT,
-          preview,
-          rolloutDecision,
-          pilotReadiness,
-          matrixDraft,
-        });
-        const serverGate = canUseMatrixPrimaryPilotWithServerEvidence({
-          serverResult: serverSaveDryRun,
-          localRolloutDecision: rolloutDecision,
-          localPilotReadiness: pilotReadiness,
-        });
+          templateName,
+        );
+        const matrixDraft = getConstructorMatrixPreviewMatrixDraft(pilotDraft.preview);
 
-        setConstructorMatrixPreview(preview);
+        setConstructorMatrixPreview(pilotDraft.preview);
         setConstructorMatrixPreviewInput(input);
-        setConstructorMatrixRolloutDecision(rolloutDecision);
-        setConstructorMatrixServerSaveDryRun(serverSaveDryRun);
+        setConstructorMatrixRolloutDecision(pilotDraft.rolloutDecision);
+        setConstructorMatrixServerSaveDryRun(pilotDraft.serverSaveDryRun);
         setConstructorMatrixPreviewError("");
         setConstructorMatrixRolloutError("");
         setConstructorMatrixServerSaveDryRunError("");
 
         if (
+          pilotDraft.source === "matrix_primary_pilot" &&
           matrixDraft &&
-          localEligibility.allowed &&
-          serverGate.allowed &&
-          serverSaveDryRun.dryRun.status === "passed"
+          pilotDraft.serverSaveDryRun.dryRun.status === "passed"
         ) {
           setConstructorDraft(null);
           setConstructorTemplatePayload(null);
@@ -14375,19 +14373,43 @@ export function PageClient({
           return;
         }
 
+        if (pilotDraft.source === "legacy_fallback") {
+          setConstructorDraft(pilotDraft.draft);
+          setConstructorTemplatePayload(pilotDraft.templatePayload);
+          setConstructorMatrixWorkspace(CLOSED_CONSTRUCTOR_MATRIX_WORKSPACE);
+          setActiveConstructorDraftSource("legacy");
+          setConstructorMessage(
+            copyFor(language, {
+              en: `Current constructor draft built. New planning logic is not active for this case: ${constructorMatrixScenarioLabel(
+                language,
+                pilotDraft.rolloutDecision.scenario,
+              )}; mode ${constructorMatrixModeLabel(language, pilotDraft.rolloutDecision.mode)}.`,
+              ru: `Собран текущий черновик. Новая логика планирования для этого случая не стала рабочей: ${constructorMatrixScenarioLabel(
+                language,
+                pilotDraft.rolloutDecision.scenario,
+              )}; режим ${constructorMatrixModeLabel(language, pilotDraft.rolloutDecision.mode)}.`,
+              bg: `Създадена е текущата чернова. Новата логика за планиране не е активна за този случай: ${constructorMatrixScenarioLabel(
+                language,
+                pilotDraft.rolloutDecision.scenario,
+              )}; режим ${constructorMatrixModeLabel(language, pilotDraft.rolloutDecision.mode)}.`,
+            }),
+          );
+          return;
+        }
+
         setConstructorMessage(
           copyFor(language, {
             en: `The new constructor is comparison-only for this case (${constructorMatrixScenarioLabel(
               language,
-              rolloutDecision.scenario,
+              pilotDraft.rolloutDecision.scenario,
             )}). Building the current constructor draft instead.`,
             ru: `Новый конструктор для этого случая пока только для сравнения (${constructorMatrixScenarioLabel(
               language,
-              rolloutDecision.scenario,
+              pilotDraft.rolloutDecision.scenario,
             )}). Поэтому сверху собран текущий черновик.`,
             bg: `Новият конструктор за този случай е само за сравнение (${constructorMatrixScenarioLabel(
               language,
-              rolloutDecision.scenario,
+              pilotDraft.rolloutDecision.scenario,
             )}). Затова отгоре е създадена текущата чернова.`,
           }),
         );

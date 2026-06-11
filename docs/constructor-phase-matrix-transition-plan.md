@@ -3684,11 +3684,13 @@ NEXT_PUBLIC_MATRIX_CONSTRUCTOR_SAVE_ASSIGN_PILOT=true
 
 the build action attempts the matrix primary pilot path:
 
-1. run matrix preview;
-2. run rollout decision;
-3. run server save dry-run;
-4. evaluate local pilot readiness;
-5. activate `matrix_primary_pilot` only if local and server gates pass.
+1. call `POST /api/v1/plans/constructor/internal/matrix-primary-pilot-draft`;
+2. receive preview, rollout decision, pilot readiness and server save dry-run
+   evidence in one response;
+3. activate `matrix_primary_pilot` only when the server response source is
+   `matrix_primary_pilot` and dry-run status is `passed`;
+4. otherwise show the current constructor draft from `legacy_fallback` with a
+   trainer-readable scenario/mode explanation.
 
 If any gate fails, the current constructor draft is generated instead and the
 new constructor remains a preview/review artifact.
@@ -3696,8 +3698,9 @@ new constructor remains a preview/review artifact.
 ### 42.3 Guardrails
 
 Stage 31 still does not change the production draft API route and does not make
-matrix globally default. The save/assign path remains gated by explicit flags
-and server dry-run evidence.
+matrix globally default. The new pilot draft endpoint does not write DB/storage,
+does not create templates, does not assign plans and does not send telemetry.
+The save/assign path remains gated by explicit flags and server dry-run evidence.
 
 Blocked scenarios stay blocked:
 

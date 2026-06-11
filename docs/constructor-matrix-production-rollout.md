@@ -199,6 +199,25 @@ Manual browser checks:
 - production `/api/v1/plans/constructor/draft` remains legacy-backed;
 - browser console has no errors.
 
+## Main build button smoke
+
+With all three matrix flags enabled, the trainer-facing **build draft** action
+must call the controlled pilot draft path before legacy fallback:
+
+```text
+POST /api/v1/plans/constructor/internal/matrix-primary-pilot-draft
+```
+
+Expected behavior:
+
+- allowed pilot case: the top draft is marked as the new planning logic and can
+  proceed through the gated template save flow;
+- blocked or preview-only case: the top draft is the current constructor
+  fallback, and the message explains the matrix scenario and rollout mode;
+- no DB write, template creation or plan assignment happens during this pilot
+  draft request;
+- production `/api/v1/plans/constructor/draft` remains legacy-backed.
+
 Expected evidence to record:
 
 - date/time;

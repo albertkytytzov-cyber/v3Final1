@@ -3,6 +3,7 @@ import {
   buildConstructorTemplatePayload,
   buildConstructorMatrixPreviewResponse,
   buildMatrixDrivenConstructorDraft,
+  buildMatrixConstructorDraftIfAllowed,
   buildMatrixPrimaryPilotSaveDryRun,
   decideMatrixConstructorRollout,
   buildPerformConstructorDraft,
@@ -181,6 +182,155 @@ export function registerPlanningRoutes(
 
     // Internal decision only: no DB writes, no template creation and no production route changes.
     return decideMatrixConstructorRollout(body.input, body.options);
+  });
+
+  app.post("/api/v1/plans/constructor/internal/matrix-primary-pilot-draft", async (request) => {
+    const user = await dependencies.guards.requireUser(request);
+
+    if (user.role !== "coach" && user.role !== "admin") {
+      throw dependencies.httpError(
+        403,
+        "Only coach or admin accounts can build constructor pilot drafts",
+      );
+    }
+
+    let body;
+    try {
+      body = parseMatrixPrimaryPilotSaveDryRunBody(request.body);
+    } catch (error) {
+      throw dependencies.httpError(400, (error as Error).message);
+    }
+
+    await dependencies.guards.assertAthleteAccess(user, body.input.athlete.athleteId);
+
+    const previewOptions = body.rolloutOptions?.previewOptions ?? {
+      includeDrafts: true,
+      includeComparisonReport: true,
+      includeSafetyDetails: true,
+      includeInfoDifferences: true,
+    };
+    const rolloutOptions = {
+      ...body.rolloutOptions,
+      previewOptions,
+    };
+    const preview = buildConstructorMatrixPreviewResponse(body.input, previewOptions);
+    const rolloutDecision = decideMatrixConstructorRollout(body.input, rolloutOptions);
+    const pilotReadiness = evaluateMatrixPilotReadiness(body.input, {
+      rolloutOptions,
+    });
+    const primaryPilotEligible =
+      rolloutDecision.mode === "matrix_allowed_for_primary" &&
+      rolloutDecision.matrixPrimaryAllowed &&
+      rolloutDecision.blockers.length === 0 &&
+      pilotReadiness.status === "ready_for_limited_primary_pilot" &&
+      pilotReadiness.blockers.length === 0;
+    let draftResult: ReturnType<typeof buildMatrixConstructorDraftIfAllowed> | null = null;
+    let matrixDraftError = "";
+
+    try {
+      draftResult = buildMatrixConstructorDraftIfAllowed(body.input, {
+        ...rolloutOptions,
+        fallbackToLegacy: true,
+        allowedModes: ["matrix_allowed_for_primary"],
+      });
+    } catch (error) {
+      matrixDraftError = error instanceof Error ? error.message : String(error);
+    }
+
+    const matrixDraftAllowed =
+      primaryPilotEligible && draftResult?.source === "matrix" && Boolean(draftResult.draft);
+    const candidateSource = matrixDraftAllowed ? "matrix_primary_pilot" : "legacy_fallback";
+    const candidateDraft =
+      candidateSource === "matrix_primary_pilot" && draftResult?.draft
+        ? draftResult.draft
+        : buildPerformConstructorDraft(body.input);
+    const candidateReason =
+      candidateSource === "matrix_primary_pilot"
+        ? "Matrix draft was allowed by the controlled pilot gate and passed server save dry-run checks."
+        : matrixDraftError ||
+          draftResult?.reason ||
+          `${rolloutDecision.mode}/${pilotReadiness.status}`;
+    const templateName =
+      body.templateName ?? `PERFORM Constructor Candidate • ${body.input.competition.name}`;
+    const candidateDryRun = buildMatrixPrimaryPilotSaveDryRun({
+      activeDraftSource:
+        candidateSource === "matrix_primary_pilot" ? "matrix_primary_pilot" : "legacy",
+      draft: candidateSource === "matrix_primary_pilot" ? candidateDraft : null,
+      primaryPilotEligible: candidateSource === "matrix_primary_pilot",
+      eligibilityReason: candidateSource === "matrix_primary_pilot" ? null : candidateReason,
+      eligibilityEvidence: [
+        `scenario=${rolloutDecision.scenario}`,
+        `rolloutMode=${rolloutDecision.mode}`,
+        `matrixPrimaryAllowed=${rolloutDecision.matrixPrimaryAllowed}`,
+        `readiness=${pilotReadiness.status}`,
+        `rolloutBlockers=${rolloutDecision.blockers.length}`,
+        `readinessBlockers=${pilotReadiness.blockers.length}`,
+        ...(matrixDraftError ? [`matrixDraftError=${matrixDraftError}`] : []),
+      ],
+      templateName,
+    });
+    const source =
+      candidateSource === "matrix_primary_pilot" && candidateDryRun.status === "passed"
+        ? "matrix_primary_pilot"
+        : "legacy_fallback";
+    const draft =
+      source === "matrix_primary_pilot" ? candidateDraft : buildPerformConstructorDraft(body.input);
+    const reason =
+      source === "matrix_primary_pilot"
+        ? candidateReason
+        : candidateSource === "matrix_primary_pilot"
+          ? `Matrix draft did not pass server save dry-run: ${candidateDryRun.status}`
+          : candidateReason;
+    const dryRun =
+      source === "matrix_primary_pilot"
+        ? candidateDryRun
+        : buildMatrixPrimaryPilotSaveDryRun({
+            activeDraftSource: "legacy",
+            draft: null,
+            primaryPilotEligible: false,
+            eligibilityReason: reason,
+            eligibilityEvidence: [
+              `scenario=${rolloutDecision.scenario}`,
+              `rolloutMode=${rolloutDecision.mode}`,
+              `matrixPrimaryAllowed=${rolloutDecision.matrixPrimaryAllowed}`,
+              `readiness=${pilotReadiness.status}`,
+              `rolloutBlockers=${rolloutDecision.blockers.length}`,
+              `readinessBlockers=${pilotReadiness.blockers.length}`,
+              ...(matrixDraftError ? [`matrixDraftError=${matrixDraftError}`] : []),
+            ],
+            templateName,
+          });
+    const serverSaveDryRun = {
+      generatedFrom: "matrix_primary_pilot_server_save_dry_run" as const,
+      generatedAt: new Date().toISOString(),
+      dryRun,
+      rolloutDecision,
+      pilotReadiness,
+      notes: [
+        "Internal server-side dry-run only.",
+        "This route does not create templates, assign plans, write DB/storage/telemetry, or change the production constructor route.",
+      ],
+    };
+
+    // Internal pilot draft only: no DB writes, no template creation and no production route changes.
+    return {
+      generatedFrom: "matrix_primary_pilot_server_draft" as const,
+      generatedAt: new Date().toISOString(),
+      source,
+      reason,
+      draft,
+      templatePayload: buildConstructorTemplatePayload(draft, templateName),
+      preview,
+      rolloutDecision,
+      pilotReadiness,
+      serverSaveDryRun,
+      notes: [
+        source === "matrix_primary_pilot"
+          ? "Matrix draft is active for this limited pilot build."
+          : "Matrix draft is not active for this build; legacy fallback was returned.",
+        "No DB writes, storage writes, telemetry writes, template creation, or plan assignment happen in this route.",
+      ],
+    };
   });
 
   app.post("/api/v1/plans/constructor/internal/matrix-primary-pilot-save-dry-run", async (request) => {

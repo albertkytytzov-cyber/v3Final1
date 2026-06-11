@@ -1741,11 +1741,23 @@ content:
 - blocks include editable exercise rows and concrete volume prescriptions;
 - the active draft explanation no longer exposes experimental/internal wording.
 
-When all three web flags are enabled, the main constructor build action can
-attempt the matrix primary pilot path. It activates the new draft only after
-local rollout/readiness checks and server save dry-run evidence pass. If the
-scenario is not primary-allowed, the UI falls back to the current constructor
-draft and keeps the matrix result as preview evidence.
+When all three web flags are enabled, the main constructor build action calls
+the controlled server-authoritative pilot endpoint:
+
+```text
+POST /api/v1/plans/constructor/internal/matrix-primary-pilot-draft
+```
+
+The endpoint returns one trainer-facing result: `matrix_primary_pilot` when the
+matrix draft is allowed and server save dry-run passes, or `legacy_fallback`
+with preview/rollout/readiness evidence when the new logic is not allowed for
+that case. The production `POST /api/v1/plans/constructor/draft` route remains
+unchanged and legacy-backed.
+
+The web UI therefore no longer needs to infer the active draft from three
+separate internal calls. It shows whether the top draft is the new planning
+logic or the current constructor fallback, and it keeps the matrix result as
+preview evidence when fallback is used.
 
 Guardrails remain:
 
