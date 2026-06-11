@@ -332,6 +332,58 @@ async function checkControlledExposureSourceGuards() {
   };
 }
 
+async function checkTrainerFacingMatrixCopy() {
+  const trainerFacingFiles = [
+    "apps/web/app/components/constructor/MatrixConstructorPreviewPanel.tsx",
+    "apps/web/app/components/constructor/MatrixPreviewWorkspace.tsx",
+    "apps/web/app/components/constructor/MatrixRolloutDecisionCard.tsx",
+    "apps/web/app/components/constructor/MatrixPilotReadinessCard.tsx",
+    "apps/web/app/components/constructor/MatrixPrimaryPilotSaveDryRunCard.tsx",
+    "apps/web/app/lib/constructor-matrix-review-export.ts",
+  ];
+  const combined = (
+    await Promise.all(trainerFacingFiles.map((path) => readProjectFile(path)))
+  ).join("\n");
+  const forbiddenPhrases = [
+    "Current vs new constructor",
+    "Internal Matrix Constructor Review",
+    "Matrix vs Legacy",
+    "Legacy:",
+    'contextLabel="workspace"',
+    "internal panel",
+    "QA",
+    "production чернова",
+    "close-start ",
+  ];
+
+  for (const phrase of forbiddenPhrases) {
+    assert(
+      !combined.includes(phrase),
+      `Trainer-facing matrix UI must not expose old/internal phrase: ${phrase}`,
+    );
+  }
+
+  assert(
+    combined.includes("Текущий план и новая логика планирования"),
+    "Trainer-facing matrix panel must use a clear Russian planning label",
+  );
+  assert(
+    combined.includes("проверка нового плана"),
+    "Matrix workspace export context must be localized for trainers",
+  );
+  assert(
+    combined.includes("constructorMatrixSeverityLabel") &&
+      combined.includes("constructorMatrixBlockerMessage"),
+    "Matrix UI must translate technical severity/blocker values before rendering",
+  );
+
+  return {
+    oldInternalTermsHidden: true,
+    russianPlanningLabelPresent: true,
+    blockerMessagesTranslated: true,
+  };
+}
+
 const previewOptions = {
   includeDrafts: true,
   includeComparisonReport: true,
@@ -525,6 +577,7 @@ assert(
 
 const featureFlags = checkFeatureFlagDefaults();
 const controlledExposure = await checkControlledExposureSourceGuards();
+const trainerFacingCopy = await checkTrainerFacingMatrixCopy();
 
 console.log(
   JSON.stringify(
@@ -546,6 +599,7 @@ console.log(
       saveAllowed,
       featureFlags,
       controlledExposure,
+      trainerFacingCopy,
     },
     null,
     2,

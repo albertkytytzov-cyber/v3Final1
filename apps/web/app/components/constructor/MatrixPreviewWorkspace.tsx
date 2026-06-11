@@ -12,12 +12,15 @@ import {
   type ConstructorMatrixWorkspaceState,
   buildConstructorPreviewDraftMetrics,
   constructorMatrixActionLabel,
+  constructorMatrixBlockerMessage,
   constructorMatrixMetricLabel,
   constructorMatrixModeLabel,
   constructorMatrixPassStopLabel,
   constructorMatrixRolloutBadgeClass,
   constructorMatrixRolloutLabel,
   constructorMatrixScenarioLabel,
+  constructorMatrixSeverityLabel,
+  formatConstructorPreviewDraftDensity,
   constructorMatrixWorkspaceScenarioText,
   constructorMatrixWorkspaceWhyText,
   matrixUiCopyFor,
@@ -88,7 +91,9 @@ export function MatrixPreviewWorkspace({
   const activeMatrixPrimaryPilot = activeDraftSource === "matrix_primary_pilot";
   const activeMatrixCandidate = activeMatrixInternal || activeMatrixPrimaryPilot;
   const metrics = buildConstructorPreviewDraftMetrics(draft);
-  const badgeLabel = constructorMatrixRolloutLabel(language, rolloutDecision?.mode) || "internal";
+  const badgeLabel =
+    constructorMatrixRolloutLabel(language, rolloutDecision?.mode) ||
+    matrixUiCopyFor(language, { en: "review", ru: "проверка", bg: "проверка" });
   const whyText = constructorMatrixWorkspaceWhyText(language, rolloutDecision);
   const scenarioText = constructorMatrixWorkspaceScenarioText(language, rolloutDecision);
   const primaryPilotDisabledText = matrixPrimaryPilotEligibility.allowed
@@ -99,14 +104,14 @@ export function MatrixPreviewWorkspace({
 
   return (
     <section className="constructor-panel constructor-matrix-workspace-panel">
-      {/* Matrix workspace is display-only: never pass this draft to template/save/assign handlers. */}
+      {/* Review workspace is display-only: never pass this draft to template/save/assign handlers. */}
       <header className="constructor-matrix-workspace-header">
         <div>
           <span className="eyebrow eyebrow-muted">
             {matrixUiCopyFor(language, {
-              en: "New constructor plan review",
-              ru: "Проверка плана нового конструктора",
-              bg: "Проверка на плана от новия конструктор",
+              en: "New planning logic review",
+              ru: "Проверка новой логики планирования",
+              bg: "Проверка на новата логика на планиране",
             })}
           </span>
           <h3>
@@ -166,7 +171,11 @@ export function MatrixPreviewWorkspace({
       </div>
 
       <MatrixReviewExportActions
-        contextLabel="workspace"
+        contextLabel={matrixUiCopyFor(language, {
+          en: "new plan review",
+          ru: "проверка нового плана",
+          bg: "проверка на нов план",
+        })}
         language={language}
         preview={preview}
         readiness={readiness}
@@ -346,6 +355,10 @@ export function MatrixPreviewWorkspace({
       <div className="constructor-matrix-count-grid constructor-matrix-workspace-overview">
         {[
           [
+            matrixUiCopyFor(language, { en: "scope", ru: "объём", bg: "обем" }),
+            formatConstructorPreviewDraftDensity(language, metrics),
+          ],
+          [
             matrixUiCopyFor(language, { en: "mode", ru: "режим", bg: "режим" }),
             constructorMatrixModeLabel(language, rolloutDecision?.mode),
           ],
@@ -396,7 +409,10 @@ export function MatrixPreviewWorkspace({
               {rolloutDecision.blockers.map((blocker, index) => (
                 <li key={`${blocker.code}-${index}`}>
                   <strong>{blocker.code}</strong>
-                  <span>{blocker.message}</span>
+                  <span>
+                    {constructorMatrixSeverityLabel(language, blocker.severity)} ·{" "}
+                    {constructorMatrixBlockerMessage(language, blocker.code, blocker.message)}
+                  </span>
                 </li>
               ))}
             </ul>
@@ -426,9 +442,7 @@ export function MatrixPreviewWorkspace({
             {draft.riskFlags.length ? (
               draft.riskFlags.slice(0, 6).map((risk, index) => (
                 <li key={`${risk.code}-${index}`}>
-                  <strong>
-                    {risk.code} · {risk.level}
-                  </strong>
+                  <strong>{constructorMatrixSeverityLabel(language, risk.level)}</strong>
                   <span>{risk.message}</span>
                 </li>
               ))

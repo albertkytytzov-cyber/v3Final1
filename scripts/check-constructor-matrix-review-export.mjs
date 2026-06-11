@@ -95,7 +95,7 @@ function assertPackageShape({ id, reviewPackage }) {
     parsed.generatedFrom === "internal_matrix_constructor_review_export",
     `${id}: generatedFrom should identify internal review export`,
   );
-  assert(reviewPackage.markdown.includes("# Internal Matrix Constructor Review"), `${id}: markdown title missing`);
+  assert(reviewPackage.markdown.includes("# Internal New Planning Logic Review"), `${id}: markdown title missing`);
   assert(reviewPackage.markdown.includes("## Pilot Readiness"), `${id}: markdown readiness missing`);
   assert(
     reviewPackage.payload.summary.counts.matrix.dayCount > 0,

@@ -8,6 +8,7 @@ import {
   constructorMatrixPassStopLabel,
   constructorMatrixReadinessStatusLabel,
   constructorMatrixScenarioLabel,
+  constructorMatrixSeverityLabel,
   matrixUiCopyFor,
 } from "../../lib/constructor-matrix-ui";
 import type { Language } from "../../lib/i18n";
@@ -113,11 +114,11 @@ export function MatrixPrimaryPilotSaveDryRunCard({
               <li
                 className={`constructor-matrix-difference constructor-matrix-severity-${item.severity}`}
                 key={item.id}
-              >
-                <div>
-                  <strong>{item.id}</strong>
-                  <span>{item.severity}</span>
-                </div>
+                >
+                  <div>
+                    <strong>{item.id}</strong>
+                    <span>{constructorMatrixSeverityLabel(language, item.severity)}</span>
+                  </div>
                 <p>{item.label}</p>
                 {item.evidence.length ? <small>{item.evidence.join(" · ")}</small> : null}
               </li>
@@ -139,7 +140,8 @@ export function MatrixPrimaryPilotSaveDryRunCard({
             <li key={item.id}>
               <strong>{item.label}</strong>
               <span>
-                {constructorMatrixPassStopLabel(language, item.passed)} · {item.severity}
+                {constructorMatrixPassStopLabel(language, item.passed)} ·{" "}
+                {constructorMatrixSeverityLabel(language, item.severity)}
                 {item.evidence.length ? ` · ${item.evidence.join(" · ")}` : ""}
               </span>
             </li>

@@ -7,6 +7,7 @@ import {
   constructorMatrixPassStopLabel,
   constructorMatrixReadinessStatusLabel,
   constructorMatrixScenarioLabel,
+  constructorMatrixSeverityLabel,
   getPilotReadinessBadgeTone,
   getPilotReadinessLabel,
   getPilotReadinessMeaning,
@@ -141,7 +142,7 @@ export function MatrixPilotReadinessCard({
                   >
                     <div>
                       <strong>{blocker.id}</strong>
-                      <span>{blocker.severity}</span>
+                      <span>{constructorMatrixSeverityLabel(language, blocker.severity)}</span>
                     </div>
                     <p>{blocker.message}</p>
                   </li>
@@ -175,7 +176,8 @@ export function MatrixPilotReadinessCard({
                   <div>
                     <strong>{item.label}</strong>
                     <span>
-                      {constructorMatrixPassStopLabel(language, item.status === "pass")} · {item.severity}
+                      {constructorMatrixPassStopLabel(language, item.status === "pass")} ·{" "}
+                      {constructorMatrixSeverityLabel(language, item.severity)}
                     </span>
                   </div>
                   <p>{item.explanation}</p>

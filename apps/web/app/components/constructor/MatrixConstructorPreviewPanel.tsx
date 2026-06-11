@@ -14,9 +14,15 @@ import {
   buildConstructorPreviewDraftMetrics,
   collectConstructorMatrixCandidateSummary,
   constructorMatrixCheckLabel,
+  constructorMatrixBlockKeyLabel,
+  constructorMatrixDifferenceCategoryLabel,
+  constructorMatrixLoadLevelLabel,
   constructorMatrixMetricLabel,
   constructorMatrixRolloutLabel,
+  constructorMatrixSeverityLabel,
   formatConstructorPreviewAffected,
+  formatConstructorPreviewDraftDensity,
+  formatConstructorPreviewWeekRowSummary,
   getConstructorMatrixPreviewMatrixDraft,
   isConstructorMatrixReadOnlyCandidateVisible,
   matrixUiCopyFor,
@@ -120,16 +126,16 @@ export function MatrixConstructorPreviewPanel({
           <div>
             <strong>
               {matrixUiCopyFor(language, {
-                en: "Current vs new constructor",
-                ru: "Сравнение текущего и нового конструктора",
-                bg: "Сравнение на текущия и новия конструктор",
+                en: "Current plan and new planning logic",
+                ru: "Текущий план и новая логика планирования",
+                bg: "Текущ план и нова логика на планиране",
               })}
             </strong>
             <span>
               {matrixUiCopyFor(language, {
-                en: "Check the new planning logic before using it for templates or assignments.",
-                ru: "Проверка новой логики планирования перед сохранением шаблона или назначением.",
-                bg: "Експериментален QA панел. Не записва и не заменя черновата.",
+                en: "Compare the working draft with the new logic before saving or assigning.",
+                ru: "Сравните рабочий черновик с новой логикой перед сохранением или назначением.",
+                bg: "Сравнете работната чернова с новата логика преди запис или назначаване.",
               })}
             </span>
           </div>
@@ -154,8 +160,8 @@ export function MatrixConstructorPreviewPanel({
                     bg: "Сравни отново",
                   })
                 : matrixUiCopyFor(language, {
-                    en: "Compare current vs new",
-                    ru: "Сравнить текущий и новый",
+                    en: "Compare working draft and new logic",
+                    ru: "Сравнить рабочий черновик и новую логику",
                     bg: "Сравни текущия и новия",
                   })}
           </button>
@@ -168,8 +174,8 @@ export function MatrixConstructorPreviewPanel({
             <span>
               {matrixUiCopyFor(language, {
                 en: "Include info differences",
-                ru: "Показывать технические отличия",
-                bg: "Показвай info разлики",
+                ru: "Показывать служебные отличия",
+                bg: "Показвай служебни разлики",
               })}
             </span>
           </label>
@@ -293,7 +299,7 @@ export function MatrixConstructorPreviewPanel({
                   {[...failedSafety, ...failedLegacyGuard].length ? (
                     [...failedSafety, ...failedLegacyGuard].map((item) => (
                       <li key={`${item.code}-${item.explanation}`}>
-                        <strong>{item.code}</strong>
+                        <strong>{constructorMatrixSeverityLabel(language, item.severity)}</strong>
                         <span>{item.explanation}</span>
                       </li>
                     ))
@@ -320,7 +326,7 @@ export function MatrixConstructorPreviewPanel({
                   <ul className="constructor-matrix-preview-list">
                     {preview.warnings.slice(0, 4).map((warning) => (
                       <li key={`${warning.code}-${warning.message}`}>
-                        <strong>{warning.code}</strong>
+                        <strong>{constructorMatrixSeverityLabel(language, warning.severity)}</strong>
                         <span>{warning.message}</span>
                       </li>
                     ))}
@@ -390,7 +396,7 @@ export function MatrixConstructorPreviewPanel({
                 <article className="constructor-matrix-preview-card" key={label}>
                   <div className="summary-topline">
                     <strong>{label}</strong>
-                    <span>{metrics.density}</span>
+                    <span>{formatConstructorPreviewDraftDensity(language, metrics)}</span>
                   </div>
                   <div className="constructor-matrix-count-grid">
                     {[
@@ -410,9 +416,8 @@ export function MatrixConstructorPreviewPanel({
                       <li key={week.key}>
                         <strong>{week.label}</strong>
                         <span>
-                          {phaseLabel(week.phase)} · {week.dayCount}d / {week.sessionCount}s /{" "}
-                          {week.blockCount}b
-                          {week.closeStartDayCount ? ` · close-start ${week.closeStartDayCount}d` : ""}
+                          {phaseLabel(week.phase)} ·{" "}
+                          {formatConstructorPreviewWeekRowSummary(language, week)}
                         </span>
                       </li>
                     ))}
@@ -472,9 +477,12 @@ export function MatrixConstructorPreviewPanel({
                       {candidateSummary.selectedBlockOverview.length ? (
                         candidateSummary.selectedBlockOverview.map((block) => (
                           <li key={block.key}>
-                            <strong>{block.key}</strong>
+                            <strong>{constructorMatrixBlockKeyLabel(language, block.key)}</strong>
                             <span>
-                              {block.label} · {block.count}x · {block.loadLevels}
+                              {block.label} · {block.count}x ·{" "}
+                              {block.loadLevels
+                                .map((loadLevel) => constructorMatrixLoadLevelLabel(language, loadLevel))
+                                .join(", ")}
                             </span>
                           </li>
                         ))
@@ -520,7 +528,7 @@ export function MatrixConstructorPreviewPanel({
                         candidateSummary.riskSummary.map((risk) => (
                           <li key={risk.key}>
                             <strong>
-                              {risk.code} · {risk.severity}
+                              {constructorMatrixSeverityLabel(language, risk.severity)}
                             </strong>
                             <span>{risk.message}</span>
                           </li>
@@ -625,11 +633,11 @@ export function MatrixConstructorPreviewPanel({
                       key={`${difference.category}-${difference.message}-${index}`}
                     >
                       <div>
-                        <strong>{difference.category}</strong>
-                        <span>{difference.severity}</span>
+                        <strong>{constructorMatrixDifferenceCategoryLabel(language, difference.category)}</strong>
+                        <span>{constructorMatrixSeverityLabel(language, difference.severity)}</span>
                       </div>
                       <p>{difference.message}</p>
-                      <small>{formatConstructorPreviewAffected(difference.affected)}</small>
+                      <small>{formatConstructorPreviewAffected(language, difference.affected)}</small>
                     </li>
                   ))}
                 </ul>
@@ -637,8 +645,8 @@ export function MatrixConstructorPreviewPanel({
                 <p>
                   {matrixUiCopyFor(language, {
                     en: "No differences were returned by the comparison report.",
-                    ru: "Comparison report не вернул различий.",
-                    bg: "Comparison report не върна разлики.",
+                    ru: "Сравнение не вернуло различий.",
+                    bg: "Сравнението не върна разлики.",
                   })}
                 </p>
               )}
@@ -660,7 +668,7 @@ export function MatrixConstructorPreviewPanel({
             {matrixUiCopyFor(language, {
               en: "Run the comparison to see the new plan variant. The current draft will not change.",
               ru: "Запустите сравнение, чтобы увидеть новый вариант плана. Текущий черновик не изменится.",
-              bg: "Отворете internal панела и пуснете сравнение за QA. Текущата production чернова не се променя.",
+              bg: "Пуснете сравнението, за да видите нов вариант на плана. Текущата чернова не се променя.",
             })}
           </p>
         )}

@@ -222,7 +222,7 @@ export function buildConstructorMatrixReviewMarkdown(
   );
 
   return [
-    "# Internal Matrix Constructor Review",
+    "# Internal New Planning Logic Review",
     "",
     `Generated at: ${payload.generatedAt}`,
     "",
@@ -231,7 +231,7 @@ export function buildConstructorMatrixReviewMarkdown(
     `- Scenario: ${rollout.scenario ?? "not loaded"}`,
     `- Allowlisted: ${rollout.allowlisted === null ? "not loaded" : rollout.allowlisted ? "yes" : "no"}`,
     `- Recommended action: ${rollout.recommendedAction ?? "not loaded"}`,
-    `- Matrix primary allowed: ${
+    `- New plan primary allowed: ${
       rollout.matrixPrimaryAllowed === null ? "not loaded" : rollout.matrixPrimaryAllowed ? "yes" : "no"
     }`,
     "",
@@ -243,25 +243,25 @@ export function buildConstructorMatrixReviewMarkdown(
     `- errors / warnings / expected: ${payload.summary.errorCount} / ${payload.summary.warningCount} / ${payload.summary.expectedDifferenceCount}`,
     "",
     "## Counts",
-    `- Legacy: ${formatCountSummary(payload.summary.counts.legacy)}`,
-    `- Matrix: ${formatCountSummary(payload.summary.counts.matrix)}`,
+    `- Current draft: ${formatCountSummary(payload.summary.counts.legacy)}`,
+    `- New logic: ${formatCountSummary(payload.summary.counts.matrix)}`,
     "",
-    "## Matrix Explanation",
+    "## New Logic Explanation",
     payload.matrixExplanation?.mainDecision
       ? `Main decision: ${payload.matrixExplanation.mainDecision}`
       : "Main decision: none",
     payload.matrixExplanation?.whyNow ? `Why now: ${payload.matrixExplanation.whyNow}` : "Why now: none",
     "",
-    "## Matrix Messages",
+    "## New Logic Messages",
     markdownList(payload.matrixExplanation?.matrixMessages ?? []),
     "",
     "## Blockers",
     markdownList(blockers),
     "",
-    "## Matrix Risks",
+    "## New Logic Risks",
     markdownList(risks),
     "",
-    "## Matrix vs Legacy Differences",
+    "## New Logic vs Current Draft Differences",
     markdownList(differences),
     "",
     "## Pilot Readiness",
@@ -271,7 +271,7 @@ export function buildConstructorMatrixReviewMarkdown(
           `- Scenario: ${payload.pilotReadiness.scenario}`,
           `- Rollout mode: ${payload.pilotReadiness.rolloutMode}`,
           `- Recommended action: ${payload.pilotReadiness.recommendedAction}`,
-          `- Matrix primary allowed: ${payload.pilotReadiness.matrixPrimaryAllowed ? "yes" : "no"}`,
+          `- New plan primary allowed: ${payload.pilotReadiness.matrixPrimaryAllowed ? "yes" : "no"}`,
           `- Checklist pass/warning/fail/n/a: ${payload.pilotReadiness.checklistCounts.pass}/${payload.pilotReadiness.checklistCounts.warning}/${payload.pilotReadiness.checklistCounts.fail}/${payload.pilotReadiness.checklistCounts.not_applicable}`,
           `- Blocker count: ${payload.pilotReadiness.blockerCount}`,
           `- Blocker codes: ${payload.pilotReadiness.blockerCodes.join(", ") || "none"}`,

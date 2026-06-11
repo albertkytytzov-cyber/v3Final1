@@ -3,11 +3,13 @@
 import type { MatrixConstructorRolloutDecision } from "@training-platform/shared";
 import {
   constructorMatrixActionLabel,
+  constructorMatrixBlockerMessage,
   constructorMatrixRolloutBadgeClass,
   constructorMatrixRolloutLabel,
   constructorMatrixRolloutSupportText,
   constructorMatrixModeLabel,
   constructorMatrixScenarioLabel,
+  constructorMatrixSeverityLabel,
   matrixUiCopyFor,
 } from "../../lib/constructor-matrix-ui";
 import type { Language } from "../../lib/i18n";
@@ -128,9 +130,9 @@ export function MatrixRolloutDecisionCard({
                 >
                   <div>
                     <strong>{blocker.code}</strong>
-                    <span>{blocker.severity}</span>
+                    <span>{constructorMatrixSeverityLabel(language, blocker.severity)}</span>
                   </div>
-                  <p>{blocker.message}</p>
+                  <p>{constructorMatrixBlockerMessage(language, blocker.code, blocker.message)}</p>
                   {blocker.details?.length ? <small>{blocker.details.slice(0, 3).join(" · ")}</small> : null}
                 </li>
               ))}

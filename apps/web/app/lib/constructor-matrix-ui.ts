@@ -39,7 +39,7 @@ export type ConstructorMatrixCandidateSummary = {
     key: string;
     label: string;
     count: number;
-    loadLevels: string;
+    loadLevels: string[];
   }[];
   loadSummary: {
     label: string;
@@ -237,6 +237,181 @@ export function constructorMatrixPassStopLabel(language: Language, passed: boole
   return passed
     ? matrixUiCopyFor(language, { en: "passed", ru: "пройдено", bg: "премина" })
     : matrixUiCopyFor(language, { en: "stop", ru: "стоп", bg: "стоп" });
+}
+
+export function constructorMatrixSeverityLabel(language: Language, severity?: string | null) {
+  if (!severity) {
+    return "-";
+  }
+
+  const labels: Record<string, string> = {
+    info: matrixUiCopyFor(language, { en: "info", ru: "информация", bg: "информация" }),
+    warning: matrixUiCopyFor(language, { en: "attention", ru: "внимание", bg: "внимание" }),
+    error: matrixUiCopyFor(language, { en: "stop", ru: "стоп", bg: "стоп" }),
+  };
+
+  return labels[severity] ?? severity.replaceAll("_", " ");
+}
+
+export function constructorMatrixLoadLevelLabel(language: Language, loadLevel?: string | null) {
+  if (!loadLevel) {
+    return "-";
+  }
+
+  const labels: Record<string, string> = {
+    very_low: matrixUiCopyFor(language, { en: "very light", ru: "очень лёгкая", bg: "много лека" }),
+    low: matrixUiCopyFor(language, { en: "light", ru: "лёгкая", bg: "лека" }),
+    medium: matrixUiCopyFor(language, { en: "moderate", ru: "средняя", bg: "средна" }),
+    high: matrixUiCopyFor(language, { en: "high", ru: "высокая", bg: "висока" }),
+  };
+
+  return labels[loadLevel] ?? loadLevel.replaceAll("_", " ");
+}
+
+export function constructorMatrixDifferenceCategoryLabel(language: Language, category?: string | null) {
+  if (!category) {
+    return "-";
+  }
+
+  const labels: Record<string, string> = {
+    structure: matrixUiCopyFor(language, { en: "structure", ru: "структура", bg: "структура" }),
+    phase: matrixUiCopyFor(language, { en: "phase", ru: "фаза", bg: "фаза" }),
+    load: matrixUiCopyFor(language, { en: "load", ru: "нагрузка", bg: "натоварване" }),
+    safety: matrixUiCopyFor(language, { en: "safety", ru: "безопасность", bg: "безопасност" }),
+    content: matrixUiCopyFor(language, { en: "content", ru: "содержание", bg: "съдържание" }),
+    logistics: matrixUiCopyFor(language, { en: "logistics", ru: "логистика", bg: "логистика" }),
+    focus: matrixUiCopyFor(language, { en: "focus", ru: "фокус", bg: "фокус" }),
+    explanation: matrixUiCopyFor(language, { en: "explanation", ru: "объяснение", bg: "обяснение" }),
+    info: matrixUiCopyFor(language, { en: "info", ru: "информация", bg: "информация" }),
+  };
+
+  return labels[category] ?? category.replaceAll("_", " ");
+}
+
+export function constructorMatrixBlockKeyLabel(language: Language, key?: string | null) {
+  if (!key) {
+    return "-";
+  }
+
+  const labels: Record<string, string> = {
+    general: matrixUiCopyFor(language, { en: "general work", ru: "общая работа", bg: "обща работа" }),
+    technical: matrixUiCopyFor(language, { en: "technical work", ru: "техническая работа", bg: "техническа работа" }),
+    strength: matrixUiCopyFor(language, { en: "strength work", ru: "силовая работа", bg: "силова работа" }),
+    conditioning: matrixUiCopyFor(language, { en: "conditioning", ru: "кондиционная работа", bg: "кондиционна работа" }),
+    metabolic: matrixUiCopyFor(language, { en: "metabolic work", ru: "энергетическая работа", bg: "метаболитна работа" }),
+    speed: matrixUiCopyFor(language, { en: "speed work", ru: "скоростная работа", bg: "скоростна работа" }),
+    mobility: matrixUiCopyFor(language, { en: "mobility", ru: "мобильность", bg: "мобилност" }),
+    recovery: matrixUiCopyFor(language, { en: "recovery", ru: "восстановление", bg: "възстановяване" }),
+    activation: matrixUiCopyFor(language, { en: "activation", ru: "активация", bg: "активация" }),
+    fatigue_skill: matrixUiCopyFor(language, { en: "skill under fatigue", ru: "техника под утомлением", bg: "техника под умора" }),
+    taper_quality: matrixUiCopyFor(language, { en: "taper quality", ru: "качество подводки", bg: "качество на подводката" }),
+    weight_management: matrixUiCopyFor(language, { en: "weight control", ru: "контроль веса", bg: "контрол на теглото" }),
+    aerobic_base: matrixUiCopyFor(language, { en: "aerobic base", ru: "аэробная база", bg: "аеробна база" }),
+    wrestling_contact_density: matrixUiCopyFor(language, { en: "wrestling density", ru: "плотность борьбы", bg: "плътност на борбата" }),
+  };
+
+  return labels[key] ?? key.replaceAll("_", " ");
+}
+
+export function constructorMatrixBlockerMessage(
+  language: Language,
+  code?: string | null,
+  fallback?: string | null,
+) {
+  if (!code) {
+    return fallback ?? "-";
+  }
+
+  const labels: Record<string, string> = {
+    explicitly_disabled: matrixUiCopyFor(language, {
+      en: "The new planning logic is disabled for this check.",
+      ru: "Новая логика планирования выключена для этой проверки.",
+      bg: "Новата логика на планиране е изключена за тази проверка.",
+    }),
+    matrix_safety_error: matrixUiCopyFor(language, {
+      en: "The new plan has a safety issue and cannot be used yet.",
+      ru: "В новом плане есть safety-ограничение, поэтому его пока нельзя применять.",
+      bg: "В новия план има safety ограничение и още не може да се използва.",
+    }),
+    legacy_default_changed: matrixUiCopyFor(language, {
+      en: "The current constructor protection changed, so rollout is blocked.",
+      ru: "Защита текущего конструктора изменилась, поэтому применение заблокировано.",
+      bg: "Защитата на текущия конструктор се промени и приложението е блокирано.",
+    }),
+    comparison_error: matrixUiCopyFor(language, {
+      en: "The comparison returned an error.",
+      ru: "Сравнение вернуло ошибку.",
+      bg: "Сравнението върна грешка.",
+    }),
+    legacy_template_used_as_structure: matrixUiCopyFor(language, {
+      en: "Old template cards were used as structure; the new logic must use them only as content hints.",
+      ru: "Старые карточки использованы как структура; новая логика должна брать их только как подсказки содержания.",
+      bg: "Старите карти са използвани като структура; новата логика трябва да ги ползва само като подсказки.",
+    }),
+    missing_required_explanation: matrixUiCopyFor(language, {
+      en: "The new plan is missing a required explanation for this scenario.",
+      ru: "В новом плане не хватает обязательного объяснения для этого сценария.",
+      bg: "В новия план липсва задължително обяснение за този сценарий.",
+    }),
+    unknown_scenario: matrixUiCopyFor(language, {
+      en: "The scenario was not recognized by the controlled list.",
+      ru: "Сценарий не распознан проверенным списком.",
+      bg: "Сценарият не е разпознат от контролирания списък.",
+    }),
+    not_allowlisted: matrixUiCopyFor(language, {
+      en: "This scenario is not yet allowed for the new logic.",
+      ru: "Этот сценарий пока не разрешён для новой логики.",
+      bg: "Този сценарий още не е разрешен за новата логика.",
+    }),
+    main_start_too_close_for_primary: matrixUiCopyFor(language, {
+      en: "The start is too close for automatic use of the new plan.",
+      ru: "Старт слишком близко, поэтому новый план нельзя включать автоматически.",
+      bg: "Стартът е твърде близо и новият план не може да се включи автоматично.",
+    }),
+    competition_day_primary_not_enabled: matrixUiCopyFor(language, {
+      en: "Competition day remains comparison-only.",
+      ru: "День соревнования остаётся только для сравнения.",
+      bg: "Денят на състезание остава само за сравнение.",
+    }),
+    input_mutation_detected: matrixUiCopyFor(language, {
+      en: "The input changed during the check.",
+      ru: "Вводные изменились во время проверки.",
+      bg: "Входните данни се промениха по време на проверката.",
+    }),
+  };
+
+  return labels[code] ?? fallback ?? code.replaceAll("_", " ");
+}
+
+export function formatConstructorPreviewDraftDensity(
+  language: Language,
+  metrics: ConstructorPreviewDraftMetrics,
+) {
+  return [
+    `${metrics.weekCount} ${constructorMatrixMetricLabel(language, "weeks")}`,
+    `${metrics.dayCount} ${constructorMatrixMetricLabel(language, "days")}`,
+    `${metrics.sessionCount} ${constructorMatrixMetricLabel(language, "sessions")}`,
+    `${metrics.blockCount} ${constructorMatrixMetricLabel(language, "blocks")}`,
+  ].join(" / ");
+}
+
+export function formatConstructorPreviewWeekRowSummary(
+  language: Language,
+  week: ConstructorPreviewDraftMetrics["weekRows"][number],
+) {
+  const parts = [
+    `${week.dayCount} ${constructorMatrixMetricLabel(language, "days")}`,
+    `${week.sessionCount} ${constructorMatrixMetricLabel(language, "sessions")}`,
+    `${week.blockCount} ${constructorMatrixMetricLabel(language, "blocks")}`,
+  ];
+
+  if (week.closeStartDayCount) {
+    parts.push(
+      `${week.closeStartDayCount} ${constructorMatrixMetricLabel(language, "close-start")}`,
+    );
+  }
+
+  return parts.join(" / ");
 }
 
 export function constructorPreviewSessionsForDay(
@@ -609,7 +784,7 @@ export function collectConstructorMatrixCandidateSummary(
         key,
         label: value.label,
         count: value.count,
-        loadLevels: Array.from(value.loadLevels).join(", "),
+        loadLevels: Array.from(value.loadLevels),
       }))
       .sort((left, right) => right.count - left.count)
       .slice(0, 8),
@@ -909,19 +1084,28 @@ export function constructorMatrixWorkspaceScenarioText(
 }
 
 export function formatConstructorPreviewAffected(
+  language: Language,
   affected?: NonNullable<
     NonNullable<ConstructorMatrixPreviewResponse["comparisonReport"]>["differences"][number]["affected"]
   >,
 ) {
   if (!affected) {
-    return "whole preview";
+    return matrixUiCopyFor(language, {
+      en: "whole comparison",
+      ru: "всё сравнение",
+      bg: "цялото сравнение",
+    });
   }
 
   return [
-    affected.weekNumber ? `W${affected.weekNumber}` : "",
-    affected.dayNumber ? `D${affected.dayNumber}` : "",
+    affected.weekNumber
+      ? `${matrixUiCopyFor(language, { en: "week", ru: "неделя", bg: "седмица" })} ${affected.weekNumber}`
+      : "",
+    affected.dayNumber
+      ? `${matrixUiCopyFor(language, { en: "day", ru: "день", bg: "ден" })} ${affected.dayNumber}`
+      : "",
     affected.sessionName ?? "",
-    affected.blockType ?? "",
+    affected.blockType ? constructorMatrixBlockKeyLabel(language, affected.blockType) : "",
   ]
     .filter(Boolean)
     .join(" / ");
