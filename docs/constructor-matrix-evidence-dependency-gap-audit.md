@@ -217,3 +217,35 @@ Primary gap: evidence dependency registry + data-quality thresholds.
 Next step: implement typed evidence dependencies before broad production expansion.
 ```
 
+## 10. Registry implementation status
+
+Implemented after this audit:
+
+- typed registry: `packages/shared/src/constructor-matrix-evidence.ts`;
+- exported registry ids and helpers from `@training-platform/shared`;
+- `evidenceDependencies` attached to:
+  - `ConstructorPhaseMatrixRule`;
+  - `ConstructorWeekMatrixRule`;
+  - `ConstructorDayMatrixRule`;
+  - `ConstructorTrainingBlockDefinition`;
+  - selected Matrix blocks;
+  - Matrix risk checks;
+  - block eligibility reasons;
+- Matrix adapter now carries registry titles into `ConstructorPlanBlock.evidenceRefs`;
+- automated check:
+
+```bash
+npm run check:constructor-matrix-evidence-dependencies
+```
+
+The check verifies:
+
+- registry ids are unique and point to existing docs;
+- every phase/week/day/block Matrix rule has evidence dependencies;
+- high-risk domains expose explicit limitations;
+- every selected block in preview fixtures carries evidence dependencies;
+- every risk check in preview fixtures carries evidence dependencies.
+
+Remaining P0 gap after registry:
+
+- numeric thresholds for weight cut, hydration, readiness, RHR, sleep, pain and device confidence still need a separate data-dependency gate before Matrix becomes broad default.

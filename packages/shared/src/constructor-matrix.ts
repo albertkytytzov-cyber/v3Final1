@@ -6,6 +6,8 @@ import type {
   ConstructorPhase,
   ConstructorRiskCode,
 } from "./constructor-core";
+import type { ConstructorMatrixEvidenceDependencyId } from "./constructor-matrix-evidence";
+import { uniqueConstructorMatrixEvidenceDependencies } from "./constructor-matrix-evidence";
 import type { SeasonStrategyCompetitionRole } from "./season-strategy";
 
 export type ConstructorPreparationPhase =
@@ -105,6 +107,7 @@ export interface ConstructorPhaseMatrixRule {
   defaultWeekTypes: ConstructorWeekType[];
   canDevelopQualities: boolean;
   recoveryPriority: ConstructorRecoveryPriority;
+  evidenceDependencies: ConstructorMatrixEvidenceDependencyId[];
   explanation: string;
 }
 
@@ -120,6 +123,7 @@ export interface ConstructorWeekMatrixRule {
   canUseHeavyLegLmv: boolean;
   canUseControlBouts: boolean;
   recoveryPriority: ConstructorRecoveryPriority;
+  evidenceDependencies: ConstructorMatrixEvidenceDependencyId[];
   explanation: string;
 }
 
@@ -138,6 +142,7 @@ export interface ConstructorDayMatrixRule {
   canUseSpeed: boolean;
   canUseControlBouts: boolean;
   recoveryPriority: ConstructorRecoveryPriority;
+  evidenceDependencies: ConstructorMatrixEvidenceDependencyId[];
   explanation: string;
 }
 
@@ -161,6 +166,7 @@ export interface ConstructorTrainingBlockDefinition {
   usesControlBouts: boolean;
   riskTags: ConstructorRiskCode[];
   forbiddenCombinations: ConstructorTrainingBlockType[];
+  evidenceDependencies: ConstructorMatrixEvidenceDependencyId[];
   explanation: string;
 }
 
@@ -168,12 +174,14 @@ export interface ConstructorBlockEligibilityRule {
   code: ConstructorEligibilityReasonCode;
   message: string;
   replacementBlockType?: ConstructorTrainingBlockType;
+  evidenceDependencies?: ConstructorMatrixEvidenceDependencyId[];
 }
 
 export interface ConstructorRiskRule {
   code: ConstructorRiskCode | ConstructorEligibilityReasonCode;
   message: string;
   replacementBlockType?: ConstructorTrainingBlockType;
+  evidenceDependencies?: ConstructorMatrixEvidenceDependencyId[];
 }
 
 export interface ConstructorExplanationReason {
@@ -210,7 +218,203 @@ export interface ConstructorTemplateCardCompatibility {
   explanation: string;
 }
 
-export const CONSTRUCTOR_PHASE_MATRIX_RULES: ConstructorPhaseMatrixRule[] = [
+type ConstructorMatrixRuleWithoutEvidence<T extends { evidenceDependencies: unknown }> = Omit<
+  T,
+  "evidenceDependencies"
+>;
+
+function evidence(
+  ids: readonly ConstructorMatrixEvidenceDependencyId[],
+): ConstructorMatrixEvidenceDependencyId[] {
+  return uniqueConstructorMatrixEvidenceDependencies(ids);
+}
+
+function evidenceForPhase(phase: ConstructorPreparationPhase): ConstructorMatrixEvidenceDependencyId[] {
+  const common = ["perform_evidence_matrix", "matrix_transition_plan"] as const;
+
+  switch (phase) {
+    case "general_preparation":
+      return evidence([...common, "constructor_core_stack", "periodization_taper_peaking"]);
+    case "special_preparation":
+      return evidence([...common, "constructor_core_stack", "wrestling_temporal_structure"]);
+    case "special_pre_competition":
+      return evidence([...common, "europe_pre_competition_plan", "periodization_taper_peaking"]);
+    case "direct_pre_competition":
+    case "taper":
+      return evidence([...common, "europe_pre_competition_plan", "periodization_taper_peaking"]);
+    case "competition":
+      return evidence([
+        ...common,
+        "europe_pre_competition_plan",
+        "periodization_taper_peaking",
+        "ncaa_weight_management",
+        "acsm_hydration_nutrition",
+      ]);
+    case "transition_recovery":
+      return evidence([...common, "recovery_monitoring_consensus"]);
+    default:
+      return evidence(common);
+  }
+}
+
+function evidenceForWeekType(weekType: ConstructorWeekType): ConstructorMatrixEvidenceDependencyId[] {
+  const common = ["perform_evidence_matrix", "matrix_transition_plan"] as const;
+
+  switch (weekType) {
+    case "development":
+      return evidence([
+        ...common,
+        "china_ssit_freestyle_wrestlers",
+        "bfr_kaatsu_local_metabolic",
+        "china_bfr_half_squat_wrestlers",
+      ]);
+    case "maintenance":
+    case "special":
+      return evidence([...common, "europe_pre_competition_plan", "wrestling_temporal_structure"]);
+    case "pre_competition":
+    case "taper":
+    case "competition":
+      return evidence([...common, "europe_pre_competition_plan", "periodization_taper_peaking"]);
+    case "deload":
+    case "recovery":
+    case "post_competition":
+      return evidence([...common, "recovery_monitoring_consensus", "europe_pre_competition_plan"]);
+    case "travel_logistics":
+      return evidence([...common, "europe_pre_competition_plan", "acsm_hydration_nutrition"]);
+    default:
+      return evidence(common);
+  }
+}
+
+function evidenceForDayType(dayType: ConstructorDayType): ConstructorMatrixEvidenceDependencyId[] {
+  const common = ["perform_evidence_matrix", "matrix_transition_plan"] as const;
+
+  switch (dayType) {
+    case "heavy_training":
+    case "medium_training":
+    case "spp_day":
+    case "gpp_day":
+      return evidence([
+        ...common,
+        "periodization_taper_peaking",
+        "bfr_kaatsu_local_metabolic",
+        "china_ssit_freestyle_wrestlers",
+      ]);
+    case "technical":
+    case "mat_day":
+    case "competition_model":
+      return evidence([...common, "wrestling_temporal_structure", "europe_pre_competition_plan"]);
+    case "light_training":
+    case "half_day":
+    case "environment_change":
+    case "recovery":
+    case "sauna_recovery":
+    case "post_competition":
+      return evidence([...common, "recovery_monitoring_consensus", "europe_pre_competition_plan"]);
+    case "travel":
+      return evidence([...common, "europe_pre_competition_plan", "acsm_hydration_nutrition"]);
+    case "weigh_in":
+      return evidence([
+        ...common,
+        "ncaa_weight_management",
+        "acsm_hydration_nutrition",
+        "japan_rapid_weight_loss_wrestlers",
+        "sichuan_weight_reduction_wrestlers",
+      ]);
+    case "competition":
+      return evidence([...common, "wrestling_temporal_structure", "periodization_taper_peaking"]);
+    default:
+      return evidence(common);
+  }
+}
+
+function evidenceForTrainingBlock(
+  type: ConstructorTrainingBlockType,
+): ConstructorMatrixEvidenceDependencyId[] {
+  const common = ["perform_evidence_matrix", "matrix_transition_plan"] as const;
+
+  switch (type) {
+    case "mat_technique":
+    case "mat_tactics":
+    case "mat_light_technical":
+      return evidence([...common, "wrestling_temporal_structure", "europe_pre_competition_plan"]);
+    case "mat_competition_model":
+    case "mat_control_bouts":
+    case "competition_start":
+      return evidence([...common, "wrestling_temporal_structure", "europe_pre_competition_plan"]);
+    case "spp":
+      return evidence([...common, "europe_pre_competition_plan", "bfr_kaatsu_local_metabolic"]);
+    case "gpp":
+    case "aerobic_deload":
+    case "environment_change":
+      return evidence([...common, "recovery_monitoring_consensus", "periodization_taper_peaking"]);
+    case "leg_lmv":
+      return evidence([
+        ...common,
+        "bfr_kaatsu_local_metabolic",
+        "china_bfr_half_squat_wrestlers",
+        "europe_pre_competition_plan",
+      ]);
+    case "first_action_speed":
+      return evidence([...common, "china_ssit_freestyle_wrestlers", "europe_pre_competition_plan"]);
+    case "mobility":
+    case "recovery":
+    case "post_competition_recovery":
+      return evidence([...common, "recovery_monitoring_consensus"]);
+    case "sauna":
+    case "weigh_in":
+      return evidence([
+        ...common,
+        "ncaa_weight_management",
+        "acsm_hydration_nutrition",
+        "japan_rapid_weight_loss_wrestlers",
+      ]);
+    case "travel":
+      return evidence([...common, "europe_pre_competition_plan", "acsm_hydration_nutrition"]);
+    default:
+      return evidence([...common, "perform_internal_validation_pending"]);
+  }
+}
+
+function withPhaseEvidence(
+  rule: ConstructorMatrixRuleWithoutEvidence<ConstructorPhaseMatrixRule>,
+): ConstructorPhaseMatrixRule {
+  return {
+    ...rule,
+    evidenceDependencies: evidenceForPhase(rule.phase),
+  };
+}
+
+function withWeekEvidence(
+  rule: ConstructorMatrixRuleWithoutEvidence<ConstructorWeekMatrixRule>,
+): ConstructorWeekMatrixRule {
+  return {
+    ...rule,
+    evidenceDependencies: evidenceForWeekType(rule.weekType),
+  };
+}
+
+function withDayEvidence(
+  rule: ConstructorMatrixRuleWithoutEvidence<ConstructorDayMatrixRule>,
+): ConstructorDayMatrixRule {
+  return {
+    ...rule,
+    evidenceDependencies: evidenceForDayType(rule.dayType),
+  };
+}
+
+function withTrainingBlockEvidence(
+  rule: ConstructorMatrixRuleWithoutEvidence<ConstructorTrainingBlockDefinition>,
+): ConstructorTrainingBlockDefinition {
+  return {
+    ...rule,
+    evidenceDependencies: evidenceForTrainingBlock(rule.type),
+  };
+}
+
+const CONSTRUCTOR_PHASE_MATRIX_RULE_DEFINITIONS: Array<
+  ConstructorMatrixRuleWithoutEvidence<ConstructorPhaseMatrixRule>
+> = [
   {
     phase: "general_preparation",
     constructorPhase: "base",
@@ -304,7 +508,12 @@ export const CONSTRUCTOR_PHASE_MATRIX_RULES: ConstructorPhaseMatrixRule[] = [
   },
 ];
 
-export const CONSTRUCTOR_WEEK_MATRIX_RULES: ConstructorWeekMatrixRule[] = [
+export const CONSTRUCTOR_PHASE_MATRIX_RULES: ConstructorPhaseMatrixRule[] =
+  CONSTRUCTOR_PHASE_MATRIX_RULE_DEFINITIONS.map(withPhaseEvidence);
+
+const CONSTRUCTOR_WEEK_MATRIX_RULE_DEFINITIONS: Array<
+  ConstructorMatrixRuleWithoutEvidence<ConstructorWeekMatrixRule>
+> = [
   {
     weekType: "development",
     phases: ["general_preparation", "special_preparation"],
@@ -447,7 +656,12 @@ export const CONSTRUCTOR_WEEK_MATRIX_RULES: ConstructorWeekMatrixRule[] = [
   },
 ];
 
-export const CONSTRUCTOR_DAY_MATRIX_RULES: ConstructorDayMatrixRule[] = [
+export const CONSTRUCTOR_WEEK_MATRIX_RULES: ConstructorWeekMatrixRule[] =
+  CONSTRUCTOR_WEEK_MATRIX_RULE_DEFINITIONS.map(withWeekEvidence);
+
+const CONSTRUCTOR_DAY_MATRIX_RULE_DEFINITIONS: Array<
+  ConstructorMatrixRuleWithoutEvidence<ConstructorDayMatrixRule>
+> = [
   {
     dayType: "heavy_training",
     allowedWeekTypes: ["development"],
@@ -722,7 +936,12 @@ export const CONSTRUCTOR_DAY_MATRIX_RULES: ConstructorDayMatrixRule[] = [
   },
 ];
 
-export const CONSTRUCTOR_TRAINING_BLOCK_LIBRARY: ConstructorTrainingBlockDefinition[] = [
+export const CONSTRUCTOR_DAY_MATRIX_RULES: ConstructorDayMatrixRule[] =
+  CONSTRUCTOR_DAY_MATRIX_RULE_DEFINITIONS.map(withDayEvidence);
+
+const CONSTRUCTOR_TRAINING_BLOCK_DEFINITIONS: Array<
+  ConstructorMatrixRuleWithoutEvidence<ConstructorTrainingBlockDefinition>
+> = [
   {
     type: "mat_technique",
     blockType: "technical",
@@ -1121,6 +1340,9 @@ export const CONSTRUCTOR_TRAINING_BLOCK_LIBRARY: ConstructorTrainingBlockDefinit
   },
 ];
 
+export const CONSTRUCTOR_TRAINING_BLOCK_LIBRARY: ConstructorTrainingBlockDefinition[] =
+  CONSTRUCTOR_TRAINING_BLOCK_DEFINITIONS.map(withTrainingBlockEvidence);
+
 export const CONSTRUCTOR_TEMPLATE_CARD_COMPATIBILITY: ConstructorTemplateCardCompatibility[] = [
   {
     cardId: "pre_competition_21",
@@ -1180,6 +1402,39 @@ function getWeekRule(weekType: ConstructorWeekType) {
 
 function getDayRule(dayType: ConstructorDayType) {
   return CONSTRUCTOR_DAY_MATRIX_RULES.find((rule) => rule.dayType === dayType);
+}
+
+function evidenceForEligibilityReason(params: {
+  reason: ConstructorBlockEligibilityRule;
+  block: ConstructorTrainingBlockDefinition;
+  weekRule?: ConstructorWeekMatrixRule;
+  dayRule?: ConstructorDayMatrixRule;
+}): ConstructorMatrixEvidenceDependencyId[] {
+  const base = [
+    ...params.block.evidenceDependencies,
+    ...(params.weekRule?.evidenceDependencies ?? []),
+    ...(params.dayRule?.evidenceDependencies ?? []),
+  ];
+
+  switch (params.reason.code) {
+    case "development_forbidden_before_main_start":
+    case "taper_development_mix":
+    case "week_development_forbidden":
+    case "day_development_forbidden":
+      return evidence([...base, "europe_pre_competition_plan", "periodization_taper_peaking"]);
+    case "heavy_leg_lmv_too_close":
+      return evidence([...base, "bfr_kaatsu_local_metabolic", "china_bfr_half_squat_wrestlers"]);
+    case "mat_volume_too_high_close_to_start":
+    case "control_bouts_too_close":
+    case "control_bouts_not_allowed":
+      return evidence([...base, "wrestling_temporal_structure", "europe_pre_competition_plan"]);
+    case "heavy_load_on_travel_day":
+      return evidence([...base, "europe_pre_competition_plan", "acsm_hydration_nutrition"]);
+    case "heavy_load_on_weigh_in_day":
+      return evidence([...base, "ncaa_weight_management", "acsm_hydration_nutrition"]);
+    default:
+      return evidence(base);
+  }
 }
 
 export function getWeekTypeForContext(context: ConstructorMatrixContext): ConstructorWeekType {
@@ -1449,7 +1704,15 @@ export function getForbiddenBlockReasons(
     });
   }
 
-  return reasons;
+  return reasons.map((reason) => ({
+    ...reason,
+    evidenceDependencies: evidenceForEligibilityReason({
+      reason,
+      block,
+      weekRule,
+      dayRule,
+    }),
+  }));
 }
 
 export function isTrainingBlockAllowed(

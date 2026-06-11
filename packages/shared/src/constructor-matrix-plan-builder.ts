@@ -1,4 +1,6 @@
 import type { ConstructorInput, ConstructorRiskCode } from "./constructor-core";
+import type { ConstructorMatrixEvidenceDependencyId } from "./constructor-matrix-evidence";
+import { uniqueConstructorMatrixEvidenceDependencies } from "./constructor-matrix-evidence";
 import type {
   ConstructorDayType,
   ConstructorMatrixLoadLevel,
@@ -71,6 +73,7 @@ export interface MatrixDrivenRiskCheckResult {
   code: MatrixDrivenRiskCode;
   severity: MatrixDrivenRiskSeverity;
   message: string;
+  evidenceDependencies: ConstructorMatrixEvidenceDependencyId[];
   affected: {
     weekNumber?: number;
     dayNumber?: number;
@@ -106,6 +109,7 @@ export interface MatrixDrivenSelectedBlock {
   loadLevel: ConstructorMatrixLoadLevel;
   matVolumeLevel: ConstructorMatrixLoadLevel;
   riskTags: ConstructorRiskCode[];
+  evidenceDependencies: ConstructorMatrixEvidenceDependencyId[];
   volume: MatrixDrivenVolumePrescription;
   selectedBecause: string[];
   explanations: MatrixDrivenExplanation[];
@@ -186,6 +190,51 @@ function normalizeOptions(options?: MatrixDrivenBuilderOptions): Required<Matrix
 
 function unique<T>(values: T[]) {
   return Array.from(new Set(values));
+}
+
+function uniqueEvidence(
+  ids: readonly ConstructorMatrixEvidenceDependencyId[],
+): ConstructorMatrixEvidenceDependencyId[] {
+  return uniqueConstructorMatrixEvidenceDependencies(ids);
+}
+
+function evidenceForMatrixRisk(code: MatrixDrivenRiskCode): ConstructorMatrixEvidenceDependencyId[] {
+  switch (code) {
+    case "main_start_development_forbidden":
+    case "taper_mixed_with_development":
+      return uniqueEvidence([
+        "europe_pre_competition_plan",
+        "periodization_taper_peaking",
+        "matrix_transition_plan",
+      ]);
+    case "heavy_lmv_too_close_to_start":
+      return uniqueEvidence([
+        "bfr_kaatsu_local_metabolic",
+        "china_bfr_half_squat_wrestlers",
+        "europe_pre_competition_plan",
+      ]);
+    case "heavy_strength_too_close_to_start":
+      return uniqueEvidence(["periodization_taper_peaking", "europe_pre_competition_plan"]);
+    case "excessive_mat_volume_near_start":
+    case "control_bouts_too_close_to_start":
+      return uniqueEvidence(["wrestling_temporal_structure", "europe_pre_competition_plan"]);
+    case "heavy_load_on_travel_day":
+      return uniqueEvidence(["europe_pre_competition_plan", "acsm_hydration_nutrition"]);
+    case "heavy_load_on_weigh_in_day":
+      return uniqueEvidence([
+        "ncaa_weight_management",
+        "acsm_hydration_nutrition",
+        "japan_rapid_weight_loss_wrestlers",
+      ]);
+    case "competition_day_training_load":
+      return uniqueEvidence(["wrestling_temporal_structure", "periodization_taper_peaking"]);
+    case "post_competition_development_load":
+      return uniqueEvidence(["recovery_monitoring_consensus", "periodization_taper_peaking"]);
+    case "legacy_template_used_as_structure":
+      return uniqueEvidence(["matrix_transition_plan", "constructor_core_stack"]);
+    default:
+      return uniqueEvidence(["perform_evidence_matrix"]);
+  }
 }
 
 function loadToDraftLevel(load: ConstructorMatrixLoadLevel): MatrixDrivenLoadLevel {
@@ -469,6 +518,7 @@ export function selectMatrixDrivenBlocksForSession(params: {
         loadLevel: block.loadLevel,
         matVolumeLevel: block.matVolumeLevel,
         riskTags: block.riskTags,
+        evidenceDependencies: block.evidenceDependencies,
         volume,
         selectedBecause: [
           `day_type=${params.day.dayType}`,
@@ -569,6 +619,10 @@ export function applyMatrixDrivenRiskChecks(params: {
         code: riskCode,
         severity: "error",
         message: `${block.label}: выбранный блок конфликтует с типом дня ${params.day.dayType}.`,
+        evidenceDependencies: uniqueEvidence([
+          ...block.evidenceDependencies,
+          ...evidenceForMatrixRisk(riskCode),
+        ]),
         affected: {
           weekNumber: params.week.weekNumber,
           dayNumber: params.day.dayNumber,
@@ -598,6 +652,11 @@ export function applyMatrixDrivenRiskChecks(params: {
       code: riskCode,
       severity: "warning",
       message: `${block.label}: не выбран. ${candidate.reasons.map((reason) => reason.message).join(" ")}`,
+      evidenceDependencies: uniqueEvidence([
+        ...block.evidenceDependencies,
+        ...evidenceForMatrixRisk(riskCode),
+        ...candidate.reasons.flatMap((reason) => reason.evidenceDependencies ?? []),
+      ]),
       affected: {
         weekNumber: params.week.weekNumber,
         dayNumber: params.day.dayNumber,

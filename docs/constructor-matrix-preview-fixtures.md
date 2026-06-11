@@ -24,6 +24,12 @@ Runner подключён в:
 scripts/check-perform-constructor-core.mjs
 ```
 
+Evidence dependency coverage check:
+
+```text
+scripts/check-constructor-matrix-evidence-dependencies.mjs
+```
+
 Internal/debug API endpoint, который использует тот же preview response helper:
 
 ```text
@@ -34,6 +40,7 @@ POST /api/v1/plans/constructor/internal/matrix-preview
 
 ```bash
 npm run check:constructor-core
+npm run check:constructor-matrix-evidence-dependencies
 npm run check
 ```
 
@@ -162,6 +169,8 @@ Fixture pack остаётся preview/safety базой, а `check-perform-const
 - `buildMatrixConstructorDraftIfAllowed` returns matrix for primary-allowed far development and main-start D-28/D-21/D-10/D-4, while D-3 still falls back/blocks;
 - rollout decision не мутирует input;
 - default `buildPerformConstructorDraft` остаётся legacy.
+- every selected Matrix block in fixture scenarios carries typed evidence dependencies;
+- every Matrix risk check in fixture scenarios carries typed evidence dependencies.
 
 Отдельный internal endpoint:
 

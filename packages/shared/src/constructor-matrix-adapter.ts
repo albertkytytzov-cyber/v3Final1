@@ -23,6 +23,7 @@ import type {
   ConstructorPreparationPhase,
   ConstructorTrainingBlockType,
 } from "./constructor-matrix";
+import { getConstructorMatrixEvidenceDependencies } from "./constructor-matrix-evidence";
 import type {
   MatrixDrivenBuilderOptions,
   MatrixDrivenPlanDay,
@@ -581,6 +582,10 @@ function matrixBlockExercises(block: MatrixDrivenSelectedBlock): ConstructorPlan
 }
 
 function adaptBlock(block: MatrixDrivenSelectedBlock): ConstructorPlanBlock {
+  const evidenceTitles = getConstructorMatrixEvidenceDependencies(block.evidenceDependencies).map(
+    (item) => item.title,
+  );
+
   return {
     name: matrixBlockName(block),
     type: block.blockTypeCategory as ConstructorBlockType,
@@ -600,6 +605,7 @@ function adaptBlock(block: MatrixDrivenSelectedBlock): ConstructorPlanBlock {
     riskFlags: block.riskTags,
     evidenceRefs: [
       "PERFORM: фазовая матрица подготовки",
+      ...evidenceTitles,
       ...(block.sourceCompatibilityCards.length ? ["эталонные блоки используются как библиотека упражнений"] : []),
     ],
     coachEditable: true,

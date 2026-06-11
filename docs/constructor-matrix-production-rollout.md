@@ -57,6 +57,7 @@ npm run build --workspace @training-platform/shared
 npm run build --workspace @training-platform/api
 npm run build --workspace @training-platform/web
 npm run check:constructor-core
+npm run check:constructor-matrix-evidence-dependencies
 npm run check:constructor-matrix-ui-gates
 npm run check:constructor-matrix-review-export
 npm run check
