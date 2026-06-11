@@ -124,17 +124,17 @@ export function MatrixPreviewWorkspace({
           </h3>
           <p>
             {matrixUiCopyFor(language, {
-              en: "Review it before choosing whether it can replace the current draft.",
-              ru: "Проверьте его перед тем, как использовать вместо текущего черновика.",
-              bg: "Прегледайте го преди да решите дали може да замени текущата чернова.",
+              en: "Review it before choosing whether it can replace the safe assignable plan.",
+              ru: "Проверьте его перед тем, как использовать вместо безопасного плана для назначения.",
+              bg: "Прегледайте го преди да решите дали може да замени безопасния план.",
             })}
           </p>
         </div>
         <button className="tertiary-button" onClick={onCloseWorkspace} type="button">
           {matrixUiCopyFor(language, {
-            en: "Back to current draft",
-            ru: "Вернуться к текущему черновику",
-            bg: "Назад към текущата чернова",
+            en: "Back to safe plan",
+            ru: "Вернуться к безопасному плану",
+            bg: "Назад към безопасния план",
           })}
         </button>
       </header>
@@ -147,7 +147,7 @@ export function MatrixPreviewWorkspace({
           {matrixUiCopyFor(language, { en: "not saved yet", ru: "ещё не сохранено", bg: "още не е записано" })}
         </span>
         <span className="constructor-matrix-readonly-badge">
-          {matrixUiCopyFor(language, { en: "current draft is safe", ru: "текущий черновик сохранён", bg: "текущата чернова е запазена" })}
+          {matrixUiCopyFor(language, { en: "safe plan is preserved", ru: "безопасный план сохранён", bg: "безопасният план е запазен" })}
         </span>
         {limitedPrimaryPilotEnabled ? (
           <>
@@ -214,9 +214,9 @@ export function MatrixPreviewWorkspace({
                 })
               : activeMatrixInternal
               ? matrixUiCopyFor(language, {
-                  en: "The main draft panel now shows this read-only new variant. The current draft and template payload are unchanged.",
-                  ru: "Основная панель сейчас показывает новый вариант для просмотра. Текущий черновик и шаблон не изменены.",
-                  bg: "Основният панел показва новия вариант само за преглед. Текущата чернова и шаблонът не са променени.",
+                  en: "The main draft panel now shows this read-only Matrix variant. The safe plan and template payload are unchanged.",
+                  ru: "Основная панель сейчас показывает Matrix-вариант для просмотра. Безопасный план и шаблон не изменены.",
+                  bg: "Основният панел показва Matrix варианта само за преглед. Безопасният план и шаблонът не са променени.",
                 })
               : canActivate
                 ? matrixUiCopyFor(language, {
@@ -231,9 +231,9 @@ export function MatrixPreviewWorkspace({
           {activeMatrixCandidate ? (
             <button className="secondary-button" onClick={onReturnToLegacyDraft} type="button">
               {matrixUiCopyFor(language, {
-                en: "Return to current draft",
-                ru: "Вернуться к текущему черновику",
-                bg: "Върни текущата чернова",
+                en: "Return to safe plan",
+                ru: "Вернуться к безопасному плану",
+                bg: "Върни безопасния план",
               })}
             </button>
           ) : (
@@ -275,9 +275,9 @@ export function MatrixPreviewWorkspace({
             {activeMatrixPrimaryPilot ? (
               <button className="secondary-button" onClick={onReturnToLegacyDraft} type="button">
                 {matrixUiCopyFor(language, {
-                  en: "Return to current draft",
-                  ru: "Вернуться к текущему черновику",
-                  bg: "Върни текущата чернова",
+                  en: "Return to safe plan",
+                  ru: "Вернуться к безопасному плану",
+                  bg: "Върни безопасния план",
                 })}
               </button>
             ) : (

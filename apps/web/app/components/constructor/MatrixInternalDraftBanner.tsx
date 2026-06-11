@@ -44,9 +44,9 @@ export function MatrixInternalDraftBanner({
         </span>
         <button className="tertiary-button" onClick={onReturnToLegacyDraft} type="button">
           {matrixUiCopyFor(language, {
-            en: "Return to current draft",
-            ru: "Вернуться к текущему черновику",
-            bg: "Върни текущата чернова",
+            en: "Return to safe plan",
+            ru: "Вернуться к безопасному плану",
+            bg: "Върни безопасния план",
           })}
         </button>
       </div>
@@ -72,9 +72,9 @@ export function MatrixInternalDraftBanner({
                 bg: "Това е работна чернова за изрично разрешен сценарий. Не се назначава автоматично: запазете я като шаблон, после проверете датите и я назначете.",
               })
             : matrixUiCopyFor(language, {
-                en: "This draft is used only for review. It is read-only, not saved, not assigned, and the current draft is unchanged.",
-                ru: "Этот черновик используется только для проверки. Он не сохраняется, не назначается, текущий черновик не изменён.",
-                bg: "Тази чернова е само за проверка. Не се записва, не се назначава и текущата чернова не е променена.",
+                en: "This draft is used only for review. It is read-only, not saved, not assigned, and the safe plan is unchanged.",
+                ru: "Этот черновик используется только для проверки. Он не сохраняется, не назначается, безопасный план не изменён.",
+                bg: "Тази чернова е само за проверка. Не се записва, не се назначава и безопасният план не е променен.",
               })}
         </p>
       </div>

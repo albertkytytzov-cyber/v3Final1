@@ -1821,3 +1821,25 @@ Regression coverage:
 npm run check:constructor-core
 npm run check:constructor-matrix-ui-gates
 ```
+
+### 15.26 Trainer-facing safe-plan terminology
+
+After the limited pilot became visible on production, the trainer UI must not
+make fallback states look like an old or broken constructor.
+
+Trainer-facing labels now use:
+
+- `Matrix-конструктор` when the controlled Matrix draft becomes the active
+  working plan;
+- `безопасный режим` / `безопасный план` when Matrix remains in control or
+  comparison mode and PERFORM builds the assignable fallback plan;
+- `Контроль Matrix-планирования` for the lower explainability panel.
+- focus chips inherit the calendar/season phase mode, so close-start,
+  recovery and protected windows show maintenance, transfer, activation or
+  recovery instead of old blanket `development` labels.
+
+This is a UI language layer only. It does not change matrix draft logic,
+rollout policy, server gates, DB/API contracts, mobile contracts, or
+save/template/assign behavior. The safety rule remains: close start windows,
+travel, weigh-in and blocked scenarios can explain Matrix output without
+replacing the assignable safe plan.

@@ -156,9 +156,9 @@ export function MatrixRolloutDecisionCard({
             <p className="constructor-matrix-rollout-note">
               {workspaceCanOpen
                 ? matrixUiCopyFor(language, {
-                en: "Available for review. It will not save, assign, or replace the current draft until the safety gate allows it.",
-                    ru: "Доступно для проверки. Не сохраняет, не назначает и не заменяет текущий черновик, пока это не разрешит проверка безопасности.",
-                    bg: "Достъпно е за проверка. Не записва, не назначава и не заменя текущата чернова, докато проверката за безопасност не го разреши.",
+                    en: "Available for review. It will not save, assign, or replace the safe plan until the safety gate allows it.",
+                    ru: "Доступно для проверки. Не сохраняет, не назначает и не заменяет безопасный план, пока это не разрешит проверка безопасности.",
+                    bg: "Достъпно е за проверка. Не записва, не назначава и не заменя безопасния план, докато проверката за безопасност не го разреши.",
                   })
                 : workspaceUnavailableReason}
             </p>

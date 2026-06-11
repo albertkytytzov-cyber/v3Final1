@@ -127,21 +127,21 @@ export function MatrixConstructorPreviewPanel({
           <div>
             <strong>
               {matrixUiCopyFor(language, {
-                en: "New planning logic diagnostics",
-                ru: "Диагностика новой логики планирования",
-                bg: "Диагностика на новата логика на планиране",
+                en: "Matrix planning control",
+                ru: "Контроль Matrix-планирования",
+                bg: "Контрол на Matrix планирането",
               })}
             </strong>
             <span>
               {matrixUiCopyFor(language, {
-                en: "This block explains whether the new logic can become the working draft. It does not save or assign anything by itself.",
-                ru: "Этот блок объясняет, может ли новая логика стать рабочим черновиком. Сам по себе он ничего не сохраняет и не назначает.",
-                bg: "Този блок обяснява дали новата логика може да стане работна чернова. Сам по себе си не записва и не назначава нищо.",
+                en: "This block explains why Matrix is active, in control mode, or blocked for the selected start. It does not save or assign anything by itself.",
+                ru: "Этот блок объясняет, почему Matrix активен, только контролирует или заблокирован для выбранного старта. Сам по себе он ничего не сохраняет и не назначает.",
+                bg: "Този блок обяснява защо Matrix е активен, само контролира или е блокиран за избрания старт. Сам по себе си не записва и не назначава нищо.",
               })}
             </span>
           </div>
           <span className="constructor-source-badge">
-            {matrixUiCopyFor(language, { en: "diagnostics", ru: "диагностика", bg: "диагностика" })}
+            {matrixUiCopyFor(language, { en: "control", ru: "контроль", bg: "контрол" })}
           </span>
         </summary>
 
@@ -156,14 +156,14 @@ export function MatrixConstructorPreviewPanel({
               ? loadingLabel
               : preview || previewError
                 ? matrixUiCopyFor(language, {
-                    en: "Check new logic again",
-                    ru: "Проверить новую логику ещё раз",
-                    bg: "Провери новата логика отново",
+                    en: "Check Matrix again",
+                    ru: "Проверить Matrix ещё раз",
+                    bg: "Провери Matrix отново",
                   })
                 : matrixUiCopyFor(language, {
-                    en: "Check new planning logic",
-                    ru: "Проверить новую логику планирования",
-                    bg: "Провери новата логика на планиране",
+                    en: "Check Matrix planning",
+                    ru: "Проверить Matrix-планирование",
+                    bg: "Провери Matrix планирането",
                   })}
           </button>
           <label>
@@ -379,17 +379,17 @@ export function MatrixConstructorPreviewPanel({
               {([
                 [
                   matrixUiCopyFor(language, {
-                    en: "current constructor",
-                    ru: "текущий конструктор",
-                    bg: "текущ конструктор",
+                    en: "safe planning mode",
+                    ru: "безопасный режим",
+                    bg: "безопасен режим",
                   }),
                   legacyMetrics,
                 ],
                 [
                   matrixUiCopyFor(language, {
-                    en: "new constructor",
-                    ru: "новый конструктор",
-                    bg: "нов конструктор",
+                    en: "Matrix plan",
+                    ru: "Matrix-план",
+                    bg: "Matrix план",
                   }),
                   matrixMetrics,
                 ],
@@ -447,9 +447,9 @@ export function MatrixConstructorPreviewPanel({
                 </div>
                 <p className="constructor-matrix-rollout-note">
                   {matrixUiCopyFor(language, {
-                    en: "Review candidate. It is not saved and does not replace the current draft until the coach explicitly chooses a safe apply path.",
-                    ru: "Кандидат для проверки. Он не сохраняется и не заменяет текущий черновик, пока тренер явно не выберет безопасное применение.",
-                    bg: "Кандидат за проверка. Не се записва и не заменя текущата чернова.",
+                    en: "Review candidate. It is not saved and does not replace the safe plan until the coach explicitly chooses a safe apply path.",
+                    ru: "Кандидат для проверки. Он не сохраняется и не заменяет безопасный план, пока тренер явно не выберет безопасное применение.",
+                    bg: "Кандидат за проверка. Не се записва и не заменя безопасния план.",
                   })}
                 </p>
                 <div className="constructor-matrix-count-grid">
@@ -667,9 +667,9 @@ export function MatrixConstructorPreviewPanel({
         ) : (
           <p className="placeholder-copy">
             {matrixUiCopyFor(language, {
-              en: "Run the comparison to see the new plan variant. The current draft will not change.",
-              ru: "Запустите сравнение, чтобы увидеть новый вариант плана. Текущий черновик не изменится.",
-              bg: "Пуснете сравнението, за да видите нов вариант на плана. Текущата чернова не се променя.",
+              en: "Run the control check to see the Matrix plan variant. The safe plan will not change.",
+              ru: "Запустите контроль, чтобы увидеть Matrix-вариант плана. Безопасный план не изменится.",
+              bg: "Пуснете контрола, за да видите Matrix вариант на плана. Безопасният план не се променя.",
             })}
           </p>
         )}

@@ -184,9 +184,9 @@ export function constructorMatrixActionLabel(language: Language, action?: string
       bg: "Провери новия план",
     }),
     keep_legacy: matrixUiCopyFor(language, {
-      en: "Keep current draft",
-      ru: "Оставить текущий черновик",
-      bg: "Остави текущата чернова",
+      en: "Keep safe plan",
+      ru: "Оставить безопасный план",
+      bg: "Остави безопасния план",
     }),
     preview_only: matrixUiCopyFor(language, {
       en: "Compare only",
@@ -334,9 +334,9 @@ export function constructorMatrixBlockerMessage(
       bg: "В новия план има safety ограничение и още не може да се използва.",
     }),
     legacy_default_changed: matrixUiCopyFor(language, {
-      en: "The current constructor protection changed, so rollout is blocked.",
-      ru: "Защита текущего конструктора изменилась, поэтому применение заблокировано.",
-      bg: "Защитата на текущия конструктор се промени и приложението е блокирано.",
+      en: "The safe-plan protection changed, so application is blocked.",
+      ru: "Защита безопасного плана изменилась, поэтому применение заблокировано.",
+      bg: "Защитата на безопасния план се промени и приложението е блокирано.",
     }),
     comparison_error: matrixUiCopyFor(language, {
       en: "The comparison returned an error.",
@@ -438,10 +438,10 @@ function replaceConstructorMatrixTerms(language: Language, message: string) {
       ? [
           [/\bLegacy\/matrix comparison\b/gi, "сравнение текущей и новой логики"],
           [/\bLegacy and matrix\b/gi, "текущая и новая логика"],
-          [/\bLegacy path\b/gi, "текущий конструктор"],
-          [/\bLegacy constructor\b/gi, "текущий конструктор"],
-          [/\blegacy cards\b/gi, "карточки текущего конструктора"],
-          [/\bLegacy cards\b/g, "Карточки текущего конструктора"],
+          [/\bLegacy path\b/gi, "безопасный режим"],
+          [/\bLegacy constructor\b/gi, "безопасный режим"],
+          [/\blegacy cards\b/gi, "карточки безопасного режима"],
+          [/\bLegacy cards\b/g, "Карточки безопасного режима"],
           [/\bMatrix-driven draft\b/gi, "новый черновик"],
           [/\bMatrix constructor draft\b/gi, "черновик нового конструктора"],
           [/\bMatrix draft\b/gi, "новый черновик"],
@@ -482,14 +482,14 @@ function replaceConstructorMatrixTerms(language: Language, message: string) {
           [/\bsafety checks\b/gi, "проверки безопасности"],
           [/\bsafety check\b/gi, "проверка безопасности"],
           [/\bnot primary-allowed\b/gi, "не разрешён как основной"],
-          [/\breturned legacy fallback\b/gi, "вернул текущий черновик"],
+          [/\breturned legacy fallback\b/gi, "вернул безопасный план"],
         ]
       : [
           [/\bLegacy\/matrix comparison\b/gi, "сравнение на текущата и новата логика"],
           [/\bLegacy and matrix\b/gi, "текущата и новата логика"],
-          [/\bLegacy path\b/gi, "текущият конструктор"],
-          [/\bLegacy constructor\b/gi, "текущият конструктор"],
-          [/\blegacy cards\b/gi, "картите на текущия конструктор"],
+          [/\bLegacy path\b/gi, "безопасният режим"],
+          [/\bLegacy constructor\b/gi, "безопасният режим"],
+          [/\blegacy cards\b/gi, "картите на безопасния режим"],
           [/\bLegacy cards\b/g, "Картите на текущия конструктор"],
           [/\bMatrix-driven draft\b/gi, "нова чернова"],
           [/\bMatrix constructor draft\b/gi, "чернова на новия конструктор"],
@@ -531,7 +531,7 @@ function replaceConstructorMatrixTerms(language: Language, message: string) {
           [/\bsafety checks\b/gi, "проверки за безопасност"],
           [/\bsafety check\b/gi, "проверка за безопасност"],
           [/\bnot primary-allowed\b/gi, "не е разрешен като основен"],
-          [/\breturned legacy fallback\b/gi, "върна текущата чернова"],
+          [/\breturned legacy fallback\b/gi, "върна безопасния план"],
         ];
 
   return replacements.reduce((value, [pattern, replacement]) => value.replace(pattern, replacement), message);
@@ -787,9 +787,9 @@ export function constructorMatrixRolloutLabel(
         bg: "Само предварителен преглед",
       }),
       legacy_only: matrixUiCopyFor(language, {
-        en: "Use current constructor",
-        ru: "Использовать текущий конструктор",
-        bg: "Използвай текущия конструктор",
+        en: "Use safe plan",
+        ru: "Использовать безопасный план",
+        bg: "Използвай безопасния план",
       }),
       blocked: matrixUiCopyFor(language, {
         en: "Blocked",
@@ -886,9 +886,9 @@ export function getPilotReadinessMeaning(
         bg: "Новият конструктор може да се преглежда, но още не трябва да се назначава.",
       }),
       internal_only: matrixUiCopyFor(language, {
-        en: "Review the new constructor output, but keep the current constructor for saving.",
-        ru: "Проверьте новый вариант, но для сохранения используйте текущий конструктор.",
-        bg: "Прегледайте новия вариант, но за запис използвайте текущия конструктор.",
+        en: "Review the Matrix output, but keep the safe plan for saving.",
+        ru: "Проверьте Matrix-вариант, но для сохранения используйте безопасный план.",
+        bg: "Прегледайте Matrix варианта, но за запис използвайте безопасния план.",
       }),
       preview_only: matrixUiCopyFor(language, {
         en: "The new constructor is visible only for comparison in this scenario.",
@@ -896,9 +896,9 @@ export function getPilotReadinessMeaning(
         bg: "В този сценарий новият конструктор е само за сравнение.",
       }),
       blocked: matrixUiCopyFor(language, {
-        en: "The new constructor has blockers here. Keep the current draft.",
-        ru: "В новом конструкторе есть блокирующие проблемы. Оставляем текущий черновик.",
-        bg: "Новият конструктор има блокиращи проблеми. Остава текущата чернова.",
+        en: "Matrix has blockers here. Keep the safe plan.",
+        ru: "В Matrix есть блокирующие ограничения. Оставляем безопасный план.",
+        bg: "Matrix има блокиращи проблеми. Остава безопасният план.",
       }),
       needs_review: matrixUiCopyFor(language, {
         en: "The scenario needs manual review before the new draft can be used.",
@@ -1100,9 +1100,9 @@ export function constructorMatrixRolloutSupportText(
 
   if (decision?.mode === "blocked") {
     return matrixUiCopyFor(language, {
-      en: "The new constructor is blocked here. Use the current draft.",
-      ru: "Новый конструктор здесь заблокирован. Используйте текущий черновик.",
-      bg: "Новият конструктор е блокиран тук. Използвайте текущата чернова.",
+      en: "Matrix is blocked here. Use the safe plan.",
+      ru: "Matrix здесь заблокирован. Используйте безопасный план.",
+      bg: "Matrix е блокиран тук. Използвайте безопасния план.",
     });
   }
 
@@ -1168,9 +1168,9 @@ export function constructorMatrixWorkspaceUnavailableReason(params: {
     }
 
     return matrixUiCopyFor(language, {
-      en: "The new draft cannot be opened: this scenario uses the current constructor or is blocked.",
-      ru: "Новый черновик недоступен: для этого сценария разрешён только текущий конструктор или есть блокировка.",
-      bg: "Новата чернова не може да се отвори: за този сценарий се използва текущият конструктор или има блокиране.",
+      en: "The Matrix draft cannot be opened: this scenario uses the safe plan or is blocked.",
+      ru: "Matrix-черновик недоступен: для этого сценария разрешён только безопасный план или есть блокировка.",
+      bg: "Matrix черновата не може да се отвори: за този сценарий се използва безопасният план или има блокиране.",
     });
   }
 
@@ -1184,9 +1184,9 @@ export function constructorMatrixWorkspaceUnavailableReason(params: {
 
   if (!preview.defaultPathUnchanged || !decision.defaultPathUnchanged) {
     return matrixUiCopyFor(language, {
-      en: "The new draft cannot be opened: current constructor protection changed.",
-      ru: "Новый черновик недоступен: защита текущего конструктора изменилась.",
-      bg: "Новата чернова не може да се отвори: защитата на текущия конструктор се промени.",
+      en: "The Matrix draft cannot be opened: safe-plan protection changed.",
+      ru: "Matrix-черновик недоступен: защита безопасного плана изменилась.",
+      bg: "Matrix черновата не може да се отвори: защитата на безопасния план се промени.",
     });
   }
 
@@ -1242,9 +1242,9 @@ export function constructorMatrixWorkspaceWhyText(
   }
 
   return matrixUiCopyFor(language, {
-    en: "The current draft remains the main draft for this scenario.",
-    ru: "Для этого сценария основным остаётся текущий черновик.",
-    bg: "Текущата чернова остава основна за този сценарий.",
+    en: "The safe plan remains the main plan for this scenario.",
+    ru: "Для этого сценария основным остаётся безопасный план.",
+    bg: "Безопасният план остава основен за този сценарий.",
   });
 }
 

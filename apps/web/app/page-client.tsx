@@ -14381,18 +14381,18 @@ export function PageClient({
           setActiveConstructorDraftSource("legacy");
           setConstructorMessage(
             copyFor(language, {
-              en: `Current constructor draft built. New planning logic is not active for this case: ${constructorMatrixScenarioLabel(
+              en: `Safe assignable plan built. Matrix stays in control mode for this case: ${constructorMatrixScenarioLabel(
                 language,
                 pilotDraft.rolloutDecision.scenario,
-              )}; mode ${constructorMatrixModeLabel(language, pilotDraft.rolloutDecision.mode)}.`,
-              ru: `Собран текущий черновик. Новая логика планирования для этого случая не стала рабочей: ${constructorMatrixScenarioLabel(
+              )}; ${constructorMatrixModeLabel(language, pilotDraft.rolloutDecision.mode)}.`,
+              ru: `Собран безопасный план для назначения. Matrix для этого случая остаётся в режиме контроля: ${constructorMatrixScenarioLabel(
                 language,
                 pilotDraft.rolloutDecision.scenario,
-              )}; режим ${constructorMatrixModeLabel(language, pilotDraft.rolloutDecision.mode)}.`,
-              bg: `Създадена е текущата чернова. Новата логика за планиране не е активна за този случай: ${constructorMatrixScenarioLabel(
+              )}; ${constructorMatrixModeLabel(language, pilotDraft.rolloutDecision.mode)}.`,
+              bg: `Създаден е безопасен план за назначаване. Matrix остава в контролен режим за този случай: ${constructorMatrixScenarioLabel(
                 language,
                 pilotDraft.rolloutDecision.scenario,
-              )}; режим ${constructorMatrixModeLabel(language, pilotDraft.rolloutDecision.mode)}.`,
+              )}; ${constructorMatrixModeLabel(language, pilotDraft.rolloutDecision.mode)}.`,
             }),
           );
           return;
@@ -14400,18 +14400,18 @@ export function PageClient({
 
         setConstructorMessage(
           copyFor(language, {
-            en: `The new constructor is comparison-only for this case (${constructorMatrixScenarioLabel(
+            en: `Matrix stays in comparison/control mode for this case (${constructorMatrixScenarioLabel(
               language,
               pilotDraft.rolloutDecision.scenario,
-            )}). Building the current constructor draft instead.`,
-            ru: `Новый конструктор для этого случая пока только для сравнения (${constructorMatrixScenarioLabel(
+            )}). Building the safe assignable plan instead.`,
+            ru: `Matrix для этого случая остаётся только в режиме контроля (${constructorMatrixScenarioLabel(
               language,
               pilotDraft.rolloutDecision.scenario,
-            )}). Поэтому сверху собран текущий черновик.`,
-            bg: `Новият конструктор за този случай е само за сравнение (${constructorMatrixScenarioLabel(
+            )}). Поэтому сверху собран безопасный план для назначения.`,
+            bg: `Matrix остава само в контролен режим за този случай (${constructorMatrixScenarioLabel(
               language,
               pilotDraft.rolloutDecision.scenario,
-            )}). Затова отгоре е създадена текущата чернова.`,
+            )}). Затова отгоре е създаден безопасен план за назначаване.`,
           }),
         );
       }
@@ -15634,6 +15634,17 @@ export function PageClient({
     selectedConstructorCompetitionPlan?.priority ?? constructorForm.competitionPriority,
     selectedConstructorCompetition?.level ?? constructorForm.competitionLevel,
   );
+  const constructorEffectivePhaseForFocus = selectedConstructorCompetitionPlan
+    ? constructorSeasonStrategySnapshot?.currentWindow.phase ??
+      deriveConstructorPhaseByCompetitionDays(constructorDaysToCompetition)
+    : constructorForm.currentPhase;
+  const constructorDevelopmentForbiddenForFocus =
+    constructorSeasonStrategySnapshot?.constructorRules.forbiddenModes.includes("development") ??
+    false;
+  const constructorUsesControlledFocusModes =
+    Boolean(selectedConstructorCompetitionPlan) ||
+    constructorDevelopmentForbiddenForFocus ||
+    !["base", "development"].includes(constructorEffectivePhaseForFocus);
   const constructorGoalLabel = (goal: ConstructorGoalType) =>
     constructorIsMajorStartWindow
       ? (
@@ -15669,8 +15680,16 @@ export function PageClient({
           } satisfies Record<ConstructorGoalType, string>
         )[goal];
   const constructorGoalModeForGoal = (goal: ConstructorGoalType): ConstructorGoalMode => {
-    if (!constructorIsMajorStartWindow) {
+    if (!constructorUsesControlledFocusModes) {
       return "development";
+    }
+
+    if (constructorEffectivePhaseForFocus === "recovery") {
+      if (["recovery", "aerobic_base", "weight_management"].includes(goal)) {
+        return "recovery";
+      }
+
+      return "maintenance";
     }
 
     if (["speed_first_action", "speed_strength", "taper_quality"].includes(goal)) {
@@ -22615,14 +22634,14 @@ export function PageClient({
                     <strong>
                       {copyFor(language, {
                         en: activeConstructorDraftIsMatrixPrimaryPilot
-                          ? "3. Working draft: new constructor"
-                          : "3. Working draft: current constructor",
+                          ? "3. Working plan: Matrix constructor"
+                          : "3. Working plan: safe constructor",
                         ru: activeConstructorDraftIsMatrixPrimaryPilot
-                          ? "3. Рабочий черновик: новый конструктор"
-                          : "3. Рабочий черновик: текущий конструктор",
+                          ? "3. Рабочий план: Matrix-конструктор"
+                          : "3. Рабочий план: безопасный режим",
                         bg: activeConstructorDraftIsMatrixPrimaryPilot
-                          ? "3. Работна чернова: нов конструктор"
-                          : "3. Работна чернова: текущ конструктор",
+                          ? "3. Работен план: Matrix конструктор"
+                          : "3. Работен план: безопасен режим",
                       })}
                     </strong>
                     <span>
@@ -22643,16 +22662,16 @@ export function PageClient({
                         <div className="constructor-active-draft-banner">
                           <strong>
                             {copyFor(language, {
-                              en: "Current constructor is active",
-                              ru: "Активен текущий конструктор",
-                              bg: "Активен е текущият конструктор",
+                              en: "Safe planning mode is active",
+                              ru: "Активен безопасный режим планирования",
+                              bg: "Активен е безопасният режим на планиране",
                             })}
                           </strong>
                           <p>
                             {copyFor(language, {
-                              en: "The new planning logic did not become the working draft for these inputs, or it is still only in comparison mode. You can save and assign this current draft.",
-                              ru: "Новая логика планирования не стала рабочим черновиком для этих вводных или пока доступна только для сравнения. Этот текущий черновик можно сохранить и назначить.",
-                              bg: "Новата логика на планиране не стана работна чернова за тези входни данни или все още е само за сравнение. Тази текуща чернова може да се запази и назначи.",
+                              en: "For these inputs Matrix stays in control mode, so PERFORM built the safe assignable plan. You can save it as a template and assign it to the athlete.",
+                              ru: "Для этих вводных Matrix остаётся в режиме контроля, поэтому PERFORM собрал безопасный план для назначения. Его можно сохранить как шаблон и назначить спортсмену.",
+                              bg: "За тези данни Matrix остава в контролен режим, затова PERFORM създаде безопасен план за назначаване. Може да го запазите като шаблон и да го назначите.",
                             })}
                           </p>
                           {constructorMatrixRolloutDecision ? (
@@ -22660,7 +22679,7 @@ export function PageClient({
                               <strong>
                                 {copyFor(language, {
                                   en: "New logic check",
-                                  ru: "Проверка новой логики",
+                                  ru: "Контроль Matrix",
                                   bg: "Проверка на новата логика",
                                 })}
                                 :
@@ -22690,13 +22709,13 @@ export function PageClient({
                           {copyFor(language, {
                             en: activeConstructorDraftIsMatrixPrimaryPilot
                               ? "Saving and assignment for the new constructor are still controlled by the safe check."
-                              : "This new constructor draft is open for review only. Return to the current draft to save a template.",
+                              : "This Matrix draft is open for review only. Return to the safe plan to save a template.",
                             ru: activeConstructorDraftIsMatrixPrimaryPilot
                               ? "Сохранение и назначение нового конструктора пока контролируются безопасной проверкой."
-                              : "Этот черновик нового конструктора открыт только для проверки. Вернитесь к текущему черновику, чтобы сохранить шаблон.",
+                              : "Этот Matrix-черновик открыт только для проверки. Вернитесь к безопасному плану, чтобы сохранить шаблон.",
                             bg: activeConstructorDraftIsMatrixPrimaryPilot
                               ? "Записът и назначаването на новия конструктор се контролират от безопасна проверка."
-                              : "Новата чернова е само за проверка. Върнете текущата чернова, за да запазите шаблон.",
+                              : "Matrix черновата е само за проверка. Върнете безопасния план, за да запазите шаблон.",
                           })}
                         </p>
                       ) : (

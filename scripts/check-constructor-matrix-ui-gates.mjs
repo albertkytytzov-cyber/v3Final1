@@ -395,19 +395,19 @@ async function checkTrainerFacingMatrixCopy() {
   }
 
   assert(
-    combined.includes("Диагностика новой логики планирования"),
-    "Trainer-facing matrix panel must explain that matrix is a diagnostics block",
+    combined.includes("Контроль Matrix-планирования"),
+    "Trainer-facing matrix panel must explain that Matrix is a controlled planning block",
   );
   assert(
-    combined.includes("Проверить новую логику планирования"),
+    combined.includes("Проверить Matrix-планирование"),
     "Trainer-facing matrix panel must use a clear Russian check action",
   );
   assert(
-    pageClientSource.includes("3. Рабочий черновик: новый конструктор") &&
-      pageClientSource.includes("3. Рабочий черновик: текущий конструктор") &&
-      pageClientSource.includes("Активен текущий конструктор") &&
-      pageClientSource.includes("Проверка новой логики"),
-    "Main draft panel must clearly identify the active constructor source for trainers",
+    pageClientSource.includes("3. Рабочий план: Matrix-конструктор") &&
+      pageClientSource.includes("3. Рабочий план: безопасный режим") &&
+      pageClientSource.includes("Активен безопасный режим планирования") &&
+      pageClientSource.includes("Контроль Matrix"),
+    "Main draft panel must clearly identify Matrix and safe planning modes for trainers",
   );
   assert(
     combined.includes("проверка нового плана"),
