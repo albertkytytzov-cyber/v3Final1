@@ -59,6 +59,7 @@ npm run build --workspace @training-platform/web
 npm run check:constructor-core
 npm run check:constructor-matrix-evidence-dependencies
 npm run check:constructor-matrix-data-dependencies
+npm run check:constructor-matrix-review-package
 npm run check:constructor-matrix-ui-gates
 npm run check:constructor-matrix-review-export
 npm run check
@@ -287,6 +288,20 @@ The registry now meets the coverage intent before any production rollout:
 - `npm run check:constructor-matrix-threshold-candidates` enforces minimum
   count, required area coverage, valid evidence/data ids, no runtime imports and
   metadata-only fixture impact.
+
+### Matrix Review Package
+
+Before any future runtime promotion, the Matrix Review Package must be reviewed
+outside production decisioning.
+
+The package includes:
+
+- coach queue;
+- medical queue;
+- data-quality queue;
+- evidence/data/threshold summaries;
+- guardrails proving no runtime behavior, production route, rollout, preview or
+  legacy fallback change.
 
 Rollout invariants:
 

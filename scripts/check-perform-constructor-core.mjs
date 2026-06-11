@@ -2794,9 +2794,11 @@ const metadataCheckFiles = [
   "scripts/check-constructor-matrix-evidence-dependencies.mjs",
   "scripts/check-constructor-matrix-data-dependencies.mjs",
   "scripts/check-constructor-matrix-threshold-candidates.mjs",
+  "scripts/check-constructor-matrix-review-package.mjs",
   "packages/shared/src/constructor-matrix-evidence.ts",
   "packages/shared/src/constructor-matrix-data-dependencies.ts",
   "packages/shared/src/constructor-matrix-threshold-candidates.ts",
+  "packages/shared/src/constructor-matrix-review-package.ts",
 ];
 
 for (const path of metadataCheckFiles) {
@@ -2807,6 +2809,7 @@ for (const token of [
   "check:constructor-matrix-evidence-dependencies",
   "check:constructor-matrix-data-dependencies",
   "check:constructor-matrix-threshold-candidates",
+  "check:constructor-matrix-review-package",
 ]) {
   assert(packageJsonSource.includes(token), `package.json must expose ${token}`);
 }
@@ -2823,6 +2826,10 @@ for (const [path, source] of [
   assert(
     source.includes("Threshold Candidate Registry"),
     `${path} must document Threshold Candidate Registry`,
+  );
+  assert(
+    source.includes("Matrix Review Package"),
+    `${path} must document Matrix Review Package`,
   );
 }
 

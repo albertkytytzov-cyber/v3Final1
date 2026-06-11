@@ -4012,3 +4012,36 @@ git diff --check
 
 Next stage must validate candidates with coach, medical and data-quality review
 before any runtime behavior is considered.
+
+## 47. Stage: Matrix Review Package
+
+This stage creates the coach/medical/data-quality review package for the
+Matrix evidence, data dependency and threshold candidate layer.
+
+Artifacts:
+
+- `packages/shared/src/constructor-matrix-review-package.ts`;
+- `npm run check:constructor-matrix-review-package`;
+- generated JSON/Markdown review package.
+
+The package includes:
+
+- all evidence dependencies with source docs, risk areas, automation readiness,
+  review status and limitations;
+- all data dependencies with required fields, optional fields, availability,
+  missing-data behavior, runtime-use metadata and evidence links;
+- all threshold candidates with data/evidence links, review status,
+  `fixtureImpact` guardrails, forbidden runtime use and validation questions.
+
+Reviewer queues:
+
+- coach: wrestling fit, contact load, LMV, taper, phase/week/day logic and
+  whether wording is coach-usable;
+- medical: weight cut, hydration, RED-S/female context, injury, pain and youth
+  protection;
+- data-quality: typed fields, wearable confidence, missing-data behavior,
+  source traceability and auditability.
+
+No changes are allowed to runtime behavior, production draft route, rollout
+gates, preview behavior, pilot readiness, save/template/assign, block
+selection, skeleton selection or legacy fallback.

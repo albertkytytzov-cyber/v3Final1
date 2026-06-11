@@ -362,3 +362,37 @@ Guardrails unchanged:
 - no preview behavior changes;
 - no legacy fallback changes;
 - no runtime hard gates or numeric cutoffs.
+
+## 14. Matrix Review Package
+
+Stage: coach/medical/data-quality review package.
+
+The Matrix Review Package turns the evidence, data dependency and threshold
+candidate registries into one manual review artifact before any runtime
+promotion is considered.
+
+Implemented artifact:
+
+- `packages/shared/src/constructor-matrix-review-package.ts`;
+- `npm run check:constructor-matrix-review-package`;
+- JSON and Markdown package built from:
+  - `EvidenceDependencyRegistry`;
+  - `CONSTRUCTOR_MATRIX_DATA_DEPENDENCIES`;
+  - `CONSTRUCTOR_MATRIX_THRESHOLD_CANDIDATES`.
+
+Reviewer queues:
+
+- coach review: coaching fit, wrestling specificity, taper/contact/LMV
+  interpretation and whether a candidate belongs in review notes only;
+- medical review: weight cut, hydration, RED-S/female context, injury return,
+  youth protection and any medical-safety wording;
+- data-quality review: required fields, wearable confidence, missing-data
+  behavior and auditability without athlete identity.
+
+Guardrails:
+
+- no runtime behavior changes;
+- no production route changes;
+- no rollout/preview/legacy fallback changes;
+- no numeric threshold values;
+- runtime Matrix decision files must not import the review package.

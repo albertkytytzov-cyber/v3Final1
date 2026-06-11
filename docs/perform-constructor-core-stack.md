@@ -1945,3 +1945,33 @@ Regression coverage:
 npm run check:constructor-matrix-threshold-candidates
 npm run check:constructor-core
 ```
+
+### 15.29 Matrix Review Package
+
+The Matrix Review Package is the manual approval layer between registry
+coverage and any future runtime promotion. It packages the Matrix
+evidence/data/threshold layer for three review tracks:
+
+- coach review;
+- medical review;
+- data-quality review.
+
+Implemented:
+
+- `packages/shared/src/constructor-matrix-review-package.ts`;
+- `npm run check:constructor-matrix-review-package`;
+- generated JSON and Markdown payload with counts, required area coverage,
+  reviewer queues, limitations, data dependencies, evidence dependencies and
+  threshold candidates.
+
+The package is still metadata only. It does not change Matrix draft logic,
+rollout policy, pilot readiness, preview behavior, production route,
+save/template/assign behavior or legacy fallback. Runtime constructor files are
+checked to ensure they do not import this package.
+
+Regression coverage:
+
+```bash
+npm run check:constructor-matrix-review-package
+npm run check:constructor-core
+```

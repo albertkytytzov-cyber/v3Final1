@@ -582,6 +582,22 @@ requires all 16 areas to be present:
 The patch adds HRV, contact-load, LMV, taper and youth weight-cut review
 metadata only. It does not change fixture expectations.
 
+## Matrix Review Package regression
+
+`npm run check:constructor-matrix-review-package` builds the metadata-only
+Matrix Review Package from the evidence, data dependency and threshold
+candidate registries.
+
+The review package is not a preview fixture and does not change fixture
+expectations. It verifies:
+
+- coach, medical and data-quality queues exist;
+- every threshold candidate appears in a reviewer queue;
+- every data/evidence reference resolves;
+- JSON/Markdown output contains no athlete identity, email, phone-like value or
+  UUID-like raw id;
+- runtime constructor files do not import the review package.
+
 Fixture behavior is unchanged:
 
 - no numeric thresholds or cutoffs are added;
