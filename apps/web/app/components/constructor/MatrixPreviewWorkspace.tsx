@@ -20,6 +20,7 @@ import {
   constructorMatrixRolloutLabel,
   constructorMatrixScenarioLabel,
   constructorMatrixSeverityLabel,
+  constructorMatrixTrainerText,
   formatConstructorPreviewDraftDensity,
   constructorMatrixWorkspaceScenarioText,
   constructorMatrixWorkspaceWhyText,
@@ -443,7 +444,7 @@ export function MatrixPreviewWorkspace({
               draft.riskFlags.slice(0, 6).map((risk, index) => (
                 <li key={`${risk.code}-${index}`}>
                   <strong>{constructorMatrixSeverityLabel(language, risk.level)}</strong>
-                  <span>{risk.message}</span>
+                  <span>{constructorMatrixTrainerText(language, risk.message)}</span>
                 </li>
               ))
             ) : (
@@ -462,11 +463,11 @@ export function MatrixPreviewWorkspace({
           <div className="constructor-explanation-list constructor-matrix-workspace-explanations">
             <div>
               <span>{matrixUiCopyFor(language, { en: "Decision", ru: "Решение", bg: "Решение" })}</span>
-              <p>{draft.explanation.mainDecision}</p>
+              <p>{constructorMatrixTrainerText(language, draft.explanation.mainDecision)}</p>
             </div>
             <div>
               <span>{matrixUiCopyFor(language, { en: "Why now", ru: "Почему сейчас", bg: "Защо сега" })}</span>
-              <p>{draft.explanation.whyNow}</p>
+              <p>{constructorMatrixTrainerText(language, draft.explanation.whyNow)}</p>
             </div>
           </div>
         </article>

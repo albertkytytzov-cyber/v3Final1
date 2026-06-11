@@ -383,6 +383,141 @@ export function constructorMatrixBlockerMessage(
   return labels[code] ?? fallback ?? code.replaceAll("_", " ");
 }
 
+export function constructorMatrixPreparationPhaseLabel(language: Language, phase?: string | null) {
+  if (!phase) {
+    return matrixUiCopyFor(language, {
+      en: "not specified",
+      ru: "не указана",
+      bg: "не е посочена",
+    });
+  }
+
+  const labels: Record<string, string> = {
+    base: matrixUiCopyFor(language, { en: "base preparation", ru: "базовая подготовка", bg: "базова подготовка" }),
+    development: matrixUiCopyFor(language, { en: "development phase", ru: "развивающий этап", bg: "развиващ етап" }),
+    general_preparation: matrixUiCopyFor(language, { en: "general preparation", ru: "общая подготовка", bg: "обща подготовка" }),
+    special_preparation: matrixUiCopyFor(language, { en: "special preparation", ru: "специальная подготовка", bg: "специална подготовка" }),
+    special_pre_competition: matrixUiCopyFor(language, { en: "special pre-competition preparation", ru: "специальная предсоревновательная подготовка", bg: "специална предсъстезателна подготовка" }),
+    direct_pre_competition: matrixUiCopyFor(language, { en: "direct pre-competition preparation", ru: "непосредственная предсоревновательная подготовка", bg: "непосредствена предсъстезателна подготовка" }),
+    taper: matrixUiCopyFor(language, { en: "taper", ru: "подводка", bg: "тейпър" }),
+    start_window: matrixUiCopyFor(language, { en: "start window", ru: "стартовое окно", bg: "стартов прозорец" }),
+    competition: matrixUiCopyFor(language, { en: "competition window", ru: "соревновательное окно", bg: "състезателен прозорец" }),
+    transition_recovery: matrixUiCopyFor(language, { en: "post-start recovery", ru: "восстановление после старта", bg: "възстановяване след старт" }),
+    recovery: matrixUiCopyFor(language, { en: "recovery", ru: "восстановление", bg: "възстановяване" }),
+  };
+
+  return labels[phase] ?? phase.replaceAll("_", " ");
+}
+
+export function constructorMatrixCompetitionRoleLabel(language: Language, role?: string | null) {
+  if (!role) {
+    return matrixUiCopyFor(language, {
+      en: "not specified",
+      ru: "не указана",
+      bg: "не е посочена",
+    });
+  }
+
+  const labels: Record<string, string> = {
+    main_peak: matrixUiCopyFor(language, { en: "main start", ru: "главный старт", bg: "основен старт" }),
+    secondary_peak: matrixUiCopyFor(language, { en: "secondary start", ru: "второстепенный старт", bg: "второстепенен старт" }),
+    qualifier: matrixUiCopyFor(language, { en: "qualification start", ru: "квалификационный старт", bg: "квалификационен старт" }),
+    control_start: matrixUiCopyFor(language, { en: "control start", ru: "контрольный старт", bg: "контролен старт" }),
+  };
+
+  return labels[role] ?? role.replaceAll("_", " ");
+}
+
+function replaceConstructorMatrixTerms(language: Language, message: string) {
+  if (language === "en") {
+    return message;
+  }
+
+  const replacements: Array<[RegExp, string]> =
+    language === "ru"
+      ? [
+          [/\bLegacy\/matrix comparison\b/gi, "сравнение текущей и новой логики"],
+          [/\bLegacy and matrix\b/gi, "текущая и новая логика"],
+          [/\bLegacy path\b/gi, "текущий конструктор"],
+          [/\bLegacy constructor\b/gi, "текущий конструктор"],
+          [/\blegacy cards\b/gi, "карточки текущего конструктора"],
+          [/\bLegacy cards\b/g, "Карточки текущего конструктора"],
+          [/\bMatrix-driven draft\b/gi, "новый черновик"],
+          [/\bMatrix constructor draft\b/gi, "черновик нового конструктора"],
+          [/\bMatrix draft\b/gi, "новый черновик"],
+          [/\bMatrix path\b/gi, "новый конструктор"],
+          [/\bmatrix path\b/gi, "новый конструктор"],
+          [/\bMatrix risk\b/gi, "риск нового плана"],
+          [/\bMatrix explanations\b/gi, "объяснения нового конструктора"],
+          [/\bMatrix safety invariants\b/gi, "проверки безопасности нового плана"],
+          [/\bMatrix safety invariant\b/gi, "проверка безопасности нового плана"],
+          [/\bmatrix-driven block selection\b/gi, "выбор блоков по новой логике"],
+          [/\binternal preview\b/gi, "внутренняя проверка"],
+          [/\bpreview\b/gi, "предварительная проверка"],
+          [/\brollout\b/gi, "применение"],
+          [/\bgeneratedFrom=matrix marker\b/gi, "признак нового черновика"],
+          [/\bmetadata\/content hints\b/gi, "подсказки по содержанию"],
+          [/\bstructural controllers\b/gi, "источник структуры"],
+          [/\berror-level differences\b/gi, "критичные различия"],
+          [/\bsafety checks\b/gi, "проверки безопасности"],
+          [/\bsafety check\b/gi, "проверка безопасности"],
+          [/\bnot primary-allowed\b/gi, "не разрешён как основной"],
+          [/\breturned legacy fallback\b/gi, "вернул текущий черновик"],
+        ]
+      : [
+          [/\bLegacy\/matrix comparison\b/gi, "сравнение на текущата и новата логика"],
+          [/\bLegacy and matrix\b/gi, "текущата и новата логика"],
+          [/\bLegacy path\b/gi, "текущият конструктор"],
+          [/\bLegacy constructor\b/gi, "текущият конструктор"],
+          [/\blegacy cards\b/gi, "картите на текущия конструктор"],
+          [/\bLegacy cards\b/g, "Картите на текущия конструктор"],
+          [/\bMatrix-driven draft\b/gi, "нова чернова"],
+          [/\bMatrix constructor draft\b/gi, "чернова на новия конструктор"],
+          [/\bMatrix draft\b/gi, "нова чернова"],
+          [/\bMatrix path\b/gi, "новият конструктор"],
+          [/\bmatrix path\b/gi, "новият конструктор"],
+          [/\bMatrix risk\b/gi, "риск на новия план"],
+          [/\bMatrix explanations\b/gi, "обяснения на новия конструктор"],
+          [/\bMatrix safety invariants\b/gi, "проверки за безопасност на новия план"],
+          [/\bMatrix safety invariant\b/gi, "проверка за безопасност на новия план"],
+          [/\bmatrix-driven block selection\b/gi, "избор на блокове по новата логика"],
+          [/\binternal preview\b/gi, "вътрешна проверка"],
+          [/\bpreview\b/gi, "предварителна проверка"],
+          [/\brollout\b/gi, "прилагане"],
+          [/\bgeneratedFrom=matrix marker\b/gi, "маркер за нова чернова"],
+          [/\bmetadata\/content hints\b/gi, "подсказки за съдържание"],
+          [/\bstructural controllers\b/gi, "източник на структура"],
+          [/\berror-level differences\b/gi, "критични разлики"],
+          [/\bsafety checks\b/gi, "проверки за безопасност"],
+          [/\bsafety check\b/gi, "проверка за безопасност"],
+          [/\bnot primary-allowed\b/gi, "не е разрешен като основен"],
+          [/\breturned legacy fallback\b/gi, "върна текущата чернова"],
+        ];
+
+  return replacements.reduce((value, [pattern, replacement]) => value.replace(pattern, replacement), message);
+}
+
+export function constructorMatrixTrainerText(language: Language, message?: string | null) {
+  if (!message) {
+    return "";
+  }
+
+  const rolePhaseMatch = message.match(
+    /^Matrix-driven draft: старт role=([^,]+), D-([^,]+), phase=([^.]+)\.$/,
+  );
+  if (rolePhaseMatch) {
+    const [, role, days, phase] = rolePhaseMatch;
+
+    return matrixUiCopyFor(language, {
+      en: `New draft: ${constructorMatrixCompetitionRoleLabel(language, role)}, D-${days}, phase ${constructorMatrixPreparationPhaseLabel(language, phase)}.`,
+      ru: `Новый черновик: ${constructorMatrixCompetitionRoleLabel(language, role)}, Д-${days}, фаза ${constructorMatrixPreparationPhaseLabel(language, phase)}.`,
+      bg: `Нова чернова: ${constructorMatrixCompetitionRoleLabel(language, role)}, Д-${days}, фаза ${constructorMatrixPreparationPhaseLabel(language, phase)}.`,
+    });
+  }
+
+  return replaceConstructorMatrixTerms(language, message);
+}
+
 export function formatConstructorPreviewDraftDensity(
   language: Language,
   metrics: ConstructorPreviewDraftMetrics,
@@ -510,7 +645,9 @@ export function buildConstructorPreviewDecisionSummary(
     items: [
       {
         label: matrixUiCopyFor(language, { en: "phase", ru: "фаза", bg: "фаза" }),
-        value: matrix?.preparationPhase ?? matrixUiCopyFor(language, { en: "not included", ru: "нет данных", bg: "няма данни" }),
+        value: matrix
+          ? constructorMatrixPreparationPhaseLabel(language, matrix.preparationPhase)
+          : matrixUiCopyFor(language, { en: "not included", ru: "нет данных", bg: "няма данни" }),
       },
       {
         label: matrixUiCopyFor(language, {
@@ -519,7 +656,7 @@ export function buildConstructorPreviewDecisionSummary(
           bg: "роля / близост до старт",
         }),
         value: matrix
-          ? `${matrix.competitionRole} · Д-${matrix.daysUntilStart ?? "?"} · ${
+          ? `${constructorMatrixCompetitionRoleLabel(language, matrix.competitionRole)} · Д-${matrix.daysUntilStart ?? "?"} · ${
               matrix.isMainStart
                 ? matrixUiCopyFor(language, { en: "main start", ru: "главный старт", bg: "основен старт" })
                 : matrixUiCopyFor(language, { en: "non-main start", ru: "не главный старт", bg: "не основен старт" })
@@ -545,7 +682,7 @@ export function buildConstructorPreviewDecisionSummary(
       matrix?.explanations
         .filter((item) => item.code === "strategy" || item.code === "phase" || item.code === "risk")
         .slice(0, 5)
-        .map((item) => item.message) ?? [],
+        .map((item) => constructorMatrixTrainerText(language, item.message)) ?? [],
   };
 }
 

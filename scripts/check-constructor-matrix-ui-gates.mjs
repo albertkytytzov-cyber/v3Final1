@@ -26,7 +26,7 @@ const { isConstructorDraftSaveAllowed } = matrixUiModule.default ?? matrixUiModu
 const featureFlagsModule = await import("../apps/web/app/lib/feature-flags.ts");
 const { getConstructorMatrixUiFlags } = featureFlagsModule.default ?? featureFlagsModule;
 const planningSchemasModule = await import("../apps/api/src/api/planning/planning.schemas.ts");
-const { parseAssignedPlanBody, parsePlanTemplateBody } =
+const { parseAssignedPlanBody, parseAutoAssignMicrocycleBody, parsePlanTemplateBody } =
   planningSchemasModule.default ?? planningSchemasModule;
 
 async function readProjectFile(path) {
@@ -565,6 +565,20 @@ function pilotDraftResponseForFixture(id) {
   };
 }
 
+function buildFullTemplateAssignmentItems(templatePayload, templateId) {
+  return (templatePayload.days ?? []).map((day, dayIndex) => ({
+    templateId,
+    templateDayIndex: dayIndex,
+    dayOffset: dayIndex,
+    dayLabel: day.label || `Day ${dayIndex + 1}`,
+    microcycleType:
+      day.notes ||
+      templatePayload.templateGoal ||
+      templatePayload.microcycleType ||
+      templatePayload.name,
+  }));
+}
+
 function gateForFixture(id) {
   const serverResult = serverResponseForFixture(id);
   const matrixDraft = serverResult.preview.matrixDraft ?? serverResult.preview.comparisonReport?.matrixDraft ?? null;
@@ -669,6 +683,10 @@ const pilotDraftResults = cases.map((testCase) => {
   const parsedTemplateDays = parsedTemplatePayload.days ?? [];
   const parsedTemplateSessions = parsedTemplateDays.flatMap((day) => day.sessions);
   const parsedTemplateBlocks = parsedTemplateSessions.flatMap((session) => session.blocks);
+  const fullAssignmentItems = buildFullTemplateAssignmentItems(
+    response.templatePayload,
+    `template-${testCase.id}`,
+  );
   const assignmentPayload = parseAssignedPlanBody({
     athleteId: fixture.input.athlete.athleteId,
     templateId: `template-${testCase.id}`,
@@ -676,6 +694,14 @@ const pilotDraftResults = cases.map((testCase) => {
     dayLabel: "День 1",
     notes: `Назначено из шаблона конструктора: ${response.templatePayload.name}`,
     plannedPhase: fixture.input.context.currentPhase,
+  });
+  const autoAssignPayload = parseAutoAssignMicrocycleBody({
+    athleteId: fixture.input.athlete.athleteId,
+    startDate: fixture.input.competition.startDate,
+    daysCount: fullAssignmentItems.length,
+    notes: `Назначено из плана ${response.templatePayload.name}`,
+    plannedPhase: fixture.input.context.currentPhase,
+    items: fullAssignmentItems,
   });
   const serializedPayload = JSON.stringify(response.templatePayload);
   const serverGate = canUseMatrixPrimaryPilotWithServerEvidence({
@@ -712,6 +738,19 @@ const pilotDraftResults = cases.map((testCase) => {
       assignmentPayload.templateId === `template-${testCase.id}` &&
       assignmentPayload.startDate === fixture.input.competition.startDate,
     `${testCase.id}: pilot draft assignment payload must survive API assignment schema parsing`,
+  );
+  assert(
+    autoAssignPayload.athleteId === fixture.input.athlete.athleteId &&
+      autoAssignPayload.startDate === fixture.input.competition.startDate &&
+      autoAssignPayload.daysCount === templateDays.length &&
+      autoAssignPayload.items.length === templateDays.length &&
+      autoAssignPayload.items.every(
+        (item, index) =>
+          item.templateId === `template-${testCase.id}` &&
+          item.templateDayIndex === index &&
+          item.dayOffset === index,
+      ),
+    `${testCase.id}: pilot draft full-plan auto-assignment payload must cover every template day`,
   );
   assert(
     !serializedPayload.includes('"matrix"') &&
@@ -758,6 +797,8 @@ const pilotDraftResults = cases.map((testCase) => {
     templateBlocks: templateBlocks.length,
     apiTemplateSchema: "passed",
     apiAssignSchema: "passed",
+    apiAutoAssignSchema: "passed",
+    autoAssignItems: autoAssignPayload.items.length,
   };
 });
 

@@ -20,6 +20,7 @@ import {
   constructorMatrixMetricLabel,
   constructorMatrixRolloutLabel,
   constructorMatrixSeverityLabel,
+  constructorMatrixTrainerText,
   formatConstructorPreviewAffected,
   formatConstructorPreviewDraftDensity,
   formatConstructorPreviewWeekRowSummary,
@@ -267,7 +268,7 @@ export function MatrixConstructorPreviewPanel({
                     </span>
                   ))}
                 </div>
-                <p>{preview.summary.headline}</p>
+                <p>{constructorMatrixTrainerText(language, preview.summary.headline)}</p>
               </article>
 
               <article className="constructor-matrix-preview-card">
@@ -300,7 +301,7 @@ export function MatrixConstructorPreviewPanel({
                     [...failedSafety, ...failedLegacyGuard].map((item) => (
                       <li key={`${item.code}-${item.explanation}`}>
                         <strong>{constructorMatrixSeverityLabel(language, item.severity)}</strong>
-                        <span>{item.explanation}</span>
+                        <span>{constructorMatrixTrainerText(language, item.explanation)}</span>
                       </li>
                     ))
                   ) : (
@@ -327,7 +328,7 @@ export function MatrixConstructorPreviewPanel({
                     {preview.warnings.slice(0, 4).map((warning) => (
                       <li key={`${warning.code}-${warning.message}`}>
                         <strong>{constructorMatrixSeverityLabel(language, warning.severity)}</strong>
-                        <span>{warning.message}</span>
+                        <span>{constructorMatrixTrainerText(language, warning.message)}</span>
                       </li>
                     ))}
                   </ul>
@@ -479,7 +480,7 @@ export function MatrixConstructorPreviewPanel({
                           <li key={block.key}>
                             <strong>{constructorMatrixBlockKeyLabel(language, block.key)}</strong>
                             <span>
-                              {block.label} · {block.count}x ·{" "}
+                              {constructorMatrixTrainerText(language, block.label)} · {block.count}x ·{" "}
                               {block.loadLevels
                                 .map((loadLevel) => constructorMatrixLoadLevelLabel(language, loadLevel))
                                 .join(", ")}
@@ -512,7 +513,7 @@ export function MatrixConstructorPreviewPanel({
                       {candidateSummary.loadSummary.length ? (
                         candidateSummary.loadSummary.map((item) => (
                           <span key={item.label}>
-                            <small>{item.label}</small>
+                            <small>{constructorMatrixLoadLevelLabel(language, item.label)}</small>
                             <strong>{item.value}</strong>
                           </span>
                         ))
@@ -530,7 +531,7 @@ export function MatrixConstructorPreviewPanel({
                             <strong>
                               {constructorMatrixSeverityLabel(language, risk.severity)}
                             </strong>
-                            <span>{risk.message}</span>
+                            <span>{constructorMatrixTrainerText(language, risk.message)}</span>
                           </li>
                         ))
                       ) : (
@@ -553,7 +554,7 @@ export function MatrixConstructorPreviewPanel({
                     {candidateSummary.explanations.map((message) => (
                       <li key={message}>
                         <strong>{constructorMatrixMetricLabel(language, "why")}</strong>
-                        <span>{message}</span>
+                        <span>{constructorMatrixTrainerText(language, message)}</span>
                       </li>
                     ))}
                   </ul>
@@ -605,7 +606,7 @@ export function MatrixConstructorPreviewPanel({
                   {previewDecision.explanations.map((message) => (
                     <li key={message}>
                       <strong>{constructorMatrixMetricLabel(language, "matrix")}</strong>
-                      <span>{message}</span>
+                      <span>{constructorMatrixTrainerText(language, message)}</span>
                     </li>
                   ))}
                 </ul>
@@ -636,7 +637,7 @@ export function MatrixConstructorPreviewPanel({
                         <strong>{constructorMatrixDifferenceCategoryLabel(language, difference.category)}</strong>
                         <span>{constructorMatrixSeverityLabel(language, difference.severity)}</span>
                       </div>
-                      <p>{difference.message}</p>
+                      <p>{constructorMatrixTrainerText(language, difference.message)}</p>
                       <small>{formatConstructorPreviewAffected(language, difference.affected)}</small>
                     </li>
                   ))}
