@@ -287,3 +287,40 @@ Remaining P0 after hardening:
 
 - numeric thresholds/data confidence are still not runtime gates;
 - next stage should be a Threshold Candidate Registry as docs/metadata first, with coach/medical review before any runtime use.
+
+## 12. Threshold Candidate Registry status
+
+Stage: Threshold Candidate Registry.
+
+Implemented after the data-dependency skeleton:
+
+- metadata-only registry:
+  `packages/shared/src/constructor-matrix-threshold-candidates.ts`;
+- automated check:
+
+```bash
+npm run check:constructor-matrix-threshold-candidates
+```
+
+- candidate-only records for weight cut, hydration, readiness, sleep, resting
+  HR, wearable data, pain, injury, female context, youth context, travel
+  fatigue and competition context;
+- every candidate links to existing data dependencies and evidence
+  dependencies;
+- high-risk areas stay coach/medical review-required or blocked for runtime.
+
+Guardrails:
+
+- no numeric thresholds or cutoffs were added;
+- no runtime gate was added;
+- no production draft route, rollout policy, preview behavior,
+  save/template/assign flow or legacy fallback was changed;
+- current use remains documentation, review queue or future-candidate metadata
+  only.
+
+Remaining P0:
+
+- coach, medical and data-quality validation must happen before any candidate
+  can move toward a runtime decision rule;
+- threshold candidates are not proof and cannot override the Matrix safety
+  policy.

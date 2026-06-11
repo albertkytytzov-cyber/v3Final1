@@ -3886,3 +3886,82 @@ git diff --check
 
 Next stage should be a Threshold Candidate Registry as docs/metadata first,
 with coach/medical review before any runtime use.
+
+## 46. Stage: Threshold Candidate Registry
+
+This stage adds a candidate-only metadata registry for future threshold review.
+It does not change Matrix constructor behavior.
+
+No changes are allowed to:
+
+- production `/api/v1/plans/constructor/draft`;
+- rollout gates;
+- preview behavior;
+- pilot readiness;
+- save/template/assign behavior;
+- block selection;
+- eligibility;
+- risk logic;
+- volume logic;
+- skeleton/week/day/session selection;
+- legacy fallback.
+
+### 46.1 Candidate-only registry
+
+`packages/shared/src/constructor-matrix-threshold-candidates.ts` documents
+future threshold candidates for:
+
+- weight cut;
+- hydration;
+- readiness;
+- sleep;
+- resting HR;
+- wearable data;
+- pain;
+- injury;
+- female context;
+- youth context;
+- travel fatigue;
+- competition context.
+
+Each candidate records:
+
+- area;
+- signal type;
+- candidate direction;
+- decision scope;
+- required data dependencies;
+- supporting evidence dependencies;
+- missing-data behavior;
+- current runtime use;
+- review status;
+- required reviewers;
+- limitations;
+- future validation questions.
+
+### 46.2 Guardrails
+
+The registry is metadata only:
+
+- every item must be `candidateOnly=true`;
+- no numeric thresholds or cutoffs are defined;
+- no runtime gate is defined;
+- no broad default is enabled;
+- high-risk areas remain coach/medical review-required or blocked for runtime;
+- candidates cannot override the Matrix safety policy.
+
+### 46.3 Checks
+
+Required checks:
+
+```bash
+npm run build --workspace @training-platform/shared
+npm run check:constructor-core
+npm run check:constructor-matrix-evidence-dependencies
+npm run check:constructor-matrix-data-dependencies
+npm run check:constructor-matrix-threshold-candidates
+git diff --check
+```
+
+Next stage must validate candidates with coach, medical and data-quality review
+before any runtime behavior is considered.

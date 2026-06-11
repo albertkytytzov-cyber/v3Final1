@@ -558,6 +558,26 @@ It validates the copied review package, not the full UI:
 This gives the manual pilot review path its own fixture coverage while keeping
 the production constructor route unchanged.
 
+## Threshold candidate metadata regression
+
+The Threshold Candidate Registry is checked separately from preview fixtures:
+
+```bash
+npm run check:constructor-matrix-threshold-candidates
+```
+
+This registry is candidate-only metadata. It documents possible future review
+signals for weight cut, hydration, readiness, sleep, resting HR, wearable data,
+pain, injury, female/youth context, travel fatigue and competition context.
+
+Fixture behavior is unchanged:
+
+- no numeric thresholds or cutoffs are added;
+- no preview scenario becomes allowed because of a threshold candidate;
+- no matrix draft is saved or assigned by this metadata;
+- D-90, D-3, travel and weigh-in fixture behavior remains controlled by the
+  existing Matrix rollout/readiness policy.
+
 ## Что не проверяется
 
 Fixtures не делают full snapshot:

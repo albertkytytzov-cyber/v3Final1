@@ -254,6 +254,8 @@ Continue the controlled pilot only if:
 - flag-off smoke passes;
 - flag-on smoke passes;
 - rollback smoke passes;
+- `npm run check:constructor-matrix-threshold-candidates` passes and confirms
+  threshold candidates remain metadata only;
 - review exports are anonymized;
 - no production save/template/assign path is available for matrix sources unless
   the optional third-flag save/assign pilot smoke is being intentionally run;
@@ -268,3 +270,20 @@ Stop or roll back if:
   save/assign pilot flag is off;
 - review export leaks identity/raw ids;
 - constructor legacy flow regresses.
+
+## Threshold candidate rollout note
+
+The Threshold Candidate Registry is not part of production decisioning. It is a
+controlled metadata layer for future coach/medical/data-quality review.
+
+Rollout invariants:
+
+- no numeric thresholds or cutoffs are introduced;
+- no runtime gate is introduced;
+- no broad Matrix default is enabled;
+- no production draft route is changed;
+- no preview, save/template/assign or legacy fallback behavior is changed.
+
+Any future move from candidate metadata toward runtime behavior requires a
+separate review stage, updated evidence/data dependency checks and explicit
+approval.

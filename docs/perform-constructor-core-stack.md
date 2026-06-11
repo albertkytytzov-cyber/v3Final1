@@ -1890,3 +1890,34 @@ rollout policy, server gates, DB/API contracts, mobile contracts, or
 save/template/assign behavior. The safety rule remains: close start windows,
 travel, weigh-in and blocked scenarios can explain Matrix output without
 replacing the assignable safe plan.
+
+### 15.27 Threshold Candidate Registry
+
+The Threshold Candidate Registry adds a metadata-only layer for future
+coach/medical/data review of possible threshold candidates. It is intentionally
+not a runtime layer.
+
+Implemented registry:
+
+- `packages/shared/src/constructor-matrix-threshold-candidates.ts`;
+- exported ids/helpers from `@training-platform/shared`;
+- candidate-only records for weight cut, hydration, readiness, sleep, resting
+  HR, wearable data, pain, injury, female context, youth context, travel
+  fatigue and competition context.
+
+Rules:
+
+- every candidate must stay `candidateOnly=true`;
+- every candidate must point to existing evidence and data dependencies;
+- high-risk areas must require coach/medical review or stay blocked for
+  runtime;
+- no numeric threshold, cutoff, runtime gate, production route change,
+  rollout change, preview change, save/template/assign change or legacy change
+  is allowed in this stage.
+
+Regression coverage:
+
+```bash
+npm run check:constructor-matrix-threshold-candidates
+npm run check:constructor-core
+```
