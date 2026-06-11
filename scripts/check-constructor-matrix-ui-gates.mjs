@@ -1,7 +1,10 @@
 import {
+  buildConstructorTemplatePayload,
   buildConstructorMatrixPreviewResponse,
   buildMatrixDrivenConstructorDraft,
+  buildMatrixConstructorDraftIfAllowed,
   buildMatrixPrimaryPilotSaveDryRun,
+  buildPerformConstructorDraft,
   decideMatrixConstructorRollout,
   evaluateMatrixPilotReadiness,
 } from "@training-platform/shared";
@@ -214,6 +217,7 @@ async function checkControlledExposureSourceGuards() {
   );
 
   const pageClientSource = await readProjectFile("apps/web/app/page-client.tsx");
+  const buildDraftBlock = extractFunctionBlock(pageClientSource, "handleBuildConstructorDraft");
   const buildPreviewBlock = extractFunctionBlock(pageClientSource, "handleBuildConstructorMatrixPreview");
   const openWorkspaceBlock = extractFunctionBlock(pageClientSource, "handleOpenConstructorMatrixWorkspace");
   const activateInternalBlock = extractFunctionBlock(
@@ -233,6 +237,13 @@ async function checkControlledExposureSourceGuards() {
     buildPreviewBlock.includes("ENABLE_MATRIX_CONSTRUCTOR_LIMITED_PRIMARY_PILOT") &&
       buildPreviewBlock.includes("requestMatrixPrimaryPilotServerSaveDryRun"),
     "Server save dry-run request must remain scoped behind limited primary pilot flag",
+  );
+  assert(
+    buildDraftBlock.includes("ENABLE_MATRIX_CONSTRUCTOR_SAVE_ASSIGN_PILOT") &&
+      buildDraftBlock.includes("requestMatrixPrimaryPilotDraft") &&
+      buildDraftBlock.includes('pilotDraft.source === "matrix_primary_pilot"') &&
+      buildDraftBlock.includes('pilotDraft.source === "legacy_fallback"'),
+    "Main build action must use the server-authoritative matrix pilot draft path before legacy fallback",
   );
   assert(
     openWorkspaceBlock.includes("!SHOW_INTERNAL_MATRIX_CONSTRUCTOR_UI"),
@@ -308,6 +319,7 @@ async function checkControlledExposureSourceGuards() {
   const internalRoutes = [
     "/api/v1/plans/constructor/internal/matrix-preview",
     "/api/v1/plans/constructor/internal/matrix-rollout-decision",
+    "/api/v1/plans/constructor/internal/matrix-primary-pilot-draft",
     "/api/v1/plans/constructor/internal/matrix-primary-pilot-save-dry-run",
   ];
   for (const route of internalRoutes) {
@@ -431,6 +443,113 @@ function serverResponseForFixture(id) {
   };
 }
 
+function pilotDraftResponseForFixture(id) {
+  const fixture = fixtureById(id);
+  const preview = buildConstructorMatrixPreviewResponse(fixture.input, previewOptions);
+  const rolloutDecision = decideMatrixConstructorRollout(fixture.input, rolloutOptions);
+  const pilotReadiness = evaluateMatrixPilotReadiness(fixture.input, { rolloutOptions });
+  const primaryPilotEligible =
+    rolloutDecision.mode === "matrix_allowed_for_primary" &&
+    rolloutDecision.matrixPrimaryAllowed &&
+    rolloutDecision.blockers.length === 0 &&
+    pilotReadiness.status === "ready_for_limited_primary_pilot" &&
+    pilotReadiness.blockers.length === 0;
+  let draftResult = null;
+  let matrixDraftError = "";
+
+  try {
+    draftResult = buildMatrixConstructorDraftIfAllowed(fixture.input, {
+      ...rolloutOptions,
+      fallbackToLegacy: true,
+      allowedModes: ["matrix_allowed_for_primary"],
+    });
+  } catch (error) {
+    matrixDraftError = error instanceof Error ? error.message : String(error);
+  }
+
+  const matrixDraftAllowed =
+    primaryPilotEligible && draftResult?.source === "matrix" && Boolean(draftResult.draft);
+  const candidateSource = matrixDraftAllowed ? "matrix_primary_pilot" : "legacy_fallback";
+  const candidateDraft =
+    candidateSource === "matrix_primary_pilot" && draftResult?.draft
+      ? draftResult.draft
+      : buildPerformConstructorDraft(fixture.input);
+  const candidateReason =
+    candidateSource === "matrix_primary_pilot"
+      ? "Matrix draft was allowed by the controlled pilot gate and passed server save dry-run checks."
+      : matrixDraftError || draftResult?.reason || `${rolloutDecision.mode}/${pilotReadiness.status}`;
+  const templateName = `PERFORM Constructor Candidate • ${fixture.input.competition.name}`;
+  const candidateDryRun = buildMatrixPrimaryPilotSaveDryRun({
+    activeDraftSource: candidateSource === "matrix_primary_pilot" ? "matrix_primary_pilot" : "legacy",
+    draft: candidateSource === "matrix_primary_pilot" ? candidateDraft : null,
+    primaryPilotEligible: candidateSource === "matrix_primary_pilot",
+    eligibilityReason: candidateSource === "matrix_primary_pilot" ? null : candidateReason,
+    eligibilityEvidence: [
+      `scenario=${rolloutDecision.scenario}`,
+      `rolloutMode=${rolloutDecision.mode}`,
+      `matrixPrimaryAllowed=${rolloutDecision.matrixPrimaryAllowed}`,
+      `readiness=${pilotReadiness.status}`,
+      `rolloutBlockers=${rolloutDecision.blockers.length}`,
+      `readinessBlockers=${pilotReadiness.blockers.length}`,
+      ...(matrixDraftError ? [`matrixDraftError=${matrixDraftError}`] : []),
+    ],
+    templateName,
+  });
+  const source =
+    candidateSource === "matrix_primary_pilot" && candidateDryRun.status === "passed"
+      ? "matrix_primary_pilot"
+      : "legacy_fallback";
+  const draft =
+    source === "matrix_primary_pilot" ? candidateDraft : buildPerformConstructorDraft(fixture.input);
+  const reason =
+    source === "matrix_primary_pilot"
+      ? candidateReason
+      : candidateSource === "matrix_primary_pilot"
+        ? `Matrix draft did not pass server save dry-run: ${candidateDryRun.status}`
+        : candidateReason;
+  const dryRun =
+    source === "matrix_primary_pilot"
+      ? candidateDryRun
+      : buildMatrixPrimaryPilotSaveDryRun({
+          activeDraftSource: "legacy",
+          draft: null,
+          primaryPilotEligible: false,
+          eligibilityReason: reason,
+          eligibilityEvidence: [
+            `scenario=${rolloutDecision.scenario}`,
+            `rolloutMode=${rolloutDecision.mode}`,
+            `matrixPrimaryAllowed=${rolloutDecision.matrixPrimaryAllowed}`,
+            `readiness=${pilotReadiness.status}`,
+            `rolloutBlockers=${rolloutDecision.blockers.length}`,
+            `readinessBlockers=${pilotReadiness.blockers.length}`,
+            ...(matrixDraftError ? [`matrixDraftError=${matrixDraftError}`] : []),
+          ],
+          templateName,
+        });
+  const serverSaveDryRun = {
+    generatedFrom: "matrix_primary_pilot_server_save_dry_run",
+    generatedAt: new Date("2026-06-10T12:00:00.000Z").toISOString(),
+    dryRun,
+    rolloutDecision,
+    pilotReadiness,
+    notes: ["constructor matrix pilot draft regression check"],
+  };
+
+  return {
+    generatedFrom: "matrix_primary_pilot_server_draft",
+    generatedAt: new Date("2026-06-10T12:00:00.000Z").toISOString(),
+    source,
+    reason,
+    draft,
+    templatePayload: buildConstructorTemplatePayload(draft, templateName),
+    preview,
+    rolloutDecision,
+    pilotReadiness,
+    serverSaveDryRun,
+    notes: ["constructor matrix pilot draft regression check"],
+  };
+}
+
 function gateForFixture(id) {
   const serverResult = serverResponseForFixture(id);
   const matrixDraft = serverResult.preview.matrixDraft ?? serverResult.preview.comparisonReport?.matrixDraft ?? null;
@@ -524,6 +643,81 @@ const results = cases.map((testCase) => {
   };
 });
 
+const pilotDraftResults = cases.map((testCase) => {
+  const response = pilotDraftResponseForFixture(testCase.id);
+  const expectedSource = testCase.allowed ? "matrix_primary_pilot" : "legacy_fallback";
+  const templateDays = response.templatePayload.days ?? [];
+  const templateSessions = templateDays.flatMap((day) => day.sessions);
+  const templateBlocks = templateSessions.flatMap((session) => session.blocks);
+  const serializedPayload = JSON.stringify(response.templatePayload);
+  const serverGate = canUseMatrixPrimaryPilotWithServerEvidence({
+    serverResult: response.serverSaveDryRun,
+    localRolloutDecision: response.rolloutDecision,
+    localPilotReadiness: response.pilotReadiness,
+  });
+
+  assert(
+    response.source === expectedSource,
+    `${testCase.id}: expected pilot draft source=${expectedSource}, got ${response.source}`,
+  );
+  assert(
+    templateDays.length > 0,
+    `${testCase.id}: pilot draft response must include template days`,
+  );
+  assert(
+    templateSessions.length > 0,
+    `${testCase.id}: pilot draft response must include template sessions`,
+  );
+  assert(
+    templateBlocks.length > 0,
+    `${testCase.id}: pilot draft response must include template blocks`,
+  );
+  assert(
+    !serializedPayload.includes('"matrix"') &&
+      !serializedPayload.includes('"rollout"') &&
+      !serializedPayload.includes('"pilotReadiness"'),
+    `${testCase.id}: template payload must not leak internal matrix fields`,
+  );
+
+  if (testCase.allowed) {
+    assert(
+      response.draft.generatedFrom === "matrix",
+      `${testCase.id}: allowed pilot draft must be generated from matrix`,
+    );
+    assert(
+      response.serverSaveDryRun.dryRun.status === "passed",
+      `${testCase.id}: allowed pilot draft must pass server save dry-run`,
+    );
+    assert(
+      serverGate.allowed,
+      `${testCase.id}: allowed pilot draft must pass server evidence gate`,
+    );
+  } else {
+    assert(
+      response.draft.generatedFrom !== "matrix",
+      `${testCase.id}: fallback pilot draft must not expose a matrix draft as active`,
+    );
+    assert(
+      response.serverSaveDryRun.dryRun.status !== "passed",
+      `${testCase.id}: fallback pilot draft must not pass server save dry-run`,
+    );
+    assert(
+      !serverGate.allowed,
+      `${testCase.id}: fallback pilot draft must not pass server evidence gate`,
+    );
+  }
+
+  return {
+    id: testCase.id,
+    source: response.source,
+    dryRun: response.serverSaveDryRun.dryRun.status,
+    serverGateAllowed: serverGate.allowed,
+    templateDays: templateDays.length,
+    templateSessions: templateSessions.length,
+    templateBlocks: templateBlocks.length,
+  };
+});
+
 const missingGate = canUseMatrixPrimaryPilotWithServerEvidence({ serverResult: null });
 assert(!missingGate.allowed, "Missing server dry-run evidence must block primary pilot");
 assert(
@@ -584,6 +778,7 @@ console.log(
     {
       status: "ok",
       cases: results,
+      pilotDrafts: pilotDraftResults,
       missingGate: {
         allowed: missingGate.allowed,
         reason: missingGate.reason,

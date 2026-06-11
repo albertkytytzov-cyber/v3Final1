@@ -53,6 +53,7 @@ const requiredTokens = [
   "Copy review summary",
   "Copy review JSON",
   "production `/api/v1/plans/constructor/draft` remains legacy-backed",
+  "POST /api/v1/plans/constructor/internal/matrix-primary-pilot-draft",
   "review export leaks identity/raw ids",
 ];
 
