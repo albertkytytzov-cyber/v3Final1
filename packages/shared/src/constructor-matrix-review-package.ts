@@ -72,20 +72,22 @@ export interface ConstructorMatrixReviewPackageDataItem {
 export interface ConstructorMatrixReviewPackageThresholdItem {
   id: ConstructorMatrixThresholdCandidateId;
   area: ConstructorMatrixThresholdCandidateArea;
+  kind: ConstructorMatrixThresholdCandidate["kind"];
   title: string;
-  signalType: ConstructorMatrixThresholdCandidate["signalType"];
-  candidateDirection: ConstructorMatrixThresholdCandidate["candidateDirection"];
-  decisionScope: ConstructorMatrixThresholdCandidate["decisionScope"];
+  whyNeeded: string;
+  candidateStatement: string;
   dataDependencyIds: readonly ConstructorMatrixDataDependencyId[];
   evidenceDependencyIds: readonly ConstructorMatrixEvidenceDependencyId[];
+  requiredFields: readonly string[];
   missingDataBehavior: ConstructorMatrixThresholdCandidate["missingDataBehavior"];
-  runtimeUseNow: ConstructorMatrixThresholdCandidate["runtimeUseNow"];
-  reviewStatus: ConstructorMatrixThresholdCandidate["reviewStatus"];
+  proposedRuntimeUse: ConstructorMatrixThresholdCandidate["proposedRuntimeUse"];
+  status: ConstructorMatrixThresholdCandidate["status"];
   reviewRequired: ConstructorMatrixThresholdCandidate["reviewRequired"];
+  futureTargetLayers: ConstructorMatrixThresholdCandidate["futureTargetLayers"];
   fixtureImpact: ConstructorMatrixThresholdCandidate["fixtureImpact"];
   forbiddenRuntimeUseNow: ConstructorMatrixThresholdCandidate["forbiddenRuntimeUseNow"];
+  implementationReadiness: ConstructorMatrixThresholdCandidate["implementationReadiness"];
   limitations: readonly string[];
-  futureValidationQuestions: readonly string[];
 }
 
 export interface ConstructorMatrixReviewPackagePayload {
@@ -262,7 +264,7 @@ function intersects<T>(items: readonly T[], set: Set<T>) {
 function dataAreasForThreshold(candidate: ConstructorMatrixThresholdCandidate) {
   const areas: ConstructorMatrixDataDependencyArea[] = [];
 
-  for (const id of candidate.requiredDataDependencies) {
+  for (const id of candidate.dataDependencyIds) {
     const area = CONSTRUCTOR_MATRIX_DATA_DEPENDENCIES.find((item) => item.id === id)?.area;
     if (area) {
       areas.push(area);
@@ -343,15 +345,22 @@ function reviewersForThreshold(
 ): ConstructorMatrixReviewPackageReviewer[] {
   const reviewers = new Set<ConstructorMatrixReviewPackageReviewer>();
 
-  if (item.reviewRequired.includes("coach") || item.reviewRequired.includes("sport_science")) {
+  if (
+    item.reviewRequired.includes("coach_review") ||
+    item.reviewRequired.includes("sport_science_review")
+  ) {
     reviewers.add("coach");
   }
 
-  if (item.reviewRequired.includes("medical") || MEDICAL_THRESHOLD_AREAS.has(item.area)) {
+  if (item.reviewRequired.includes("medical_review") || MEDICAL_THRESHOLD_AREAS.has(item.area)) {
     reviewers.add("medical");
   }
 
-  if (item.reviewRequired.includes("data_quality") || DATA_QUALITY_THRESHOLD_AREAS.has(item.area)) {
+  if (
+    item.reviewRequired.includes("data_quality_review") ||
+    item.reviewRequired.includes("product_safety_review") ||
+    DATA_QUALITY_THRESHOLD_AREAS.has(item.area)
+  ) {
     reviewers.add("data_quality");
   }
 
@@ -388,7 +397,7 @@ function thresholdReviewRef(item: ConstructorMatrixThresholdCandidate): Construc
     id: item.id,
     title: item.title,
     areas: [item.area, ...dataAreasForThreshold(item)],
-    reason: `${item.reviewStatus} / ${item.runtimeUseNow}`,
+    reason: `${item.status} / ${item.proposedRuntimeUse}`,
   };
 }
 
@@ -463,20 +472,22 @@ function thresholdItem(
   return {
     id: item.id as ConstructorMatrixThresholdCandidateId,
     area: item.area,
+    kind: item.kind,
     title: item.title,
-    signalType: item.signalType,
-    candidateDirection: item.candidateDirection,
-    decisionScope: item.decisionScope,
-    dataDependencyIds: item.requiredDataDependencies,
-    evidenceDependencyIds: item.supportsEvidenceDependencies,
+    whyNeeded: item.whyNeeded,
+    candidateStatement: item.candidateStatement,
+    dataDependencyIds: item.dataDependencyIds,
+    evidenceDependencyIds: item.evidenceDependencyIds,
+    requiredFields: item.requiredFields,
     missingDataBehavior: item.missingDataBehavior,
-    runtimeUseNow: item.runtimeUseNow,
-    reviewStatus: item.reviewStatus,
+    proposedRuntimeUse: item.proposedRuntimeUse,
+    status: item.status,
     reviewRequired: item.reviewRequired,
+    futureTargetLayers: item.futureTargetLayers,
     fixtureImpact: item.fixtureImpact,
     forbiddenRuntimeUseNow: item.forbiddenRuntimeUseNow,
+    implementationReadiness: item.implementationReadiness,
     limitations: item.limitations,
-    futureValidationQuestions: item.futureValidationQuestions,
   };
 }
 
@@ -536,7 +547,7 @@ export function buildConstructorMatrixLayerReviewMarkdown(
     "## Threshold Candidates",
     markdownList(
       payload.thresholdCandidates.map(
-        (item) => `${item.id} · ${item.area} · ${item.reviewStatus} · ${item.runtimeUseNow}`,
+        (item) => `${item.id} · ${item.area} · ${item.status} · ${item.proposedRuntimeUse}`,
       ),
     ),
   ].join("\n");

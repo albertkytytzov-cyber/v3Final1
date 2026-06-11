@@ -302,9 +302,9 @@ Implemented after the data-dependency skeleton:
 npm run check:constructor-matrix-threshold-candidates
 ```
 
-- candidate-only records for weight cut, hydration, readiness, sleep, resting
-  HR, wearable data, pain, injury, female context, youth context, travel
-  fatigue and competition context;
+- candidate-only records for weight cut, hydration, readiness, wearable data,
+  sleep, RHR, HRV, pain, injury, female context/RED-S, youth context, travel
+  fatigue, competition context, contact load, LMV and taper;
 - every candidate links to existing data dependencies and evidence
   dependencies;
 - high-risk areas stay coach/medical review-required or blocked for runtime.
@@ -335,15 +335,26 @@ taper. The patch closes those metadata gaps without changing runtime behavior.
 
 Current coverage:
 
-- candidate count: 20;
+- candidate count: 24;
 - required areas covered: weight cut, hydration, readiness, wearable data,
   sleep, RHR, HRV, pain, injury, female context/RED-S, youth context, travel
   fatigue, competition context, contact load, LMV and taper;
 - added data dependency metadata for HRV trend, wrestling contact-load
   exposure, leg LMV local fatigue and taper hidden-fatigue context;
-- added threshold candidate metadata for HRV trend, contact exposure, control
-  bouts recovery review, LMV recovery/near-start role, taper high-volume SFP,
-  hidden glycolytic close-start load and youth weight-cut review.
+- required candidate ids include acute body mass loss, weight descent rate,
+  hydration status, sauna/heat exposure, sleep confidence, RHR deviation, HRV
+  trend, wearable data quality, multi-signal readiness, pain location/severity,
+  injury return, female symptom context, RED-S risk, youth progression/weight
+  cut, travel fatigue, competition day, contact exposure, control bouts, LMV
+  recovery/near-start role, taper SFP and hidden glycolytic close-start load.
+
+Each candidate records:
+
+- `id`, `area`, `kind`, `title`, `whyNeeded`, `candidateStatement`;
+- `evidenceDependencyIds`, `dataDependencyIds`, `requiredFields`;
+- `missingDataBehavior`, `proposedRuntimeUse`, `status`, `reviewRequired`;
+- `limitations`, `forbiddenRuntimeUseNow`, `futureTargetLayers`;
+- `fixtureImpact.runtimeChangeAllowedNow=false`.
 
 Validation now explicitly checks:
 

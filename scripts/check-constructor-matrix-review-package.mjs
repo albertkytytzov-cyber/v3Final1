@@ -122,10 +122,10 @@ for (const candidate of CONSTRUCTOR_MATRIX_THRESHOLD_CANDIDATES) {
     queue.items.filter((item) => item.layer === "threshold_candidate" && item.id === candidate.id),
   );
   assert(queueRefs.length > 0, `${candidate.id} must appear in at least one reviewer queue`);
-  for (const dataId of candidate.requiredDataDependencies) {
+  for (const dataId of candidate.dataDependencyIds) {
     assert(dataIds.has(dataId), `${candidate.id} references unknown data dependency: ${dataId}`);
   }
-  for (const evidenceId of candidate.supportsEvidenceDependencies) {
+  for (const evidenceId of candidate.evidenceDependencyIds) {
     assert(evidenceIds.has(evidenceId), `${candidate.id} references unknown evidence dependency: ${evidenceId}`);
   }
 }
@@ -158,8 +158,10 @@ for (const text of [
   ...payload.evidenceDependencies.flatMap((item) => item.limitations),
   ...payload.dataDependencies.flatMap((item) => item.limitations),
   ...payload.thresholdCandidates.flatMap((item) => [
+    item.whyNeeded,
+    item.candidateStatement,
     ...item.limitations,
-    ...item.futureValidationQuestions,
+    ...item.forbiddenRuntimeUseNow,
   ]),
 ]) {
   assert(!hasForbiddenThresholdText(text), `Review package must not define numeric threshold text: ${text}`);

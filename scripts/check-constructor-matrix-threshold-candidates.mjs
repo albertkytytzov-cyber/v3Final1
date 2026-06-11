@@ -24,31 +24,6 @@ const evidenceIds = new Set(CONSTRUCTOR_MATRIX_EVIDENCE_DEPENDENCY_REGISTRY.map(
 const dataDependencyIds = new Set(CONSTRUCTOR_MATRIX_DATA_DEPENDENCIES.map((item) => item.id));
 const candidateIds = new Set(CONSTRUCTOR_MATRIX_THRESHOLD_CANDIDATES.map((item) => item.id));
 const minimumCandidateCount = 16;
-const allowedRuntimeUseNow = new Set([
-  "none",
-  "documentation_only",
-  "review_queue_only",
-  "future_candidate",
-]);
-const blockedRuntimeStatuses = new Set([
-  "approved_for_runtime",
-  "approved_for_hard_rule",
-  "auto_allowed",
-  "hard_gate",
-  "runtime_gate",
-]);
-const highRiskAreas = new Set([
-  "weight_cut",
-  "hydration",
-  "pain",
-  "injury",
-  "female_context",
-  "youth_context",
-  "wearable_data",
-  "lmv",
-  "contact_load",
-  "taper",
-]);
 const requiredAreas = new Set([
   "weight_cut",
   "hydration",
@@ -67,6 +42,108 @@ const requiredAreas = new Set([
   "lmv",
   "taper",
 ]);
+const requiredCandidateIds = new Set([
+  "acute_body_mass_loss_candidate",
+  "weight_descent_rate_candidate",
+  "hydration_status_review_trigger_candidate",
+  "sauna_heat_exposure_review_candidate",
+  "sleep_low_confidence_candidate",
+  "rhr_deviation_candidate",
+  "hrv_trend_candidate",
+  "wearable_data_quality_candidate",
+  "multi_signal_readiness_candidate",
+  "pain_unknown_location_candidate",
+  "pain_severity_threshold_candidate",
+  "injury_return_to_training_candidate",
+  "female_symptom_context_candidate",
+  "reds_risk_review_candidate",
+  "youth_high_load_progression_candidate",
+  "youth_weight_cut_block_candidate",
+  "travel_fatigue_load_ceiling_candidate",
+  "competition_day_no_development_candidate",
+  "contact_load_exposure_candidate",
+  "control_bouts_recovery_window_candidate",
+  "lmv_legs_recovery_window_candidate",
+  "lmv_near_main_start_role_candidate",
+  "taper_high_volume_sfp_candidate",
+  "hidden_glycolytic_load_close_start_candidate",
+]);
+const allowedAreas = new Set([
+  ...requiredAreas,
+  "soreness",
+]);
+const allowedKinds = new Set([
+  "upper_bound",
+  "lower_bound",
+  "rate_of_change",
+  "trend_deviation",
+  "composite_score",
+  "categorical_gate",
+  "data_quality_gate",
+  "time_window",
+  "recovery_window",
+  "contact_exposure_window",
+  "review_trigger",
+]);
+const allowedRuntimeUse = new Set([
+  "none",
+  "documentation_only",
+  "review_export_only",
+  "risk_warning_candidate",
+  "future_soft_gate_candidate",
+  "future_hard_gate_candidate",
+]);
+const allowedMissingDataBehaviors = new Set([
+  "fail_closed",
+  "fail_soft",
+  "require_coach_confirmation",
+  "require_medical_confirmation",
+  "use_low_risk_replacement",
+  "advisory_only",
+]);
+const allowedStatuses = new Set([
+  "draft",
+  "needs_evidence",
+  "needs_coach_review",
+  "needs_medical_review",
+  "approved_for_docs_only",
+  "approved_for_warning_candidate",
+  "blocked_for_runtime",
+  "do_not_automate",
+]);
+const allowedReviewRequirements = new Set([
+  "coach_review",
+  "medical_review",
+  "sport_science_review",
+  "data_quality_review",
+  "product_safety_review",
+]);
+const allowedFutureTargetLayers = new Set([
+  "pilot_readiness",
+  "block_eligibility",
+  "volume_allocator",
+  "risk_check",
+  "explanation_builder",
+  "review_export",
+  "rollout_gate",
+]);
+const highRiskAreas = new Set([
+  "weight_cut",
+  "hydration",
+  "pain",
+  "injury",
+  "female_context",
+  "youth_context",
+  "wearable_data",
+  "lmv",
+  "contact_load",
+  "taper",
+]);
+const medicalOnlyRuntimeAreas = new Set([
+  "pain",
+  "injury",
+  "female_context",
+]);
 const runtimeDecisionFiles = [
   "packages/shared/src/constructor-matrix-plan-builder.ts",
   "packages/shared/src/constructor-matrix-skeleton.ts",
@@ -78,31 +155,22 @@ const runtimeDecisionFiles = [
   "packages/shared/src/constructor-matrix-adapter.ts",
 ];
 
-function collectText(item) {
+function collectRequiredText(item) {
   return [
-    item.id,
     item.title,
-    item.signalType,
-    item.candidateDirection,
-    item.decisionScope,
-    item.runtimeUseNow,
-    item.reviewStatus,
-    item.missingDataBehavior,
-    ...item.requiredDataDependencies,
-    ...item.supportsEvidenceDependencies,
-    ...item.reviewRequired,
-    ...(item.forbiddenRuntimeUseNow ?? []),
+    item.whyNeeded,
+    item.candidateStatement,
     ...item.limitations,
-    ...item.futureValidationQuestions,
+    ...item.forbiddenRuntimeUseNow,
   ];
 }
 
 function isAllowedNoThresholdSentence(text) {
-  return /\b(no|without|not|нет|без)\b.{0,40}\b(numeric threshold|numeric thresholds|threshold|thresholds|cutoff|cutoffs|hard rule|hard gate)\b/i.test(text);
+  return /\b(no|without|not|нет|без)\b.{0,64}\b(numeric threshold|numeric thresholds|threshold value|threshold values|threshold|thresholds|cutoff|cutoffs|hard rule|hard gate|fixed recovery timing)\b/i.test(text);
 }
 
 function hasForbiddenThresholdText(text) {
-  if (/\bthreshold candidate\b/i.test(text)) {
+  if (/\bthreshold candidate\b/i.test(text) || /\bcandidate threshold\b/i.test(text)) {
     return false;
   }
 
@@ -112,9 +180,9 @@ function hasForbiddenThresholdText(text) {
 
   return (
     />=|<=|>|</.test(text) ||
-    /[0-9]+\s*(%|kg|кг|bpm|уд\/мин|hours?|час)/i.test(text) ||
+    /[0-9]+\s*(%|kg|кг|bpm|уд\/мин|hours?|hrs|час)/i.test(text) ||
     /\b[0-9]+\/10\b/i.test(text) ||
-    /\b(threshold|cutoff|bpm|kg limit|score cutoff|runtime gate|hard gate)\b/i.test(text)
+    /\b(cutoff|threshold value|score cutoff|kg limit|bpm)\b/i.test(text)
   );
 }
 
@@ -133,61 +201,121 @@ assert(
   "Threshold candidate registry must not contain duplicate ids",
 );
 
+for (const id of requiredCandidateIds) {
+  assert(candidateIds.has(id), `Missing required threshold candidate id: ${id}`);
+}
+
 const coveredAreas = new Set();
-const runtimeUseNow = new Set();
-const reviewStatuses = new Set();
+const proposedRuntimeUse = new Set();
+const statuses = new Set();
+const usedEvidenceDependencyIds = new Set();
+const usedDataDependencyIds = new Set();
 
 for (const item of CONSTRUCTOR_MATRIX_THRESHOLD_CANDIDATES) {
   assert(/^[a-z0-9_]+$/.test(item.id), `Threshold candidate id must be snake_case: ${item.id}`);
   assert(item.candidateOnly === true, `${item.id} must be candidateOnly=true`);
-  assert(item.area, `${item.id} must have area`);
-  assert(item.title.trim().length > 0, `${item.id} must have title`);
-  assert(item.signalType, `${item.id} must have signalType`);
-  assert(item.candidateDirection, `${item.id} must have candidateDirection`);
-  assert(item.decisionScope, `${item.id} must have decisionScope`);
-  assert(Array.isArray(item.requiredDataDependencies) && item.requiredDataDependencies.length > 0, `${item.id} must have requiredDataDependencies`);
-  assert(Array.isArray(item.supportsEvidenceDependencies) && item.supportsEvidenceDependencies.length > 0, `${item.id} must have supportsEvidenceDependencies`);
+  assert(allowedAreas.has(item.area), `${item.id} has unsupported area: ${item.area}`);
+  assert(allowedKinds.has(item.kind), `${item.id} has unsupported kind: ${item.kind}`);
+  assert(typeof item.title === "string" && item.title.trim().length > 0, `${item.id} must have title`);
+  assert(typeof item.whyNeeded === "string" && item.whyNeeded.trim().length > 0, `${item.id} must have whyNeeded`);
+  assert(
+    typeof item.candidateStatement === "string" && item.candidateStatement.trim().length > 0,
+    `${item.id} must have candidateStatement`,
+  );
+  assert(Array.isArray(item.evidenceDependencyIds) && item.evidenceDependencyIds.length > 0, `${item.id} must have evidenceDependencyIds`);
+  assert(Array.isArray(item.dataDependencyIds) && item.dataDependencyIds.length > 0, `${item.id} must have dataDependencyIds`);
+  assert(Array.isArray(item.requiredFields) && item.requiredFields.length > 0, `${item.id} must have requiredFields`);
+  assert(
+    allowedMissingDataBehaviors.has(item.missingDataBehavior),
+    `${item.id} has unsupported missingDataBehavior: ${item.missingDataBehavior}`,
+  );
+  assert(allowedRuntimeUse.has(item.proposedRuntimeUse), `${item.id} has unsupported proposedRuntimeUse: ${item.proposedRuntimeUse}`);
+  assert(allowedStatuses.has(item.status), `${item.id} has unsupported status: ${item.status}`);
   assert(Array.isArray(item.reviewRequired) && item.reviewRequired.length > 0, `${item.id} must have reviewRequired`);
   assert(Array.isArray(item.limitations) && item.limitations.length > 0, `${item.id} must have limitations`);
-  assert(Array.isArray(item.futureValidationQuestions) && item.futureValidationQuestions.length > 0, `${item.id} must have futureValidationQuestions`);
   assert(Array.isArray(item.forbiddenRuntimeUseNow) && item.forbiddenRuntimeUseNow.length > 0, `${item.id} must have forbiddenRuntimeUseNow`);
-  assert(item.fixtureImpact?.runtimeChangeAllowedNow === false, `${item.id} must not allow runtime changes now`);
-  assert(item.fixtureImpact?.productionRouteChangeAllowedNow === false, `${item.id} must not allow production route changes now`);
-  assert(item.fixtureImpact?.rolloutGateChangeAllowedNow === false, `${item.id} must not allow rollout gate changes now`);
-  assert(item.fixtureImpact?.previewBehaviorChangeAllowedNow === false, `${item.id} must not allow preview behavior changes now`);
-  assert(item.fixtureImpact?.legacyFallbackChangeAllowedNow === false, `${item.id} must not allow legacy fallback changes now`);
-  assert(allowedRuntimeUseNow.has(item.runtimeUseNow), `${item.id} has unsafe runtimeUseNow: ${item.runtimeUseNow}`);
-  assert(!blockedRuntimeStatuses.has(item.reviewStatus), `${item.id} has runtime-like reviewStatus: ${item.reviewStatus}`);
-  assert(item.reviewStatus !== "approved_for_runtime", `${item.id} must not be approved for runtime`);
+  assert(Array.isArray(item.futureTargetLayers) && item.futureTargetLayers.length > 0, `${item.id} must have futureTargetLayers`);
+  assert(item.fixtureImpact, `${item.id} must have fixtureImpact`);
+  assert(item.fixtureImpact.runtimeChangeAllowedNow === false, `${item.id} must not allow runtime changes now`);
+  assert(typeof item.fixtureImpact.shouldCreateFutureFixture === "boolean", `${item.id} must declare shouldCreateFutureFixture`);
+  assert(
+    Array.isArray(item.fixtureImpact.affectedFixtureAreas),
+    `${item.id} must declare affectedFixtureAreas`,
+  );
+  assert(item.status !== "approved_for_hard_rule", `${item.id} must not be approved for hard rule`);
 
-  for (const dataDependencyId of item.requiredDataDependencies) {
+  for (const review of item.reviewRequired) {
+    assert(allowedReviewRequirements.has(review), `${item.id} has unsupported review requirement: ${review}`);
+  }
+
+  for (const layer of item.futureTargetLayers) {
+    assert(allowedFutureTargetLayers.has(layer), `${item.id} has unsupported future target layer: ${layer}`);
+  }
+
+  for (const dataDependencyId of item.dataDependencyIds) {
     assert(
       dataDependencyIds.has(dataDependencyId),
       `${item.id} references unknown data dependency: ${dataDependencyId}`,
     );
+    usedDataDependencyIds.add(dataDependencyId);
   }
 
-  for (const evidenceId of item.supportsEvidenceDependencies) {
+  for (const evidenceId of item.evidenceDependencyIds) {
     assert(
       evidenceIds.has(evidenceId),
       `${item.id} references unknown evidence dependency: ${evidenceId}`,
     );
+    usedEvidenceDependencyIds.add(evidenceId);
   }
 
-  for (const text of collectText(item)) {
+  for (const text of collectRequiredText(item)) {
     assert(!hasForbiddenThresholdText(text), `${item.id} must not define numeric threshold text: ${text}`);
   }
 
-  if (highRiskAreas.has(item.area)) {
+  if (item.proposedRuntimeUse === "future_hard_gate_candidate") {
     assert(
-      item.reviewRequired.length > 0,
-      `${item.id} high-risk candidate needs explicit reviewRequired metadata`,
+      ["needs_medical_review", "needs_coach_review", "blocked_for_runtime", "draft"].includes(item.status),
+      `${item.id} cannot be a future hard-gate candidate with status ${item.status}`,
+    );
+  }
+
+  if (highRiskAreas.has(item.area)) {
+    assert(item.reviewRequired.length > 0, `${item.id} high-risk candidate needs review metadata`);
+  }
+
+  if (item.area === "weight_cut" || item.area === "hydration") {
+    assert(
+      item.proposedRuntimeUse !== "future_hard_gate_candidate",
+      `${item.id} weight/hydration candidate cannot propose future hard gate now`,
+    );
+    if (item.status === "approved_for_warning_candidate") {
+      assert(
+        item.reviewRequired.includes("medical_review") &&
+          item.reviewRequired.includes("coach_review"),
+        `${item.id} warning candidate needs medical and coach review`,
+      );
+    }
+  }
+
+  if (
+    medicalOnlyRuntimeAreas.has(item.area) ||
+    item.id.includes("reds") ||
+    item.id.includes("injury") ||
+    item.id.includes("pain")
+  ) {
+    assert(
+      ["documentation_only", "review_export_only"].includes(item.proposedRuntimeUse),
+      `${item.id} injury/pain/RED-S candidate cannot propose runtime use: ${item.proposedRuntimeUse}`,
+    );
+    assert(
+      item.status !== "approved_for_warning_candidate",
+      `${item.id} injury/pain/RED-S candidate cannot be approved for runtime warning`,
     );
   }
 
   coveredAreas.add(item.area);
-  runtimeUseNow.add(item.runtimeUseNow);
-  reviewStatuses.add(item.reviewStatus);
+  proposedRuntimeUse.add(item.proposedRuntimeUse);
+  statuses.add(item.status);
 }
 
 for (const area of requiredAreas) {
@@ -212,8 +340,11 @@ console.log(
       candidateCount: CONSTRUCTOR_MATRIX_THRESHOLD_CANDIDATES.length,
       coveredAreas: Array.from(coveredAreas),
       requiredAreas: Array.from(requiredAreas),
-      runtimeUseNow: Array.from(runtimeUseNow),
-      reviewStatuses: Array.from(reviewStatuses),
+      candidateIds: Array.from(candidateIds),
+      evidenceDependencyIds: Array.from(usedEvidenceDependencyIds),
+      dataDependencyIds: Array.from(usedDataDependencyIds),
+      proposedRuntimeUse: Array.from(proposedRuntimeUse),
+      statuses: Array.from(statuses),
       numericThresholdsAdded: false,
       runtimeBehaviorChanged: false,
       runtimeImportsAdded: false,

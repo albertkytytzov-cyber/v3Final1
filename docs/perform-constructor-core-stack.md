@@ -1893,6 +1893,8 @@ replacing the assignable safe plan.
 
 ### 15.27 Threshold Candidate Registry
 
+Stage: Threshold Candidate Registry.
+
 The Threshold Candidate Registry adds a metadata-only layer for future
 coach/medical/data review of possible threshold candidates. It is intentionally
 not a runtime layer.
@@ -1901,9 +1903,9 @@ Implemented registry:
 
 - `packages/shared/src/constructor-matrix-threshold-candidates.ts`;
 - exported ids/helpers from `@training-platform/shared`;
-- candidate-only records for weight cut, hydration, readiness, sleep, resting
-  HR, wearable data, pain, injury, female context, youth context, travel
-  fatigue and competition context.
+- candidate-only records for weight cut, hydration, readiness, wearable data,
+  sleep, RHR, HRV, pain, injury, female context/RED-S, youth context, travel
+  fatigue, competition context, contact load, LMV and taper.
 
 ### 15.28 Threshold Candidate Registry coverage patch
 
@@ -1913,14 +1915,18 @@ metadata-only.
 Current registry coverage:
 
 - minimum candidate count enforced: 16;
-- actual candidate count: 20;
+- actual candidate count: 24;
 - required areas covered: weight cut, hydration, readiness, wearable data,
   sleep, RHR, HRV, pain, injury, female context/RED-S, youth context, travel
   fatigue, competition context, contact load, LMV and taper;
-- added metadata-only data dependencies for HRV, contact load, LMV and taper;
-- added metadata-only candidates for HRV trend, contact exposure, control-bout
-  recovery, leg LMV recovery, near-start LMV role, taper high-volume SFP,
-  hidden glycolytic close-start load and youth weight-cut review.
+- the registry uses the exact threshold candidate contract: `kind`,
+  `whyNeeded`, `candidateStatement`, evidence/data ids, `requiredFields`,
+  `proposedRuntimeUse`, `status`, `reviewRequired`, `futureTargetLayers` and
+  `fixtureImpact`;
+- required metadata-only candidates cover body mass loss/rate, hydration and
+  heat exposure, sleep/RHR/HRV/wearable/readiness, pain/injury, female/RED-S,
+  youth progression/weight cut, travel, competition day, contact exposure,
+  control bouts, LMV and taper contexts.
 
 Extra guardrails:
 

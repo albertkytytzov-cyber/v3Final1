@@ -3914,21 +3914,25 @@ future threshold candidates for:
 - weight cut;
 - hydration;
 - readiness;
+- wearable data;
 - sleep;
 - resting HR;
-- wearable data;
+- HRV;
 - pain;
 - injury;
-- female context;
+- female context / RED-S;
 - youth context;
 - travel fatigue;
-- competition context.
+- competition context;
+- contact load;
+- LMV;
+- taper.
 
 ### 46.1.1 Threshold Candidate Registry coverage patch
 
 The first registry pass had 12 candidates. The coverage patch raises the
-registry to 20 candidate-only records and enforces the original required area
-set.
+registry to 24 candidate-only records and enforces the original required area
+set plus the exact threshold candidate contract from the stage spec.
 
 Required areas now covered:
 
@@ -3956,16 +3960,32 @@ Added metadata-only data dependencies:
 - `lmv_local_fatigue_for_legs`;
 - `taper_load_context_for_hidden_fatigue`.
 
-Added metadata-only threshold candidates:
+Required metadata-only threshold candidates include:
 
+- `acute_body_mass_loss_candidate`;
+- `weight_descent_rate_candidate`;
+- `hydration_status_review_trigger_candidate`;
+- `sauna_heat_exposure_review_candidate`;
+- `sleep_low_confidence_candidate`;
+- `rhr_deviation_candidate`;
 - `hrv_trend_candidate`;
+- `wearable_data_quality_candidate`;
+- `multi_signal_readiness_candidate`;
+- `pain_unknown_location_candidate`;
+- `pain_severity_threshold_candidate`;
+- `injury_return_to_training_candidate`;
+- `female_symptom_context_candidate`;
+- `reds_risk_review_candidate`;
+- `youth_high_load_progression_candidate`;
+- `youth_weight_cut_block_candidate`;
+- `travel_fatigue_load_ceiling_candidate`;
+- `competition_day_no_development_candidate`;
 - `contact_load_exposure_candidate`;
 - `control_bouts_recovery_window_candidate`;
 - `lmv_legs_recovery_window_candidate`;
 - `lmv_near_main_start_role_candidate`;
 - `taper_high_volume_sfp_candidate`;
-- `hidden_glycolytic_load_close_start_candidate`;
-- `youth_weight_cut_review_candidate`.
+- `hidden_glycolytic_load_close_start_candidate`.
 
 No runtime promotion is included in this patch. Numeric thresholds, production
 route changes, rollout changes, preview changes and legacy fallback changes
@@ -3974,17 +3994,20 @@ remain explicitly forbidden.
 Each candidate records:
 
 - area;
-- signal type;
-- candidate direction;
-- decision scope;
-- required data dependencies;
-- supporting evidence dependencies;
+- kind;
+- why needed;
+- candidate statement;
+- evidence dependency ids;
+- data dependency ids;
+- required fields;
 - missing-data behavior;
-- current runtime use;
-- review status;
-- required reviewers;
+- proposed runtime use;
+- status;
+- review requirements;
 - limitations;
-- future validation questions.
+- forbidden runtime use now;
+- future target layers;
+- fixture impact.
 
 ### 46.2 Guardrails
 
@@ -4030,8 +4053,9 @@ The package includes:
   review status and limitations;
 - all data dependencies with required fields, optional fields, availability,
   missing-data behavior, runtime-use metadata and evidence links;
-- all threshold candidates with data/evidence links, review status,
-  `fixtureImpact` guardrails, forbidden runtime use and validation questions.
+- all threshold candidates with `kind`, candidate statement, evidence/data
+  links, required fields, proposed runtime use, status, review requirements,
+  future target layers, `fixtureImpact` guardrails and forbidden runtime use.
 
 Reviewer queues:
 

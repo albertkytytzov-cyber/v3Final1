@@ -279,15 +279,20 @@ controlled metadata layer for future coach/medical/data-quality review.
 
 ### Threshold Candidate Registry coverage patch
 
+Stage: Threshold Candidate Registry.
+
 The registry now meets the coverage intent before any production rollout:
 
-- candidate count: 20;
+- candidate count: 24;
 - required area coverage: weight cut, hydration, readiness, wearable data,
   sleep, RHR, HRV, pain, injury, female context/RED-S, youth context, travel
   fatigue, competition context, contact load, LMV and taper;
 - `npm run check:constructor-matrix-threshold-candidates` enforces minimum
   count, required area coverage, valid evidence/data ids, no runtime imports and
-  metadata-only fixture impact.
+  metadata-only fixture impact;
+- every candidate records `kind`, `whyNeeded`, `candidateStatement`,
+  `proposedRuntimeUse`, `status`, `reviewRequired`, `futureTargetLayers` and
+  `fixtureImpact.runtimeChangeAllowedNow=false`.
 
 ### Matrix Review Package
 

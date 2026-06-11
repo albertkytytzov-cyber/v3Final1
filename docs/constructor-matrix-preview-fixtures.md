@@ -562,25 +562,30 @@ the production constructor route unchanged.
 
 The Threshold Candidate Registry is checked separately from preview fixtures:
 
+Stage: Threshold Candidate Registry.
+
 ```bash
 npm run check:constructor-matrix-threshold-candidates
 ```
 
 This registry is candidate-only metadata. It documents possible future review
-signals for weight cut, hydration, readiness, sleep, resting HR, wearable data,
-pain, injury, female/youth context, travel fatigue and competition context.
+signals for weight cut, hydration, readiness, wearable data, sleep/RHR/HRV,
+pain/injury, female/RED-S, youth, travel fatigue, competition context, contact
+load, LMV and taper.
 
 ## Threshold Candidate Registry coverage patch
 
-The coverage patch expands the metadata registry from 12 to 20 candidates and
+The coverage patch expands the metadata registry from 12 to 24 candidates and
 requires all 16 areas to be present:
 
 - weight cut, hydration, readiness, wearable data, sleep, RHR, HRV;
 - pain, injury, female context/RED-S, youth context;
 - travel fatigue, competition context, contact load, LMV and taper.
 
-The patch adds HRV, contact-load, LMV, taper and youth weight-cut review
-metadata only. It does not change fixture expectations.
+The patch now uses the exact threshold candidate contract from the stage spec:
+`kind`, `whyNeeded`, `candidateStatement`, evidence/data ids, `requiredFields`,
+`proposedRuntimeUse`, `status`, `reviewRequired`, `futureTargetLayers` and
+`fixtureImpact`. It does not change fixture expectations.
 
 ## Matrix Review Package regression
 
