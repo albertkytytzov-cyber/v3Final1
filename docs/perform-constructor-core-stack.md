@@ -17,6 +17,7 @@
 - `docs/perform-constructor-mvp-test-report.md`
 - `docs/constructor-phase-matrix-transition-plan.md`
 - `docs/constructor-matrix-preview-fixtures.md`
+- `docs/constructor-matrix-evidence-dependency-gap-audit.md`
 
 ## 1. Главный принцип
 
