@@ -25,6 +25,9 @@ const matrixUiModule = await import("../apps/web/app/lib/constructor-matrix-ui.t
 const { isConstructorDraftSaveAllowed } = matrixUiModule.default ?? matrixUiModule;
 const featureFlagsModule = await import("../apps/web/app/lib/feature-flags.ts");
 const { getConstructorMatrixUiFlags } = featureFlagsModule.default ?? featureFlagsModule;
+const planningSchemasModule = await import("../apps/api/src/api/planning/planning.schemas.ts");
+const { parseAssignedPlanBody, parsePlanTemplateBody } =
+  planningSchemasModule.default ?? planningSchemasModule;
 
 async function readProjectFile(path) {
   return readFile(new URL(`../${path}`, import.meta.url), "utf8");
@@ -218,6 +221,10 @@ async function checkControlledExposureSourceGuards() {
 
   const pageClientSource = await readProjectFile("apps/web/app/page-client.tsx");
   const buildDraftBlock = extractFunctionBlock(pageClientSource, "handleBuildConstructorDraft");
+  const saveConstructorTemplateBlock = extractFunctionBlock(
+    pageClientSource,
+    "handleSaveConstructorTemplate",
+  );
   const buildPreviewBlock = extractFunctionBlock(pageClientSource, "handleBuildConstructorMatrixPreview");
   const openWorkspaceBlock = extractFunctionBlock(pageClientSource, "handleOpenConstructorMatrixWorkspace");
   const activateInternalBlock = extractFunctionBlock(
@@ -244,6 +251,14 @@ async function checkControlledExposureSourceGuards() {
       buildDraftBlock.includes('pilotDraft.source === "matrix_primary_pilot"') &&
       buildDraftBlock.includes('pilotDraft.source === "legacy_fallback"'),
     "Main build action must use the server-authoritative matrix pilot draft path before legacy fallback",
+  );
+  assert(
+    saveConstructorTemplateBlock.includes("activeConstructorDraftSaveAllowed") &&
+      saveConstructorTemplateBlock.includes("activeConstructorTemplatePayload") &&
+      saveConstructorTemplateBlock.includes('setTemplatePlanningTab("assign")') &&
+      saveConstructorTemplateBlock.includes("templateId: template.id") &&
+      saveConstructorTemplateBlock.includes("setAssignedPlanForm"),
+    "Saving an allowed constructor draft must open the template assignment flow with the saved template selected",
   );
   assert(
     openWorkspaceBlock.includes("!SHOW_INTERNAL_MATRIX_CONSTRUCTOR_UI"),
@@ -644,11 +659,24 @@ const results = cases.map((testCase) => {
 });
 
 const pilotDraftResults = cases.map((testCase) => {
+  const fixture = fixtureById(testCase.id);
   const response = pilotDraftResponseForFixture(testCase.id);
   const expectedSource = testCase.allowed ? "matrix_primary_pilot" : "legacy_fallback";
+  const parsedTemplatePayload = parsePlanTemplateBody(response.templatePayload);
   const templateDays = response.templatePayload.days ?? [];
   const templateSessions = templateDays.flatMap((day) => day.sessions);
   const templateBlocks = templateSessions.flatMap((session) => session.blocks);
+  const parsedTemplateDays = parsedTemplatePayload.days ?? [];
+  const parsedTemplateSessions = parsedTemplateDays.flatMap((day) => day.sessions);
+  const parsedTemplateBlocks = parsedTemplateSessions.flatMap((session) => session.blocks);
+  const assignmentPayload = parseAssignedPlanBody({
+    athleteId: fixture.input.athlete.athleteId,
+    templateId: `template-${testCase.id}`,
+    startDate: fixture.input.competition.startDate,
+    dayLabel: "День 1",
+    notes: `Назначено из шаблона конструктора: ${response.templatePayload.name}`,
+    plannedPhase: fixture.input.context.currentPhase,
+  });
   const serializedPayload = JSON.stringify(response.templatePayload);
   const serverGate = canUseMatrixPrimaryPilotWithServerEvidence({
     serverResult: response.serverSaveDryRun,
@@ -671,6 +699,19 @@ const pilotDraftResults = cases.map((testCase) => {
   assert(
     templateBlocks.length > 0,
     `${testCase.id}: pilot draft response must include template blocks`,
+  );
+  assert(
+    parsedTemplatePayload.name === response.templatePayload.name &&
+      parsedTemplateDays.length === templateDays.length &&
+      parsedTemplateSessions.length === templateSessions.length &&
+      parsedTemplateBlocks.length === templateBlocks.length,
+    `${testCase.id}: pilot draft template payload must survive API template schema parsing`,
+  );
+  assert(
+    assignmentPayload.athleteId === fixture.input.athlete.athleteId &&
+      assignmentPayload.templateId === `template-${testCase.id}` &&
+      assignmentPayload.startDate === fixture.input.competition.startDate,
+    `${testCase.id}: pilot draft assignment payload must survive API assignment schema parsing`,
   );
   assert(
     !serializedPayload.includes('"matrix"') &&
@@ -715,6 +756,8 @@ const pilotDraftResults = cases.map((testCase) => {
     templateDays: templateDays.length,
     templateSessions: templateSessions.length,
     templateBlocks: templateBlocks.length,
+    apiTemplateSchema: "passed",
+    apiAssignSchema: "passed",
   };
 });
 
