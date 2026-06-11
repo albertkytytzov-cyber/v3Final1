@@ -270,7 +270,7 @@ function buildMatrixMissingData(input: ConstructorInput): ConstructorMissingData
     missing.push({
       code: "readiness",
       requiredFor: "plan",
-      message: "Matrix path: нет готовности, поэтому уверенность ниже.",
+      message: "Нет готовности: уверенность в плане ниже, нужно проверить состояние спортсмена.",
     });
   }
 
@@ -278,7 +278,7 @@ function buildMatrixMissingData(input: ConstructorInput): ConstructorMissingData
     missing.push({
       code: "sleep",
       requiredFor: "plan",
-      message: "Matrix path: нет сна, поэтому taper/recovery решения осторожнее.",
+      message: "Нет сна: решения по подводке и восстановлению строятся осторожнее.",
     });
   }
 
@@ -286,7 +286,7 @@ function buildMatrixMissingData(input: ConstructorInput): ConstructorMissingData
     missing.push({
       code: "resting_hr",
       requiredFor: "plan",
-      message: "Matrix path: нет пульса покоя для контроля восстановления.",
+      message: "Нет пульса покоя: восстановление и скрытая усталость оцениваются менее точно.",
     });
   }
 
@@ -743,7 +743,7 @@ export function adaptMatrixDrivenDayToConstructorDay(
     readinessGate:
       matrixDay.volume.recoveryPriority === "primary"
         ? "Проверить свежесть, сон, вес и признаки скрытой усталости."
-        : "Если готовность низкая, заменить основной блок на recovery/mobility.",
+        : "Если готовность низкая, заменить основной блок на восстановление или мобилити.",
     blocks: sessions.flatMap((session) => session.blocks),
     sessions,
   };
@@ -789,9 +789,9 @@ export function adaptMatrixDrivenWeekToConstructorWeek(
     phase: preparationPhaseToConstructorPhase(matrixWeek.phase),
     mainIntent: [
       weekTypeLabel(matrixWeek.weekType),
-      `нагрузка ${matrixWeek.volume.loadLevel}`,
-      `ковёр ${matrixWeek.volume.matVolume}`,
-      `восстановление ${matrixWeek.recoveryPriority}`,
+      `нагрузка ${matrixLoadLabel(matrixWeek.volume.loadLevel)}`,
+      `ковёр: ${matrixMatVolumeLabel(matrixWeek.volume.matVolume)}`,
+      matrixRecoveryPriorityLabel(matrixWeek.recoveryPriority),
     ].join(" · "),
     days: matrixWeek.days.map((day) => adaptMatrixDrivenDayToConstructorDay(day, input)),
   };

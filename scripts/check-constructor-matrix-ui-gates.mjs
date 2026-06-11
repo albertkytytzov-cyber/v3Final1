@@ -599,6 +599,7 @@ function assertNoTrainerFacingMatrixLeaks(testId, draft) {
   const serializedTrainerFields = JSON.stringify(trainerFacingDraft);
   const forbiddenTrainerPhrases = [
     "Matrix-driven draft",
+    "Matrix path",
     "legacy-content:",
     "legacy-source:",
     "risk checks:",
@@ -609,6 +610,13 @@ function assertNoTrainerFacingMatrixLeaks(testId, draft) {
     "load=",
     "mat=",
     "recovery=",
+    "нагрузка medium",
+    "нагрузка very_low",
+    "ковёр medium",
+    "ковёр low",
+    "восстановление mandatory",
+    "восстановление primary",
+    "recovery/mobility",
     "competition_model/",
     "pre_competition/",
     "taper/",
