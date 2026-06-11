@@ -198,6 +198,7 @@ import { OfflineSyncCenter } from "./components/offline-sync-center";
 import { MatrixConstructorPreviewPanel } from "./components/constructor/MatrixConstructorPreviewPanel";
 import { MatrixDraftReadOnlyView } from "./components/constructor/MatrixDraftReadOnlyView";
 import { MatrixInternalDraftBanner } from "./components/constructor/MatrixInternalDraftBanner";
+import { getConstructorDraftAssignmentStartDate } from "./lib/constructor-assignment-date";
 import {
   CLOSED_CONSTRUCTOR_MATRIX_WORKSPACE,
   type ActiveConstructorDraftSource,
@@ -342,15 +343,6 @@ function diffDateInputDays(fromDateValue: string, toDateValue: string) {
   }
 
   return Math.round((toDate.getTime() - fromDate.getTime()) / (24 * 60 * 60 * 1000));
-}
-
-function getConstructorDraftAssignmentStartDate(
-  draft: ConstructorDraft | null | undefined,
-  competitionStartDate: string,
-) {
-  const cycleLengthDays = Math.max(1, Math.round(draft?.plan.cycleLengthDays ?? 1));
-
-  return shiftDateInputValue(competitionStartDate || getDateInputValue(), -cycleLengthDays);
 }
 
 function getCoachPeriodRangeDays(periodStart: string, periodEnd: string) {
@@ -14631,6 +14623,7 @@ export function PageClient({
       const assignmentStartDate = getConstructorDraftAssignmentStartDate(
         activeConstructorDraft,
         selectedConstructorCompetitionPlan?.competitionStartDate ?? constructorForm.startDate,
+        getDateInputValue(),
       );
 
       setPlanningView("templates");

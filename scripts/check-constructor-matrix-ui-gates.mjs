@@ -23,6 +23,9 @@ const localPilotModule = await import("../apps/web/app/lib/constructor-matrix-pr
 const { canUseMatrixPrimaryPilot } = localPilotModule.default ?? localPilotModule;
 const matrixUiModule = await import("../apps/web/app/lib/constructor-matrix-ui.ts");
 const { isConstructorDraftSaveAllowed } = matrixUiModule.default ?? matrixUiModule;
+const assignmentDateModule = await import("../apps/web/app/lib/constructor-assignment-date.ts");
+const { getConstructorDraftAssignmentStartDate } =
+  assignmentDateModule.default ?? assignmentDateModule;
 const featureFlagsModule = await import("../apps/web/app/lib/feature-flags.ts");
 const { getConstructorMatrixUiFlags } = featureFlagsModule.default ?? featureFlagsModule;
 const planningSchemasModule = await import("../apps/api/src/api/planning/planning.schemas.ts");
@@ -699,17 +702,22 @@ const pilotDraftResults = cases.map((testCase) => {
     response.templatePayload,
     `template-${testCase.id}`,
   );
+  const assignmentStartDate = getConstructorDraftAssignmentStartDate(
+    response.draft,
+    fixture.input.competition.startDate,
+    "2026-06-08",
+  );
   const assignmentPayload = parseAssignedPlanBody({
     athleteId: fixture.input.athlete.athleteId,
     templateId: `template-${testCase.id}`,
-    startDate: fixture.input.competition.startDate,
+    startDate: assignmentStartDate,
     dayLabel: "День 1",
     notes: `Назначено из шаблона конструктора: ${response.templatePayload.name}`,
     plannedPhase: fixture.input.context.currentPhase,
   });
   const autoAssignPayload = parseAutoAssignMicrocycleBody({
     athleteId: fixture.input.athlete.athleteId,
-    startDate: fixture.input.competition.startDate,
+    startDate: assignmentStartDate,
     daysCount: fullAssignmentItems.length,
     notes: `Назначено из плана ${response.templatePayload.name}`,
     plannedPhase: fixture.input.context.currentPhase,
@@ -748,12 +756,12 @@ const pilotDraftResults = cases.map((testCase) => {
   assert(
     assignmentPayload.athleteId === fixture.input.athlete.athleteId &&
       assignmentPayload.templateId === `template-${testCase.id}` &&
-      assignmentPayload.startDate === fixture.input.competition.startDate,
-    `${testCase.id}: pilot draft assignment payload must survive API assignment schema parsing`,
+      assignmentPayload.startDate === assignmentStartDate,
+    `${testCase.id}: pilot draft assignment payload must start at constructor cycle start`,
   );
   assert(
     autoAssignPayload.athleteId === fixture.input.athlete.athleteId &&
-      autoAssignPayload.startDate === fixture.input.competition.startDate &&
+      autoAssignPayload.startDate === assignmentStartDate &&
       autoAssignPayload.daysCount === templateDays.length &&
       autoAssignPayload.items.length === templateDays.length &&
       autoAssignPayload.items.every(
@@ -764,6 +772,12 @@ const pilotDraftResults = cases.map((testCase) => {
       ),
     `${testCase.id}: pilot draft full-plan auto-assignment payload must cover every template day`,
   );
+  if (response.draft.plan.cycleLengthDays > 1) {
+    assert(
+      assignmentStartDate < fixture.input.competition.startDate,
+      `${testCase.id}: constructor assignment must open before the competition date`,
+    );
+  }
   assert(
     !serializedPayload.includes('"matrix"') &&
       !serializedPayload.includes('"rollout"') &&
@@ -807,6 +821,8 @@ const pilotDraftResults = cases.map((testCase) => {
     templateDays: templateDays.length,
     templateSessions: templateSessions.length,
     templateBlocks: templateBlocks.length,
+    assignmentStartDate,
+    competitionStartDate: fixture.input.competition.startDate,
     apiTemplateSchema: "passed",
     apiAssignSchema: "passed",
     apiAutoAssignSchema: "passed",
