@@ -138,6 +138,16 @@ function matrixBlockTypes(draft: MatrixDrivenConstructorDraft) {
   );
 }
 
+function rawMatrixBlockTypes(draft: MatrixDrivenConstructorDraft) {
+  return new Set(
+    draft.matrix.draft.weeks.flatMap((week) =>
+      week.days.flatMap((day) =>
+        day.sessions.flatMap((session) => session.selectedBlocks.map((block) => block.blockType)),
+      ),
+    ),
+  );
+}
+
 function draftHasText(draft: ConstructorDraft, pattern: RegExp) {
   const texts = [
     draft.understood.mainTask,
@@ -216,6 +226,7 @@ export function assertMatrixDraftSafetyInvariants(
 ): ConstructorDraftSafetyInvariantResult[] {
   const summary = inputSummary(input);
   const blockTypes = matrixBlockTypes(matrixDraft);
+  const rawBlockTypes = rawMatrixBlockTypes(matrixDraft);
   const riskCodes = new Set(matrixDraft.matrix.riskChecks.map((risk) => risk.code));
   const closeMainStart = summary.isMainStart && summary.daysUntilStart !== null && summary.daysUntilStart <= 30;
   const closeToStart = summary.daysUntilStart !== null && summary.daysUntilStart <= 14;
@@ -257,7 +268,9 @@ export function assertMatrixDraftSafetyInvariants(
     invariant({
       code: "no_fixed_template_structural_source",
       severity: "error",
-      passed: matrixDraft.selectedCards.every((card) => /metadata|content/i.test(card.rationale)),
+      passed: matrixDraft.selectedCards.every((card) =>
+        /metadata|content|библиотек|содержан|объ[её]м/i.test(card.rationale),
+      ),
       explanation: "SelectedCards in matrix path must describe metadata/content source only.",
     }),
     invariant({
@@ -312,7 +325,7 @@ export function assertMatrixDraftSafetyInvariants(
     invariant({
       code: "competition_day_has_start",
       severity: "error",
-      passed: !hasCompetitionDay || blockTypes.has("competition_start"),
+      passed: !hasCompetitionDay || rawBlockTypes.has("competition_start"),
       explanation: "Competition day must use competition_start instead of ordinary training.",
     }),
     invariant({
@@ -320,8 +333,8 @@ export function assertMatrixDraftSafetyInvariants(
       severity: "error",
       passed:
         !hasPostCompetitionDay ||
-        blockTypes.has("post_competition_recovery") ||
-        blockTypes.has("recovery"),
+        rawBlockTypes.has("post_competition_recovery") ||
+        rawBlockTypes.has("recovery"),
       explanation: "Post-competition day must use recovery or post-competition recovery.",
     }),
     invariant({

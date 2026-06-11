@@ -3779,3 +3779,32 @@ npm run check:constructor-core
 npm run check:constructor-matrix-ui-gates
 npm run check
 ```
+
+## 44. Trainer-facing language cleanup for the pilot
+
+The limited primary pilot must not expose internal matrix/legacy diagnostics in
+the trainer-facing draft. The coach should see a normal planning explanation:
+
+- what phase the calendar selected;
+- why the plan is allowed or conservative;
+- what the morning/evening blocks are;
+- what risks matter in coaching language;
+- whether the top draft is the new constructor or the current fallback.
+
+Internal markers such as `Matrix-driven draft`, `legacy-content:*`,
+`matrix allowed candidates`, `risk checks`, `load=*`, `mat=*` and raw
+`block/slot` ids are allowed only inside internal structures and technical
+JSON, not inside active draft text, plan sessions, risk messages or selected
+card explanations.
+
+Safety checks still use raw matrix evidence when needed. For example,
+competition-day and post-competition invariants read `competition_start` and
+`post_competition_recovery` from the internal matrix draft instead of depending
+on visible `localLoadZones`.
+
+Regression guard:
+
+```bash
+npm run check:constructor-core
+npm run check:constructor-matrix-ui-gates
+```

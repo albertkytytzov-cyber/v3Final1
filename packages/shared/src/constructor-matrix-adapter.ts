@@ -18,6 +18,8 @@ import type {
   ConstructorRiskFlag,
 } from "./constructor-core";
 import type {
+  ConstructorDayType,
+  ConstructorMatrixLoadLevel,
   ConstructorPreparationPhase,
   ConstructorTrainingBlockType,
 } from "./constructor-matrix";
@@ -124,8 +126,104 @@ function riskCheckToConstructorRiskFlag(risk: MatrixDrivenRiskCheckResult): Cons
   return {
     code: riskCheckToConstructorRiskCode(risk),
     level: risk.severity === "error" ? "critical" : risk.severity,
-    message: `[matrix:${risk.code}] ${risk.message}`,
+    message: matrixRiskMessageForCoach(risk),
   };
+}
+
+function matrixLoadLabel(value: ConstructorMatrixLoadLevel | MatrixDrivenSelectedBlock["volume"]["loadLevel"]) {
+  const labels: Record<string, string> = {
+    very_low: "очень лёгкая",
+    low: "лёгкая",
+    medium: "средняя",
+    high: "высокая",
+  };
+
+  return labels[value] ?? String(value);
+}
+
+function matrixIntensityLabel(value: MatrixDrivenPlanSession["volume"]["intensityLevel"]) {
+  const labels: Record<string, string> = {
+    recovery: "восстановительная",
+    light: "лёгкая",
+    moderate: "умеренная",
+    high: "высокая",
+  };
+
+  return labels[value] ?? String(value);
+}
+
+function matrixMatVolumeLabel(value: MatrixDrivenPlanWeek["volume"]["matVolume"]) {
+  const labels: Record<string, string> = {
+    none: "без ковра",
+    low: "низкий",
+    medium: "средний",
+    high: "высокий",
+  };
+
+  return labels[value] ?? String(value);
+}
+
+function matrixRecoveryPriorityLabel(value: MatrixDrivenPlanWeek["recoveryPriority"]) {
+  const labels: Record<string, string> = {
+    optional: "обычный контроль",
+    recommended: "рекомендовано восстановление",
+    mandatory: "обязательное восстановление",
+    primary: "восстановление главное",
+  };
+
+  return labels[value] ?? String(value);
+}
+
+function matrixDayTypeLabel(value: ConstructorDayType) {
+  const labels: Record<ConstructorDayType, string> = {
+    heavy_training: "тяжёлый тренировочный день",
+    medium_training: "средний тренировочный день",
+    light_training: "лёгкая тренировка",
+    recovery: "восстановительный день",
+    travel: "дорога",
+    weigh_in: "взвешивание",
+    competition: "соревновательный день",
+    post_competition: "восстановление после старта",
+    half_day: "половинчатый день",
+    gpp_day: "день ОФП",
+    spp_day: "день СФП",
+    technical: "технический день",
+    competition_model: "модель борьбы",
+    mat_day: "день ковра",
+    environment_change: "смена обстановки",
+    sauna_recovery: "сауна и восстановление",
+  };
+
+  return labels[value] ?? String(value);
+}
+
+function matrixRiskMessageForCoach(risk: MatrixDrivenRiskCheckResult) {
+  const labels: Record<MatrixDrivenRiskCheckResult["code"], string> = {
+    main_start_development_forbidden:
+      "Развивающая нагрузка запрещена в этом окне главного старта. Оставляем только поддержание, перенос, активацию и восстановление.",
+    heavy_lmv_too_close_to_start:
+      "Тяжёлая локальная мышечная выносливость слишком близко к старту. Нужен поддерживающий объём без отказа.",
+    heavy_strength_too_close_to_start:
+      "Тяжёлая силовая работа слишком близко к старту. Нужна активация или поддержание без накопления усталости.",
+    excessive_mat_volume_near_start:
+      "Объём ковра близко к старту требует контроля. Если свежесть снижена, уменьшить ковёр и оставить качество.",
+    control_bouts_too_close_to_start:
+      "Контрольные схватки слишком близко к старту. Лучше оставить короткую модель или техническую активацию.",
+    heavy_load_on_travel_day:
+      "В день дороги тяжёлая нагрузка запрещена. Приоритет: переезд, сон, питание и лёгкая мобилизация.",
+    heavy_load_on_weigh_in_day:
+      "В день взвешивания тяжёлая нагрузка запрещена. Приоритет: вес, восстановление, вода/питание и короткая активация.",
+    taper_mixed_with_development:
+      "Подводка смешана с развивающей задачей. Нужно снизить объём и оставить только качество и свежесть.",
+    competition_day_training_load:
+      "В соревновательный день нельзя добавлять тренировочную нагрузку сверх разминки и восстановления между схватками.",
+    post_competition_development_load:
+      "После старта развивающая нагрузка преждевременна. Сначала восстановление и разбор состояния.",
+    legacy_template_used_as_structure:
+      "Старый шаблон не должен задавать структуру нового плана. Он может быть только источником содержания.",
+  };
+
+  return labels[risk.code] ?? risk.message;
 }
 
 function uniqueRiskFlags(riskChecks: MatrixDrivenRiskCheckResult[]): ConstructorRiskFlag[] {
@@ -489,21 +587,20 @@ function adaptBlock(block: MatrixDrivenSelectedBlock): ConstructorPlanBlock {
     targetQuality: block.targetQuality,
     volume: matrixBlockVolume(block),
     localLoadZones: [
-      `блок:${block.blockType}`,
-      `ковёр:${block.volume.matVolume}`,
-      `плотность:${block.volume.density}`,
-      ...block.sourceCompatibilityCards.map((cardId) => `legacy-source:${cardId}`),
+      matrixBlockName(block),
+      `ковёр: ${matrixMatVolumeLabel(block.volume.matVolume)}`,
+      `плотность: ${block.volume.density === "split_day" ? "две тренировки" : block.volume.density === "half_day" ? "половинчатый день" : block.volume.density === "recovery_only" ? "восстановление" : "одна тренировка"}`,
     ],
     energySystem:
       block.blockTypeCategory === "recovery"
         ? "восстановление"
         : block.volume.intensityLevel === "high"
           ? "специальная высокая интенсивность"
-          : "контролируемая матричная нагрузка",
+          : "контролируемая специальная нагрузка",
     riskFlags: block.riskTags,
     evidenceRefs: [
-      "PERFORM matrix constructor",
-      ...block.sourceCompatibilityCards.map((cardId) => `legacy-content:${cardId}`),
+      "PERFORM: фазовая матрица подготовки",
+      ...(block.sourceCompatibilityCards.length ? ["эталонные блоки используются как библиотека упражнений"] : []),
     ],
     coachEditable: true,
     volumeLocked: false,
@@ -591,14 +688,15 @@ function needsSessionFrame(blocks: ConstructorPlanBlock[]) {
 }
 
 function sessionNotes(matrixSession: MatrixDrivenPlanSession) {
-  const load = matrixSession.volume.loadLevel;
-  const intensity = matrixSession.volume.intensityLevel;
+  const selectedBlockNotes = matrixSession.selectedBlocks
+    .slice(0, 2)
+    .map((block) => `${matrixBlockName(block)}: выбран по фазе дня`);
 
   return [
     matrixSession.slot === "morning" ? "Утренний блок" : "Вечерний блок",
-    `нагрузка ${load}`,
-    `интенсивность ${intensity}`,
-    ...matrixSession.explanations.slice(0, 2).map((item) => item.message),
+    `нагрузка ${matrixLoadLabel(matrixSession.volume.loadLevel)}`,
+    `интенсивность ${matrixIntensityLabel(matrixSession.volume.intensityLevel)}`,
+    ...selectedBlockNotes,
   ].join(" · ");
 }
 
@@ -635,9 +733,9 @@ export function adaptMatrixDrivenDayToConstructorDay(
   return {
     dayLabel: dayLabelParts.join(" / "),
     dayIntent: [
-      `тип дня: ${matrixDay.dayType}`,
-      matrixDay.explanations[0]?.message,
-      matrixDay.riskChecks.length ? `risk checks: ${matrixDay.riskChecks.map((risk) => risk.code).join(", ")}` : null,
+      matrixDayTypeLabel(matrixDay.dayType),
+      matrixDay.sessions.length > 1 ? "две тренировки" : "одна тренировка",
+      matrixDay.riskChecks.length ? "есть ограничения по нагрузке: проверьте свежесть и объём ковра" : null,
     ]
       .filter(Boolean)
       .join(" · "),
@@ -666,6 +764,19 @@ function weekTypeLabel(weekType: MatrixDrivenPlanWeek["weekType"]) {
   };
 
   return labels[weekType];
+}
+
+function compatibilityCardLabel(cardId: string) {
+  const labels: Record<string, string> = {
+    pre_competition_21: "эталонный предсоревновательный блок 21 день",
+    speed_first_action_14: "короткая активация первого действия",
+    taper_10: "эталонная подводка 10 дней",
+    legs_lme_21: "поддержание СФП ног",
+    arms_grip_21: "поддержание рук и захвата",
+    recovery_7: "восстановительный блок 7 дней",
+  };
+
+  return labels[cardId] ?? cardId.replaceAll("_", " ");
 }
 
 export function adaptMatrixDrivenWeekToConstructorWeek(
@@ -797,15 +908,20 @@ export function buildMatrixDrivenConstructorDraft(
         : `Неделя ${week.weekNumber}`,
     phase: preparationPhaseToConstructorPhase(week.phase),
     title: weekTypeLabel(week.weekType),
-    intent: week.explanations[0]?.message ?? week.volume.explanation,
+    intent: [
+      weekTypeLabel(week.weekType),
+      `нагрузка ${matrixLoadLabel(week.volume.loadLevel)}`,
+      `ковёр: ${matrixMatVolumeLabel(week.volume.matVolume)}`,
+      matrixRecoveryPriorityLabel(week.recoveryPriority),
+    ].join(" · "),
   }));
   const selectedCards = matrixDraft.legacyCards.sourceCompatibilityCards.map((cardId) => ({
     id: cardId,
-    title: `Источник упражнений: ${cardId}`,
-    rationale: "Используется только как metadata/content hint, не как структура недели или дня.",
+    title: compatibilityCardLabel(cardId),
+    rationale: "Используется как библиотека упражнений и объёмов, но не задаёт структуру недели или дня.",
   }));
   const matrixRiskSummary = matrixDraft.riskChecks.length
-    ? matrixDraft.riskChecks.map((risk) => `${risk.code}: ${risk.message}`).join(" ")
+    ? Array.from(new Set(matrixDraft.riskChecks.map(matrixRiskMessageForCoach))).join(" ")
     : "Проверка матрицы не нашла критичных нарушений.";
   const phaseTitle = matrixPhaseTitle(matrixDraft.preparationPhase);
   const daysText =
@@ -818,9 +934,14 @@ export function buildMatrixDrivenConstructorDraft(
     confidence,
     understood: {
       mainTask: `${input.competition.name}: ${phaseTitle}, ${daysText}.`,
-      interpretation:
-        matrixDraft.explanations.map((item) => item.message).join(" ") ||
-        "План собран от календаря старта: фаза → неделя → день → тренировка → допустимые блоки.",
+      interpretation: [
+        `Новый конструктор собрал план от календаря старта: ${input.competition.name}, ${daysText}.`,
+        `Фаза: ${phaseTitle}.`,
+        matrixDraft.isMainStart
+          ? "Так как это главный старт, структура строится от обратного отсчёта до соревнования."
+          : "Структура учитывает роль старта и календарь спортсмена.",
+        "Старые эталонные блоки используются только как библиотека упражнений и объёмов, а не как готовая сетка дней.",
+      ].join(" "),
       limitation:
         matrixDraft.isMainStart && matrixDraft.daysUntilStart !== null && matrixDraft.daysUntilStart <= 30
           ? "Развивающие цели запрещены: план работает через поддержание, перенос, активацию, вес и восстановление."
@@ -854,8 +975,8 @@ export function buildMatrixDrivenConstructorDraft(
       evidenceSummary: [
         "календарь старта",
         "фазовая матрица PERFORM",
-        "старые карточки используются только как источники контента",
-        ...matrixDraft.legacyCards.sourceCompatibilityCards.map((cardId) => `legacy-content:${cardId}`),
+        "эталонный план Европы как методическая основа",
+        ...matrixDraft.legacyCards.sourceCompatibilityCards.map(compatibilityCardLabel),
       ].join(", "),
       coachCanEdit: [
         "выбранные блоки",

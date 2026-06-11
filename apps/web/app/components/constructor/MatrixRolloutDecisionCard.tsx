@@ -10,6 +10,7 @@ import {
   constructorMatrixModeLabel,
   constructorMatrixScenarioLabel,
   constructorMatrixSeverityLabel,
+  constructorMatrixTrainerText,
   matrixUiCopyFor,
 } from "../../lib/constructor-matrix-ui";
 import type { Language } from "../../lib/i18n";
@@ -105,7 +106,7 @@ export function MatrixRolloutDecisionCard({
               </span>
             ))}
           </div>
-          <p>{decision.explanation.headline}</p>
+          <p>{constructorMatrixTrainerText(language, decision.explanation.headline)}</p>
           {supportText ? <p className="constructor-matrix-rollout-note">{supportText}</p> : null}
           <ul className="constructor-matrix-preview-list">
             {decision.explanation.reasons.slice(0, 5).map((reason) => (
@@ -113,12 +114,12 @@ export function MatrixRolloutDecisionCard({
                 <strong>
                   {matrixUiCopyFor(language, { en: "reason", ru: "причина", bg: "причина" })}
                 </strong>
-                <span>{reason}</span>
+                <span>{constructorMatrixTrainerText(language, reason)}</span>
               </li>
             ))}
             <li>
               <strong>{matrixUiCopyFor(language, { en: "next", ru: "дальше", bg: "следващо" })}</strong>
-              <span>{decision.explanation.nextStep}</span>
+              <span>{constructorMatrixTrainerText(language, decision.explanation.nextStep)}</span>
             </li>
           </ul>
           {decision.blockers.length ? (

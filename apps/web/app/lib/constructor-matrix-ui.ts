@@ -457,6 +457,26 @@ function replaceConstructorMatrixTerms(language: Language, message: string) {
           [/\brollout\b/gi, "применение"],
           [/\bgeneratedFrom=matrix marker\b/gi, "признак нового черновика"],
           [/\bmetadata\/content hints\b/gi, "подсказки по содержанию"],
+          [/\bcompatibility\/content metadata\b/gi, "библиотека упражнений и объёмов"],
+          [/\bmatrix allowed candidates\b/gi, "допустимые блоки для этой фазы"],
+          [/\blegacy-content:pre_competition_21\b/gi, "эталонный предсоревновательный блок 21 день"],
+          [/\blegacy-content:speed_first_action_14\b/gi, "короткая активация первого действия"],
+          [/\blegacy-content:taper_10\b/gi, "эталонная подводка 10 дней"],
+          [/\blegacy-content:legs_lme_21\b/gi, "поддержание СФП ног"],
+          [/\blegacy-content:arms_grip_21\b/gi, "поддержание рук и захвата"],
+          [/\blegacy-content:recovery_7\b/gi, "восстановительный блок 7 дней"],
+          [/\bload=very_low\b/gi, "нагрузка очень лёгкая"],
+          [/\bload=low\b/gi, "нагрузка лёгкая"],
+          [/\bload=medium\b/gi, "нагрузка средняя"],
+          [/\bload=high\b/gi, "нагрузка высокая"],
+          [/\bmat=none\b/gi, "ковёр: нет"],
+          [/\bmat=low\b/gi, "ковёр: низкий"],
+          [/\bmat=medium\b/gi, "ковёр: средний"],
+          [/\bmat=high\b/gi, "ковёр: высокий"],
+          [/\brecovery=optional\b/gi, "восстановление: обычный контроль"],
+          [/\brecovery=recommended\b/gi, "восстановление: рекомендуется"],
+          [/\brecovery=mandatory\b/gi, "восстановление: обязательно"],
+          [/\brecovery=primary\b/gi, "восстановление: главное"],
           [/\bstructural controllers\b/gi, "источник структуры"],
           [/\berror-level differences\b/gi, "критичные различия"],
           [/\bsafety checks\b/gi, "проверки безопасности"],
@@ -486,6 +506,26 @@ function replaceConstructorMatrixTerms(language: Language, message: string) {
           [/\brollout\b/gi, "прилагане"],
           [/\bgeneratedFrom=matrix marker\b/gi, "маркер за нова чернова"],
           [/\bmetadata\/content hints\b/gi, "подсказки за съдържание"],
+          [/\bcompatibility\/content metadata\b/gi, "библиотека с упражнения и обеми"],
+          [/\bmatrix allowed candidates\b/gi, "допустими блокове за тази фаза"],
+          [/\blegacy-content:pre_competition_21\b/gi, "еталонен предсъстезателен блок 21 дни"],
+          [/\blegacy-content:speed_first_action_14\b/gi, "кратка активация на първото действие"],
+          [/\blegacy-content:taper_10\b/gi, "еталонна подводка 10 дни"],
+          [/\blegacy-content:legs_lme_21\b/gi, "поддържане на СФП за крака"],
+          [/\blegacy-content:arms_grip_21\b/gi, "поддържане на ръце и захват"],
+          [/\blegacy-content:recovery_7\b/gi, "възстановителен блок 7 дни"],
+          [/\bload=very_low\b/gi, "натоварване много леко"],
+          [/\bload=low\b/gi, "натоварване леко"],
+          [/\bload=medium\b/gi, "натоварване средно"],
+          [/\bload=high\b/gi, "натоварване високо"],
+          [/\bmat=none\b/gi, "тепих: няма"],
+          [/\bmat=low\b/gi, "тепих: нисък"],
+          [/\bmat=medium\b/gi, "тепих: среден"],
+          [/\bmat=high\b/gi, "тепих: висок"],
+          [/\brecovery=optional\b/gi, "възстановяване: обикновен контрол"],
+          [/\brecovery=recommended\b/gi, "възстановяване: препоръчано"],
+          [/\brecovery=mandatory\b/gi, "възстановяване: задължително"],
+          [/\brecovery=primary\b/gi, "възстановяване: основно"],
           [/\bstructural controllers\b/gi, "източник на структура"],
           [/\berror-level differences\b/gi, "критични разлики"],
           [/\bsafety checks\b/gi, "проверки за безопасност"],
@@ -512,6 +552,25 @@ export function constructorMatrixTrainerText(language: Language, message?: strin
       en: `New draft: ${constructorMatrixCompetitionRoleLabel(language, role)}, D-${days}, phase ${constructorMatrixPreparationPhaseLabel(language, phase)}.`,
       ru: `Новый черновик: ${constructorMatrixCompetitionRoleLabel(language, role)}, Д-${days}, фаза ${constructorMatrixPreparationPhaseLabel(language, phase)}.`,
       bg: `Нова чернова: ${constructorMatrixCompetitionRoleLabel(language, role)}, Д-${days}, фаза ${constructorMatrixPreparationPhaseLabel(language, phase)}.`,
+    });
+  }
+
+  const weekTypeMatch = message.match(/^Неделя (\d+): ([^;,.]+)[,;] load=([^;,.]+)[,;] mat=([^;,.]+)(?:[,;] recovery=([^.]+))?\.$/);
+  if (weekTypeMatch) {
+    const [, weekNumber, weekType, load, mat, recovery] = weekTypeMatch;
+    return replaceConstructorMatrixTerms(
+      language,
+      `Неделя ${weekNumber}: ${weekType}; load=${load}; mat=${mat}${recovery ? `; recovery=${recovery}` : ""}.`,
+    );
+  }
+
+  const sessionMixMatch = message.match(/^(morning|evening): выбрано (\d+) блок\(а\) из matrix allowed candidates\.$/);
+  if (sessionMixMatch) {
+    const [, slot, count] = sessionMixMatch;
+    return matrixUiCopyFor(language, {
+      en: `${slot === "morning" ? "Morning" : "Evening"}: ${count} phase-allowed block(s) selected.`,
+      ru: `${slot === "morning" ? "Утро" : "Вечер"}: выбрано ${count} допустимых блока по фазе дня.`,
+      bg: `${slot === "morning" ? "Сутрин" : "Вечер"}: избрани са ${count} допустими блока според фазата на деня.`,
     });
   }
 

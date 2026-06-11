@@ -418,6 +418,12 @@ async function checkTrainerFacingMatrixCopy() {
       combined.includes("constructorMatrixBlockerMessage"),
     "Matrix UI must translate technical severity/blocker values before rendering",
   );
+  assert(
+    combined.includes("constructorMatrixTrainerText(language, decision.explanation.headline)") &&
+      combined.includes("constructorMatrixTrainerText(language, reason)") &&
+      combined.includes("constructorMatrixTrainerText(language, decision.explanation.nextStep)"),
+    "Matrix rollout decision copy must pass through trainer-facing text normalization",
+  );
 
   return {
     oldInternalTermsHidden: true,
@@ -578,6 +584,42 @@ function pilotDraftResponseForFixture(id) {
     serverSaveDryRun,
     notes: ["constructor matrix pilot draft regression check"],
   };
+}
+
+function assertNoTrainerFacingMatrixLeaks(testId, draft) {
+  const trainerFacingDraft = {
+    understood: draft.understood,
+    focusPlan: draft.focusPlan,
+    missingData: draft.missingData,
+    riskFlags: draft.riskFlags,
+    selectedCards: draft.selectedCards,
+    plan: draft.plan,
+    explanation: draft.explanation,
+  };
+  const serializedTrainerFields = JSON.stringify(trainerFacingDraft);
+  const forbiddenTrainerPhrases = [
+    "Matrix-driven draft",
+    "legacy-content:",
+    "legacy-source:",
+    "risk checks:",
+    "[matrix:",
+    "matrix allowed candidates",
+    "metadata/content hint",
+    "compatibility/content metadata",
+    "load=",
+    "mat=",
+    "recovery=",
+    "competition_model/",
+    "pre_competition/",
+    "taper/",
+  ];
+
+  for (const phrase of forbiddenTrainerPhrases) {
+    assert(
+      !serializedTrainerFields.includes(phrase),
+      `${testId}: trainer-facing matrix draft must not expose technical phrase: ${phrase}`,
+    );
+  }
 }
 
 function buildFullTemplateAssignmentItems(templatePayload, templateId) {
@@ -784,6 +826,7 @@ const pilotDraftResults = cases.map((testCase) => {
       !serializedPayload.includes('"pilotReadiness"'),
     `${testCase.id}: template payload must not leak internal matrix fields`,
   );
+  assertNoTrainerFacingMatrixLeaks(testCase.id, response.draft);
 
   if (testCase.allowed) {
     assert(

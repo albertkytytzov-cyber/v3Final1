@@ -1794,3 +1794,30 @@ npm run build --workspace @training-platform/web
 npm run check:constructor-core
 npm run check:constructor-matrix-ui-gates
 ```
+
+### 15.25 Trainer-facing matrix language guard
+
+After enabling the controlled pilot, the active matrix draft must read like a
+coach planning tool, not an internal comparison report.
+
+Trainer-facing draft fields must not expose raw technical markers such as:
+
+- `Matrix-driven draft`;
+- `legacy-content:*` / `legacy-source:*`;
+- `risk checks`;
+- `matrix allowed candidates`;
+- `load=*`, `mat=*`, `recovery=*`;
+- raw block route ids such as `competition_model/morning`.
+
+The matrix adapter keeps the internal structure for safety checks, but translates
+the visible plan into Russian coach language: calendar-driven phase, day type,
+morning/evening blocks, readable load/recovery labels, and short deduplicated
+risk explanations. Safety invariants that need raw matrix block types now read
+them from the internal matrix draft, not from visible `localLoadZones`.
+
+Regression coverage:
+
+```bash
+npm run check:constructor-core
+npm run check:constructor-matrix-ui-gates
+```
