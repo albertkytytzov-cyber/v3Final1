@@ -3810,3 +3810,79 @@ Regression guard:
 npm run check:constructor-core
 npm run check:constructor-matrix-ui-gates
 ```
+
+## 45. Stage: Registry Hardening + Data Dependency Gate Skeleton
+
+This stage hardens the Matrix evidence layer without changing Matrix behavior.
+It does not change:
+
+- production `/api/v1/plans/constructor/draft`;
+- rollout gates;
+- preview behavior;
+- pilot readiness;
+- save/template/assign behavior;
+- block selection;
+- eligibility;
+- risk logic;
+- volume logic;
+- skeleton/week/day/session selection;
+- legacy fallback.
+
+### 45.1 Evidence registry hardening
+
+`packages/shared/src/constructor-matrix-evidence.ts` now records machine-checkable
+metadata for every dependency:
+
+- `riskAreas`;
+- `auditRefs`;
+- `automationReadiness`;
+- `reviewStatus`;
+- `ruleNature`.
+
+Rules:
+
+- high-risk evidence must carry explicit limitations;
+- internal validation and coach-school evidence cannot be promoted to universal
+  hard rules;
+- the Europe 2026 plan remains an internal case pattern, not a general law;
+- product rollout/safety guards cannot masquerade as sport-science proof;
+- generic evidence ids cannot be the only dependency behind a Matrix block.
+
+### 45.2 Data Dependency Gate Skeleton
+
+`packages/shared/src/constructor-matrix-data-dependencies.ts` adds a
+metadata-only registry for future data-confidence gates. It documents required
+fields, optional fields, current availability, missing-data behavior, supporting
+evidence ids, limitations and current runtime use for:
+
+- weight cut;
+- hydration;
+- readiness;
+- wearable data;
+- sleep;
+- resting HR;
+- pain;
+- injury;
+- female context;
+- youth context;
+- travel fatigue;
+- competition context.
+
+This is not a threshold registry. No hard numeric cutoffs were introduced.
+Current runtime use stays documentation/risk-warning/pilot-readiness/future-gate
+metadata only.
+
+### 45.3 Checks
+
+Required checks:
+
+```bash
+npm run build --workspace @training-platform/shared
+npm run check:constructor-core
+npm run check:constructor-matrix-evidence-dependencies
+npm run check:constructor-matrix-data-dependencies
+git diff --check
+```
+
+Next stage should be a Threshold Candidate Registry as docs/metadata first,
+with coach/medical review before any runtime use.

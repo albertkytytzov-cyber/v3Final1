@@ -19,6 +19,52 @@
 - `docs/constructor-matrix-preview-fixtures.md`
 - `docs/constructor-matrix-evidence-dependency-gap-audit.md`
 
+## Stage: Registry Hardening + Data Dependency Gate Skeleton
+
+The constructor core now has an audit-ready metadata layer for Matrix evidence.
+This stage does not change constructor behavior. It only makes the dependency
+chain reviewable:
+
+```text
+Matrix rule / block / risk
+-> evidenceDependency id
+-> riskAreas
+-> limitations
+-> automationReadiness
+-> reviewStatus
+-> dataDependency requirements
+-> missingDataBehavior
+```
+
+Implemented metadata:
+
+- `packages/shared/src/constructor-matrix-evidence.ts` now includes
+  `riskAreas`, `auditRefs`, `automationReadiness`, `reviewStatus` and
+  `ruleNature`;
+- high-risk sources are not marked as automatic hard rules;
+- internal validation and the Europe plan remain internal/coach-reviewed
+  evidence, not universal laws;
+- product rollout guards remain operational safety guards, not sport-science
+  proof;
+- `packages/shared/src/constructor-matrix-data-dependencies.ts` documents the
+  data needed for weight, hydration, readiness, wearable, pain, injury,
+  female/youth, travel and competition-context decisions.
+
+Guardrails:
+
+- no numeric thresholds were added;
+- no runtime gate, block selection, risk check, volume allocation, rollout gate,
+  preview behavior, save/template/assign behavior or legacy fallback changed;
+- the production draft route remains `/api/v1/plans/constructor/draft`;
+- Matrix is still not broad default.
+
+Checks:
+
+```bash
+npm run check:constructor-matrix-evidence-dependencies
+npm run check:constructor-matrix-data-dependencies
+```
+
 ## 1. Главный принцип
 
 Конструктор не должен “генерировать красивый календарь”. Он должен строить план по цепочке:

@@ -8,6 +8,65 @@ export type ConstructorMatrixEvidenceType =
   | "coach_school"
   | "internal_validation";
 
+export type ConstructorMatrixEvidenceRiskArea =
+  | "calendar"
+  | "phase"
+  | "week_type"
+  | "day_type"
+  | "session_slot"
+  | "block_eligibility"
+  | "volume"
+  | "risk_check"
+  | "explanation"
+  | "rollout"
+  | "save_dry_run"
+  | "weight_cut"
+  | "hydration"
+  | "readiness"
+  | "wearable_data"
+  | "travel"
+  | "weigh_in"
+  | "competition_day"
+  | "post_competition"
+  | "lmv"
+  | "bfr_kaatsu"
+  | "contact_load"
+  | "competition_model"
+  | "taper"
+  | "female_context"
+  | "youth_context"
+  | "injury_pain"
+  | "legacy_safety";
+
+export type ConstructorMatrixEvidenceAutomationReadiness =
+  | "auto_allowed"
+  | "soft_rule_only"
+  | "risk_warning_only"
+  | "coach_review_required"
+  | "medical_review_required"
+  | "internal_case_only"
+  | "evidence_only"
+  | "do_not_automate";
+
+export type ConstructorMatrixEvidenceReviewStatus =
+  | "draft"
+  | "audit_only"
+  | "coach_review_required"
+  | "medical_review_required"
+  | "approved_for_internal_pilot"
+  | "approved_for_soft_rule"
+  | "approved_for_hard_rule"
+  | "blocked_for_default";
+
+export type ConstructorMatrixEvidenceRuleNature =
+  | "evidence_rule"
+  | "coaching_heuristic"
+  | "internal_case_pattern"
+  | "product_rollout_guard"
+  | "runtime_safety_guard"
+  | "methodology_framework"
+  | "gap_marker";
+
 export interface ConstructorMatrixEvidenceDependency {
   id: string;
   level: ConstructorMatrixEvidenceLevel;
@@ -16,6 +75,11 @@ export interface ConstructorMatrixEvidenceDependency {
   sourceDoc: string;
   supports: string[];
   limitations: string[];
+  riskAreas: ConstructorMatrixEvidenceRiskArea[];
+  auditRefs: string[];
+  automationReadiness: ConstructorMatrixEvidenceAutomationReadiness;
+  reviewStatus: ConstructorMatrixEvidenceReviewStatus;
+  ruleNature: ConstructorMatrixEvidenceRuleNature;
 }
 
 export const CONSTRUCTOR_MATRIX_EVIDENCE_DEPENDENCY_REGISTRY = [
@@ -31,6 +95,11 @@ export const CONSTRUCTOR_MATRIX_EVIDENCE_DEPENDENCY_REGISTRY = [
     limitations: [
       "This is a synthesis document, so high-risk rules still need specific source ids and limitations.",
     ],
+    riskAreas: ["phase", "block_eligibility", "risk_check", "explanation"],
+    auditRefs: ["EDG-14"],
+    automationReadiness: "evidence_only",
+    reviewStatus: "audit_only",
+    ruleNature: "methodology_framework",
   },
   {
     id: "constructor_core_stack",
@@ -44,6 +113,11 @@ export const CONSTRUCTOR_MATRIX_EVIDENCE_DEPENDENCY_REGISTRY = [
     limitations: [
       "It defines product logic; it does not replace sport-science evidence for load thresholds.",
     ],
+    riskAreas: ["calendar", "phase", "rollout", "legacy_safety"],
+    auditRefs: ["EDG-01", "EDG-13", "EDG-16"],
+    automationReadiness: "soft_rule_only",
+    reviewStatus: "approved_for_internal_pilot",
+    ruleNature: "methodology_framework",
   },
   {
     id: "matrix_transition_plan",
@@ -57,6 +131,11 @@ export const CONSTRUCTOR_MATRIX_EVIDENCE_DEPENDENCY_REGISTRY = [
     limitations: [
       "It is an implementation transition plan; each matrix rule still needs evidence traceability.",
     ],
+    riskAreas: ["phase", "week_type", "day_type", "session_slot", "block_eligibility"],
+    auditRefs: ["EDG-02", "EDG-06", "EDG-14"],
+    automationReadiness: "evidence_only",
+    reviewStatus: "approved_for_internal_pilot",
+    ruleNature: "methodology_framework",
   },
   {
     id: "europe_pre_competition_plan",
@@ -70,6 +149,11 @@ export const CONSTRUCTOR_MATRIX_EVIDENCE_DEPENDENCY_REGISTRY = [
     limitations: [
       "It is a coach-validated exemplar, not a universal protocol for every athlete or competition.",
     ],
+    riskAreas: ["taper", "competition_model", "weight_cut", "readiness", "contact_load"],
+    auditRefs: ["EDG-02", "EDG-03", "EDG-04", "EDG-09", "EDG-10"],
+    automationReadiness: "internal_case_only",
+    reviewStatus: "approved_for_internal_pilot",
+    ruleNature: "internal_case_pattern",
   },
   {
     id: "periodization_taper_peaking",
@@ -81,8 +165,13 @@ export const CONSTRUCTOR_MATRIX_EVIDENCE_DEPENDENCY_REGISTRY = [
       "Reducing volume close to competition while preserving quality, specificity, freshness and short activation.",
     ],
     limitations: [
-      "Exact taper magnitude must be individualized by athlete response, sleep, weight and readiness.",
+      "Exact taper magnitude and timing must be individualized; this source does not define automatic numeric thresholds.",
     ],
+    riskAreas: ["taper", "phase", "volume", "competition_day", "risk_check"],
+    auditRefs: ["EDG-02", "EDG-03", "EDG-08"],
+    automationReadiness: "soft_rule_only",
+    reviewStatus: "approved_for_soft_rule",
+    ruleNature: "evidence_rule",
   },
   {
     id: "wrestling_temporal_structure",
@@ -96,6 +185,11 @@ export const CONSTRUCTOR_MATRIX_EVIDENCE_DEPENDENCY_REGISTRY = [
     limitations: [
       "Bout structure must become typed data instead of free text before broad automation.",
     ],
+    riskAreas: ["competition_model", "contact_load", "day_type", "session_slot"],
+    auditRefs: ["EDG-09"],
+    automationReadiness: "soft_rule_only",
+    reviewStatus: "approved_for_soft_rule",
+    ruleNature: "methodology_framework",
   },
   {
     id: "bfr_kaatsu_local_metabolic",
@@ -109,6 +203,11 @@ export const CONSTRUCTOR_MATRIX_EVIDENCE_DEPENDENCY_REGISTRY = [
     limitations: [
       "PERFORM must not prescribe real BFR automatically; use as an analogy for local stress unless explicitly approved.",
     ],
+    riskAreas: ["bfr_kaatsu", "lmv", "block_eligibility", "risk_check"],
+    auditRefs: ["EDG-07"],
+    automationReadiness: "medical_review_required",
+    reviewStatus: "medical_review_required",
+    ruleNature: "evidence_rule",
   },
   {
     id: "china_bfr_half_squat_wrestlers",
@@ -122,6 +221,11 @@ export const CONSTRUCTOR_MATRIX_EVIDENCE_DEPENDENCY_REGISTRY = [
     limitations: [
       "Youth/female protocol transfer requires age, sex, injury and safety context; not a close-start taper rule.",
     ],
+    riskAreas: ["bfr_kaatsu", "lmv", "youth_context", "female_context", "block_eligibility"],
+    auditRefs: ["EDG-07"],
+    automationReadiness: "medical_review_required",
+    reviewStatus: "medical_review_required",
+    ruleNature: "evidence_rule",
   },
   {
     id: "china_ssit_freestyle_wrestlers",
@@ -135,6 +239,11 @@ export const CONSTRUCTOR_MATRIX_EVIDENCE_DEPENDENCY_REGISTRY = [
     limitations: [
       "SSIT is a development/preseason layer and must not be used as a hidden close-start load.",
     ],
+    riskAreas: ["readiness", "volume", "block_eligibility", "taper"],
+    auditRefs: ["EDG-08"],
+    automationReadiness: "coach_review_required",
+    reviewStatus: "coach_review_required",
+    ruleNature: "evidence_rule",
   },
   {
     id: "ncaa_weight_management",
@@ -148,6 +257,11 @@ export const CONSTRUCTOR_MATRIX_EVIDENCE_DEPENDENCY_REGISTRY = [
     limitations: [
       "Policy thresholds need local configuration and cannot infer hydration status from weight alone.",
     ],
+    riskAreas: ["weight_cut", "hydration", "weigh_in", "readiness", "risk_check"],
+    auditRefs: ["EDG-04", "EDG-10"],
+    automationReadiness: "medical_review_required",
+    reviewStatus: "medical_review_required",
+    ruleNature: "runtime_safety_guard",
   },
   {
     id: "acsm_hydration_nutrition",
@@ -161,6 +275,11 @@ export const CONSTRUCTOR_MATRIX_EVIDENCE_DEPENDENCY_REGISTRY = [
     limitations: [
       "Hydration decisions need body mass trend, symptoms, intake and context, not one isolated reading.",
     ],
+    riskAreas: ["hydration", "weight_cut", "weigh_in", "readiness", "risk_check"],
+    auditRefs: ["EDG-04", "EDG-10"],
+    automationReadiness: "medical_review_required",
+    reviewStatus: "medical_review_required",
+    ruleNature: "evidence_rule",
   },
   {
     id: "japan_rapid_weight_loss_wrestlers",
@@ -174,6 +293,11 @@ export const CONSTRUCTOR_MATRIX_EVIDENCE_DEPENDENCY_REGISTRY = [
     limitations: [
       "Weight loss is not automatically readiness improvement; context and recovery markers are required.",
     ],
+    riskAreas: ["weight_cut", "hydration", "readiness", "risk_check"],
+    auditRefs: ["EDG-10"],
+    automationReadiness: "risk_warning_only",
+    reviewStatus: "coach_review_required",
+    ruleNature: "evidence_rule",
   },
   {
     id: "sichuan_weight_reduction_wrestlers",
@@ -187,6 +311,11 @@ export const CONSTRUCTOR_MATRIX_EVIDENCE_DEPENDENCY_REGISTRY = [
     limitations: [
       "Requires multi-signal data; missing sleep/RHR/readiness should reduce confidence.",
     ],
+    riskAreas: ["weight_cut", "readiness", "wearable_data", "hydration", "risk_check"],
+    auditRefs: ["EDG-10", "EDG-11", "EDG-12"],
+    automationReadiness: "risk_warning_only",
+    reviewStatus: "coach_review_required",
+    ruleNature: "evidence_rule",
   },
   {
     id: "grappling_grip_dehydration_transfer",
@@ -200,6 +329,11 @@ export const CONSTRUCTOR_MATRIX_EVIDENCE_DEPENDENCY_REGISTRY = [
     limitations: [
       "Transfer evidence must be labelled as grappling transfer, not direct wrestling proof.",
     ],
+    riskAreas: ["hydration", "contact_load", "readiness"],
+    auditRefs: ["EDG-10"],
+    automationReadiness: "risk_warning_only",
+    reviewStatus: "approved_for_soft_rule",
+    ruleNature: "evidence_rule",
   },
   {
     id: "recovery_monitoring_consensus",
@@ -213,6 +347,11 @@ export const CONSTRUCTOR_MATRIX_EVIDENCE_DEPENDENCY_REGISTRY = [
     limitations: [
       "Signals are trend-based; missing data should lower confidence instead of producing a hard diagnosis.",
     ],
+    riskAreas: ["readiness", "volume", "risk_check"],
+    auditRefs: ["EDG-11"],
+    automationReadiness: "risk_warning_only",
+    reviewStatus: "approved_for_soft_rule",
+    ruleNature: "evidence_rule",
   },
   {
     id: "wearable_validity_trend",
@@ -226,6 +365,11 @@ export const CONSTRUCTOR_MATRIX_EVIDENCE_DEPENDENCY_REGISTRY = [
     limitations: [
       "Device quality, timestamps and completeness must be checked before high-confidence decisions.",
     ],
+    riskAreas: ["wearable_data", "readiness", "risk_check"],
+    auditRefs: ["EDG-12"],
+    automationReadiness: "evidence_only",
+    reviewStatus: "audit_only",
+    ruleNature: "methodology_framework",
   },
   {
     id: "nsca_youth_safe_progression",
@@ -239,6 +383,11 @@ export const CONSTRUCTOR_MATRIX_EVIDENCE_DEPENDENCY_REGISTRY = [
     limitations: [
       "Age/maturity context must be known before applying youth-specific restrictions.",
     ],
+    riskAreas: ["youth_context", "injury_pain", "block_eligibility", "volume"],
+    auditRefs: ["EDG-07", "EDG-11"],
+    automationReadiness: "coach_review_required",
+    reviewStatus: "coach_review_required",
+    ruleNature: "evidence_rule",
   },
   {
     id: "perform_internal_validation_pending",
@@ -252,6 +401,11 @@ export const CONSTRUCTOR_MATRIX_EVIDENCE_DEPENDENCY_REGISTRY = [
     limitations: [
       "This dependency is not proof of effectiveness; it is a required audit marker until real PERFORM outcomes exist.",
     ],
+    riskAreas: ["rollout", "explanation", "risk_check"],
+    auditRefs: ["EDG-14", "EDG-15"],
+    automationReadiness: "evidence_only",
+    reviewStatus: "blocked_for_default",
+    ruleNature: "gap_marker",
   },
 ] as const satisfies readonly ConstructorMatrixEvidenceDependency[];
 
@@ -298,4 +452,19 @@ export function uniqueConstructorMatrixEvidenceDependencies(
   ids: readonly ConstructorMatrixEvidenceDependencyId[],
 ): ConstructorMatrixEvidenceDependencyId[] {
   return Array.from(new Set(ids));
+}
+
+export function listConstructorMatrixEvidenceDependencyIds(): ConstructorMatrixEvidenceDependencyId[] {
+  return [...CONSTRUCTOR_MATRIX_EVIDENCE_DEPENDENCY_IDS];
+}
+
+export function validateConstructorMatrixEvidenceDependencyIds(
+  ids: readonly string[],
+): { ok: boolean; missing: string[] } {
+  const missing = ids.filter((id) => !isConstructorMatrixEvidenceDependencyId(id));
+
+  return {
+    ok: missing.length === 0,
+    missing,
+  };
 }

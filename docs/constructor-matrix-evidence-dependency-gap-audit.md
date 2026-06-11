@@ -249,3 +249,41 @@ The check verifies:
 Remaining P0 gap after registry:
 
 - numeric thresholds for weight cut, hydration, readiness, RHR, sleep, pain and device confidence still need a separate data-dependency gate before Matrix becomes broad default.
+
+## 11. Registry hardening status
+
+Stage: Registry Hardening + Data Dependency Gate Skeleton.
+
+Implemented after the first registry pass:
+
+- `EvidenceDependencyRegistry` is now audit-ready metadata, not just a list of source titles;
+- every evidence dependency carries:
+  - `riskAreas`;
+  - `auditRefs`;
+  - `automationReadiness`;
+  - `reviewStatus`;
+  - `ruleNature`;
+- high-risk dependencies such as weight cut, hydration, readiness, wearable data, travel, weigh-in, competition day, LМВ, BFR/KAATSU, contact load, taper, youth/female context and injury/pain must expose explicit limitations;
+- internal validation, coach-school evidence and the Europe 2026 plan are not allowed to become universal hard rules;
+- product rollout guards are treated as operational safety, not sport-science proof;
+- generic evidence ids cannot be the only evidence basis for a Matrix block.
+
+Added metadata-only data dependency skeleton:
+
+- `packages/shared/src/constructor-matrix-data-dependencies.ts`;
+- `npm run check:constructor-matrix-data-dependencies`;
+- areas covered: weight cut, hydration, readiness, wearable data, sleep, RHR, pain, injury, female context, youth context, travel fatigue and competition context;
+- each item records required/optional fields, current availability, missing-data behavior, evidence links, limitations and current runtime use.
+
+Guardrails:
+
+- no numeric thresholds were added;
+- no runtime decision rule was added;
+- production `/api/v1/plans/constructor/draft` was not changed;
+- rollout gates, preview behavior, pilot readiness, save/template/assign and legacy fallback were not changed;
+- Matrix broad default remains blocked until data confidence and threshold candidates are reviewed separately.
+
+Remaining P0 after hardening:
+
+- numeric thresholds/data confidence are still not runtime gates;
+- next stage should be a Threshold Candidate Registry as docs/metadata first, with coach/medical review before any runtime use.

@@ -1,3 +1,5 @@
+import { existsSync, readFileSync } from "node:fs";
+
 import {
   buildConstructorComparisonPreview,
   buildConstructorMatrixPreviewResponse,
@@ -30,6 +32,10 @@ function assert(condition, message) {
   if (!condition) {
     throw new Error(message);
   }
+}
+
+function readProjectFile(path) {
+  return readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 }
 
 function isWarmupBlock(block) {
@@ -2779,6 +2785,39 @@ assert(
 );
 
 const constructorPreviewFixtureResult = runConstructorPreviewFixtures();
+const packageJsonSource = readProjectFile("package.json");
+const evidenceAuditDoc = readProjectFile("docs/constructor-matrix-evidence-dependency-gap-audit.md");
+const coreStackDoc = readProjectFile("docs/perform-constructor-core-stack.md");
+const transitionPlanDoc = readProjectFile("docs/constructor-phase-matrix-transition-plan.md");
+
+const metadataCheckFiles = [
+  "scripts/check-constructor-matrix-evidence-dependencies.mjs",
+  "scripts/check-constructor-matrix-data-dependencies.mjs",
+  "packages/shared/src/constructor-matrix-evidence.ts",
+  "packages/shared/src/constructor-matrix-data-dependencies.ts",
+];
+
+for (const path of metadataCheckFiles) {
+  assert(existsSync(new URL(`../${path}`, import.meta.url)), `Missing matrix metadata file: ${path}`);
+}
+
+for (const token of [
+  "check:constructor-matrix-evidence-dependencies",
+  "check:constructor-matrix-data-dependencies",
+]) {
+  assert(packageJsonSource.includes(token), `package.json must expose ${token}`);
+}
+
+for (const [path, source] of [
+  ["docs/constructor-matrix-evidence-dependency-gap-audit.md", evidenceAuditDoc],
+  ["docs/perform-constructor-core-stack.md", coreStackDoc],
+  ["docs/constructor-phase-matrix-transition-plan.md", transitionPlanDoc],
+]) {
+  assert(
+    source.includes("Registry Hardening + Data Dependency Gate Skeleton"),
+    `${path} must document Registry Hardening + Data Dependency Gate Skeleton`,
+  );
+}
 
 console.log(
   JSON.stringify(

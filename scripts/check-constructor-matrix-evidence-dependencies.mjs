@@ -25,12 +25,129 @@ function unique(values) {
   return Array.from(new Set(values));
 }
 
+const highRiskAreas = new Set([
+  "weight_cut",
+  "hydration",
+  "readiness",
+  "wearable_data",
+  "travel",
+  "weigh_in",
+  "competition_day",
+  "lmv",
+  "bfr_kaatsu",
+  "contact_load",
+  "taper",
+  "injury_pain",
+  "female_context",
+  "youth_context",
+]);
+
+const autoAllowedRuntimeNatures = new Set(["product_rollout_guard", "runtime_safety_guard"]);
+const internalEvidenceTypes = new Set(["internal_validation", "coach_school"]);
+const internalRuleNatures = new Set(["internal_case_pattern", "coaching_heuristic"]);
+const highRiskKeywordPattern = /\b(bfr|kaatsu|red|reds|injury|pain|female|youth|weight|hydration|rwl|sauna|wearable|readiness)\b/i;
+const highRiskReviewStatusAllowlist = new Set([
+  "coach_review_required",
+  "medical_review_required",
+  "blocked_for_default",
+  "audit_only",
+  "approved_for_internal_pilot",
+  "approved_for_soft_rule",
+]);
+const genericEvidenceIds = new Set([
+  "perform_evidence_matrix",
+  "general_evidence",
+  "evidence_matrix",
+  "generic_science_basis",
+  "perform_general_science",
+]);
+
+function itemHasHighRiskArea(item) {
+  return item.riskAreas.some((area) => highRiskAreas.has(area));
+}
+
+function hasSpecificLimitation(item) {
+  return item.limitations.some((text) => {
+    const normalized = text.trim();
+
+    return normalized.length >= 32 && /\b(not|no|must|should|needs?|required|requires?|cannot|without|unless|треб|нельзя|нужн)\b/i.test(normalized);
+  });
+}
+
+function validateRegistryMetadata(item) {
+  assert(Array.isArray(item.riskAreas) && item.riskAreas.length > 0, `Evidence ${item.id} must have riskAreas`);
+  assert(Array.isArray(item.auditRefs), `Evidence ${item.id} must have auditRefs array`);
+  assert(item.auditRefs.length > 0, `Evidence ${item.id} must have auditRefs`);
+  assert(typeof item.automationReadiness === "string" && item.automationReadiness.length > 0, `Evidence ${item.id} must have automationReadiness`);
+  assert(typeof item.reviewStatus === "string" && item.reviewStatus.length > 0, `Evidence ${item.id} must have reviewStatus`);
+  assert(typeof item.ruleNature === "string" && item.ruleNature.length > 0, `Evidence ${item.id} must have ruleNature`);
+
+  const highRisk = itemHasHighRiskArea(item);
+
+  if (highRisk) {
+    assert(hasSpecificLimitation(item), `${item.id} has high-risk riskAreas and must have explicit limitations`);
+
+    if (item.automationReadiness === "auto_allowed") {
+      assert(
+        autoAllowedRuntimeNatures.has(item.ruleNature) && item.type !== "direct_training_intervention",
+        `${item.id} cannot be auto_allowed for high-risk training evidence without product/runtime guard nature`,
+      );
+    }
+  }
+
+  if (
+    highRisk &&
+    (internalEvidenceTypes.has(item.type) || internalRuleNatures.has(item.ruleNature))
+  ) {
+    assert(item.automationReadiness !== "auto_allowed", `${item.id} internal/coach evidence cannot be auto_allowed`);
+    assert(item.reviewStatus !== "approved_for_hard_rule", `${item.id} internal/coach evidence cannot become a hard universal rule`);
+  }
+
+  if (item.ruleNature === "product_rollout_guard") {
+    const combinedText = [item.title, ...item.supports].join(" ");
+    assert(item.type !== "direct_training_intervention", `${item.id} product rollout guard cannot be direct intervention evidence`);
+    assert(
+      !/\b(physiological|training proof|proves adaptation|доказывает трениров|физиолог)\b/i.test(combinedText),
+      `${item.id} product rollout guard must not claim physiological/training proof`,
+    );
+    assert(
+      item.limitations.some((text) => /operational|product|safety|rollout|guard/i.test(text)),
+      `${item.id} product rollout guard must explain operational/product safety limitations`,
+    );
+  }
+
+  const keywordText = [
+    item.id,
+    item.title,
+    ...item.riskAreas,
+  ].join(" ");
+
+  if (highRiskKeywordPattern.test(keywordText)) {
+    assert(item.automationReadiness !== "auto_allowed", `${item.id} high-risk keyword evidence cannot be auto_allowed`);
+    assert(
+      highRiskReviewStatusAllowlist.has(item.reviewStatus),
+      `${item.id} high-risk keyword evidence has unsafe reviewStatus: ${item.reviewStatus}`,
+    );
+    assert(item.reviewStatus !== "approved_for_hard_rule", `${item.id} high-risk keyword evidence cannot be approved_for_hard_rule`);
+  }
+}
+
+function validateSpecificEvidence(ids, context) {
+  const uniqueIds = unique(ids);
+  const hasGeneric = uniqueIds.some((id) => genericEvidenceIds.has(id));
+  const hasSpecific = uniqueIds.some((id) => !genericEvidenceIds.has(id));
+
+  assert(!hasGeneric || hasSpecific, `${context} cannot use generic evidence id as the only evidence dependency`);
+}
+
 function validateIds(ids, context, registryIds) {
   assert(Array.isArray(ids) && ids.length > 0, `${context} must have evidenceDependencies`);
 
   for (const id of ids) {
     assert(registryIds.has(id), `${context} references unknown evidence dependency: ${id}`);
   }
+
+  validateSpecificEvidence(ids, context);
 }
 
 function flattenMatrixDraftBlocks(matrixDraft) {
@@ -64,6 +181,7 @@ for (const item of CONSTRUCTOR_MATRIX_EVIDENCE_DEPENDENCY_REGISTRY) {
   assert(item.sourceDoc.startsWith("docs/"), `Evidence ${item.id} must point to docs/* source`);
   assert(item.supports.length > 0, `Evidence ${item.id} must declare supports`);
   assert(item.limitations.length > 0, `Evidence ${item.id} must declare limitations`);
+  validateRegistryMetadata(item);
   await fileExists(item.sourceDoc);
 }
 
@@ -176,6 +294,11 @@ console.log(
         dayRules: CONSTRUCTOR_DAY_MATRIX_RULES.length,
         trainingBlocks: CONSTRUCTOR_TRAINING_BLOCK_LIBRARY.length,
         fixtures: fixtures.length,
+      },
+      hardenedMetadata: {
+        highRiskAreas: Array.from(highRiskAreas),
+        highRiskEvidenceCount: CONSTRUCTOR_MATRIX_EVIDENCE_DEPENDENCY_REGISTRY.filter(itemHasHighRiskArea).length,
+        genericOnlyEvidenceGuard: true,
       },
       fixtureSummaries,
     },

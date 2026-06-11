@@ -30,6 +30,12 @@ Evidence dependency coverage check:
 scripts/check-constructor-matrix-evidence-dependencies.mjs
 ```
 
+Data dependency skeleton check:
+
+```text
+scripts/check-constructor-matrix-data-dependencies.mjs
+```
+
 Internal/debug API endpoint, который использует тот же preview response helper:
 
 ```text
@@ -41,6 +47,7 @@ POST /api/v1/plans/constructor/internal/matrix-preview
 ```bash
 npm run check:constructor-core
 npm run check:constructor-matrix-evidence-dependencies
+npm run check:constructor-matrix-data-dependencies
 npm run check
 ```
 
@@ -171,6 +178,33 @@ Fixture pack остаётся preview/safety базой, а `check-perform-const
 - default `buildPerformConstructorDraft` остаётся legacy.
 - every selected Matrix block in fixture scenarios carries typed evidence dependencies;
 - every Matrix risk check in fixture scenarios carries typed evidence dependencies.
+
+## Registry Hardening + Data Dependency Gate Skeleton
+
+This stage keeps preview behavior unchanged. The fixture pack still checks
+Matrix-vs-legacy safety and rollout invariants; it does not become a runtime
+data-confidence engine.
+
+What changed around fixtures:
+
+- `EvidenceDependencyRegistry` now includes `riskAreas`, `auditRefs`,
+  `automationReadiness`, `reviewStatus` and `ruleNature`;
+- high-risk evidence dependencies must expose limitations and cannot become
+  automatic universal hard rules;
+- Matrix selected blocks and risk checks still carry evidence ids as before,
+  but the verifier now also blocks generic-only evidence for Matrix blocks;
+- `packages/shared/src/constructor-matrix-data-dependencies.ts` documents the
+  missing-data requirements for future weight/readiness/wearable/pain/hydration
+  decisions;
+- no numeric thresholds were added;
+- preview, rollout, pilot readiness, save/template/assign, production draft and
+  legacy fallback behavior are unchanged.
+
+Additional check:
+
+```bash
+npm run check:constructor-matrix-data-dependencies
+```
 
 Отдельный internal endpoint:
 

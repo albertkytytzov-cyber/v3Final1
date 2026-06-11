@@ -58,6 +58,7 @@ npm run build --workspace @training-platform/api
 npm run build --workspace @training-platform/web
 npm run check:constructor-core
 npm run check:constructor-matrix-evidence-dependencies
+npm run check:constructor-matrix-data-dependencies
 npm run check:constructor-matrix-ui-gates
 npm run check:constructor-matrix-review-export
 npm run check
@@ -70,6 +71,26 @@ Expected evidence:
 - PR is mergeable;
 - production branch includes the rollout commit;
 - no local uncommitted changes are required for deploy.
+
+## Registry Hardening + Data Dependency Gate Skeleton
+
+The production rollout checklist now includes the metadata-only evidence/data
+checks. These checks do not enable Matrix by default and do not change runtime
+behavior.
+
+Required invariants:
+
+- hardened `EvidenceDependencyRegistry` keeps high-risk evidence explicit about
+  limitations, review status and automation readiness;
+- internal validation and coach-school evidence are not universal hard rules;
+- product rollout guards remain operational safety checks, not sport-science
+  proof;
+- `Data Dependency Gate Skeleton` records what data is needed for future
+  weight, hydration, readiness, wearable, pain, injury, female/youth, travel and
+  competition-context decisions;
+- no numeric thresholds are introduced;
+- production `/api/v1/plans/constructor/draft`, rollout gates, preview behavior,
+  save/template/assign and legacy fallback stay unchanged.
 
 ## Production deploy
 
