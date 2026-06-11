@@ -22621,9 +22621,15 @@ export function PageClient({
                   <div className="summary-topline">
                     <strong>
                       {copyFor(language, {
-                        en: "3. Draft plan",
-                        ru: "3. Черновик плана",
-                        bg: "3. Чернова план",
+                        en: activeConstructorDraftIsMatrixPrimaryPilot
+                          ? "3. Working draft: new constructor"
+                          : "3. Working draft: current constructor",
+                        ru: activeConstructorDraftIsMatrixPrimaryPilot
+                          ? "3. Рабочий черновик: новый конструктор"
+                          : "3. Рабочий черновик: текущий конструктор",
+                        bg: activeConstructorDraftIsMatrixPrimaryPilot
+                          ? "3. Работна чернова: нов конструктор"
+                          : "3. Работна чернова: текущ конструктор",
                       })}
                     </strong>
                     <span>
@@ -22641,14 +22647,42 @@ export function PageClient({
                           onReturnToLegacyDraft={handleReturnToLegacyConstructorDraft}
                         />
                       ) : (
-                        <div className="constructor-active-draft-source-row">
-                          <span className="constructor-active-draft-badge">
+                        <div className="constructor-active-draft-banner">
+                          <strong>
                             {copyFor(language, {
-                              en: "current constructor draft",
-                              ru: "черновик текущего конструктора",
-                              bg: "чернова от текущия конструктор",
+                              en: "Current constructor is active",
+                              ru: "Активен текущий конструктор",
+                              bg: "Активен е текущият конструктор",
                             })}
-                          </span>
+                          </strong>
+                          <p>
+                            {copyFor(language, {
+                              en: "The new planning logic did not become the working draft for these inputs, or it is still only in comparison mode. You can save and assign this current draft.",
+                              ru: "Новая логика планирования не стала рабочим черновиком для этих вводных или пока доступна только для сравнения. Этот текущий черновик можно сохранить и назначить.",
+                              bg: "Новата логика на планиране не стана работна чернова за тези входни данни или все още е само за сравнение. Тази текуща чернова може да се запази и назначи.",
+                            })}
+                          </p>
+                          {constructorMatrixRolloutDecision ? (
+                            <p>
+                              <strong>
+                                {copyFor(language, {
+                                  en: "New logic check",
+                                  ru: "Проверка новой логики",
+                                  bg: "Проверка на новата логика",
+                                })}
+                                :
+                              </strong>{" "}
+                              {constructorMatrixScenarioLabel(
+                                language,
+                                constructorMatrixRolloutDecision.scenario,
+                              )}{" "}
+                              ·{" "}
+                              {constructorMatrixModeLabel(
+                                language,
+                                constructorMatrixRolloutDecision.mode,
+                              )}
+                            </p>
+                          ) : null}
                         </div>
                       )}
                       <MatrixDraftReadOnlyView

@@ -127,21 +127,21 @@ export function MatrixConstructorPreviewPanel({
           <div>
             <strong>
               {matrixUiCopyFor(language, {
-                en: "Current plan and new planning logic",
-                ru: "Текущий план и новая логика планирования",
-                bg: "Текущ план и нова логика на планиране",
+                en: "New planning logic diagnostics",
+                ru: "Диагностика новой логики планирования",
+                bg: "Диагностика на новата логика на планиране",
               })}
             </strong>
             <span>
               {matrixUiCopyFor(language, {
-                en: "Compare the working draft with the new logic before saving or assigning.",
-                ru: "Сравните рабочий черновик с новой логикой перед сохранением или назначением.",
-                bg: "Сравнете работната чернова с новата логика преди запис или назначаване.",
+                en: "This block explains whether the new logic can become the working draft. It does not save or assign anything by itself.",
+                ru: "Этот блок объясняет, может ли новая логика стать рабочим черновиком. Сам по себе он ничего не сохраняет и не назначает.",
+                bg: "Този блок обяснява дали новата логика може да стане работна чернова. Сам по себе си не записва и не назначава нищо.",
               })}
             </span>
           </div>
           <span className="constructor-source-badge">
-            {matrixUiCopyFor(language, { en: "review", ru: "проверка", bg: "проверка" })}
+            {matrixUiCopyFor(language, { en: "diagnostics", ru: "диагностика", bg: "диагностика" })}
           </span>
         </summary>
 
@@ -156,14 +156,14 @@ export function MatrixConstructorPreviewPanel({
               ? loadingLabel
               : preview || previewError
                 ? matrixUiCopyFor(language, {
-                    en: "Compare again",
-                  ru: "Сравнить ещё раз",
-                    bg: "Сравни отново",
+                    en: "Check new logic again",
+                    ru: "Проверить новую логику ещё раз",
+                    bg: "Провери новата логика отново",
                   })
                 : matrixUiCopyFor(language, {
-                    en: "Compare working draft and new logic",
-                    ru: "Сравнить рабочий черновик и новую логику",
-                    bg: "Сравни текущия и новия",
+                    en: "Check new planning logic",
+                    ru: "Проверить новую логику планирования",
+                    bg: "Провери новата логика на планиране",
                   })}
           </button>
           <label>
@@ -174,9 +174,9 @@ export function MatrixConstructorPreviewPanel({
             />
             <span>
               {matrixUiCopyFor(language, {
-                en: "Include info differences",
-                ru: "Показывать служебные отличия",
-                bg: "Показвай служебни разлики",
+                en: "Show technical differences",
+                ru: "Показывать технические отличия",
+                bg: "Показвай технически разлики",
               })}
             </span>
           </label>

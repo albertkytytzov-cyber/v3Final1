@@ -371,6 +371,7 @@ async function checkTrainerFacingMatrixCopy() {
   const combined = (
     await Promise.all(trainerFacingFiles.map((path) => readProjectFile(path)))
   ).join("\n");
+  const pageClientSource = await readProjectFile("apps/web/app/page-client.tsx");
   const forbiddenPhrases = [
     "Current vs new constructor",
     "Internal Matrix Constructor Review",
@@ -391,8 +392,19 @@ async function checkTrainerFacingMatrixCopy() {
   }
 
   assert(
-    combined.includes("Текущий план и новая логика планирования"),
-    "Trainer-facing matrix panel must use a clear Russian planning label",
+    combined.includes("Диагностика новой логики планирования"),
+    "Trainer-facing matrix panel must explain that matrix is a diagnostics block",
+  );
+  assert(
+    combined.includes("Проверить новую логику планирования"),
+    "Trainer-facing matrix panel must use a clear Russian check action",
+  );
+  assert(
+    pageClientSource.includes("3. Рабочий черновик: новый конструктор") &&
+      pageClientSource.includes("3. Рабочий черновик: текущий конструктор") &&
+      pageClientSource.includes("Активен текущий конструктор") &&
+      pageClientSource.includes("Проверка новой логики"),
+    "Main draft panel must clearly identify the active constructor source for trainers",
   );
   assert(
     combined.includes("проверка нового плана"),
