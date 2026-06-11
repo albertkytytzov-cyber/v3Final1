@@ -10,13 +10,17 @@ export type ConstructorMatrixThresholdCandidateArea =
   | "readiness"
   | "sleep"
   | "rhr"
+  | "hrv"
   | "wearable_data"
   | "pain"
   | "injury"
   | "female_context"
   | "youth_context"
   | "travel_fatigue"
-  | "competition_context";
+  | "competition_context"
+  | "contact_load"
+  | "lmv"
+  | "taper";
 
 export type ConstructorMatrixThresholdCandidateSignalType =
   | "trend"
@@ -61,9 +65,18 @@ export type ConstructorMatrixThresholdCandidateReviewer =
   | "coach"
   | "medical"
   | "product"
-  | "data_quality";
+  | "data_quality"
+  | "sport_science";
 
-export interface ConstructorMatrixThresholdCandidate {
+export interface ConstructorMatrixThresholdCandidateFixtureImpact {
+  runtimeChangeAllowedNow: false;
+  productionRouteChangeAllowedNow: false;
+  rolloutGateChangeAllowedNow: false;
+  previewBehaviorChangeAllowedNow: false;
+  legacyFallbackChangeAllowedNow: false;
+}
+
+export interface ConstructorMatrixThresholdCandidateDefinition {
   id: string;
   area: ConstructorMatrixThresholdCandidateArea;
   title: string;
@@ -81,7 +94,27 @@ export interface ConstructorMatrixThresholdCandidate {
   futureValidationQuestions: readonly string[];
 }
 
-export const CONSTRUCTOR_MATRIX_THRESHOLD_CANDIDATES = [
+export interface ConstructorMatrixThresholdCandidate extends ConstructorMatrixThresholdCandidateDefinition {
+  fixtureImpact: ConstructorMatrixThresholdCandidateFixtureImpact;
+  forbiddenRuntimeUseNow: readonly string[];
+}
+
+const NO_RUNTIME_THRESHOLD_CANDIDATE_IMPACT = {
+  runtimeChangeAllowedNow: false,
+  productionRouteChangeAllowedNow: false,
+  rolloutGateChangeAllowedNow: false,
+  previewBehaviorChangeAllowedNow: false,
+  legacyFallbackChangeAllowedNow: false,
+} as const satisfies ConstructorMatrixThresholdCandidateFixtureImpact;
+
+const FORBIDDEN_THRESHOLD_CANDIDATE_RUNTIME_USE_NOW = [
+  "production_decisioning",
+  "automatic_plan_change",
+  "save_assign_decision",
+  "matrix_rollout_override",
+] as const;
+
+const CONSTRUCTOR_MATRIX_THRESHOLD_CANDIDATE_DEFINITIONS = [
   {
     id: "body_mass_trend_weight_cut_candidate",
     area: "weight_cut",
@@ -223,6 +256,34 @@ export const CONSTRUCTOR_MATRIX_THRESHOLD_CANDIDATES = [
     futureValidationQuestions: [
       "Which baseline-relative RHR pattern correlates with coach-noted recovery debt in PERFORM?",
       "How should illness symptoms override or qualify RHR trend interpretation?",
+    ],
+  },
+  {
+    id: "hrv_trend_candidate",
+    area: "hrv",
+    title: "HRV trend candidate for recovery-confidence review",
+    signalType: "trend",
+    candidateDirection: "lower_than_baseline",
+    decisionScope: "review_confidence",
+    requiredDataDependencies: [
+      "hrv_trend_for_recovery_confidence",
+      "wearable_data_quality_for_readiness",
+    ],
+    supportsEvidenceDependencies: [
+      "recovery_monitoring_consensus",
+      "wearable_validity_trend",
+    ],
+    missingDataBehavior: "advisory_only",
+    runtimeUseNow: "review_queue_only",
+    reviewStatus: "needs_data_validation",
+    reviewRequired: ["coach", "data_quality"],
+    candidateOnly: true,
+    limitations: [
+      "Candidate only: no HRV numeric threshold is approved, and HRV cannot diagnose recovery alone.",
+    ],
+    futureValidationQuestions: [
+      "Which HRV trend patterns match coach-noted freshness or recovery debt in PERFORM history?",
+      "How should device confidence change HRV interpretation in review exports?",
     ],
   },
   {
@@ -390,6 +451,206 @@ export const CONSTRUCTOR_MATRIX_THRESHOLD_CANDIDATES = [
     ],
   },
   {
+    id: "contact_load_exposure_candidate",
+    area: "contact_load",
+    title: "Contact-load exposure candidate for wrestling-session review",
+    signalType: "composite_signal",
+    candidateDirection: "contextual",
+    decisionScope: "coach_review",
+    requiredDataDependencies: [
+      "contact_load_exposure_for_wrestling_sessions",
+    ],
+    supportsEvidenceDependencies: [
+      "wrestling_temporal_structure",
+      "perform_evidence_matrix",
+    ],
+    missingDataBehavior: "require_coach_confirmation",
+    runtimeUseNow: "documentation_only",
+    reviewStatus: "needs_coach_review",
+    reviewRequired: ["coach", "sport_science"],
+    candidateOnly: true,
+    limitations: [
+      "Candidate only: mat minutes are not contact load, and no contact-minute threshold is approved.",
+    ],
+    futureValidationQuestions: [
+      "Which bout and live-wrestling context separates technical mat time from true contact exposure?",
+      "Which coach notes are required before contact load can affect a review package?",
+    ],
+  },
+  {
+    id: "control_bouts_recovery_window_candidate",
+    area: "contact_load",
+    title: "Control-bouts recovery-window candidate for coach review",
+    signalType: "context_flag",
+    candidateDirection: "contextual",
+    decisionScope: "load_ceiling",
+    requiredDataDependencies: [
+      "contact_load_exposure_for_wrestling_sessions",
+      "readiness_context_for_load_confidence",
+    ],
+    supportsEvidenceDependencies: [
+      "wrestling_temporal_structure",
+      "matrix_transition_plan",
+      "europe_pre_competition_plan",
+    ],
+    missingDataBehavior: "require_coach_confirmation",
+    runtimeUseNow: "review_queue_only",
+    reviewStatus: "needs_coach_review",
+    reviewRequired: ["coach", "sport_science"],
+    candidateOnly: true,
+    limitations: [
+      "Candidate only: no fixed recovery-hour or recovery-day threshold is approved after control bouts.",
+    ],
+    futureValidationQuestions: [
+      "Which control-bout exposure patterns require next-day recovery review in coach logs?",
+      "Which readiness signals should qualify control-bout recovery without creating automation?",
+    ],
+  },
+  {
+    id: "lmv_legs_recovery_window_candidate",
+    area: "lmv",
+    title: "Leg LMV recovery-window candidate for coach review",
+    signalType: "composite_signal",
+    candidateDirection: "contextual",
+    decisionScope: "load_ceiling",
+    requiredDataDependencies: [
+      "lmv_local_fatigue_for_legs",
+      "readiness_context_for_load_confidence",
+    ],
+    supportsEvidenceDependencies: [
+      "bfr_kaatsu_local_metabolic",
+      "europe_pre_competition_plan",
+      "perform_evidence_matrix",
+    ],
+    missingDataBehavior: "require_coach_confirmation",
+    runtimeUseNow: "review_queue_only",
+    reviewStatus: "needs_coach_review",
+    reviewRequired: ["coach", "sport_science"],
+    candidateOnly: true,
+    limitations: [
+      "Candidate only: no fixed D-day or recovery-window threshold is approved for leg LMV.",
+    ],
+    futureValidationQuestions: [
+      "Which leg-local fatigue patterns predict coach edits after LMV work?",
+      "Which movement-quality notes are required before LMV context can affect review confidence?",
+    ],
+  },
+  {
+    id: "lmv_near_main_start_role_candidate",
+    area: "lmv",
+    title: "Near-main-start LMV role candidate for review",
+    signalType: "context_flag",
+    candidateDirection: "contextual",
+    decisionScope: "coach_review",
+    requiredDataDependencies: [
+      "lmv_local_fatigue_for_legs",
+      "taper_load_context_for_hidden_fatigue",
+    ],
+    supportsEvidenceDependencies: [
+      "europe_pre_competition_plan",
+      "matrix_transition_plan",
+      "perform_evidence_matrix",
+    ],
+    missingDataBehavior: "require_coach_confirmation",
+    runtimeUseNow: "documentation_only",
+    reviewStatus: "needs_coach_review",
+    reviewRequired: ["coach", "sport_science"],
+    candidateOnly: true,
+    limitations: [
+      "Candidate only: leg LMV role near a main start stays metadata until development, maintenance and activation roles are separated.",
+    ],
+    futureValidationQuestions: [
+      "Which LMV role labels are needed before close-start plans can explain local fatigue safely?",
+      "Which near-start LMV contexts should stay coach-only even after validation?",
+    ],
+  },
+  {
+    id: "taper_high_volume_sfp_candidate",
+    area: "taper",
+    title: "High-volume SFP candidate inside taper review",
+    signalType: "composite_signal",
+    candidateDirection: "contextual",
+    decisionScope: "load_ceiling",
+    requiredDataDependencies: [
+      "taper_load_context_for_hidden_fatigue",
+      "readiness_context_for_load_confidence",
+    ],
+    supportsEvidenceDependencies: [
+      "periodization_taper_peaking",
+      "matrix_transition_plan",
+    ],
+    missingDataBehavior: "use_low_risk_replacement",
+    runtimeUseNow: "review_queue_only",
+    reviewStatus: "needs_coach_review",
+    reviewRequired: ["coach", "sport_science"],
+    candidateOnly: true,
+    limitations: [
+      "Candidate only: no numeric volume threshold is approved for SFP load inside taper.",
+    ],
+    futureValidationQuestions: [
+      "Which SFP taper patterns coaches reduce during close-start review?",
+      "Which planned-volume fields must exist before taper risk can be reviewed consistently?",
+    ],
+  },
+  {
+    id: "hidden_glycolytic_load_close_start_candidate",
+    area: "taper",
+    title: "Hidden glycolytic load candidate for close-start review",
+    signalType: "context_flag",
+    candidateDirection: "contextual",
+    decisionScope: "load_ceiling",
+    requiredDataDependencies: [
+      "taper_load_context_for_hidden_fatigue",
+      "sleep_readiness_for_load_confidence",
+    ],
+    supportsEvidenceDependencies: [
+      "periodization_taper_peaking",
+      "china_ssit_freestyle_wrestlers",
+      "matrix_transition_plan",
+    ],
+    missingDataBehavior: "use_low_risk_replacement",
+    runtimeUseNow: "review_queue_only",
+    reviewStatus: "needs_coach_review",
+    reviewRequired: ["coach", "sport_science"],
+    candidateOnly: true,
+    limitations: [
+      "Candidate only: no fixed recovery-hour threshold is approved for hidden glycolytic load close to start.",
+    ],
+    futureValidationQuestions: [
+      "Which close-start high-intensity contexts create hidden fatigue in coach review?",
+      "Which sleep and readiness context should qualify hidden glycolytic-load warnings?",
+    ],
+  },
+  {
+    id: "youth_weight_cut_review_candidate",
+    area: "youth_context",
+    title: "Youth weight-cut review candidate for medical safety",
+    signalType: "composite_signal",
+    candidateDirection: "contextual",
+    decisionScope: "medical_safety",
+    requiredDataDependencies: [
+      "youth_context_for_high_load_progression",
+      "body_mass_trend_for_weight_cut",
+    ],
+    supportsEvidenceDependencies: [
+      "nsca_youth_safe_progression",
+      "ncaa_weight_management",
+      "acsm_hydration_nutrition",
+    ],
+    missingDataBehavior: "require_medical_confirmation",
+    runtimeUseNow: "none",
+    reviewStatus: "needs_medical_review",
+    reviewRequired: ["medical", "coach"],
+    candidateOnly: true,
+    limitations: [
+      "Candidate only: no automatic youth weight-cut decision is allowed from constructor metadata.",
+    ],
+    futureValidationQuestions: [
+      "Which youth context must block automation and require medical review for weight management?",
+      "Which coach and guardian policy fields are needed before youth weight context is even reviewed?",
+    ],
+  },
+  {
     id: "competition_day_no_development_candidate",
     area: "competition_context",
     title: "Competition-day no-development candidate for pilot review",
@@ -417,13 +678,22 @@ export const CONSTRUCTOR_MATRIX_THRESHOLD_CANDIDATES = [
       "Which bout-structure fields must exist before competition-day logic can move beyond metadata?",
     ],
   },
-] as const satisfies readonly ConstructorMatrixThresholdCandidate[];
+] as const satisfies readonly ConstructorMatrixThresholdCandidateDefinition[];
 
 export type ConstructorMatrixThresholdCandidateId =
-  (typeof CONSTRUCTOR_MATRIX_THRESHOLD_CANDIDATES)[number]["id"];
+  (typeof CONSTRUCTOR_MATRIX_THRESHOLD_CANDIDATE_DEFINITIONS)[number]["id"];
+
+export const CONSTRUCTOR_MATRIX_THRESHOLD_CANDIDATES =
+  CONSTRUCTOR_MATRIX_THRESHOLD_CANDIDATE_DEFINITIONS.map((item) => ({
+    ...item,
+    fixtureImpact: NO_RUNTIME_THRESHOLD_CANDIDATE_IMPACT,
+    forbiddenRuntimeUseNow: FORBIDDEN_THRESHOLD_CANDIDATE_RUNTIME_USE_NOW,
+  })) as readonly (ConstructorMatrixThresholdCandidate & {
+    id: ConstructorMatrixThresholdCandidateId;
+  })[];
 
 export const CONSTRUCTOR_MATRIX_THRESHOLD_CANDIDATE_IDS =
-  CONSTRUCTOR_MATRIX_THRESHOLD_CANDIDATES.map((item) => item.id);
+  CONSTRUCTOR_MATRIX_THRESHOLD_CANDIDATE_DEFINITIONS.map((item) => item.id);
 
 export const CONSTRUCTOR_MATRIX_THRESHOLD_CANDIDATE_ID_SET = new Set<string>(
   CONSTRUCTOR_MATRIX_THRESHOLD_CANDIDATE_IDS,

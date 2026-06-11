@@ -570,6 +570,18 @@ This registry is candidate-only metadata. It documents possible future review
 signals for weight cut, hydration, readiness, sleep, resting HR, wearable data,
 pain, injury, female/youth context, travel fatigue and competition context.
 
+## Threshold Candidate Registry coverage patch
+
+The coverage patch expands the metadata registry from 12 to 20 candidates and
+requires all 16 areas to be present:
+
+- weight cut, hydration, readiness, wearable data, sleep, RHR, HRV;
+- pain, injury, female context/RED-S, youth context;
+- travel fatigue, competition context, contact load, LMV and taper.
+
+The patch adds HRV, contact-load, LMV, taper and youth weight-cut review
+metadata only. It does not change fixture expectations.
+
 Fixture behavior is unchanged:
 
 - no numeric thresholds or cutoffs are added;

@@ -32,6 +32,10 @@ const highRiskDataAreas = new Set([
   "female_context",
   "youth_context",
   "wearable_data",
+  "hrv",
+  "contact_load",
+  "lmv",
+  "taper",
 ]);
 const conservativeMissingDataBehaviors = new Set([
   "require_coach_confirmation",
@@ -44,12 +48,18 @@ const requiredAreas = new Set([
   "hydration",
   "readiness",
   "wearable_data",
+  "sleep",
+  "rhr",
+  "hrv",
   "pain",
   "injury",
   "female_context",
   "youth_context",
   "travel_fatigue",
   "competition_context",
+  "contact_load",
+  "lmv",
+  "taper",
 ]);
 
 function hasForbiddenThreshold(text) {

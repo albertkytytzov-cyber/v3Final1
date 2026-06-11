@@ -276,6 +276,18 @@ Stop or roll back if:
 The Threshold Candidate Registry is not part of production decisioning. It is a
 controlled metadata layer for future coach/medical/data-quality review.
 
+### Threshold Candidate Registry coverage patch
+
+The registry now meets the coverage intent before any production rollout:
+
+- candidate count: 20;
+- required area coverage: weight cut, hydration, readiness, wearable data,
+  sleep, RHR, HRV, pain, injury, female context/RED-S, youth context, travel
+  fatigue, competition context, contact load, LMV and taper;
+- `npm run check:constructor-matrix-threshold-candidates` enforces minimum
+  count, required area coverage, valid evidence/data ids, no runtime imports and
+  metadata-only fixture impact.
+
 Rollout invariants:
 
 - no numeric thresholds or cutoffs are introduced;

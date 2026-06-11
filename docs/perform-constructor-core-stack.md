@@ -1905,6 +1905,30 @@ Implemented registry:
   HR, wearable data, pain, injury, female context, youth context, travel
   fatigue and competition context.
 
+### 15.28 Threshold Candidate Registry coverage patch
+
+The coverage patch closes the original acceptance gap while staying
+metadata-only.
+
+Current registry coverage:
+
+- minimum candidate count enforced: 16;
+- actual candidate count: 20;
+- required areas covered: weight cut, hydration, readiness, wearable data,
+  sleep, RHR, HRV, pain, injury, female context/RED-S, youth context, travel
+  fatigue, competition context, contact load, LMV and taper;
+- added metadata-only data dependencies for HRV, contact load, LMV and taper;
+- added metadata-only candidates for HRV trend, contact exposure, control-bout
+  recovery, leg LMV recovery, near-start LMV role, taper high-volume SFP,
+  hidden glycolytic close-start load and youth weight-cut review.
+
+Extra guardrails:
+
+- every candidate exposes `fixtureImpact.runtimeChangeAllowedNow=false`;
+- every candidate records forbidden runtime use;
+- runtime constructor files must not import the threshold registry;
+- no candidate defines numeric threshold values or runtime hard gates.
+
 Rules:
 
 - every candidate must stay `candidateOnly=true`;

@@ -3924,6 +3924,53 @@ future threshold candidates for:
 - travel fatigue;
 - competition context.
 
+### 46.1.1 Threshold Candidate Registry coverage patch
+
+The first registry pass had 12 candidates. The coverage patch raises the
+registry to 20 candidate-only records and enforces the original required area
+set.
+
+Required areas now covered:
+
+- weight cut;
+- hydration;
+- readiness;
+- wearable data;
+- sleep;
+- resting HR;
+- HRV;
+- pain;
+- injury;
+- female context / RED-S;
+- youth context;
+- travel fatigue;
+- competition context;
+- contact load;
+- LMV;
+- taper.
+
+Added metadata-only data dependencies:
+
+- `hrv_trend_for_recovery_confidence`;
+- `contact_load_exposure_for_wrestling_sessions`;
+- `lmv_local_fatigue_for_legs`;
+- `taper_load_context_for_hidden_fatigue`.
+
+Added metadata-only threshold candidates:
+
+- `hrv_trend_candidate`;
+- `contact_load_exposure_candidate`;
+- `control_bouts_recovery_window_candidate`;
+- `lmv_legs_recovery_window_candidate`;
+- `lmv_near_main_start_role_candidate`;
+- `taper_high_volume_sfp_candidate`;
+- `hidden_glycolytic_load_close_start_candidate`;
+- `youth_weight_cut_review_candidate`.
+
+No runtime promotion is included in this patch. Numeric thresholds, production
+route changes, rollout changes, preview changes and legacy fallback changes
+remain explicitly forbidden.
+
 Each candidate records:
 
 - area;

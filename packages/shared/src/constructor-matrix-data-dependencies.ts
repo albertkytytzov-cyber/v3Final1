@@ -14,7 +14,10 @@ export type ConstructorMatrixDataDependencyArea =
   | "female_context"
   | "youth_context"
   | "travel_fatigue"
-  | "competition_context";
+  | "competition_context"
+  | "contact_load"
+  | "lmv"
+  | "taper";
 
 export type ConstructorMatrixDataAvailability =
   | "available"
@@ -182,6 +185,31 @@ export const CONSTRUCTOR_MATRIX_DATA_DEPENDENCIES = [
     runtimeUseNow: "risk_warning_only",
   },
   {
+    id: "hrv_trend_for_recovery_confidence",
+    area: "hrv",
+    title: "HRV trend context for recovery confidence",
+    requiredFields: [
+      "hrv_trend",
+      "baseline_hrv",
+      "data_window_days",
+    ],
+    optionalFields: [
+      "sleep_quality",
+      "fatigue",
+      "device_confidence",
+    ],
+    currentAvailability: "partial",
+    missingDataBehavior: "advisory_only",
+    supportsEvidenceDependencies: [
+      "recovery_monitoring_consensus",
+      "wearable_validity_trend",
+    ],
+    limitations: [
+      "No isolated HRV diagnosis is allowed; no numeric threshold is approved.",
+    ],
+    runtimeUseNow: "risk_warning_only",
+  },
+  {
     id: "wearable_data_quality_for_readiness",
     area: "wearable_data",
     title: "Wearable data quality for readiness context",
@@ -203,6 +231,58 @@ export const CONSTRUCTOR_MATRIX_DATA_DEPENDENCIES = [
       "Wearable data is trend and context evidence, not absolute truth for high-confidence decisions.",
     ],
     runtimeUseNow: "pilot_readiness_only",
+  },
+  {
+    id: "contact_load_exposure_for_wrestling_sessions",
+    area: "contact_load",
+    title: "Contact-load exposure context for wrestling sessions",
+    requiredFields: [
+      "contact_minutes",
+      "live_wrestling_minutes",
+      "sparring_rounds",
+      "control_bouts",
+    ],
+    optionalFields: [
+      "opponent_resistance",
+      "technical_intent",
+      "coach_contact_note",
+    ],
+    currentAvailability: "partial",
+    missingDataBehavior: "require_coach_confirmation",
+    supportsEvidenceDependencies: [
+      "wrestling_temporal_structure",
+      "perform_evidence_matrix",
+    ],
+    limitations: [
+      "Mat minutes are not equal to contact load; no contact-minute threshold is approved.",
+    ],
+    runtimeUseNow: "documentation_only",
+  },
+  {
+    id: "lmv_local_fatigue_for_legs",
+    area: "lmv",
+    title: "Local muscular fatigue context for leg LMV work",
+    requiredFields: [
+      "leg_local_fatigue",
+      "previous_lmv_load",
+      "days_to_start",
+    ],
+    optionalFields: [
+      "soreness",
+      "coach_note",
+      "movement_quality",
+    ],
+    currentAvailability: "unknown",
+    missingDataBehavior: "require_coach_confirmation",
+    supportsEvidenceDependencies: [
+      "bfr_kaatsu_local_metabolic",
+      "europe_pre_competition_plan",
+      "perform_evidence_matrix",
+    ],
+    limitations: [
+      "LMV/statodynamics is not the same as true BFR/KAATSU; no recovery-window threshold is approved.",
+    ],
+    runtimeUseNow: "documentation_only",
   },
   {
     id: "pain_location_severity_for_block_eligibility",
@@ -324,6 +404,32 @@ export const CONSTRUCTOR_MATRIX_DATA_DEPENDENCIES = [
     ],
     limitations: [
       "No heavy load add-on is allowed from missing travel-fatigue context without coach confirmation.",
+    ],
+    runtimeUseNow: "risk_warning_only",
+  },
+  {
+    id: "taper_load_context_for_hidden_fatigue",
+    area: "taper",
+    title: "Taper load context for hidden fatigue review",
+    requiredFields: [
+      "days_to_start",
+      "start_role",
+      "planned_volume",
+      "recent_high_intensity_load",
+    ],
+    optionalFields: [
+      "sleep_quality",
+      "rhr_trend",
+      "coach_taper_note",
+    ],
+    currentAvailability: "partial",
+    missingDataBehavior: "use_low_risk_replacement",
+    supportsEvidenceDependencies: [
+      "periodization_taper_peaking",
+      "matrix_transition_plan",
+    ],
+    limitations: [
+      "No fixed taper-load threshold is approved; exact taper dose requires review.",
     ],
     runtimeUseNow: "risk_warning_only",
   },

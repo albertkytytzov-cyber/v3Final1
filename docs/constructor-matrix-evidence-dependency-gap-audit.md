@@ -272,7 +272,7 @@ Added metadata-only data dependency skeleton:
 
 - `packages/shared/src/constructor-matrix-data-dependencies.ts`;
 - `npm run check:constructor-matrix-data-dependencies`;
-- areas covered: weight cut, hydration, readiness, wearable data, sleep, RHR, pain, injury, female context, youth context, travel fatigue and competition context;
+- areas covered: weight cut, hydration, readiness, wearable data, sleep, RHR, HRV, pain, injury, female context, youth context, travel fatigue, competition context, contact load, LMV and taper;
 - each item records required/optional fields, current availability, missing-data behavior, evidence links, limitations and current runtime use.
 
 Guardrails:
@@ -324,3 +324,41 @@ Remaining P0:
   can move toward a runtime decision rule;
 - threshold candidates are not proof and cannot override the Matrix safety
   policy.
+
+## 13. Threshold Candidate Registry coverage patch
+
+Stage: Threshold Candidate Registry Coverage Patch.
+
+Coverage was audited after the initial registry stage. The registry originally
+contained 12 candidate-only records and did not cover HRV, contact load, LMV or
+taper. The patch closes those metadata gaps without changing runtime behavior.
+
+Current coverage:
+
+- candidate count: 20;
+- required areas covered: weight cut, hydration, readiness, wearable data,
+  sleep, RHR, HRV, pain, injury, female context/RED-S, youth context, travel
+  fatigue, competition context, contact load, LMV and taper;
+- added data dependency metadata for HRV trend, wrestling contact-load
+  exposure, leg LMV local fatigue and taper hidden-fatigue context;
+- added threshold candidate metadata for HRV trend, contact exposure, control
+  bouts recovery review, LMV recovery/near-start role, taper high-volume SFP,
+  hidden glycolytic close-start load and youth weight-cut review.
+
+Validation now explicitly checks:
+
+- minimum candidate count;
+- required area coverage;
+- valid data dependency ids;
+- valid evidence dependency ids;
+- metadata-only fixture impact;
+- no runtime imports from Matrix decision files;
+- no numeric threshold values.
+
+Guardrails unchanged:
+
+- no production draft route changes;
+- no rollout gate changes;
+- no preview behavior changes;
+- no legacy fallback changes;
+- no runtime hard gates or numeric cutoffs.

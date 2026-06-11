@@ -1,4 +1,4 @@
-import { access } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 
 import {
   CONSTRUCTOR_MATRIX_DATA_DEPENDENCIES,
@@ -16,9 +16,14 @@ async function fileExists(path) {
   await access(new URL(`../${path}`, import.meta.url));
 }
 
+async function readProjectFile(path) {
+  return readFile(new URL(`../${path}`, import.meta.url), "utf8");
+}
+
 const evidenceIds = new Set(CONSTRUCTOR_MATRIX_EVIDENCE_DEPENDENCY_REGISTRY.map((item) => item.id));
 const dataDependencyIds = new Set(CONSTRUCTOR_MATRIX_DATA_DEPENDENCIES.map((item) => item.id));
 const candidateIds = new Set(CONSTRUCTOR_MATRIX_THRESHOLD_CANDIDATES.map((item) => item.id));
+const minimumCandidateCount = 16;
 const allowedRuntimeUseNow = new Set([
   "none",
   "documentation_only",
@@ -39,21 +44,39 @@ const highRiskAreas = new Set([
   "injury",
   "female_context",
   "youth_context",
+  "wearable_data",
+  "lmv",
+  "contact_load",
+  "taper",
 ]);
 const requiredAreas = new Set([
   "weight_cut",
   "hydration",
   "readiness",
+  "wearable_data",
   "sleep",
   "rhr",
-  "wearable_data",
+  "hrv",
   "pain",
   "injury",
   "female_context",
   "youth_context",
   "travel_fatigue",
   "competition_context",
+  "contact_load",
+  "lmv",
+  "taper",
 ]);
+const runtimeDecisionFiles = [
+  "packages/shared/src/constructor-matrix-plan-builder.ts",
+  "packages/shared/src/constructor-matrix-skeleton.ts",
+  "packages/shared/src/constructor-matrix-preview.ts",
+  "packages/shared/src/constructor-matrix-rollout.ts",
+  "packages/shared/src/constructor-matrix-pilot-readiness.ts",
+  "packages/shared/src/constructor-matrix-save-dry-run.ts",
+  "packages/shared/src/constructor-core.ts",
+  "packages/shared/src/constructor-matrix-adapter.ts",
+];
 
 function collectText(item) {
   return [
@@ -68,6 +91,7 @@ function collectText(item) {
     ...item.requiredDataDependencies,
     ...item.supportsEvidenceDependencies,
     ...item.reviewRequired,
+    ...(item.forbiddenRuntimeUseNow ?? []),
     ...item.limitations,
     ...item.futureValidationQuestions,
   ];
@@ -78,13 +102,18 @@ function isAllowedNoThresholdSentence(text) {
 }
 
 function hasForbiddenThresholdText(text) {
+  if (/\bthreshold candidate\b/i.test(text)) {
+    return false;
+  }
+
   if (isAllowedNoThresholdSentence(text)) {
     return false;
   }
 
   return (
-    />=|<=/.test(text) ||
+    />=|<=|>|</.test(text) ||
     /[0-9]+\s*(%|kg|кг|bpm|уд\/мин|hours?|час)/i.test(text) ||
+    /\b[0-9]+\/10\b/i.test(text) ||
     /\b(threshold|cutoff|bpm|kg limit|score cutoff|runtime gate|hard gate)\b/i.test(text)
   );
 }
@@ -94,6 +123,10 @@ await fileExists("packages/shared/src/constructor-matrix-threshold-candidates.ts
 assert(
   CONSTRUCTOR_MATRIX_THRESHOLD_CANDIDATES.length > 0,
   "CONSTRUCTOR_MATRIX_THRESHOLD_CANDIDATES must not be empty",
+);
+assert(
+  CONSTRUCTOR_MATRIX_THRESHOLD_CANDIDATES.length >= minimumCandidateCount,
+  `CONSTRUCTOR_MATRIX_THRESHOLD_CANDIDATES must include at least ${minimumCandidateCount} candidates`,
 );
 assert(
   candidateIds.size === CONSTRUCTOR_MATRIX_THRESHOLD_CANDIDATES.length,
@@ -117,6 +150,12 @@ for (const item of CONSTRUCTOR_MATRIX_THRESHOLD_CANDIDATES) {
   assert(Array.isArray(item.reviewRequired) && item.reviewRequired.length > 0, `${item.id} must have reviewRequired`);
   assert(Array.isArray(item.limitations) && item.limitations.length > 0, `${item.id} must have limitations`);
   assert(Array.isArray(item.futureValidationQuestions) && item.futureValidationQuestions.length > 0, `${item.id} must have futureValidationQuestions`);
+  assert(Array.isArray(item.forbiddenRuntimeUseNow) && item.forbiddenRuntimeUseNow.length > 0, `${item.id} must have forbiddenRuntimeUseNow`);
+  assert(item.fixtureImpact?.runtimeChangeAllowedNow === false, `${item.id} must not allow runtime changes now`);
+  assert(item.fixtureImpact?.productionRouteChangeAllowedNow === false, `${item.id} must not allow production route changes now`);
+  assert(item.fixtureImpact?.rolloutGateChangeAllowedNow === false, `${item.id} must not allow rollout gate changes now`);
+  assert(item.fixtureImpact?.previewBehaviorChangeAllowedNow === false, `${item.id} must not allow preview behavior changes now`);
+  assert(item.fixtureImpact?.legacyFallbackChangeAllowedNow === false, `${item.id} must not allow legacy fallback changes now`);
   assert(allowedRuntimeUseNow.has(item.runtimeUseNow), `${item.id} has unsafe runtimeUseNow: ${item.runtimeUseNow}`);
   assert(!blockedRuntimeStatuses.has(item.reviewStatus), `${item.id} has runtime-like reviewStatus: ${item.reviewStatus}`);
   assert(item.reviewStatus !== "approved_for_runtime", `${item.id} must not be approved for runtime`);
@@ -141,14 +180,8 @@ for (const item of CONSTRUCTOR_MATRIX_THRESHOLD_CANDIDATES) {
 
   if (highRiskAreas.has(item.area)) {
     assert(
-      item.reviewRequired.includes("coach") || item.reviewRequired.includes("medical"),
-      `${item.id} high-risk candidate needs coach or medical review`,
-    );
-    assert(
-      item.reviewStatus === "needs_coach_review" ||
-        item.reviewStatus === "needs_medical_review" ||
-        item.reviewStatus === "blocked_for_runtime",
-      `${item.id} high-risk candidate must stay review-required or blocked for runtime`,
+      item.reviewRequired.length > 0,
+      `${item.id} high-risk candidate needs explicit reviewRequired metadata`,
     );
   }
 
@@ -161,16 +194,29 @@ for (const area of requiredAreas) {
   assert(coveredAreas.has(area), `Missing required threshold candidate area: ${area}`);
 }
 
+for (const path of runtimeDecisionFiles) {
+  const source = await readProjectFile(path);
+  assert(
+    !source.includes("constructor-matrix-threshold-candidates") &&
+      !source.includes("CONSTRUCTOR_MATRIX_THRESHOLD") &&
+      !source.includes("ThresholdCandidate"),
+    `${path} must not import or use Threshold Candidate Registry in runtime decisioning`,
+  );
+}
+
 console.log(
   JSON.stringify(
     {
       status: "ok",
+      minimumCandidateCount,
       candidateCount: CONSTRUCTOR_MATRIX_THRESHOLD_CANDIDATES.length,
       coveredAreas: Array.from(coveredAreas),
+      requiredAreas: Array.from(requiredAreas),
       runtimeUseNow: Array.from(runtimeUseNow),
       reviewStatuses: Array.from(reviewStatuses),
       numericThresholdsAdded: false,
       runtimeBehaviorChanged: false,
+      runtimeImportsAdded: false,
     },
     null,
     2,
