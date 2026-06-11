@@ -344,6 +344,15 @@ function diffDateInputDays(fromDateValue: string, toDateValue: string) {
   return Math.round((toDate.getTime() - fromDate.getTime()) / (24 * 60 * 60 * 1000));
 }
 
+function getConstructorDraftAssignmentStartDate(
+  draft: ConstructorDraft | null | undefined,
+  competitionStartDate: string,
+) {
+  const cycleLengthDays = Math.max(1, Math.round(draft?.plan.cycleLengthDays ?? 1));
+
+  return shiftDateInputValue(competitionStartDate || getDateInputValue(), -cycleLengthDays);
+}
+
 function getCoachPeriodRangeDays(periodStart: string, periodEnd: string) {
   const diffDays = diffDateInputDays(periodStart, periodEnd);
 
@@ -14619,6 +14628,10 @@ export function PageClient({
       const template = await createPlanTemplateFromDraft(activeConstructorTemplatePayload, {
         clearImportedDraft: false,
       });
+      const assignmentStartDate = getConstructorDraftAssignmentStartDate(
+        activeConstructorDraft,
+        selectedConstructorCompetitionPlan?.competitionStartDate ?? constructorForm.startDate,
+      );
 
       setPlanningView("templates");
       setTemplatePlanningTab("assign");
@@ -14629,7 +14642,7 @@ export function PageClient({
         ...current,
         athleteId: selectedAthleteId || current.athleteId,
         templateId: template.id,
-        startDate: getDateInputValue(),
+        startDate: assignmentStartDate,
         dayLabel: localizedDayOneLabel(language),
         notes: copyFor(language, {
           en: `Assigned from constructor template: ${template.name}`,
@@ -14639,16 +14652,16 @@ export function PageClient({
       }));
       setConstructorMessage(
         copyFor(language, {
-          en: `Template saved, but not assigned yet: ${template.name}. Check the dates, then assign it to the athlete.`,
-          ru: `Шаблон сохранён, но ещё не назначен спортсмену: ${template.name}. Проверьте даты и нажмите назначение плана.`,
-          bg: `Шаблонът е запазен, но още не е назначен: ${template.name}. Проверете датите и назначете плана.`,
+          en: `Template saved, but not assigned yet: ${template.name}. Assignment starts on ${assignmentStartDate}; check the dates, then assign it to the athlete.`,
+          ru: `Шаблон сохранён, но ещё не назначен спортсмену: ${template.name}. Назначение начинается с ${assignmentStartDate}; проверьте даты и нажмите назначение плана.`,
+          bg: `Шаблонът е запазен, но още не е назначен: ${template.name}. Назначаването започва от ${assignmentStartDate}; проверете датите и назначете плана.`,
         }),
       );
       setStatusMessage(
         copyFor(language, {
-          en: `Constructor template saved. It is open in assignment mode now; review dates and assign it to the athlete.`,
-          ru: `Шаблон конструктора сохранён. Сейчас открыт режим назначения: проверьте даты и назначьте его спортсмену.`,
-          bg: `Шаблонът от конструктора е запазен. Отворен е режимът за назначаване: проверете датите и го назначете.`,
+          en: `Constructor template saved. Assignment mode is open from ${assignmentStartDate}; review dates and assign it to the athlete.`,
+          ru: `Шаблон конструктора сохранён. Режим назначения открыт с ${assignmentStartDate}: проверьте даты и назначьте его спортсмену.`,
+          bg: `Шаблонът от конструктора е запазен. Режимът за назначаване е отворен от ${assignmentStartDate}: проверете датите и го назначете.`,
         }),
       );
     } catch (error) {
