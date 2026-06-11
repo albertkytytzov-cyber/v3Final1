@@ -67,9 +67,9 @@ export function MatrixInternalDraftBanner({
         <p>
           {activeMatrixPrimaryPilot
             ? matrixUiCopyFor(language, {
-                en: "This is a limited-use view for an explicitly allowed scenario. It is not saved or assigned automatically.",
-                ru: "Это ограниченное применение для явно разрешённого сценария. Он не сохраняется и не назначается автоматически.",
-                bg: "Това е ограничена употреба само за изрично разрешен сценарий. Не се записва и не се назначава автоматично.",
+                en: "This is the working draft for an explicitly allowed scenario. It is not assigned automatically: save it as a template, then review dates and assign it to the athlete.",
+                ru: "Это рабочий черновик для явно разрешённого сценария. Он не назначается автоматически: сохраните его как шаблон, затем проверьте даты и назначьте спортсмену.",
+                bg: "Това е работна чернова за изрично разрешен сценарий. Не се назначава автоматично: запазете я като шаблон, после проверете датите и я назначете.",
               })
             : matrixUiCopyFor(language, {
                 en: "This draft is used only for review. It is read-only, not saved, not assigned, and the current draft is unchanged.",

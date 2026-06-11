@@ -14639,16 +14639,16 @@ export function PageClient({
       }));
       setConstructorMessage(
         copyFor(language, {
-          en: `Template saved and opened for assignment: ${template.name}.`,
-          ru: `Шаблон сохранён и открыт для назначения: ${template.name}.`,
-          bg: `Шаблонът е запазен и отворен за назначаване: ${template.name}.`,
+          en: `Template saved, but not assigned yet: ${template.name}. Check the dates, then assign it to the athlete.`,
+          ru: `Шаблон сохранён, но ещё не назначен спортсмену: ${template.name}. Проверьте даты и нажмите назначение плана.`,
+          bg: `Шаблонът е запазен, но още не е назначен: ${template.name}. Проверете датите и назначете плана.`,
         }),
       );
       setStatusMessage(
         copyFor(language, {
-          en: `Constructor template saved. Check dates and assign it to the athlete: ${template.name}.`,
-          ru: `Шаблон конструктора сохранён. Проверьте даты и назначьте спортсмену: ${template.name}.`,
-          bg: `Шаблонът от конструктора е запазен. Проверете датите и го назначете на спортиста: ${template.name}.`,
+          en: `Constructor template saved. It is open in assignment mode now; review dates and assign it to the athlete.`,
+          ru: `Шаблон конструктора сохранён. Сейчас открыт режим назначения: проверьте даты и назначьте его спортсмену.`,
+          bg: `Шаблонът от конструктора е запазен. Отворен е режимът за назначаване: проверете датите и го назначете.`,
         }),
       );
     } catch (error) {
@@ -22609,7 +22609,7 @@ export function PageClient({
                     <strong>
                       {copyFor(language, {
                         en: "3. Draft plan",
-                        ru: "3. Draft-план",
+                        ru: "3. Черновик плана",
                         bg: "3. Чернова план",
                       })}
                     </strong>
@@ -22667,9 +22667,9 @@ export function PageClient({
                           type="button"
                         >
                           {copyFor(language, {
-                            en: "Save as template",
-                            ru: "Сохранить как шаблон",
-                            bg: "Запази като шаблон",
+                            en: "Save template and open assignment",
+                            ru: "Сохранить шаблон и перейти к назначению",
+                            bg: "Запази шаблона и отвори назначаване",
                           })}
                         </button>
                       )}
