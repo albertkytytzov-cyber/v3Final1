@@ -3,6 +3,8 @@ import { access, readFile } from "node:fs/promises";
 import {
   buildConstructorMatrixLayerReviewPackage,
   CONSTRUCTOR_MATRIX_DATA_DEPENDENCIES,
+  CONSTRUCTOR_MATRIX_EVIDENCE_CLAIM_BLOCKERS,
+  CONSTRUCTOR_MATRIX_EVIDENCE_CLAIM_REVIEW_INTAKES,
   CONSTRUCTOR_MATRIX_EVIDENCE_DEPENDENCY_REGISTRY,
   CONSTRUCTOR_MATRIX_REVIEW_PACKAGE_REQUIRED_THRESHOLD_AREAS,
   CONSTRUCTOR_MATRIX_THRESHOLD_CANDIDATES,
@@ -98,6 +100,20 @@ assert(payload.summary.thresholdCandidateCount >= 16, "Review package must inclu
 assert(
   payload.summary.requiredThresholdAreasMissing.length === 0,
   `Review package is missing threshold areas: ${payload.summary.requiredThresholdAreasMissing.join(", ")}`,
+);
+assert(
+  payload.evidenceClaimReviewIntake.evidenceClaimReviewIntakeCount ===
+    CONSTRUCTOR_MATRIX_EVIDENCE_CLAIM_REVIEW_INTAKES.length,
+  "Review package must include evidence claim review intake count",
+);
+assert(
+  payload.evidenceClaimReviewIntake.blockersCoveredCount ===
+    CONSTRUCTOR_MATRIX_EVIDENCE_CLAIM_BLOCKERS.length,
+  "Review package must report all evidence claim blockers covered by intake",
+);
+assert(
+  payload.evidenceClaimReviewIntake.runtimeChangeAllowedNowCount === 0,
+  "Review package review intake summary must report no runtime changes",
 );
 
 for (const area of CONSTRUCTOR_MATRIX_REVIEW_PACKAGE_REQUIRED_THRESHOLD_AREAS) {
@@ -198,8 +214,10 @@ console.log(
       counts: {
         evidenceDependencies: payload.summary.evidenceDependencyCount,
         dataDependencies: payload.summary.dataDependencyCount,
-        thresholdCandidates: payload.summary.thresholdCandidateCount,
-      },
+      thresholdCandidates: payload.summary.thresholdCandidateCount,
+      evidenceClaimReviewIntakes:
+        payload.evidenceClaimReviewIntake.evidenceClaimReviewIntakeCount,
+    },
       reviewers: payload.reviewerQueues.map((queue) => ({
         reviewer: queue.reviewer,
         items: queue.items.length,

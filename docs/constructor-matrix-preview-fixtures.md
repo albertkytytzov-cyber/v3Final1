@@ -731,6 +731,32 @@ Preview fixture expectations are unchanged:
 - broad Matrix default remains prohibited;
 - no source claim is promoted into runtime rules.
 
+## Evidence Claim Blocker Review Intake Pack regression
+
+Stage: Evidence Claim Blocker Review Intake Pack.
+
+`npm run check:constructor-matrix-evidence-claim-review-intake` verifies the
+metadata-only review intake pack for evidence claim blockers:
+
+- every evidence claim blocker has exactly one review intake;
+- manual-verification blockers require manual source verification before
+  extraction;
+- full-text/policy blockers require source text or official policy text before
+  extraction;
+- human-review blockers require real reviewer decisions before future
+  extraction;
+- high-risk blockers are routed to conservative coach, medical, data-quality,
+  sport-science or product-safety tracks;
+- `runtimeChangeAllowedNow=false` and `humanReviewed=false` remain unchanged.
+
+Preview fixture expectations are unchanged:
+
+- review intake metadata does not alter Matrix preview behavior;
+- no preview scenario becomes primary because of review intake metadata;
+- no rollout, save/template/assign or legacy fallback behavior is changed;
+- broad Matrix default remains prohibited;
+- no evidence claim is extracted, approved or promoted into runtime rules.
+
 ## Что не проверяется
 
 Fixtures не делают full snapshot:

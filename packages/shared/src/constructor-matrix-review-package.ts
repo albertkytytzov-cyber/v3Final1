@@ -15,6 +15,10 @@ import {
   type ConstructorMatrixEvidenceClaimExtractionSummary,
 } from "./constructor-matrix-evidence-claims";
 import {
+  buildConstructorMatrixEvidenceClaimReviewIntakeSummary,
+  type ConstructorMatrixEvidenceClaimReviewIntakeSummary,
+} from "./constructor-matrix-evidence-claim-review-intake";
+import {
   buildConstructorMatrixReviewDecisionLedgerSummary,
   getConstructorMatrixReviewDecisionsForSubject,
   type ConstructorMatrixReviewDecisionLedgerSummary,
@@ -143,6 +147,7 @@ export interface ConstructorMatrixReviewPackagePayload {
   sourceAcquisition: ConstructorMatrixSourceAcquisitionSummary;
   sourceLookupIntake: ConstructorMatrixSourceLookupIntakeSummary;
   evidenceClaims: ConstructorMatrixEvidenceClaimExtractionSummary;
+  evidenceClaimReviewIntake: ConstructorMatrixEvidenceClaimReviewIntakeSummary;
   reviewerQueues: readonly ConstructorMatrixReviewPackageReviewerQueue[];
   evidenceDependencies: readonly ConstructorMatrixReviewPackageEvidenceItem[];
   dataDependencies: readonly ConstructorMatrixReviewPackageDataItem[];
@@ -612,6 +617,12 @@ export function buildConstructorMatrixLayerReviewMarkdown(
       `Evidence claim P0 source candidate coverage: ${payload.evidenceClaims.p0SourceCandidatesCoveredCount}/${payload.evidenceClaims.p0SourceCandidateCount}`,
       `Evidence claim P0 backlog coverage: ${payload.evidenceClaims.p0BacklogItemsCoveredCount}/${payload.evidenceClaims.p0BacklogItemCount}`,
       `Evidence claim runtimeChangeAllowedNow=${payload.evidenceClaims.runtimeChangeAllowedNow}`,
+      `Evidence claim review intakes: ${payload.evidenceClaimReviewIntake.evidenceClaimReviewIntakeCount}`,
+      `Evidence claim review blockers covered: ${payload.evidenceClaimReviewIntake.blockersCoveredCount}/${payload.evidenceClaimReviewIntake.evidenceClaimBlockerCount}`,
+      `Evidence claim review manual verification: ${payload.evidenceClaimReviewIntake.manualVerificationIntakeCount}`,
+      `Evidence claim review source text needed: ${payload.evidenceClaimReviewIntake.sourceTextNeededIntakeCount}`,
+      `Evidence claim review human-review routing: ${payload.evidenceClaimReviewIntake.humanReviewBeforeClaimsIntakeCount}`,
+      `Evidence claim review runtime changes: ${payload.evidenceClaimReviewIntake.runtimeChangeAllowedNowCount}`,
     ]),
     "",
     "## Required Threshold Areas Covered",
@@ -672,6 +683,7 @@ export function buildConstructorMatrixLayerReviewPackage(params?: {
     sourceAcquisition: buildConstructorMatrixSourceAcquisitionSummary(),
     sourceLookupIntake: buildConstructorMatrixSourceLookupIntakeSummary(),
     evidenceClaims: buildConstructorMatrixEvidenceClaimExtractionSummary(),
+    evidenceClaimReviewIntake: buildConstructorMatrixEvidenceClaimReviewIntakeSummary(),
     reviewerQueues: buildReviewerQueues(),
     evidenceDependencies: CONSTRUCTOR_MATRIX_EVIDENCE_DEPENDENCY_REGISTRY.map(evidenceItem),
     dataDependencies: CONSTRUCTOR_MATRIX_DATA_DEPENDENCIES.map(dataItem),

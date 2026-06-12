@@ -463,6 +463,39 @@ Rollout guardrails:
   changed;
 - broad Matrix default remains disabled.
 
+## Evidence Claim Blocker Review Intake Pack rollout note
+
+Stage: Evidence Claim Blocker Review Intake Pack.
+
+The evidence claim blocker review intake pack is metadata-only. It routes every
+current evidence claim blocker to reviewer questions, required artifacts,
+allowed outcomes and next actions for future manual review.
+
+Rollout summary:
+
+- review intake registry: `packages/shared/src/constructor-matrix-evidence-claim-review-intake.ts`;
+- one intake route per evidence claim blocker;
+- manual-verification blockers require manual source verification before
+  extraction;
+- full-text/policy blockers require source text or official policy text before
+  extraction;
+- human-review blockers require real reviewer decisions before future
+  extraction;
+- runtime changes allowed now: none.
+
+Rollout guardrails:
+
+- review intake does not approve claims;
+- review intake does not extract claims;
+- no numeric thresholds or cutoffs are introduced;
+- no fake citations, source metadata or human approvals are added;
+- all intakes remain `humanReviewed=false`;
+- no production route is changed;
+- no rollout gate is changed;
+- no preview behavior, save/template/assign behavior or legacy fallback is
+  changed;
+- broad Matrix default remains disabled.
+
 Next step: manual source verification, human review of claim blockers or a
 future extraction pass after source readiness is updated. Runtime promotion
 requires a separate explicit stage.

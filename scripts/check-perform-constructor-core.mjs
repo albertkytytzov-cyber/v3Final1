@@ -2800,8 +2800,10 @@ const metadataCheckFiles = [
   "scripts/check-constructor-matrix-source-candidates.mjs",
   "scripts/check-constructor-matrix-source-lookup-intake.mjs",
   "scripts/check-constructor-matrix-evidence-claims.mjs",
+  "scripts/check-constructor-matrix-evidence-claim-review-intake.mjs",
   "packages/shared/src/constructor-matrix-evidence.ts",
   "packages/shared/src/constructor-matrix-evidence-claims.ts",
+  "packages/shared/src/constructor-matrix-evidence-claim-review-intake.ts",
   "packages/shared/src/constructor-matrix-data-dependencies.ts",
   "packages/shared/src/constructor-matrix-threshold-candidates.ts",
   "packages/shared/src/constructor-matrix-review-package.ts",
@@ -2825,6 +2827,7 @@ for (const token of [
   "check:constructor-matrix-source-candidates",
   "check:constructor-matrix-source-lookup-intake",
   "check:constructor-matrix-evidence-claims",
+  "check:constructor-matrix-evidence-claim-review-intake",
 ]) {
   assert(packageJsonSource.includes(token), `package.json must expose ${token}`);
 }
@@ -2865,6 +2868,10 @@ for (const [path, source] of [
   assert(
     source.includes("P0 Evidence Claim Extraction Registry"),
     `${path} must document P0 Evidence Claim Extraction Registry`,
+  );
+  assert(
+    source.includes("Evidence Claim Blocker Review Intake Pack"),
+    `${path} must document Evidence Claim Blocker Review Intake Pack`,
   );
 }
 

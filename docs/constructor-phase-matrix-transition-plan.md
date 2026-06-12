@@ -4252,3 +4252,39 @@ disabled.
 
 Next stage options: manual source verification, human review of claim blockers
 or a later claim extraction pass after source readiness is updated.
+
+## 53. Stage: Evidence Claim Blocker Review Intake Pack
+
+Stage: Evidence Claim Blocker Review Intake Pack.
+
+This stage adds a metadata-only review intake path for every evidence claim
+blocker:
+
+EvidenceClaimBlocker -> ReviewIntake -> reviewer questions -> required
+artifacts -> allowed outcomes -> future manual review.
+
+Artifacts:
+
+- `packages/shared/src/constructor-matrix-evidence-claim-review-intake.ts`;
+- `npm run check:constructor-matrix-evidence-claim-review-intake`;
+- shared exports for intake ids and summary helpers;
+- Review Package review-intake summary metadata.
+
+The intake pack does not approve claims, does not extract claims and does not
+create numeric thresholds. It does not invent citations, source metadata,
+reviewer names or review dates. Every intake remains `humanReviewed=false`, and
+no `reviewedBy` or `reviewedAt` values are recorded.
+
+Manual-verification blockers require manual source verification before
+extraction. Full-text/policy blockers require source text or official policy
+text before extraction. Human-review blockers require real coach, medical,
+data-quality, sport-science or product-safety decisions before future
+extraction.
+
+No changes are allowed to runtime behavior, production draft route, rollout
+gates, preview behavior, pilot readiness, save/template/assign, block
+selection, skeleton selection or legacy fallback. Matrix default remains
+disabled.
+
+Next stage options: actual human review outside code, manual source
+verification, or a later claim extraction pass after blocker readiness changes.
