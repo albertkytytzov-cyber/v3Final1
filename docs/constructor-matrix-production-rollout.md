@@ -532,3 +532,44 @@ Rollout guardrails:
 Next real-world step: manual source verification and reviewer completion
 outside code. Next code stage after real review: Source Readiness Update from
 Human Review Results.
+
+## Matrix Desk Source Review + Evidence Claim Candidate Extraction rollout note
+
+Stage: Matrix Desk Source Review + Evidence Claim Candidate Extraction.
+
+The desk source review and evidence claim candidate registries are
+metadata-only. They sit after SourceLookupIntake and before any future human
+review, manual source verification or source readiness update:
+
+SourceLookupIntake -> DeskSourceReviewRegistry ->
+EvidenceClaimCandidateRegistry -> future human review / source verification /
+extraction pass.
+
+Rollout summary:
+
+- desk review registry:
+  `packages/shared/src/constructor-matrix-desk-source-review.ts`;
+- claim candidate registry:
+  `packages/shared/src/constructor-matrix-evidence-claim-candidates.ts`;
+- 14 desk source reviews cover the 14 source lookup records;
+- 15 claim candidates remain candidate-only review context;
+- runtime changes allowed now: none.
+
+Rollout guardrails:
+
+- desk source review is not human review;
+- claim candidates are not final evidence claims;
+- claim candidates are not runtime rules;
+- manual-verification-needed sources remain blocked for final extraction;
+- source readiness is not updated;
+- no medical approval, coach approval, fake human approval, reviewer name,
+  review date, fake citation or fake source metadata is added;
+- no numeric threshold or cutoff value is added;
+- no production route is changed;
+- no rollout gate is changed;
+- no preview behavior, save/template/assign behavior or legacy fallback is
+  changed;
+- broad Matrix default remains disabled.
+
+Next stage: real human/manual source review or Source Readiness Update from
+Human Review Results. Runtime promotion requires a separate explicit stage.

@@ -781,6 +781,33 @@ Preview fixture expectations are unchanged:
 - broad Matrix default remains prohibited;
 - no evidence claim is extracted, approved or promoted into runtime rules.
 
+## Matrix Desk Source Review + Evidence Claim Candidate Extraction regression
+
+Stage: Matrix Desk Source Review + Evidence Claim Candidate Extraction.
+
+`npm run check:constructor-matrix-desk-source-review-and-claim-candidates`
+verifies the metadata-only desk-review and claim-candidate layer:
+
+- every SourceLookupIntake record is covered by a desk source review;
+- every desk source review keeps `humanReviewed=false` and
+  `runtimeChangeAllowedNow=false`;
+- claim candidates are candidate-only and are not final evidence claims;
+- manual-verification-needed sources are not used as claim support;
+- linked source, evidence, data, threshold, decision, blocker and intake ids
+  resolve to existing registries;
+- no medical approval, coach approval, fake human approval, reviewer name,
+  review date, fake citation or fake source metadata is introduced;
+- no numeric threshold or cutoff value is introduced.
+
+Preview fixture expectations are unchanged:
+
+- desk source review metadata does not alter Matrix preview behavior;
+- evidence claim candidates do not alter Matrix preview behavior;
+- no preview scenario becomes primary because of candidate metadata;
+- no rollout, save/template/assign or legacy fallback behavior is changed;
+- broad Matrix default remains prohibited;
+- no evidence claim is extracted, approved or promoted into runtime rules.
+
 ## Что не проверяется
 
 Fixtures не делают full snapshot:

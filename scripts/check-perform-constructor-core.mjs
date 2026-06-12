@@ -2802,9 +2802,12 @@ const metadataCheckFiles = [
   "scripts/check-constructor-matrix-evidence-claims.mjs",
   "scripts/check-constructor-matrix-evidence-claim-review-intake.mjs",
   "scripts/check-constructor-matrix-review-intake-export.mjs",
+  "scripts/check-constructor-matrix-desk-source-review-and-claim-candidates.mjs",
   "packages/shared/src/constructor-matrix-evidence.ts",
   "packages/shared/src/constructor-matrix-evidence-claims.ts",
   "packages/shared/src/constructor-matrix-evidence-claim-review-intake.ts",
+  "packages/shared/src/constructor-matrix-evidence-claim-candidates.ts",
+  "packages/shared/src/constructor-matrix-desk-source-review.ts",
   "packages/shared/src/constructor-matrix-review-intake-export.ts",
   "packages/shared/src/constructor-matrix-data-dependencies.ts",
   "packages/shared/src/constructor-matrix-threshold-candidates.ts",
@@ -2832,6 +2835,7 @@ for (const token of [
   "check:constructor-matrix-evidence-claims",
   "check:constructor-matrix-evidence-claim-review-intake",
   "check:constructor-matrix-review-intake-export",
+  "check:constructor-matrix-desk-source-review-and-claim-candidates",
 ]) {
   assert(packageJsonSource.includes(token), `package.json must expose ${token}`);
 }
@@ -2880,6 +2884,10 @@ for (const [path, source] of [
   assert(
     source.includes("Matrix Review Intake Export Pack"),
     `${path} must document Matrix Review Intake Export Pack`,
+  );
+  assert(
+    source.includes("Matrix Desk Source Review + Evidence Claim Candidate Extraction"),
+    `${path} must document Matrix Desk Source Review + Evidence Claim Candidate Extraction`,
   );
 }
 

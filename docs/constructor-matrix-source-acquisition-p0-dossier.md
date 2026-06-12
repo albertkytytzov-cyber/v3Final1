@@ -330,3 +330,41 @@ unchanged. Matrix default remains disabled.
 Next real-world step: manual source verification and reviewer completion
 outside code. Next code stage after real review: Source Readiness Update from
 Human Review Results.
+
+## 16. Stage: Matrix Desk Source Review + Evidence Claim Candidate Extraction
+
+The Matrix Desk Source Review + Evidence Claim Candidate Extraction stage adds
+a metadata-only desk review and candidate layer after SourceLookupIntake:
+
+SourceLookupIntake -> DeskSourceReviewRegistry ->
+EvidenceClaimCandidateRegistry -> future human review / source verification /
+extraction pass.
+
+Artifacts:
+
+- desk review registry:
+  `packages/shared/src/constructor-matrix-desk-source-review.ts`;
+- claim candidate registry:
+  `packages/shared/src/constructor-matrix-evidence-claim-candidates.ts`;
+- verifier:
+  `npm run check:constructor-matrix-desk-source-review-and-claim-candidates`;
+- Review Package summary fields for desk source review and claim candidate
+  counts.
+
+The desk source review is not human review. Claim candidates are not final
+evidence claims and are not runtime rules. This stage adds no human approvals,
+medical approvals, coach approvals, `reviewedBy`, `reviewedAt`, numeric
+thresholds, cutoff values, fake citations or fake source metadata.
+
+Manual-verification-needed sources remain blocked for final extraction. Source
+readiness is not updated. Runtime behavior, production route, rollout gates,
+preview behavior and legacy fallback are unchanged. Matrix default remains
+disabled.
+
+Current metadata shape: 14 desk source reviews cover all source lookup records,
+and 15 evidence claim candidates provide candidate-only review context.
+`competition_context` remains blocked until future manual/regulatory source
+verification.
+
+Next stage: real human/manual source review or Source Readiness Update from
+Human Review Results.

@@ -4,10 +4,13 @@ import {
   buildConstructorMatrixReviewIntakeExportPack,
   buildConstructorMatrixLayerReviewPackage,
   CONSTRUCTOR_MATRIX_DATA_DEPENDENCIES,
+  CONSTRUCTOR_MATRIX_DESK_SOURCE_REVIEWS,
+  CONSTRUCTOR_MATRIX_EVIDENCE_CLAIM_CANDIDATES,
   CONSTRUCTOR_MATRIX_EVIDENCE_CLAIM_BLOCKERS,
   CONSTRUCTOR_MATRIX_EVIDENCE_CLAIM_REVIEW_INTAKES,
   CONSTRUCTOR_MATRIX_EVIDENCE_DEPENDENCY_REGISTRY,
   CONSTRUCTOR_MATRIX_REVIEW_PACKAGE_REQUIRED_THRESHOLD_AREAS,
+  CONSTRUCTOR_MATRIX_SOURCE_LOOKUP_INTAKE,
   CONSTRUCTOR_MATRIX_THRESHOLD_CANDIDATES,
 } from "@training-platform/shared";
 
@@ -126,6 +129,50 @@ assert(
   payload.reviewIntakeExport.reviewIntakeExportRuntimeChangeAllowedNowCount === 0,
   "Review package review intake export summary must report no runtime changes",
 );
+assert(
+  payload.deskSourceReview.deskSourceReviewCount ===
+    CONSTRUCTOR_MATRIX_DESK_SOURCE_REVIEWS.length,
+  "Review package must include desk source review count",
+);
+assert(
+  payload.deskSourceReview.sourceLookupRecordsCoveredCount ===
+    CONSTRUCTOR_MATRIX_SOURCE_LOOKUP_INTAKE.length,
+  "Review package must report every source lookup record covered by desk review",
+);
+assert(
+  payload.deskSourceReview.humanReviewedCount === 0,
+  "Review package desk source review summary must report no human reviews",
+);
+assert(
+  payload.deskSourceReview.runtimeChangeAllowedNowCount === 0,
+  "Review package desk source review summary must report no runtime changes",
+);
+assert(
+  payload.evidenceClaimCandidates.evidenceClaimCandidateCount ===
+    CONSTRUCTOR_MATRIX_EVIDENCE_CLAIM_CANDIDATES.length,
+  "Review package must include evidence claim candidate count",
+);
+assert(
+  payload.evidenceClaimCandidates.evidenceClaimCandidateCount >= 12,
+  "Review package must include at least 12 evidence claim candidates",
+);
+assert(
+  payload.evidenceClaimCandidates.candidateOnlyCount ===
+    CONSTRUCTOR_MATRIX_EVIDENCE_CLAIM_CANDIDATES.length,
+  "Review package evidence claim candidate summary must report candidate-only records",
+);
+assert(
+  payload.evidenceClaimCandidates.evidenceClaimCandidatesHumanReviewedCount === 0,
+  "Review package evidence claim candidate summary must report no human-reviewed records",
+);
+assert(
+  payload.evidenceClaimCandidates.evidenceClaimCandidatesRuntimeChangeAllowedNowCount === 0,
+  "Review package evidence claim candidate summary must report no runtime changes",
+);
+assert(
+  payload.evidenceClaims.evidenceClaimCount === 0,
+  "Review package must keep final evidence claim count at zero",
+);
 
 for (const area of CONSTRUCTOR_MATRIX_REVIEW_PACKAGE_REQUIRED_THRESHOLD_AREAS) {
   assert(
@@ -230,6 +277,10 @@ console.log(
         payload.evidenceClaimReviewIntake.evidenceClaimReviewIntakeCount,
       reviewIntakeExportItems:
         payload.reviewIntakeExport.reviewIntakeExportItemCount,
+      deskSourceReviews:
+        payload.deskSourceReview.deskSourceReviewCount,
+      evidenceClaimCandidates:
+        payload.evidenceClaimCandidates.evidenceClaimCandidateCount,
     },
       reviewers: payload.reviewerQueues.map((queue) => ({
         reviewer: queue.reviewer,

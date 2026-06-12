@@ -5,6 +5,10 @@ import {
   type ConstructorMatrixDataDependencyId,
 } from "./constructor-matrix-data-dependencies";
 import {
+  buildConstructorMatrixDeskSourceReviewSummary,
+  type ConstructorMatrixDeskSourceReviewSummary,
+} from "./constructor-matrix-desk-source-review";
+import {
   CONSTRUCTOR_MATRIX_EVIDENCE_DEPENDENCY_REGISTRY,
   type ConstructorMatrixEvidenceDependency,
   type ConstructorMatrixEvidenceDependencyId,
@@ -14,6 +18,10 @@ import {
   buildConstructorMatrixEvidenceClaimExtractionSummary,
   type ConstructorMatrixEvidenceClaimExtractionSummary,
 } from "./constructor-matrix-evidence-claims";
+import {
+  buildConstructorMatrixEvidenceClaimCandidateSummary,
+  type ConstructorMatrixEvidenceClaimCandidateSummary,
+} from "./constructor-matrix-evidence-claim-candidates";
 import {
   buildConstructorMatrixEvidenceClaimReviewIntakeSummary,
   type ConstructorMatrixEvidenceClaimReviewIntakeSummary,
@@ -150,6 +158,8 @@ export interface ConstructorMatrixReviewPackagePayload {
   sourceExpansionBacklog: ConstructorMatrixSourceExpansionBacklogSummary;
   sourceAcquisition: ConstructorMatrixSourceAcquisitionSummary;
   sourceLookupIntake: ConstructorMatrixSourceLookupIntakeSummary;
+  deskSourceReview: ConstructorMatrixDeskSourceReviewSummary;
+  evidenceClaimCandidates: ConstructorMatrixEvidenceClaimCandidateSummary;
   evidenceClaims: ConstructorMatrixEvidenceClaimExtractionSummary;
   evidenceClaimReviewIntake: ConstructorMatrixEvidenceClaimReviewIntakeSummary;
   reviewIntakeExport: ConstructorMatrixReviewIntakeExportSummary;
@@ -616,6 +626,19 @@ export function buildConstructorMatrixLayerReviewMarkdown(
       `Source lookup extraction ready: ${payload.sourceLookupIntake.extractionReadyCount}`,
       `Source lookup unavailable: ${payload.sourceLookupIntake.lookupUnavailableCount}`,
       `Source lookup runtimeChangeAllowedNow=${payload.sourceLookupIntake.sourceLookupRuntimeChangeAllowedNow}`,
+      `Desk source reviews: ${payload.deskSourceReview.deskSourceReviewCount}`,
+      `Desk source lookup coverage: ${payload.deskSourceReview.sourceLookupRecordsCoveredCount}/${payload.deskSourceReview.sourceLookupRecordCount}`,
+      `Desk source manual verification still required: ${payload.deskSourceReview.manualVerificationStillRequiredCount}`,
+      `Desk source full text still required: ${payload.deskSourceReview.fullTextStillRequiredCount}`,
+      `Desk source policy text still required: ${payload.deskSourceReview.policyTextStillRequiredCount}`,
+      `Desk source humanReviewed=${payload.deskSourceReview.humanReviewedCount}`,
+      `Desk source runtime changes: ${payload.deskSourceReview.runtimeChangeAllowedNowCount}`,
+      `Evidence claim candidates: ${payload.evidenceClaimCandidates.evidenceClaimCandidateCount}`,
+      `Evidence claim candidate-only records: ${payload.evidenceClaimCandidates.candidateOnlyCount}`,
+      `Evidence claim candidate human-reviewed records: ${payload.evidenceClaimCandidates.evidenceClaimCandidatesHumanReviewedCount}`,
+      `Evidence claim candidate runtime changes: ${payload.evidenceClaimCandidates.evidenceClaimCandidatesRuntimeChangeAllowedNowCount}`,
+      `Evidence claim candidate high-risk coverage: ${payload.evidenceClaimCandidates.highRiskAreasCovered.join(", ") || "none"}`,
+      `Evidence claim candidate high-risk still blocked: ${payload.evidenceClaimCandidates.highRiskAreasStillBlocked.join(", ") || "none"}`,
       `Evidence claims extracted: ${payload.evidenceClaims.evidenceClaimCount}`,
       `Evidence claim blockers: ${payload.evidenceClaims.evidenceClaimBlockerCount}`,
       `Evidence claim source lookup coverage: ${payload.evidenceClaims.sourceLookupRecordsCoveredCount}/${payload.evidenceClaims.sourceLookupRecordCount}`,
@@ -689,6 +712,8 @@ export function buildConstructorMatrixLayerReviewPackage(params?: {
     sourceExpansionBacklog: buildConstructorMatrixSourceExpansionBacklogSummary(),
     sourceAcquisition: buildConstructorMatrixSourceAcquisitionSummary(),
     sourceLookupIntake: buildConstructorMatrixSourceLookupIntakeSummary(),
+    deskSourceReview: buildConstructorMatrixDeskSourceReviewSummary(),
+    evidenceClaimCandidates: buildConstructorMatrixEvidenceClaimCandidateSummary(),
     evidenceClaims: buildConstructorMatrixEvidenceClaimExtractionSummary(),
     evidenceClaimReviewIntake: buildConstructorMatrixEvidenceClaimReviewIntakeSummary(),
     reviewIntakeExport: buildConstructorMatrixReviewIntakeExportSummary(),

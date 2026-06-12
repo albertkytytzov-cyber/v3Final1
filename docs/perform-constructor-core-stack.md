@@ -2253,3 +2253,48 @@ Guardrails:
 Next real-world step: manual source verification and reviewer completion
 outside code. Next code stage after real review: Source Readiness Update from
 Human Review Results.
+
+### 15.37 Matrix Desk Source Review + Evidence Claim Candidate Extraction
+
+Stage: Matrix Desk Source Review + Evidence Claim Candidate Extraction.
+
+This stage adds a metadata-only desk-review and claim-candidate layer:
+
+SourceLookupIntake -> DeskSourceReviewRegistry ->
+EvidenceClaimCandidateRegistry -> future human review / source verification /
+extraction pass.
+
+Implemented:
+
+- `packages/shared/src/constructor-matrix-desk-source-review.ts`;
+- `packages/shared/src/constructor-matrix-evidence-claim-candidates.ts`;
+- shared exports for both registries and summary helpers;
+- `npm run check:constructor-matrix-desk-source-review-and-claim-candidates`;
+- Review Package summary metadata for desk source reviews and evidence claim
+  candidates.
+
+The desk review records source identity/readiness metadata only. They are not
+human review, medical review or coach review. Evidence claim candidates are
+candidate-only context for later review; they are not final evidence claims and
+are not runtime rules.
+
+Guardrails:
+
+- all records keep `humanReviewed=false`;
+- no `reviewedBy` or `reviewedAt` values are recorded;
+- no medical or coach approval is added;
+- no numeric thresholds or cutoff values are added;
+- no fake citations or fake source metadata are added;
+- manual-verification-needed sources remain blocked for final extraction;
+- source readiness is not updated;
+- runtime behavior, production route, rollout gates, preview behavior,
+  save/template/assign behavior and legacy fallback are unchanged;
+- Matrix default remains disabled.
+
+Current metadata shape: 14 desk source reviews cover 14 source lookup records,
+and 15 evidence claim candidates remain candidate-only. `competition_context`
+is intentionally still blocked for future manual/regulatory source
+verification.
+
+Next stage: real human/manual source review or Source Readiness Update from
+Human Review Results.
