@@ -4217,3 +4217,38 @@ prohibited.
 Next stage options: evidence claim extraction from verified sources, manual
 source verification for policy/rule entries, or real coach/medical/data-quality
 review.
+
+## 52. Stage: P0 Evidence Claim Extraction Registry
+
+This stage adds a metadata-only layer after SourceLookupIntake:
+
+SourceLookupIntake -> EvidenceClaimExtractionRegistry ->
+EvidenceClaimBlockers -> future human review / source verification.
+
+Artifacts:
+
+- `packages/shared/src/constructor-matrix-evidence-claims.ts`;
+- `npm run check:constructor-matrix-evidence-claims`;
+- shared exports for evidence claim ids, blocker ids and summary helpers;
+- Review Package evidence-claim extraction summary metadata.
+
+The claim registry intentionally empty because no SourceLookupIntake record is
+currently extraction-ready. The stage creates 20 blockers instead, covering
+14/14 source lookup records, 10/10 P0 source candidates, 6/6 P0 backlog items
+and all required high-risk areas.
+
+Manual-verification policy/rule sources are not used for claim extraction.
+Verified source identities that still need full text, abstract, policy text or
+human review remain blocked.
+
+No evidence claim is a runtime rule. No claim is human-approved. No numeric
+threshold values, fake citations, fake source metadata or fake approvals are
+introduced.
+
+No changes are allowed to runtime behavior, production draft route, rollout
+gates, preview behavior, pilot readiness, save/template/assign, block
+selection, skeleton selection or legacy fallback. Matrix default remains
+disabled.
+
+Next stage options: manual source verification, human review of claim blockers
+or a later claim extraction pass after source readiness is updated.

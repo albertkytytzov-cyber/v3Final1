@@ -5,6 +5,7 @@ export * from "./constructor-matrix-data-dependencies";
 export * from "./constructor-matrix-adapter";
 export * from "./constructor-matrix-comparison";
 export * from "./constructor-matrix-evidence";
+export * from "./constructor-matrix-evidence-claims";
 export * from "./constructor-matrix";
 export * from "./constructor-matrix-plan-builder";
 export * from "./constructor-matrix-pilot-readiness";

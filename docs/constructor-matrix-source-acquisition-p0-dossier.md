@@ -241,3 +241,35 @@ Guardrails:
 Next safe stages: evidence claim extraction from verified sources only, manual
 verification for official policy/rule entries, or real coach/medical/data
 quality review.
+
+## 13. Stage: P0 Evidence Claim Extraction Registry
+
+The P0 evidence claim extraction stage has created a metadata-only registry for
+future extracted claims and current claim blockers:
+
+- registry: `packages/shared/src/constructor-matrix-evidence-claims.ts`;
+- verifier: `npm run check:constructor-matrix-evidence-claims`;
+- Review Package summary: evidence claim counts, blocker counts and coverage;
+- source lookup records covered: 14/14;
+- P0 source candidates covered: 10/10;
+- P0 backlog items covered: 6/6.
+
+The claim registry intentionally empty because SourceLookupIntake currently has
+0 extraction-ready records. The stage records 20 blockers instead of extracting
+claims from source identities that still need full text, policy text, manual
+verification or human review.
+
+This means:
+
+- manual-verification sources are not used for claims;
+- verified-but-not-ready sources stay blocked;
+- no source identity is turned into a runtime rule;
+- no numeric threshold values are approved;
+- no fake citations or human approvals are added.
+
+Runtime behavior, production route, rollout gates, preview behavior and legacy
+fallback are unchanged. Matrix default remains disabled.
+
+Next safe stages: manual verification of blocked policy/rule sources, source
+readiness updates, or real coach/medical/data-quality review before any future
+claim extraction.

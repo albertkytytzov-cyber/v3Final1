@@ -2799,7 +2799,9 @@ const metadataCheckFiles = [
   "scripts/check-constructor-matrix-source-expansion-backlog.mjs",
   "scripts/check-constructor-matrix-source-candidates.mjs",
   "scripts/check-constructor-matrix-source-lookup-intake.mjs",
+  "scripts/check-constructor-matrix-evidence-claims.mjs",
   "packages/shared/src/constructor-matrix-evidence.ts",
+  "packages/shared/src/constructor-matrix-evidence-claims.ts",
   "packages/shared/src/constructor-matrix-data-dependencies.ts",
   "packages/shared/src/constructor-matrix-threshold-candidates.ts",
   "packages/shared/src/constructor-matrix-review-package.ts",
@@ -2822,6 +2824,7 @@ for (const token of [
   "check:constructor-matrix-source-expansion-backlog",
   "check:constructor-matrix-source-candidates",
   "check:constructor-matrix-source-lookup-intake",
+  "check:constructor-matrix-evidence-claims",
 ]) {
   assert(packageJsonSource.includes(token), `package.json must expose ${token}`);
 }
@@ -2858,6 +2861,10 @@ for (const [path, source] of [
   assert(
     source.includes("P0 Controlled Source Lookup + Source Intake Registry"),
     `${path} must document P0 Controlled Source Lookup + Source Intake Registry`,
+  );
+  assert(
+    source.includes("P0 Evidence Claim Extraction Registry"),
+    `${path} must document P0 Evidence Claim Extraction Registry`,
   );
 }
 

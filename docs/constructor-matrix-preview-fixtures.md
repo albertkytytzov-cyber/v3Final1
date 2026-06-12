@@ -703,6 +703,34 @@ Preview fixture expectations are unchanged:
 - broad Matrix default remains prohibited;
 - no source is promoted into runtime rules.
 
+## P0 Evidence Claim Extraction Registry regression
+
+Stage: P0 Evidence Claim Extraction Registry.
+
+`npm run check:constructor-matrix-evidence-claims` verifies the metadata-only
+claim registry and blockers:
+
+- evidence claims: 0;
+- evidence claim blockers: 20;
+- source lookup records covered: 14/14;
+- P0 source candidates covered: 10/10;
+- P0 backlog items covered: 6/6;
+- required high-risk areas are represented by blockers;
+- manual-verification sources are not used for claims;
+- runtime constructor files do not import the evidence-claim registry.
+
+The claim registry intentionally empty because no source lookup intake record
+is currently ready for claim extraction. Blockers carry the stage until full
+text, policy text, source readiness or human review changes.
+
+Preview fixture expectations are unchanged:
+
+- evidence claim metadata does not alter Matrix preview behavior;
+- no preview scenario becomes primary because of evidence claim metadata;
+- no rollout, save/template/assign or legacy fallback behavior is changed;
+- broad Matrix default remains prohibited;
+- no source claim is promoted into runtime rules.
+
 ## Что не проверяется
 
 Fixtures не делают full snapshot:

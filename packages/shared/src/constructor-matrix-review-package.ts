@@ -11,6 +11,10 @@ import {
   type ConstructorMatrixEvidenceRiskArea,
 } from "./constructor-matrix-evidence";
 import {
+  buildConstructorMatrixEvidenceClaimExtractionSummary,
+  type ConstructorMatrixEvidenceClaimExtractionSummary,
+} from "./constructor-matrix-evidence-claims";
+import {
   buildConstructorMatrixReviewDecisionLedgerSummary,
   getConstructorMatrixReviewDecisionsForSubject,
   type ConstructorMatrixReviewDecisionLedgerSummary,
@@ -138,6 +142,7 @@ export interface ConstructorMatrixReviewPackagePayload {
   sourceExpansionBacklog: ConstructorMatrixSourceExpansionBacklogSummary;
   sourceAcquisition: ConstructorMatrixSourceAcquisitionSummary;
   sourceLookupIntake: ConstructorMatrixSourceLookupIntakeSummary;
+  evidenceClaims: ConstructorMatrixEvidenceClaimExtractionSummary;
   reviewerQueues: readonly ConstructorMatrixReviewPackageReviewerQueue[];
   evidenceDependencies: readonly ConstructorMatrixReviewPackageEvidenceItem[];
   dataDependencies: readonly ConstructorMatrixReviewPackageDataItem[];
@@ -601,6 +606,12 @@ export function buildConstructorMatrixLayerReviewMarkdown(
       `Source lookup extraction ready: ${payload.sourceLookupIntake.extractionReadyCount}`,
       `Source lookup unavailable: ${payload.sourceLookupIntake.lookupUnavailableCount}`,
       `Source lookup runtimeChangeAllowedNow=${payload.sourceLookupIntake.sourceLookupRuntimeChangeAllowedNow}`,
+      `Evidence claims extracted: ${payload.evidenceClaims.evidenceClaimCount}`,
+      `Evidence claim blockers: ${payload.evidenceClaims.evidenceClaimBlockerCount}`,
+      `Evidence claim source lookup coverage: ${payload.evidenceClaims.sourceLookupRecordsCoveredCount}/${payload.evidenceClaims.sourceLookupRecordCount}`,
+      `Evidence claim P0 source candidate coverage: ${payload.evidenceClaims.p0SourceCandidatesCoveredCount}/${payload.evidenceClaims.p0SourceCandidateCount}`,
+      `Evidence claim P0 backlog coverage: ${payload.evidenceClaims.p0BacklogItemsCoveredCount}/${payload.evidenceClaims.p0BacklogItemCount}`,
+      `Evidence claim runtimeChangeAllowedNow=${payload.evidenceClaims.runtimeChangeAllowedNow}`,
     ]),
     "",
     "## Required Threshold Areas Covered",
@@ -660,6 +671,7 @@ export function buildConstructorMatrixLayerReviewPackage(params?: {
     sourceExpansionBacklog: buildConstructorMatrixSourceExpansionBacklogSummary(),
     sourceAcquisition: buildConstructorMatrixSourceAcquisitionSummary(),
     sourceLookupIntake: buildConstructorMatrixSourceLookupIntakeSummary(),
+    evidenceClaims: buildConstructorMatrixEvidenceClaimExtractionSummary(),
     reviewerQueues: buildReviewerQueues(),
     evidenceDependencies: CONSTRUCTOR_MATRIX_EVIDENCE_DEPENDENCY_REGISTRY.map(evidenceItem),
     dataDependencies: CONSTRUCTOR_MATRIX_DATA_DEPENDENCIES.map(dataItem),

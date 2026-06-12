@@ -429,3 +429,40 @@ Rollout guardrails:
 Next step: evidence claim extraction from verified sources only, manual source
 verification where needed, or real coach/medical/data-quality review. Runtime
 promotion requires a separate explicit stage.
+
+## P0 Evidence Claim Extraction Registry rollout note
+
+Stage: P0 Evidence Claim Extraction Registry.
+
+The evidence claim extraction registry is metadata-only. It records extracted
+claims only when a source lookup record is verified and extraction-safe. At this
+stage, no source lookup record is extraction-ready.
+
+Rollout summary:
+
+- evidence claims: 0;
+- evidence claim blockers: 20;
+- source lookup records covered: 14/14;
+- P0 source candidates covered: 10/10;
+- P0 backlog items covered: 6/6;
+- required high-risk areas covered by blockers.
+
+The claim registry intentionally empty because `extractionReadyCount=0`.
+Manual-verification sources and verified-but-not-ready sources are blocked from
+claim extraction.
+
+Rollout guardrails:
+
+- claims are not runtime rules;
+- claims are not human-approved;
+- no numeric thresholds or cutoffs are introduced;
+- no fake citations, source metadata or human approvals are added;
+- no production route is changed;
+- no rollout gate is changed;
+- no preview behavior, save/template/assign behavior or legacy fallback is
+  changed;
+- broad Matrix default remains disabled.
+
+Next step: manual source verification, human review of claim blockers or a
+future extraction pass after source readiness is updated. Runtime promotion
+requires a separate explicit stage.

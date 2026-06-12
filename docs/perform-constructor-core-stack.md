@@ -2135,3 +2135,45 @@ Guardrails:
 
 Next step: evidence claim extraction from verified sources only, manual source
 verification where needed, or real coach/medical/data-quality review.
+
+### 15.34 P0 Evidence Claim Extraction Registry
+
+Stage: P0 Evidence Claim Extraction Registry.
+
+This stage adds the metadata-only evidence claim extraction registry after
+SourceLookupIntake. Claims may be added only when a source lookup record is
+verified and extraction-safe. Current source lookup records are verified as
+source identities, but none is marked ready for claim extraction.
+
+Implemented:
+
+- `packages/shared/src/constructor-matrix-evidence-claims.ts`;
+- exported claim, blocker and summary helpers from `@training-platform/shared`;
+- `npm run check:constructor-matrix-evidence-claims`;
+- Review Package evidence-claim summary fields.
+
+Coverage:
+
+- evidence claims: 0;
+- evidence claim blockers: 20;
+- source lookup records covered: 14/14;
+- P0 source candidates covered: 10/10;
+- P0 backlog items covered: 6/6;
+- required high-risk areas covered by blockers.
+
+The claim registry intentionally empty because `extractionReadyCount=0`.
+Manual-verification sources and verified-but-not-ready sources are represented
+by blockers instead of claim text.
+
+Guardrails:
+
+- claims are metadata-only and not runtime rules;
+- claims are not human-approved;
+- no numeric threshold values are introduced;
+- no fake citations, source metadata or human approvals are added;
+- runtime behavior, production route, rollout gates, preview behavior,
+  save/template/assign behavior and legacy fallback are unchanged;
+- Matrix default remains disabled.
+
+Next step: human review of blockers, manual verification of policy/rule sources
+or a later extraction pass after source readiness changes.
