@@ -4288,3 +4288,35 @@ disabled.
 
 Next stage options: actual human review outside code, manual source
 verification, or a later claim extraction pass after blocker readiness changes.
+
+## 54. Stage: Matrix Review Intake Export Pack
+
+Stage: Matrix Review Intake Export Pack.
+
+This stage creates metadata-only review packets from the Evidence Claim Review
+Intake registry:
+
+EvidenceClaimReviewIntake -> ReviewIntakeExportPack -> reviewer-specific
+Markdown/JSON packets -> real-world manual review.
+
+Artifacts:
+
+- `packages/shared/src/constructor-matrix-review-intake-export.ts`;
+- `docs/matrix-review-intake-export/`;
+- `npm run generate:constructor-matrix-review-intake-export`;
+- `npm run check:constructor-matrix-review-intake-export`;
+- Review Package review-intake export summary metadata.
+
+The export pack is for human reviewers. It does not approve anything, does not
+extract claims, does not update source readiness and does not create numeric
+thresholds. It does not invent citations, source metadata, human approvals,
+reviewer names or review dates.
+
+No changes are allowed to runtime behavior, production draft route, rollout
+gates, preview behavior, pilot readiness, save/template/assign, block
+selection, skeleton selection or legacy fallback. Matrix default remains
+disabled.
+
+Next real-world step: manual source verification and reviewer completion
+outside code. Next code stage after real review: Source Readiness Update from
+Human Review Results.

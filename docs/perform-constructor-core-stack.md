@@ -2215,3 +2215,41 @@ Guardrails:
 
 Next step: actual human review, manual source verification outside code, or a
 later evidence-claim extraction pass after source readiness changes.
+
+### 15.36 Matrix Review Intake Export Pack
+
+Stage: Matrix Review Intake Export Pack.
+
+This stage adds a metadata-only export layer for human reviewers:
+
+EvidenceClaimReviewIntake -> ReviewIntakeExportPack -> reviewer-specific
+Markdown/JSON packets -> real-world manual review.
+
+Implemented:
+
+- `packages/shared/src/constructor-matrix-review-intake-export.ts`;
+- `docs/matrix-review-intake-export/`;
+- `npm run generate:constructor-matrix-review-intake-export`;
+- `npm run check:constructor-matrix-review-intake-export`;
+- Review Package summary fields for export item count, audience counts and
+  zero runtime-change count.
+
+The export pack creates packets for manual source verification, source text
+acquisition, coach review, medical review, data-quality review, sport-science
+review and product-safety review.
+
+Guardrails:
+
+- export pack is metadata-only;
+- export pack is for human reviewers;
+- it does not approve anything;
+- it does not extract claims;
+- it does not update source readiness;
+- no numeric thresholds are created;
+- runtime behavior, production route, rollout gates, preview behavior,
+  save/template/assign behavior and legacy fallback are unchanged;
+- Matrix default remains disabled.
+
+Next real-world step: manual source verification and reviewer completion
+outside code. Next code stage after real review: Source Readiness Update from
+Human Review Results.

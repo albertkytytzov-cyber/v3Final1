@@ -26,6 +26,10 @@ import {
   type ConstructorMatrixReviewSubjectType,
 } from "./constructor-matrix-review-decision-ledger";
 import {
+  buildConstructorMatrixReviewIntakeExportSummary,
+  type ConstructorMatrixReviewIntakeExportSummary,
+} from "./constructor-matrix-review-intake-export";
+import {
   buildConstructorMatrixSourceExpansionBacklogSummary,
   type ConstructorMatrixSourceExpansionBacklogSummary,
 } from "./constructor-matrix-source-expansion-backlog";
@@ -148,6 +152,7 @@ export interface ConstructorMatrixReviewPackagePayload {
   sourceLookupIntake: ConstructorMatrixSourceLookupIntakeSummary;
   evidenceClaims: ConstructorMatrixEvidenceClaimExtractionSummary;
   evidenceClaimReviewIntake: ConstructorMatrixEvidenceClaimReviewIntakeSummary;
+  reviewIntakeExport: ConstructorMatrixReviewIntakeExportSummary;
   reviewerQueues: readonly ConstructorMatrixReviewPackageReviewerQueue[];
   evidenceDependencies: readonly ConstructorMatrixReviewPackageEvidenceItem[];
   dataDependencies: readonly ConstructorMatrixReviewPackageDataItem[];
@@ -623,6 +628,8 @@ export function buildConstructorMatrixLayerReviewMarkdown(
       `Evidence claim review source text needed: ${payload.evidenceClaimReviewIntake.sourceTextNeededIntakeCount}`,
       `Evidence claim review human-review routing: ${payload.evidenceClaimReviewIntake.humanReviewBeforeClaimsIntakeCount}`,
       `Evidence claim review runtime changes: ${payload.evidenceClaimReviewIntake.runtimeChangeAllowedNowCount}`,
+      `Review intake export items: ${payload.reviewIntakeExport.reviewIntakeExportItemCount}`,
+      `Review intake export runtime changes: ${payload.reviewIntakeExport.reviewIntakeExportRuntimeChangeAllowedNowCount}`,
     ]),
     "",
     "## Required Threshold Areas Covered",
@@ -684,6 +691,7 @@ export function buildConstructorMatrixLayerReviewPackage(params?: {
     sourceLookupIntake: buildConstructorMatrixSourceLookupIntakeSummary(),
     evidenceClaims: buildConstructorMatrixEvidenceClaimExtractionSummary(),
     evidenceClaimReviewIntake: buildConstructorMatrixEvidenceClaimReviewIntakeSummary(),
+    reviewIntakeExport: buildConstructorMatrixReviewIntakeExportSummary(),
     reviewerQueues: buildReviewerQueues(),
     evidenceDependencies: CONSTRUCTOR_MATRIX_EVIDENCE_DEPENDENCY_REGISTRY.map(evidenceItem),
     dataDependencies: CONSTRUCTOR_MATRIX_DATA_DEPENDENCIES.map(dataItem),

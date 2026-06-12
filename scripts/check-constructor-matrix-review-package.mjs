@@ -1,6 +1,7 @@
 import { access, readFile } from "node:fs/promises";
 
 import {
+  buildConstructorMatrixReviewIntakeExportPack,
   buildConstructorMatrixLayerReviewPackage,
   CONSTRUCTOR_MATRIX_DATA_DEPENDENCIES,
   CONSTRUCTOR_MATRIX_EVIDENCE_CLAIM_BLOCKERS,
@@ -115,6 +116,16 @@ assert(
   payload.evidenceClaimReviewIntake.runtimeChangeAllowedNowCount === 0,
   "Review package review intake summary must report no runtime changes",
 );
+const reviewIntakeExportPack = buildConstructorMatrixReviewIntakeExportPack();
+assert(
+  payload.reviewIntakeExport.reviewIntakeExportItemCount ===
+    reviewIntakeExportPack.summary.exportItemCount,
+  "Review package must include review intake export item count",
+);
+assert(
+  payload.reviewIntakeExport.reviewIntakeExportRuntimeChangeAllowedNowCount === 0,
+  "Review package review intake export summary must report no runtime changes",
+);
 
 for (const area of CONSTRUCTOR_MATRIX_REVIEW_PACKAGE_REQUIRED_THRESHOLD_AREAS) {
   assert(
@@ -217,6 +228,8 @@ console.log(
       thresholdCandidates: payload.summary.thresholdCandidateCount,
       evidenceClaimReviewIntakes:
         payload.evidenceClaimReviewIntake.evidenceClaimReviewIntakeCount,
+      reviewIntakeExportItems:
+        payload.reviewIntakeExport.reviewIntakeExportItemCount,
     },
       reviewers: payload.reviewerQueues.map((queue) => ({
         reviewer: queue.reviewer,

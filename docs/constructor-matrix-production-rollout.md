@@ -499,3 +499,36 @@ Rollout guardrails:
 Next step: manual source verification, human review of claim blockers or a
 future extraction pass after source readiness is updated. Runtime promotion
 requires a separate explicit stage.
+
+## Matrix Review Intake Export Pack rollout note
+
+Stage: Matrix Review Intake Export Pack.
+
+The review intake export pack is metadata-only. It generates reviewer-specific
+Markdown/JSON packets from Evidence Claim Review Intake for real-world manual
+review.
+
+Rollout summary:
+
+- export builder: `packages/shared/src/constructor-matrix-review-intake-export.ts`;
+- generated export docs: `docs/matrix-review-intake-export/`;
+- audiences: manual source verification, source text acquisition, coach,
+  medical, data-quality, sport-science and product-safety review;
+- runtime changes allowed now: none.
+
+Rollout guardrails:
+
+- export pack does not approve anything;
+- export pack does not extract claims;
+- export pack does not update source readiness;
+- no numeric thresholds or cutoffs are introduced;
+- no fake citations, source metadata or human approvals are added;
+- no production route is changed;
+- no rollout gate is changed;
+- no preview behavior, save/template/assign behavior or legacy fallback is
+  changed;
+- broad Matrix default remains disabled.
+
+Next real-world step: manual source verification and reviewer completion
+outside code. Next code stage after real review: Source Readiness Update from
+Human Review Results.

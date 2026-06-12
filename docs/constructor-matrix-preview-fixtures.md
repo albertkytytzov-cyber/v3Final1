@@ -757,6 +757,30 @@ Preview fixture expectations are unchanged:
 - broad Matrix default remains prohibited;
 - no evidence claim is extracted, approved or promoted into runtime rules.
 
+## Matrix Review Intake Export Pack regression
+
+Stage: Matrix Review Intake Export Pack.
+
+`npm run check:constructor-matrix-review-intake-export` verifies the
+metadata-only export pack generated from Evidence Claim Review Intake:
+
+- every review intake appears in at least one export item;
+- every audience packet exists for manual source verification, source text
+  acquisition, coach, medical, data-quality, sport-science and product-safety
+  review;
+- JSON and Markdown exports match the shared builder output;
+- export items keep `runtimeChangeAllowedNow=false` and `humanReviewed=false`;
+- no source readiness update, claim extraction or runtime promotion is
+  performed.
+
+Preview fixture expectations are unchanged:
+
+- review intake export metadata does not alter Matrix preview behavior;
+- no preview scenario becomes primary because of review intake export metadata;
+- no rollout, save/template/assign or legacy fallback behavior is changed;
+- broad Matrix default remains prohibited;
+- no evidence claim is extracted, approved or promoted into runtime rules.
+
 ## Что не проверяется
 
 Fixtures не делают full snapshot:
