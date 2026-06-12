@@ -444,3 +444,33 @@ Guardrails:
 
 Next step: run an actual coach, medical and data-quality review pass, or move
 source gaps into a source-expansion backlog before any runtime promotion.
+
+## 16. Source Expansion Backlog + Review Intake Guard
+
+Stage: Source Expansion Backlog + Review Intake Guard.
+
+The source-expansion backlog converts the Review Package and Review Decision
+Ledger into a prioritized intake list for future review work. It is
+metadata-only and does not claim that new sources have been found.
+
+Implemented artifact:
+
+- `packages/shared/src/constructor-matrix-source-expansion-backlog.ts`;
+- `npm run check:constructor-matrix-source-expansion-backlog`;
+- shared exports for backlog ids, lookup helpers and backlog summary;
+- Review Package summary fields for backlog count, priority counts, review
+  tracks and unresolved P0 backlog ids;
+- Review Decision Ledger metadata links to related backlog items.
+
+Guardrails:
+
+- no sources, citations, authors, years, DOI or PMID values are invented;
+- no numeric threshold values are approved;
+- no human review decisions are faked;
+- `humanReviewed=false` remains unchanged in the Review Decision Ledger;
+- runtime behavior, production route, rollout gates, preview behavior and
+  legacy fallback are unchanged;
+- Matrix default remains prohibited.
+
+Next step: actual coach, medical, data-quality and sport-science review, or
+targeted source acquisition for the P0/P1 backlog items.

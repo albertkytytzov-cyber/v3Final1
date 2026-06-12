@@ -16,6 +16,10 @@ import {
   type ConstructorMatrixThresholdCandidateArea,
   type ConstructorMatrixThresholdCandidateId,
 } from "./constructor-matrix-threshold-candidates";
+import {
+  CONSTRUCTOR_MATRIX_SOURCE_EXPANSION_BACKLOG,
+  type ConstructorMatrixSourceExpansionBacklogId,
+} from "./constructor-matrix-source-expansion-backlog";
 
 export type ConstructorMatrixReviewSubjectType =
   | "evidence_dependency"
@@ -70,6 +74,7 @@ export type ConstructorMatrixReviewDecisionEntry = {
   evidenceDependencyIds: readonly ConstructorMatrixEvidenceDependencyId[];
   dataDependencyIds: readonly ConstructorMatrixDataDependencyId[];
   thresholdCandidateIds: readonly ConstructorMatrixThresholdCandidateId[];
+  sourceExpansionBacklogIds?: readonly ConstructorMatrixSourceExpansionBacklogId[];
   humanReviewed: false;
   reviewedBy?: never;
   reviewedAt?: never;
@@ -246,6 +251,30 @@ function thresholdIdsForData(
   return CONSTRUCTOR_MATRIX_THRESHOLD_CANDIDATES
     .filter((item) => (item.dataDependencyIds as readonly string[]).includes(id))
     .map((item) => item.id as ConstructorMatrixThresholdCandidateId);
+}
+
+function sourceExpansionIdsForEvidence(
+  id: ConstructorMatrixEvidenceDependencyId,
+): ConstructorMatrixSourceExpansionBacklogId[] {
+  return CONSTRUCTOR_MATRIX_SOURCE_EXPANSION_BACKLOG
+    .filter((item) => (item.evidenceDependencyIds as readonly string[]).includes(id))
+    .map((item) => item.id as ConstructorMatrixSourceExpansionBacklogId);
+}
+
+function sourceExpansionIdsForData(
+  id: ConstructorMatrixDataDependencyId,
+): ConstructorMatrixSourceExpansionBacklogId[] {
+  return CONSTRUCTOR_MATRIX_SOURCE_EXPANSION_BACKLOG
+    .filter((item) => (item.dataDependencyIds as readonly string[]).includes(id))
+    .map((item) => item.id as ConstructorMatrixSourceExpansionBacklogId);
+}
+
+function sourceExpansionIdsForThreshold(
+  id: ConstructorMatrixThresholdCandidateId,
+): ConstructorMatrixSourceExpansionBacklogId[] {
+  return CONSTRUCTOR_MATRIX_SOURCE_EXPANSION_BACKLOG
+    .filter((item) => (item.thresholdCandidateIds as readonly string[]).includes(id))
+    .map((item) => item.id as ConstructorMatrixSourceExpansionBacklogId);
 }
 
 function addAreaTracks(
@@ -664,6 +693,9 @@ function evidenceDecisionEntry(
     evidenceDependencyIds: [item.id as ConstructorMatrixEvidenceDependencyId],
     dataDependencyIds: dataIdsForEvidence(item.id as ConstructorMatrixEvidenceDependencyId),
     thresholdCandidateIds: thresholdIdsForEvidence(item.id as ConstructorMatrixEvidenceDependencyId),
+    sourceExpansionBacklogIds: sourceExpansionIdsForEvidence(
+      item.id as ConstructorMatrixEvidenceDependencyId,
+    ),
     humanReviewed: false,
   };
 }
@@ -698,6 +730,9 @@ function dataDecisionEntry(
     evidenceDependencyIds: item.supportsEvidenceDependencies,
     dataDependencyIds: [item.id as ConstructorMatrixDataDependencyId],
     thresholdCandidateIds: thresholdIdsForData(item.id as ConstructorMatrixDataDependencyId),
+    sourceExpansionBacklogIds: sourceExpansionIdsForData(
+      item.id as ConstructorMatrixDataDependencyId,
+    ),
     humanReviewed: false,
   };
 }
@@ -735,6 +770,9 @@ function thresholdDecisionEntry(
     evidenceDependencyIds: item.evidenceDependencyIds,
     dataDependencyIds: item.dataDependencyIds,
     thresholdCandidateIds: [item.id as ConstructorMatrixThresholdCandidateId],
+    sourceExpansionBacklogIds: sourceExpansionIdsForThreshold(
+      item.id as ConstructorMatrixThresholdCandidateId,
+    ),
     humanReviewed: false,
   };
 }

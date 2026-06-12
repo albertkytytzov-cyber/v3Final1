@@ -15,6 +15,7 @@ export * from "./constructor-matrix-rollout";
 export * from "./constructor-matrix-save-dry-run";
 export * from "./constructor-matrix-skeleton";
 export * from "./constructor-matrix-threshold-candidates";
+export * from "./constructor-matrix-source-expansion-backlog";
 export * from "./season-strategy";
 
 export type UserRole = "coach" | "athlete" | "admin";

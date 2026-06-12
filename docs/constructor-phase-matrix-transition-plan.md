@@ -4107,3 +4107,40 @@ selection, skeleton selection or legacy fallback.
 
 Next stage: real coach, medical and data-quality review pass, or source
 expansion backlog, before any runtime behavior is considered.
+
+## 49. Stage: Source Expansion Backlog + Review Intake Guard
+
+This stage adds the next metadata-only link in the review governance chain:
+
+EvidenceDependencyRegistry -> DataDependencyGate -> ThresholdCandidateRegistry
+-> ReviewPackage -> ReviewDecisionLedger -> SourceExpansionBacklog.
+
+Artifacts:
+
+- `packages/shared/src/constructor-matrix-source-expansion-backlog.ts`;
+- `npm run check:constructor-matrix-source-expansion-backlog`;
+- shared exports for source-expansion backlog ids, lookup helpers and summary;
+- Review Package source-expansion summary metadata;
+- Review Decision Ledger links to source-expansion backlog ids.
+
+The backlog defines review intake questions, required source types, acceptance
+criteria and runtime blockers for weight cut, hydration, RED-S/female context,
+BFR/KAATSU, injury/pain, youth, wearable readiness, sleep/RHR/HRV, contact
+load, LMV, taper, competition model, travel fatigue, internal validation and
+review export traceability.
+
+It does not claim that sources have been found. It does not invent studies,
+authors, years, DOI, PMID, effect sizes, protocols, contraindication lists or
+numeric threshold values.
+
+No human review decisions are recorded. The Review Decision Ledger remains
+system triage only with `humanReviewed=false`, no `reviewedBy`, and no
+`reviewedAt`.
+
+No changes are allowed to runtime behavior, production draft route, rollout
+gates, preview behavior, pilot readiness, save/template/assign, block
+selection, skeleton selection or legacy fallback. Matrix default remains
+prohibited.
+
+Next stage: actual coach, medical, data-quality and sport-science review pass,
+or targeted source acquisition for unresolved backlog items.

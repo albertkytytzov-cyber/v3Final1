@@ -632,6 +632,27 @@ Preview fixture expectations are unchanged:
 - no numeric thresholds or cutoffs are added;
 - no Matrix default, save, template or assign path is enabled.
 
+## Source Expansion Backlog + Review Intake Guard regression
+
+Stage: Source Expansion Backlog + Review Intake Guard.
+
+`npm run check:constructor-matrix-source-expansion-backlog` verifies the
+metadata-only source-expansion backlog:
+
+- required backlog items are present;
+- evidence, data, threshold and ledger ids resolve;
+- Review Package includes source-expansion summary metadata;
+- Review Decision Ledger keeps `humanReviewed=false`;
+- no fake citations or numeric thresholds are added;
+- runtime constructor files do not import the backlog.
+
+Preview fixture expectations are unchanged:
+
+- the backlog does not alter Matrix preview behavior;
+- no preview scenario becomes primary because of source-expansion metadata;
+- no rollout, save/template/assign or legacy fallback behavior is changed;
+- Matrix default remains prohibited.
+
 ## Что не проверяется
 
 Fixtures не делают full snapshot:

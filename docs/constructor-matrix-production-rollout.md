@@ -343,3 +343,26 @@ Rollout guardrails:
 
 Next step: actual coach, medical and data-quality review, or source expansion
 backlog, before any runtime promotion.
+
+## Source Expansion Backlog + Review Intake Guard rollout note
+
+Stage: Source Expansion Backlog + Review Intake Guard.
+
+The source-expansion backlog is metadata-only intake planning. It lists source
+types, review questions, acceptance criteria and runtime blockers for future
+coach, medical, data-quality and sport-science work.
+
+Rollout guardrails:
+
+- no sources, citations, DOI, PMID or threshold values are invented;
+- no human approvals are recorded;
+- Review Decision Ledger entries remain `humanReviewed=false`;
+- no production route is changed;
+- no rollout gate is changed;
+- no preview behavior, save/template/assign behavior or legacy fallback is
+  changed;
+- Matrix default remains prohibited;
+- Huawei files and SDK scripts remain unrelated to this Matrix stage.
+
+Next step: actual human review pass or targeted source acquisition. Runtime
+promotion requires a separate explicit stage.

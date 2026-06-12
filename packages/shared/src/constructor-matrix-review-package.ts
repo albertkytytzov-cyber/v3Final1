@@ -18,6 +18,10 @@ import {
   type ConstructorMatrixReviewSubjectType,
 } from "./constructor-matrix-review-decision-ledger";
 import {
+  buildConstructorMatrixSourceExpansionBacklogSummary,
+  type ConstructorMatrixSourceExpansionBacklogSummary,
+} from "./constructor-matrix-source-expansion-backlog";
+import {
   CONSTRUCTOR_MATRIX_THRESHOLD_CANDIDATES,
   type ConstructorMatrixThresholdCandidate,
   type ConstructorMatrixThresholdCandidateArea,
@@ -123,6 +127,7 @@ export interface ConstructorMatrixReviewPackagePayload {
     requiredThresholdAreasMissing: readonly ConstructorMatrixThresholdCandidateArea[];
   };
   reviewDecisionLedger: ConstructorMatrixReviewDecisionLedgerSummary;
+  sourceExpansionBacklog: ConstructorMatrixSourceExpansionBacklogSummary;
   reviewerQueues: readonly ConstructorMatrixReviewPackageReviewerQueue[];
   evidenceDependencies: readonly ConstructorMatrixReviewPackageEvidenceItem[];
   dataDependencies: readonly ConstructorMatrixReviewPackageDataItem[];
@@ -575,6 +580,8 @@ export function buildConstructorMatrixLayerReviewMarkdown(
       `Review decision ledger entries: ${payload.reviewDecisionLedger.totalLedgerEntries}`,
       `Review decision threshold coverage: ${payload.reviewDecisionLedger.thresholdCandidatesCoveredCount}/${payload.reviewDecisionLedger.thresholdCandidateCount}`,
       `Review decision humanReviewed=${payload.reviewDecisionLedger.humanReviewed}`,
+      `Source expansion backlog items: ${payload.sourceExpansionBacklog.sourceExpansionBacklogCount}`,
+      `Source expansion unresolved P0: ${payload.sourceExpansionBacklog.unresolvedP0SourceExpansionIds.join(", ") || "none"}`,
     ]),
     "",
     "## Required Threshold Areas Covered",
@@ -631,6 +638,7 @@ export function buildConstructorMatrixLayerReviewPackage(params?: {
       requiredThresholdAreasMissing,
     },
     reviewDecisionLedger: buildConstructorMatrixReviewDecisionLedgerSummary(),
+    sourceExpansionBacklog: buildConstructorMatrixSourceExpansionBacklogSummary(),
     reviewerQueues: buildReviewerQueues(),
     evidenceDependencies: CONSTRUCTOR_MATRIX_EVIDENCE_DEPENDENCY_REGISTRY.map(evidenceItem),
     dataDependencies: CONSTRUCTOR_MATRIX_DATA_DEPENDENCIES.map(dataItem),
