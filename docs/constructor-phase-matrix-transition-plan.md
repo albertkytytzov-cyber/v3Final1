@@ -4181,3 +4181,39 @@ prohibited.
 Next stage options: controlled external source lookup, evidence claim
 extraction, real coach/medical/data-quality review, or a source-candidate
 acceptance/rejection ledger.
+
+## 51. Stage: P0 Controlled Source Lookup + Source Intake Registry
+
+This stage adds a metadata-only source lookup intake layer:
+
+SourceExpansionBacklog -> SourceCandidateRegistry -> SourceLookupIntake ->
+future EvidenceClaimExtraction.
+
+Artifacts:
+
+- `packages/shared/src/constructor-matrix-source-lookup-intake.ts`;
+- `npm run check:constructor-matrix-source-lookup-intake`;
+- shared exports for source lookup intake ids, lookup helpers and summary;
+- Review Package source lookup intake summary metadata;
+- Review Decision Ledger metadata links to source lookup intake ids.
+
+External lookup was available. The registry records 14 intake entries, 14
+verified source identities, 2 entries requiring manual verification before
+claim extraction, 0 extraction-ready entries and 0 lookup-unavailable entries.
+P0 backlog coverage is 6/6, and P0 source-candidate coverage is 10/10.
+
+The registry does not perform evidence claim extraction. It records source
+identity metadata only and keeps all entries blocked from runtime use.
+
+No fake citations, authors, years, DOI or PMID values are added. No numeric
+threshold values are approved. No fake human review decisions are recorded. No
+source is promoted into rules.
+
+No changes are allowed to runtime behavior, production draft route, rollout
+gates, preview behavior, pilot readiness, save/template/assign, block
+selection, skeleton selection or legacy fallback. Matrix default remains
+prohibited.
+
+Next stage options: evidence claim extraction from verified sources, manual
+source verification for policy/rule entries, or real coach/medical/data-quality
+review.

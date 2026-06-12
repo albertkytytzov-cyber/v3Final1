@@ -393,3 +393,39 @@ Rollout guardrails:
 Next step: controlled external lookup, evidence claim extraction, real
 coach/medical/data-quality review or a source-candidate acceptance/rejection
 ledger. Runtime promotion requires a separate explicit stage.
+
+## P0 Controlled Source Lookup + Source Intake Registry rollout note
+
+Stage: P0 Controlled Source Lookup + Source Intake Registry.
+
+The source lookup intake registry is metadata-only. It records verified source
+identity metadata for P0 source candidates and review context, but it does not
+extract evidence claims and does not accept sources into runtime rules.
+
+Lookup summary:
+
+- external lookup was available;
+- source lookup intake records: 14;
+- verified source identities: 14;
+- manual verification needed: 2;
+- extraction ready: 0;
+- lookup unavailable: 0;
+- P0 backlog coverage: 6/6;
+- P0 source-candidate coverage: 10/10.
+
+Rollout guardrails:
+
+- no source is accepted into rules;
+- no fake citations, DOI, PMID, authors or source metadata are invented;
+- no numeric thresholds or cutoffs are introduced;
+- no human approvals, reviewer names or review timestamps are recorded;
+- every source lookup intake record has `runtimeChangeAllowedNow=false`;
+- no production route is changed;
+- no rollout gate is changed;
+- no preview behavior, save/template/assign behavior or legacy fallback is
+  changed;
+- broad Matrix default remains prohibited.
+
+Next step: evidence claim extraction from verified sources only, manual source
+verification where needed, or real coach/medical/data-quality review. Runtime
+promotion requires a separate explicit stage.

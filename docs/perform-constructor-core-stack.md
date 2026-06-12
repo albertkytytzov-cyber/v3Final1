@@ -2091,3 +2091,47 @@ Guardrails:
 
 Next step: external lookup, evidence claim extraction, real coach/medical/data
 quality review or a source-candidate acceptance/rejection ledger.
+
+### 15.33 P0 Controlled Source Lookup + Source Intake Registry
+
+Stage: P0 Controlled Source Lookup + Source Intake Registry.
+
+This stage adds a metadata-only source lookup intake registry after the Source
+Candidate Registry. It records verified source identity metadata and remaining
+intake gaps, but it does not extract evidence claims or promote any source into
+runtime rules.
+
+Implemented:
+
+- `packages/shared/src/constructor-matrix-source-lookup-intake.ts`;
+- exported ids, lookup helpers and summary helpers from
+  `@training-platform/shared`;
+- `npm run check:constructor-matrix-source-lookup-intake`;
+- Review Package source lookup intake summary fields;
+- Review Decision Ledger metadata links to source lookup intake ids.
+
+Coverage:
+
+- external lookup was available;
+- source lookup intake records: 14;
+- verified source identities: 14;
+- manual verification needed: 2;
+- extraction ready: 0;
+- lookup unavailable: 0;
+- P0 backlog coverage: 6/6;
+- P0 source-candidate coverage: 10/10.
+
+Guardrails:
+
+- no source is accepted into rules;
+- no evidence claim extraction is performed;
+- no fake citations, DOI, PMID, authors or years are added;
+- no numeric threshold values are introduced;
+- no fake human approvals are recorded;
+- every intake record has `runtimeChangeAllowedNow=false`;
+- runtime behavior, production route, rollout gates, preview behavior,
+  save/template/assign behavior and legacy fallback are unchanged;
+- Matrix default remains prohibited.
+
+Next step: evidence claim extraction from verified sources only, manual source
+verification where needed, or real coach/medical/data-quality review.

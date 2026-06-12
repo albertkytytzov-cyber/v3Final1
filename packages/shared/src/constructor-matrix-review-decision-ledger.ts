@@ -24,6 +24,10 @@ import {
   CONSTRUCTOR_MATRIX_SOURCE_CANDIDATES,
   type ConstructorMatrixSourceCandidateId,
 } from "./constructor-matrix-source-candidates";
+import {
+  CONSTRUCTOR_MATRIX_SOURCE_LOOKUP_INTAKE,
+  type ConstructorMatrixSourceLookupIntakeId,
+} from "./constructor-matrix-source-lookup-intake";
 
 export type ConstructorMatrixReviewSubjectType =
   | "evidence_dependency"
@@ -80,6 +84,7 @@ export type ConstructorMatrixReviewDecisionEntry = {
   thresholdCandidateIds: readonly ConstructorMatrixThresholdCandidateId[];
   sourceExpansionBacklogIds?: readonly ConstructorMatrixSourceExpansionBacklogId[];
   sourceCandidateIds?: readonly ConstructorMatrixSourceCandidateId[];
+  sourceLookupIntakeIds?: readonly ConstructorMatrixSourceLookupIntakeId[];
   humanReviewed: false;
   reviewedBy?: never;
   reviewedAt?: never;
@@ -304,6 +309,30 @@ function sourceCandidateIdsForThreshold(
   return CONSTRUCTOR_MATRIX_SOURCE_CANDIDATES
     .filter((item) => (item.linkedThresholdCandidateIds as readonly string[]).includes(id))
     .map((item) => item.id as ConstructorMatrixSourceCandidateId);
+}
+
+function sourceLookupIntakeIdsForEvidence(
+  id: ConstructorMatrixEvidenceDependencyId,
+): ConstructorMatrixSourceLookupIntakeId[] {
+  return CONSTRUCTOR_MATRIX_SOURCE_LOOKUP_INTAKE
+    .filter((item) => (item.linkedEvidenceDependencyIds as readonly string[]).includes(id))
+    .map((item) => item.id as ConstructorMatrixSourceLookupIntakeId);
+}
+
+function sourceLookupIntakeIdsForData(
+  id: ConstructorMatrixDataDependencyId,
+): ConstructorMatrixSourceLookupIntakeId[] {
+  return CONSTRUCTOR_MATRIX_SOURCE_LOOKUP_INTAKE
+    .filter((item) => (item.linkedDataDependencyIds as readonly string[]).includes(id))
+    .map((item) => item.id as ConstructorMatrixSourceLookupIntakeId);
+}
+
+function sourceLookupIntakeIdsForThreshold(
+  id: ConstructorMatrixThresholdCandidateId,
+): ConstructorMatrixSourceLookupIntakeId[] {
+  return CONSTRUCTOR_MATRIX_SOURCE_LOOKUP_INTAKE
+    .filter((item) => (item.linkedThresholdCandidateIds as readonly string[]).includes(id))
+    .map((item) => item.id as ConstructorMatrixSourceLookupIntakeId);
 }
 
 function addAreaTracks(
@@ -728,6 +757,9 @@ function evidenceDecisionEntry(
     sourceCandidateIds: sourceCandidateIdsForEvidence(
       item.id as ConstructorMatrixEvidenceDependencyId,
     ),
+    sourceLookupIntakeIds: sourceLookupIntakeIdsForEvidence(
+      item.id as ConstructorMatrixEvidenceDependencyId,
+    ),
     humanReviewed: false,
   };
 }
@@ -766,6 +798,9 @@ function dataDecisionEntry(
       item.id as ConstructorMatrixDataDependencyId,
     ),
     sourceCandidateIds: sourceCandidateIdsForData(
+      item.id as ConstructorMatrixDataDependencyId,
+    ),
+    sourceLookupIntakeIds: sourceLookupIntakeIdsForData(
       item.id as ConstructorMatrixDataDependencyId,
     ),
     humanReviewed: false,
@@ -809,6 +844,9 @@ function thresholdDecisionEntry(
       item.id as ConstructorMatrixThresholdCandidateId,
     ),
     sourceCandidateIds: sourceCandidateIdsForThreshold(
+      item.id as ConstructorMatrixThresholdCandidateId,
+    ),
+    sourceLookupIntakeIds: sourceLookupIntakeIdsForThreshold(
       item.id as ConstructorMatrixThresholdCandidateId,
     ),
     humanReviewed: false,

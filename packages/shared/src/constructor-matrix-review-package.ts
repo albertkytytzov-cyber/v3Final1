@@ -26,6 +26,10 @@ import {
   type ConstructorMatrixSourceAcquisitionSummary,
 } from "./constructor-matrix-source-candidates";
 import {
+  buildConstructorMatrixSourceLookupIntakeSummary,
+  type ConstructorMatrixSourceLookupIntakeSummary,
+} from "./constructor-matrix-source-lookup-intake";
+import {
   CONSTRUCTOR_MATRIX_THRESHOLD_CANDIDATES,
   type ConstructorMatrixThresholdCandidate,
   type ConstructorMatrixThresholdCandidateArea,
@@ -133,6 +137,7 @@ export interface ConstructorMatrixReviewPackagePayload {
   reviewDecisionLedger: ConstructorMatrixReviewDecisionLedgerSummary;
   sourceExpansionBacklog: ConstructorMatrixSourceExpansionBacklogSummary;
   sourceAcquisition: ConstructorMatrixSourceAcquisitionSummary;
+  sourceLookupIntake: ConstructorMatrixSourceLookupIntakeSummary;
   reviewerQueues: readonly ConstructorMatrixReviewPackageReviewerQueue[];
   evidenceDependencies: readonly ConstructorMatrixReviewPackageEvidenceItem[];
   dataDependencies: readonly ConstructorMatrixReviewPackageDataItem[];
@@ -590,6 +595,12 @@ export function buildConstructorMatrixLayerReviewMarkdown(
       `Source acquisition candidates: ${payload.sourceAcquisition.totalCandidates}`,
       `Source acquisition P0 coverage: ${payload.sourceAcquisition.p0BacklogCoverage.coveredP0BacklogCount}/${payload.sourceAcquisition.p0BacklogCoverage.p0BacklogCount}`,
       `Source acquisition runtimeChangeAllowedNow=${payload.sourceAcquisition.runtimeChangeAllowedNow}`,
+      `Source lookup intake records: ${payload.sourceLookupIntake.sourceLookupIntakeCount}`,
+      `Source lookup verified sources: ${payload.sourceLookupIntake.verifiedSourceCount}`,
+      `Source lookup manual needed: ${payload.sourceLookupIntake.manualLookupNeededCount}`,
+      `Source lookup extraction ready: ${payload.sourceLookupIntake.extractionReadyCount}`,
+      `Source lookup unavailable: ${payload.sourceLookupIntake.lookupUnavailableCount}`,
+      `Source lookup runtimeChangeAllowedNow=${payload.sourceLookupIntake.sourceLookupRuntimeChangeAllowedNow}`,
     ]),
     "",
     "## Required Threshold Areas Covered",
@@ -648,6 +659,7 @@ export function buildConstructorMatrixLayerReviewPackage(params?: {
     reviewDecisionLedger: buildConstructorMatrixReviewDecisionLedgerSummary(),
     sourceExpansionBacklog: buildConstructorMatrixSourceExpansionBacklogSummary(),
     sourceAcquisition: buildConstructorMatrixSourceAcquisitionSummary(),
+    sourceLookupIntake: buildConstructorMatrixSourceLookupIntakeSummary(),
     reviewerQueues: buildReviewerQueues(),
     evidenceDependencies: CONSTRUCTOR_MATRIX_EVIDENCE_DEPENDENCY_REGISTRY.map(evidenceItem),
     dataDependencies: CONSTRUCTOR_MATRIX_DATA_DEPENDENCIES.map(dataItem),

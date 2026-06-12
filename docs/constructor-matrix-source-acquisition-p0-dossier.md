@@ -208,3 +208,36 @@ Unsafe next stages:
 - fake source metadata;
 - human-review simulation;
 - broad Matrix default.
+
+## 12. Stage: P0 Controlled Source Lookup + Source Intake Registry
+
+The controlled source lookup stage has created a metadata-only intake registry:
+
+- registry: `packages/shared/src/constructor-matrix-source-lookup-intake.ts`;
+- verifier: `npm run check:constructor-matrix-source-lookup-intake`;
+- Review Package summary: source lookup intake counts and runtime guard flag;
+- Review Decision Ledger links: metadata-only source lookup intake ids.
+
+External lookup was available. The intake registry records 14 source identities,
+with 14 verified records, 2 entries still needing manual verification before
+claim extraction, 0 extraction-ready entries and 0 lookup-unavailable entries.
+It covers 6/6 P0 source-expansion backlog items and 10/10 P0 source candidates.
+
+The stage records citation metadata such as source title, URL, DOI, PMID,
+publisher or organization, and reviewer tracks when verified. It does not
+extract evidence claims, does not approve any source for rules, and does not
+convert source candidates into runtime behavior.
+
+Guardrails:
+
+- no fake citations, DOI, PMID, authors or years are added;
+- no numeric threshold values or cutoffs are approved;
+- no fake human approvals, reviewer names or review timestamps are recorded;
+- no source is accepted into runtime rules;
+- runtime behavior, production route, rollout gates, preview behavior and
+  legacy fallback are unchanged;
+- Matrix default remains prohibited.
+
+Next safe stages: evidence claim extraction from verified sources only, manual
+verification for official policy/rule entries, or real coach/medical/data
+quality review.

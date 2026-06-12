@@ -517,3 +517,47 @@ Guardrails:
 Next step: controlled external lookup, evidence claim extraction, real
 coach/medical/data-quality review or a future source-candidate acceptance
 ledger.
+
+## 18. P0 Controlled Source Lookup + Source Intake Registry
+
+Stage: P0 Controlled Source Lookup + Source Intake Registry.
+
+The source lookup intake registry adds a controlled metadata-only layer after
+the Source Candidate Registry:
+
+SourceExpansionBacklog -> SourceCandidateRegistry -> SourceLookupIntake ->
+future EvidenceClaimExtraction.
+
+Implemented artifact:
+
+- `packages/shared/src/constructor-matrix-source-lookup-intake.ts`;
+- `npm run check:constructor-matrix-source-lookup-intake`;
+- shared exports for source lookup ids, lookup helpers and intake summary;
+- Review Package source-lookup summary metadata;
+- Review Decision Ledger metadata links to source lookup intake ids.
+
+Lookup status:
+
+- external lookup was available;
+- source lookup intake records: 14;
+- verified source identities: 14;
+- manual verification needed: 2;
+- extraction ready: 0;
+- lookup unavailable: 0;
+- P0 source-expansion backlog coverage: 6/6;
+- P0 source-candidate coverage: 10/10.
+
+Guardrails:
+
+- the registry stores citation/source-identity metadata only;
+- no source is accepted into runtime rules;
+- no evidence claims are extracted in this stage;
+- no numeric threshold values or cutoffs are approved;
+- no fake citations, DOI, PMID, authors or years are added;
+- no fake human approvals, reviewer names or review timestamps are recorded;
+- runtime behavior, production route, rollout gates, preview behavior and
+  legacy fallback are unchanged;
+- Matrix default remains prohibited.
+
+Next step: evidence claim extraction from verified sources only, or manual
+source verification for entries marked as needing manual verification.

@@ -17,6 +17,7 @@ export * from "./constructor-matrix-skeleton";
 export * from "./constructor-matrix-threshold-candidates";
 export * from "./constructor-matrix-source-expansion-backlog";
 export * from "./constructor-matrix-source-candidates";
+export * from "./constructor-matrix-source-lookup-intake";
 export * from "./season-strategy";
 
 export type UserRole = "coach" | "athlete" | "admin";

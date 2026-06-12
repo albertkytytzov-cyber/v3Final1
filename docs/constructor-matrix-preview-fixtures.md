@@ -675,6 +675,34 @@ Preview fixture expectations are unchanged:
 - no rollout, save/template/assign or legacy fallback behavior is changed;
 - broad Matrix default remains prohibited.
 
+## P0 Controlled Source Lookup + Source Intake Registry regression
+
+Stage: P0 Controlled Source Lookup + Source Intake Registry.
+
+`npm run check:constructor-matrix-source-lookup-intake` verifies the
+metadata-only source lookup intake registry:
+
+- external lookup was available;
+- source lookup intake records: 14;
+- verified source identities: 14;
+- manual verification needed: 2;
+- extraction ready: 0;
+- lookup unavailable: 0;
+- P0 backlog coverage: 6/6;
+- P0 source-candidate coverage: 10/10;
+- source, backlog, evidence, data, threshold and ledger ids resolve;
+- Review Package includes source lookup intake summary metadata;
+- no fake citations, numeric thresholds or fake human approvals are added;
+- runtime constructor files do not import the source lookup intake registry.
+
+Preview fixture expectations are unchanged:
+
+- source lookup intake metadata does not alter Matrix preview behavior;
+- no preview scenario becomes primary because of source lookup metadata;
+- no rollout, save/template/assign or legacy fallback behavior is changed;
+- broad Matrix default remains prohibited;
+- no source is promoted into runtime rules.
+
 ## Что не проверяется
 
 Fixtures не делают full snapshot:
