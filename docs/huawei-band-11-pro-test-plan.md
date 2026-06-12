@@ -294,3 +294,56 @@ After verification:
 4. Download `agconnect-services.json`.
 5. Install it with `scripts/install-huawei-agconnect.sh`.
 6. Rebuild Android and test Huawei Health Kit authorization.
+
+## Second Android Probe 2026-06-12
+
+Connected phone:
+
+- Manufacturer/model: Xiaomi `2407FPN8EG`.
+- PERFORM is installed: `com.perform.training` version `1.0.23`.
+- HMS Core is installed: `com.huawei.hwid` version `6.15.6.332`.
+- Huawei Health is installed: `com.huawei.health` version `16.1.4.310`.
+- Huawei watch is connected through Huawei Health.
+- `agconnect-services.json` is installed in the Android project.
+
+Phone-side authorization:
+
+- Huawei Health `Health Service Kit` is enabled in privacy settings.
+- Huawei Health shows PERFORM under data sharing/authorization.
+- The visible PERFORM permissions are enabled for distance/elevation, workouts,
+  calories, sleep and heart rate.
+
+Direct Huawei Health Kit result:
+
+- `HuaweiHealth.isAvailable` returns available with AG Connect config, HMS Core
+  and Huawei Health present.
+- `HuaweiHealth.requestAuthorization` opens Huawei Health and returns without
+  a local setup blocker.
+- `HuaweiHealth.readDailySummary` fails with `50005`.
+- Logcat shows the Health Kit SDK querying the Huawei cloud app profile and
+  receiving `appInfo is null` before reporting an unknown authorization error.
+
+AppGallery Connect result:
+
+- Android app `PERFORM` / `com.perform.training` exists under project `MVP`, but
+  its app release status is `Draft`.
+- Project settings for app `PERFORM` show `Account Kit` enabled under `Manage
+  APIs`.
+- `Health Kit` / `Health Service Kit` is not present in the available `Manage
+  APIs` list for this app/account.
+- The Huawei developer account menu shows `Not verified`.
+
+Health Connect fallback result:
+
+- Health Connect is installed and PERFORM can query it.
+- Huawei Health is detected as an installed known source.
+- No Huawei-origin sleep, heart-rate, exercise, distance or calorie records are
+  exposed through Health Connect on this phone yet.
+
+Conclusion:
+
+- Local setup is complete enough for PERFORM development and diagnostics.
+- Huawei watch pairing, HMS Core, Huawei Health, AG Connect config and local
+  Huawei Health permissions are not the current blocker.
+- Real Huawei Health Kit data reads remain blocked by the AppGallery Connect
+  Health Kit service release/approval/cloud profile for `com.perform.training`.

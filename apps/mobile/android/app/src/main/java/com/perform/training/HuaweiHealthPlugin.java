@@ -104,7 +104,7 @@ public class HuaweiHealthPlugin extends Plugin {
             Intent intent = settingController.requestAuthorizationIntent(HEALTH_SCOPES, true);
             startActivityForResult(call, intent, "handleAuthorizationResult");
         } catch (Exception error) {
-            call.reject("Не удалось открыть авторизацию Huawei Health: " + safeMessage(error), error);
+            call.reject("Не удалось открыть авторизацию Huawei Health: " + formatHealthKitError(error), error);
         }
     }
 
@@ -121,11 +121,16 @@ public class HuaweiHealthPlugin extends Plugin {
             boolean granted = authResult != null && authResult.isSuccess();
 
             response.put("granted", granted);
-            response.put("reason", granted ? JSONObject.NULL : "Huawei Health не выдал разрешение на чтение данных.");
+            response.put(
+                "reason",
+                granted
+                    ? JSONObject.NULL
+                    : "Huawei Health не подтвердил разрешение. Проверьте Health Service Kit в Huawei Health и статус Health Kit для com.perform.training в AppGallery Connect."
+            );
 
             call.resolve(response);
         } catch (Exception error) {
-            call.reject("Ошибка авторизации Huawei Health: " + safeMessage(error), error);
+            call.reject("Ошибка авторизации Huawei Health: " + formatHealthKitError(error), error);
         }
     }
 
@@ -177,7 +182,7 @@ public class HuaweiHealthPlugin extends Plugin {
                 new OnFailureListener() {
                     @Override
                     public void onFailure(Exception error) {
-                        call.reject("Не удалось прочитать данные Huawei Health: " + safeMessage(error), error);
+                        call.reject("Не удалось прочитать данные Huawei Health: " + formatHealthKitError(error), error);
                     }
                 }
             );
@@ -197,7 +202,7 @@ public class HuaweiHealthPlugin extends Plugin {
                 reply -> call.resolve(toDailySummary(dayRange.entryDate, sampleSets, reply.getActivityRecords(), null))
             )
             .addOnFailureListener(
-                error -> call.resolve(toDailySummary(dayRange.entryDate, sampleSets, null, safeMessage(error)))
+                error -> call.resolve(toDailySummary(dayRange.entryDate, sampleSets, null, formatHealthKitError(error)))
             );
     }
 
@@ -498,6 +503,19 @@ public class HuaweiHealthPlugin extends Plugin {
 
     private static String safeMessage(Exception error) {
         return error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage();
+    }
+
+    private static String formatHealthKitError(Exception error) {
+        String message = safeMessage(error);
+
+        if (message.contains("50005")) {
+            return (
+                message +
+                " (Huawei Health Kit вернул 50005: обычно это значит, что приложение или нужные Health Kit scopes ещё не активированы/одобрены в AppGallery Connect либо профиль ещё не разошёлся в HMS Core.)"
+            );
+        }
+
+        return message;
     }
 
     private static String isoNow() {
