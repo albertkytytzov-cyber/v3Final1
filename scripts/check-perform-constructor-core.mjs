@@ -2803,10 +2803,12 @@ const metadataCheckFiles = [
   "scripts/check-constructor-matrix-evidence-claim-review-intake.mjs",
   "scripts/check-constructor-matrix-review-intake-export.mjs",
   "scripts/check-constructor-matrix-desk-source-review-and-claim-candidates.mjs",
+  "scripts/check-constructor-matrix-evidence-claim-candidate-review-export.mjs",
   "packages/shared/src/constructor-matrix-evidence.ts",
   "packages/shared/src/constructor-matrix-evidence-claims.ts",
   "packages/shared/src/constructor-matrix-evidence-claim-review-intake.ts",
   "packages/shared/src/constructor-matrix-evidence-claim-candidates.ts",
+  "packages/shared/src/constructor-matrix-evidence-claim-candidate-review-export.ts",
   "packages/shared/src/constructor-matrix-desk-source-review.ts",
   "packages/shared/src/constructor-matrix-review-intake-export.ts",
   "packages/shared/src/constructor-matrix-data-dependencies.ts",
@@ -2817,6 +2819,7 @@ const metadataCheckFiles = [
   "packages/shared/src/constructor-matrix-source-candidates.ts",
   "packages/shared/src/constructor-matrix-source-lookup-intake.ts",
   "docs/matrix-review-intake-export/README.md",
+  "docs/matrix-claim-candidate-review-export/README.md",
 ];
 
 for (const path of metadataCheckFiles) {
@@ -2836,6 +2839,7 @@ for (const token of [
   "check:constructor-matrix-evidence-claim-review-intake",
   "check:constructor-matrix-review-intake-export",
   "check:constructor-matrix-desk-source-review-and-claim-candidates",
+  "check:constructor-matrix-evidence-claim-candidate-review-export",
 ]) {
   assert(packageJsonSource.includes(token), `package.json must expose ${token}`);
 }
@@ -2888,6 +2892,10 @@ for (const [path, source] of [
   assert(
     source.includes("Matrix Desk Source Review + Evidence Claim Candidate Extraction"),
     `${path} must document Matrix Desk Source Review + Evidence Claim Candidate Extraction`,
+  );
+  assert(
+    source.includes("Matrix Evidence Claim Candidate Review Export Pack"),
+    `${path} must document Matrix Evidence Claim Candidate Review Export Pack`,
   );
 }
 

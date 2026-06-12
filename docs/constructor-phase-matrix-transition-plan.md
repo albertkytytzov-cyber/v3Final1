@@ -4358,3 +4358,39 @@ records; 15 evidence claim candidates provide candidate-only review context.
 
 Next stage options: real human/manual source review or Source Readiness Update
 from Human Review Results.
+
+## 56. Stage: Matrix Evidence Claim Candidate Review Export Pack
+
+Stage: Matrix Evidence Claim Candidate Review Export Pack.
+
+This stage creates metadata-only reviewer packets from Evidence Claim
+Candidates:
+
+EvidenceClaimCandidateRegistry -> ClaimCandidateReviewExportPack ->
+reviewer-specific Markdown/JSON packets -> real-world manual review.
+
+Artifacts:
+
+- `packages/shared/src/constructor-matrix-evidence-claim-candidate-review-export.ts`;
+- `docs/matrix-claim-candidate-review-export/`;
+- `npm run generate:constructor-matrix-evidence-claim-candidate-review-export`;
+- `npm run check:constructor-matrix-evidence-claim-candidate-review-export`;
+- Review Package summary metadata for claim candidate review export counts.
+
+The export pack is for human reviewers, but it is not human review. It exports
+candidate-only claims, not final claims. It does not approve candidates, update
+source readiness, create numeric thresholds or change runtime behavior.
+
+Current export shape: 15 evidence claim candidates are covered by 80 export
+items across coach, medical, data-quality, sport-science, product-safety and
+source-text-acquisition audiences. Manual source verification remains a
+separate real-world task for blocked source identities. Final evidence claims
+remain 0.
+
+Production draft route, rollout gates, preview behavior, pilot readiness,
+save/template/assign behavior, block selection, skeleton selection and legacy
+fallback are unchanged. Matrix default remains disabled.
+
+Next real-world step: manual source verification, full-text acquisition and
+reviewer completion outside code. Next code stage after real review: Source
+Readiness Update from Human Review Results.

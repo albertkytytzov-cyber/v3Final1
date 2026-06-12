@@ -808,6 +808,33 @@ Preview fixture expectations are unchanged:
 - broad Matrix default remains prohibited;
 - no evidence claim is extracted, approved or promoted into runtime rules.
 
+## Matrix Evidence Claim Candidate Review Export Pack regression
+
+Stage: Matrix Evidence Claim Candidate Review Export Pack.
+
+`npm run check:constructor-matrix-evidence-claim-candidate-review-export`
+verifies the metadata-only export pack generated from Evidence Claim
+Candidates:
+
+- every evidence claim candidate appears in at least one export item;
+- every required reviewer audience is represented for each candidate;
+- JSON and Markdown exports match the shared builder output;
+- export items keep `runtimeChangeAllowedNow=false`,
+  `humanReviewed=false` and `candidateOnly=true`;
+- no source readiness update, candidate approval, final claim extraction or
+  runtime promotion is performed;
+- no numeric threshold or cutoff value is introduced.
+
+Preview fixture expectations are unchanged:
+
+- claim candidate review export metadata does not alter Matrix preview
+  behavior;
+- no preview scenario becomes primary because of claim candidate export
+  metadata;
+- no rollout, save/template/assign or legacy fallback behavior is changed;
+- broad Matrix default remains prohibited;
+- no evidence claim is extracted, approved or promoted into runtime rules.
+
 ## Что не проверяется
 
 Fixtures не делают full snapshot:

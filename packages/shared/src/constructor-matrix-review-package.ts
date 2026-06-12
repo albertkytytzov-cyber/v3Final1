@@ -19,6 +19,10 @@ import {
   type ConstructorMatrixEvidenceClaimExtractionSummary,
 } from "./constructor-matrix-evidence-claims";
 import {
+  buildConstructorMatrixClaimCandidateReviewExportSummary,
+  type ConstructorMatrixClaimCandidateReviewExportSummary,
+} from "./constructor-matrix-evidence-claim-candidate-review-export";
+import {
   buildConstructorMatrixEvidenceClaimCandidateSummary,
   type ConstructorMatrixEvidenceClaimCandidateSummary,
 } from "./constructor-matrix-evidence-claim-candidates";
@@ -160,6 +164,7 @@ export interface ConstructorMatrixReviewPackagePayload {
   sourceLookupIntake: ConstructorMatrixSourceLookupIntakeSummary;
   deskSourceReview: ConstructorMatrixDeskSourceReviewSummary;
   evidenceClaimCandidates: ConstructorMatrixEvidenceClaimCandidateSummary;
+  claimCandidateReviewExport: ConstructorMatrixClaimCandidateReviewExportSummary;
   evidenceClaims: ConstructorMatrixEvidenceClaimExtractionSummary;
   evidenceClaimReviewIntake: ConstructorMatrixEvidenceClaimReviewIntakeSummary;
   reviewIntakeExport: ConstructorMatrixReviewIntakeExportSummary;
@@ -639,6 +644,10 @@ export function buildConstructorMatrixLayerReviewMarkdown(
       `Evidence claim candidate runtime changes: ${payload.evidenceClaimCandidates.evidenceClaimCandidatesRuntimeChangeAllowedNowCount}`,
       `Evidence claim candidate high-risk coverage: ${payload.evidenceClaimCandidates.highRiskAreasCovered.join(", ") || "none"}`,
       `Evidence claim candidate high-risk still blocked: ${payload.evidenceClaimCandidates.highRiskAreasStillBlocked.join(", ") || "none"}`,
+      `Claim candidate review export items: ${payload.claimCandidateReviewExport.claimCandidateReviewExportItemCount}`,
+      `Claim candidate review export runtime changes: ${payload.claimCandidateReviewExport.claimCandidateReviewExportRuntimeChangeAllowedNowCount}`,
+      `Claim candidate review export human-reviewed records: ${payload.claimCandidateReviewExport.claimCandidateReviewExportHumanReviewedCount}`,
+      `Claim candidate review export final evidence claims: ${payload.claimCandidateReviewExport.finalEvidenceClaimCount}`,
       `Evidence claims extracted: ${payload.evidenceClaims.evidenceClaimCount}`,
       `Evidence claim blockers: ${payload.evidenceClaims.evidenceClaimBlockerCount}`,
       `Evidence claim source lookup coverage: ${payload.evidenceClaims.sourceLookupRecordsCoveredCount}/${payload.evidenceClaims.sourceLookupRecordCount}`,
@@ -714,6 +723,7 @@ export function buildConstructorMatrixLayerReviewPackage(params?: {
     sourceLookupIntake: buildConstructorMatrixSourceLookupIntakeSummary(),
     deskSourceReview: buildConstructorMatrixDeskSourceReviewSummary(),
     evidenceClaimCandidates: buildConstructorMatrixEvidenceClaimCandidateSummary(),
+    claimCandidateReviewExport: buildConstructorMatrixClaimCandidateReviewExportSummary(),
     evidenceClaims: buildConstructorMatrixEvidenceClaimExtractionSummary(),
     evidenceClaimReviewIntake: buildConstructorMatrixEvidenceClaimReviewIntakeSummary(),
     reviewIntakeExport: buildConstructorMatrixReviewIntakeExportSummary(),

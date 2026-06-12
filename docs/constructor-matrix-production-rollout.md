@@ -573,3 +573,41 @@ Rollout guardrails:
 
 Next stage: real human/manual source review or Source Readiness Update from
 Human Review Results. Runtime promotion requires a separate explicit stage.
+
+## Matrix Evidence Claim Candidate Review Export Pack rollout note
+
+Stage: Matrix Evidence Claim Candidate Review Export Pack.
+
+The claim candidate review export pack is metadata-only. It creates
+reviewer-specific Markdown/JSON packets from Evidence Claim Candidates for
+future real-world review.
+
+Rollout summary:
+
+- export builder:
+  `packages/shared/src/constructor-matrix-evidence-claim-candidate-review-export.ts`;
+- generated export docs: `docs/matrix-claim-candidate-review-export/`;
+- audiences: coach, medical, data-quality, sport-science, product-safety,
+  manual source verification and source text acquisition;
+- evidence claim candidates covered: 15;
+- export items: 80;
+- runtime changes allowed now: none.
+
+Rollout guardrails:
+
+- export pack is for human reviewers, but is not human review;
+- it exports candidate-only claims, not final claims;
+- it does not approve anything;
+- it does not update source readiness;
+- no numeric thresholds or cutoffs are introduced;
+- no fake citations, source metadata or human approvals are added;
+- no production route is changed;
+- no rollout gate is changed;
+- no preview behavior, save/template/assign behavior or legacy fallback is
+  changed;
+- broad Matrix default remains disabled.
+
+Next real-world step: manual source verification, full-text acquisition and
+reviewer completion outside code. Next code stage after real review: Source
+Readiness Update from Human Review Results. Runtime promotion requires a
+separate explicit stage.

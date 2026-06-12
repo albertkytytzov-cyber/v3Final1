@@ -3,6 +3,7 @@ import { access, readFile } from "node:fs/promises";
 import {
   buildConstructorMatrixReviewIntakeExportPack,
   buildConstructorMatrixLayerReviewPackage,
+  buildConstructorMatrixClaimCandidateReviewExportPack,
   CONSTRUCTOR_MATRIX_DATA_DEPENDENCIES,
   CONSTRUCTOR_MATRIX_DESK_SOURCE_REVIEWS,
   CONSTRUCTOR_MATRIX_EVIDENCE_CLAIM_CANDIDATES,
@@ -173,6 +174,25 @@ assert(
   payload.evidenceClaims.evidenceClaimCount === 0,
   "Review package must keep final evidence claim count at zero",
 );
+const claimCandidateReviewExportPack =
+  buildConstructorMatrixClaimCandidateReviewExportPack();
+assert(
+  payload.claimCandidateReviewExport.claimCandidateReviewExportItemCount ===
+    claimCandidateReviewExportPack.summary.exportItemCount,
+  "Review package must include claim candidate review export item count",
+);
+assert(
+  payload.claimCandidateReviewExport.claimCandidateReviewExportRuntimeChangeAllowedNowCount === 0,
+  "Review package claim candidate review export summary must report no runtime changes",
+);
+assert(
+  payload.claimCandidateReviewExport.claimCandidateReviewExportHumanReviewedCount === 0,
+  "Review package claim candidate review export summary must report no human-reviewed records",
+);
+assert(
+  payload.claimCandidateReviewExport.finalEvidenceClaimCount === 0,
+  "Review package claim candidate review export summary must keep final evidence claims at zero",
+);
 
 for (const area of CONSTRUCTOR_MATRIX_REVIEW_PACKAGE_REQUIRED_THRESHOLD_AREAS) {
   assert(
@@ -281,6 +301,8 @@ console.log(
         payload.deskSourceReview.deskSourceReviewCount,
       evidenceClaimCandidates:
         payload.evidenceClaimCandidates.evidenceClaimCandidateCount,
+      claimCandidateReviewExportItems:
+        payload.claimCandidateReviewExport.claimCandidateReviewExportItemCount,
     },
       reviewers: payload.reviewerQueues.map((queue) => ({
         reviewer: queue.reviewer,
