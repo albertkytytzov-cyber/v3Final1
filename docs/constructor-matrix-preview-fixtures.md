@@ -653,6 +653,28 @@ Preview fixture expectations are unchanged:
 - no rollout, save/template/assign or legacy fallback behavior is changed;
 - Matrix default remains prohibited.
 
+## P0 Source Acquisition Dossier + Source Candidate Registry regression
+
+Stage: P0 Source Acquisition Dossier + Source Candidate Registry.
+
+`npm run check:constructor-matrix-source-candidates` verifies the
+metadata-only source candidate registry:
+
+- every P0 source-expansion backlog item has at least one source candidate;
+- required source-acquisition areas are covered;
+- evidence, data, threshold, ledger and backlog ids resolve;
+- Review Package includes source-acquisition summary metadata;
+- Review Decision Ledger keeps source-candidate links as metadata only;
+- no fake citations, numeric thresholds or fake human approvals are added;
+- runtime constructor files do not import the source-candidate registry.
+
+Preview fixture expectations are unchanged:
+
+- source candidates do not alter Matrix preview behavior;
+- no preview scenario becomes primary because of source-candidate metadata;
+- no rollout, save/template/assign or legacy fallback behavior is changed;
+- broad Matrix default remains prohibited.
+
 ## Что не проверяется
 
 Fixtures не делают full snapshot:

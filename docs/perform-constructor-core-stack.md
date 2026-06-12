@@ -2052,3 +2052,42 @@ Guardrails:
 
 Next step: real coach, medical, data-quality and sport-science review, or
 targeted source acquisition for P0/P1 backlog items.
+
+### 15.32 P0 Source Acquisition Dossier + Source Candidate Registry
+
+Stage: P0 Source Acquisition Dossier + Source Candidate Registry.
+
+This stage adds a metadata-only source candidate registry and a P0 acquisition
+dossier. It plans source lookup and evidence-claim extraction, but it does not
+accept sources or approve thresholds.
+
+Implemented:
+
+- `packages/shared/src/constructor-matrix-source-candidates.ts`;
+- `docs/constructor-matrix-source-acquisition-p0-dossier.md`;
+- exported ids, lookup helpers and summary helpers from
+  `@training-platform/shared`;
+- `npm run check:constructor-matrix-source-candidates`;
+- Review Package source-acquisition summary fields;
+- Review Decision Ledger metadata links to source candidate ids.
+
+Coverage:
+
+- every P0 source-expansion backlog item has linked source candidates;
+- required areas are represented for source acquisition;
+- candidates link existing evidence dependency, data dependency, threshold
+  candidate, review decision and source backlog ids.
+
+Guardrails:
+
+- no source is marked accepted;
+- no fake citations, DOI, PMID, authors or source metadata are invented;
+- no numeric threshold values are introduced;
+- no fake human approvals are recorded;
+- every candidate has `runtimeChangeAllowedNow=false`;
+- runtime behavior, production route, rollout gates, preview behavior,
+  save/template/assign behavior and legacy fallback are unchanged;
+- Matrix default remains prohibited.
+
+Next step: external lookup, evidence claim extraction, real coach/medical/data
+quality review or a source-candidate acceptance/rejection ledger.

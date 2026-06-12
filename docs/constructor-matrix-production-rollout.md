@@ -366,3 +366,30 @@ Rollout guardrails:
 
 Next step: actual human review pass or targeted source acquisition. Runtime
 promotion requires a separate explicit stage.
+
+## P0 Source Acquisition Dossier + Source Candidate Registry rollout note
+
+Stage: P0 Source Acquisition Dossier + Source Candidate Registry.
+
+The source-candidate registry and P0 dossier are metadata-only acquisition
+planning. They identify source needs, acceptance criteria, rejection criteria,
+extraction questions, reviewer tracks and forbidden runtime uses for unresolved
+P0 gaps.
+
+Rollout guardrails:
+
+- no source is automatically accepted;
+- no fake citations, DOI, PMID, authors or source metadata are invented;
+- no numeric thresholds or cutoffs are introduced;
+- no human approvals, reviewer names or review timestamps are recorded;
+- every source candidate has `runtimeChangeAllowedNow=false`;
+- no production route is changed;
+- no rollout gate is changed;
+- no preview behavior, save/template/assign behavior or legacy fallback is
+  changed;
+- broad Matrix default remains prohibited;
+- Huawei files and SDK scripts remain unrelated to this Matrix stage.
+
+Next step: controlled external lookup, evidence claim extraction, real
+coach/medical/data-quality review or a source-candidate acceptance/rejection
+ledger. Runtime promotion requires a separate explicit stage.

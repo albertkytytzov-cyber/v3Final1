@@ -2797,12 +2797,14 @@ const metadataCheckFiles = [
   "scripts/check-constructor-matrix-review-package.mjs",
   "scripts/check-constructor-matrix-review-decision-ledger.mjs",
   "scripts/check-constructor-matrix-source-expansion-backlog.mjs",
+  "scripts/check-constructor-matrix-source-candidates.mjs",
   "packages/shared/src/constructor-matrix-evidence.ts",
   "packages/shared/src/constructor-matrix-data-dependencies.ts",
   "packages/shared/src/constructor-matrix-threshold-candidates.ts",
   "packages/shared/src/constructor-matrix-review-package.ts",
   "packages/shared/src/constructor-matrix-review-decision-ledger.ts",
   "packages/shared/src/constructor-matrix-source-expansion-backlog.ts",
+  "packages/shared/src/constructor-matrix-source-candidates.ts",
 ];
 
 for (const path of metadataCheckFiles) {
@@ -2816,6 +2818,7 @@ for (const token of [
   "check:constructor-matrix-review-package",
   "check:constructor-matrix-review-decision-ledger",
   "check:constructor-matrix-source-expansion-backlog",
+  "check:constructor-matrix-source-candidates",
 ]) {
   assert(packageJsonSource.includes(token), `package.json must expose ${token}`);
 }
@@ -2844,6 +2847,10 @@ for (const [path, source] of [
   assert(
     source.includes("Source Expansion Backlog + Review Intake Guard"),
     `${path} must document Source Expansion Backlog + Review Intake Guard`,
+  );
+  assert(
+    source.includes("P0 Source Acquisition Dossier + Source Candidate Registry"),
+    `${path} must document P0 Source Acquisition Dossier + Source Candidate Registry`,
   );
 }
 

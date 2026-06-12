@@ -4144,3 +4144,40 @@ prohibited.
 
 Next stage: actual coach, medical, data-quality and sport-science review pass,
 or targeted source acquisition for unresolved backlog items.
+
+## 50. Stage: P0 Source Acquisition Dossier + Source Candidate Registry
+
+This stage adds a metadata-only acquisition layer after the source-expansion
+backlog:
+
+SourceExpansionBacklog -> SourceCandidateRegistry -> P0 Source Acquisition
+Dossier.
+
+Artifacts:
+
+- `packages/shared/src/constructor-matrix-source-candidates.ts`;
+- `docs/constructor-matrix-source-acquisition-p0-dossier.md`;
+- `npm run check:constructor-matrix-source-candidates`;
+- shared exports for source candidate ids, lookup helpers and acquisition
+  summary;
+- Review Package source-acquisition summary metadata;
+- Review Decision Ledger metadata links to source candidate ids.
+
+The registry answers which P0 gaps require source lookup, which evidence/data
+dependencies and threshold candidates are blocked, what source type is needed,
+what acceptance or rejection criteria apply, what extraction questions must be
+answered later, and which runtime uses remain forbidden.
+
+It does not perform a systematic review. It does not claim that sources have
+been found. It does not invent studies, authors, DOI, PMID, protocols, effect
+sizes, contraindication lists or numeric threshold values. No source is marked
+accepted, and no human review decision is recorded.
+
+No changes are allowed to runtime behavior, production draft route, rollout
+gates, preview behavior, pilot readiness, save/template/assign, block
+selection, skeleton selection or legacy fallback. Matrix default remains
+prohibited.
+
+Next stage options: controlled external source lookup, evidence claim
+extraction, real coach/medical/data-quality review, or a source-candidate
+acceptance/rejection ledger.

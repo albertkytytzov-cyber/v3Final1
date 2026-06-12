@@ -22,6 +22,10 @@ import {
   type ConstructorMatrixSourceExpansionBacklogSummary,
 } from "./constructor-matrix-source-expansion-backlog";
 import {
+  buildConstructorMatrixSourceAcquisitionSummary,
+  type ConstructorMatrixSourceAcquisitionSummary,
+} from "./constructor-matrix-source-candidates";
+import {
   CONSTRUCTOR_MATRIX_THRESHOLD_CANDIDATES,
   type ConstructorMatrixThresholdCandidate,
   type ConstructorMatrixThresholdCandidateArea,
@@ -128,6 +132,7 @@ export interface ConstructorMatrixReviewPackagePayload {
   };
   reviewDecisionLedger: ConstructorMatrixReviewDecisionLedgerSummary;
   sourceExpansionBacklog: ConstructorMatrixSourceExpansionBacklogSummary;
+  sourceAcquisition: ConstructorMatrixSourceAcquisitionSummary;
   reviewerQueues: readonly ConstructorMatrixReviewPackageReviewerQueue[];
   evidenceDependencies: readonly ConstructorMatrixReviewPackageEvidenceItem[];
   dataDependencies: readonly ConstructorMatrixReviewPackageDataItem[];
@@ -582,6 +587,9 @@ export function buildConstructorMatrixLayerReviewMarkdown(
       `Review decision humanReviewed=${payload.reviewDecisionLedger.humanReviewed}`,
       `Source expansion backlog items: ${payload.sourceExpansionBacklog.sourceExpansionBacklogCount}`,
       `Source expansion unresolved P0: ${payload.sourceExpansionBacklog.unresolvedP0SourceExpansionIds.join(", ") || "none"}`,
+      `Source acquisition candidates: ${payload.sourceAcquisition.totalCandidates}`,
+      `Source acquisition P0 coverage: ${payload.sourceAcquisition.p0BacklogCoverage.coveredP0BacklogCount}/${payload.sourceAcquisition.p0BacklogCoverage.p0BacklogCount}`,
+      `Source acquisition runtimeChangeAllowedNow=${payload.sourceAcquisition.runtimeChangeAllowedNow}`,
     ]),
     "",
     "## Required Threshold Areas Covered",
@@ -639,6 +647,7 @@ export function buildConstructorMatrixLayerReviewPackage(params?: {
     },
     reviewDecisionLedger: buildConstructorMatrixReviewDecisionLedgerSummary(),
     sourceExpansionBacklog: buildConstructorMatrixSourceExpansionBacklogSummary(),
+    sourceAcquisition: buildConstructorMatrixSourceAcquisitionSummary(),
     reviewerQueues: buildReviewerQueues(),
     evidenceDependencies: CONSTRUCTOR_MATRIX_EVIDENCE_DEPENDENCY_REGISTRY.map(evidenceItem),
     dataDependencies: CONSTRUCTOR_MATRIX_DATA_DEPENDENCIES.map(dataItem),
