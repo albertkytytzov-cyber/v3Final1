@@ -10,7 +10,23 @@ type MatrixDraftReadOnlyViewProps = {
   className?: string;
 };
 
-function exerciseDetails(exercise: NonNullable<ConstructorDraft["plan"]["weeks"][number]["days"][number]["blocks"][number]["exercises"]>[number]) {
+type ConstructorDraftBlock =
+  ConstructorDraft["plan"]["weeks"][number]["days"][number]["blocks"][number];
+type ConstructorDraftExercise = NonNullable<ConstructorDraftBlock["exercises"]>[number];
+
+const TECHNICAL_NOTE_MARKERS = [
+  "coachEditable=",
+  "loadLocked=",
+  "not medical advice",
+  "reviewRequired=",
+  "mode=",
+  "source-verified",
+  "safety:",
+  "regressions:",
+  "progressions:",
+] as const;
+
+function exerciseDetails(exercise: ConstructorDraftExercise) {
   return [
     exercise.targetSets ? `${exercise.targetSets} сер.` : "",
     exercise.targetReps ? `${exercise.targetReps} повт.` : "",
@@ -21,16 +37,34 @@ function exerciseDetails(exercise: NonNullable<ConstructorDraft["plan"]["weeks"]
     .join(" / ");
 }
 
-function blockReviewNotes(block: ConstructorDraft["plan"]["weeks"][number]["days"][number]["blocks"][number]) {
+function coachVisibleExerciseNotes(exercise: ConstructorDraftExercise) {
+  return (exercise.notes ?? "")
+    .split(" · ")
+    .map((item) => item.trim())
+    .filter((item) =>
+      item && !TECHNICAL_NOTE_MARKERS.some((marker) => item.toLowerCase().includes(marker.toLowerCase())),
+    )
+    .slice(0, 3)
+    .join(" · ");
+}
+
+function blockReviewNotes(block: ConstructorDraftBlock) {
   return [
     block.coachEditable ? "редактируется тренером" : "нагрузка зафиксирована",
     block.volumeLocked ? "нагрузка заблокирована" : "",
-    block.riskFlags.length ? `риски: ${block.riskFlags.join(", ")}` : "",
-    block.evidenceRefs.length ? `evidence: ${block.evidenceRefs.slice(0, 3).join(", ")}` : "",
-    block.localLoadZones.length ? `зоны: ${block.localLoadZones.slice(0, 3).join(", ")}` : "",
+    block.riskFlags.length ? "есть risk flags" : "",
+    block.evidenceRefs.length ? "есть evidence refs" : "",
   ]
     .filter(Boolean)
     .join(" · ");
+}
+
+function blockTechnicalMetadata(block: ConstructorDraftBlock) {
+  return [
+    block.riskFlags.length ? `Risk flags: ${block.riskFlags.join(", ")}` : "",
+    block.evidenceRefs.length ? `Evidence refs: ${block.evidenceRefs.slice(0, 6).join(", ")}` : "",
+    block.localLoadZones.length ? `Load zones: ${block.localLoadZones.slice(0, 6).join(", ")}` : "",
+  ].filter(Boolean);
 }
 
 export function MatrixDraftReadOnlyView({
@@ -78,15 +112,28 @@ export function MatrixDraftReadOnlyView({
                             <div className="matrix-coach-exercise-list">
                               {block.exercises.slice(0, 4).map((exercise) => {
                                 const details = exerciseDetails(exercise);
+                                const coachNotes = coachVisibleExerciseNotes(exercise);
 
                                 return (
                                   <small key={`${keyPrefix}-${day.dayLabel}-${session.name}-${exercise.name}`}>
                                     {details ? `${exercise.name} (${details})` : exercise.name}
-                                    {exercise.notes ? ` — ${exercise.notes}` : ""}
+                                    {coachNotes ? ` — ${coachNotes}` : ""}
                                   </small>
                                 );
                               })}
                             </div>
+                          ) : null}
+                          {blockTechnicalMetadata(block).length ? (
+                            <details>
+                              <summary>Проверка и доказательства</summary>
+                              <div className="matrix-coach-exercise-list">
+                                {blockTechnicalMetadata(block).map((item) => (
+                                  <small key={`${keyPrefix}-${day.dayLabel}-${session.name}-${block.name}-${item}`}>
+                                    {item}
+                                  </small>
+                                ))}
+                              </div>
+                            </details>
                           ) : null}
                         </li>
                       ))}

@@ -2,6 +2,7 @@ import type { ConstructorInput, ConstructorPlanExercise } from "./constructor-co
 import type {
   ConstructorDayType,
   ConstructorPreparationPhase,
+  ConstructorSessionSlot,
   ConstructorTrainingBlockType,
 } from "./constructor-matrix";
 import {
@@ -21,6 +22,12 @@ export type ConstructorMatrixExerciseResolverContext = {
   input: ConstructorInput;
   phase?: ConstructorPreparationPhase;
   dayType?: ConstructorDayType;
+  weekNumber?: number;
+  dayNumber?: number;
+  daysUntilStart?: number | null;
+  sessionSlot?: ConstructorSessionSlot;
+  blockIndex?: number;
+  avoidExerciseIds?: readonly string[];
   strengthLoadContext?: ConstructorMatrixStrengthLoadContext;
   maxExercises?: number;
 };
@@ -470,8 +477,11 @@ function sortExerciseCandidates(
   params: ConstructorMatrixExerciseResolverContext,
   profile: ConstructorMatrixAthleteExerciseProfile,
 ) {
-  const leftScore = athleteProfileScore(left, profile);
-  const rightScore = athleteProfileScore(right, profile);
+  const avoidExerciseIds = new Set(params.avoidExerciseIds ?? []);
+  const leftScore =
+    athleteProfileScore(left, profile) - (avoidExerciseIds.has(left.id) ? 120 : 0);
+  const rightScore =
+    athleteProfileScore(right, profile) - (avoidExerciseIds.has(right.id) ? 120 : 0);
 
   if (leftScore !== rightScore) {
     return rightScore - leftScore;
@@ -484,14 +494,22 @@ function sortExerciseCandidates(
     return leftPriority - rightPriority;
   }
 
-  if (profile.hasSpecificSignal) {
-    const contextKey = `${profile.stableKey}:${params.block.blockType}:${params.phase ?? "unknown"}:${params.dayType ?? "unknown"}`;
-    const leftRotation = stableHash(`${contextKey}:${left.id}`) % 997;
-    const rightRotation = stableHash(`${contextKey}:${right.id}`) % 997;
+  const contextKey = [
+    profile.stableKey,
+    params.block.blockType,
+    params.phase ?? "unknown_phase",
+    params.dayType ?? "unknown_day_type",
+    params.weekNumber ?? "unknown_week",
+    params.dayNumber ?? "unknown_day",
+    params.daysUntilStart ?? "unknown_d",
+    params.sessionSlot ?? "unknown_slot",
+    params.blockIndex ?? "unknown_block",
+  ].join(":");
+  const leftRotation = stableHash(`${contextKey}:${left.id}`) % 997;
+  const rightRotation = stableHash(`${contextKey}:${right.id}`) % 997;
 
-    if (leftRotation !== rightRotation) {
-      return leftRotation - rightRotation;
-    }
+  if (leftRotation !== rightRotation) {
+    return leftRotation - rightRotation;
   }
 
   return left.id.localeCompare(right.id);
@@ -643,6 +661,12 @@ export function resolveConstructorMatrixBlockExercises(params: {
   input: ConstructorInput;
   phase?: ConstructorPreparationPhase;
   dayType?: ConstructorDayType;
+  weekNumber?: number;
+  dayNumber?: number;
+  daysUntilStart?: number | null;
+  sessionSlot?: ConstructorSessionSlot;
+  blockIndex?: number;
+  avoidExerciseIds?: readonly string[];
   strengthLoadContext?: ConstructorMatrixStrengthLoadContext;
 }): ConstructorPlanExercise[] {
   return resolveConstructorMatrixExercisesForBlock(params).exercises.map(
@@ -655,12 +679,11 @@ export function resolveConstructorMatrixBlockExercises(params: {
       targetRpe: item.targetRpe,
       notes: [
         item.notes,
-        item.safetyNotes.length ? `safety: ${item.safetyNotes.join("; ")}` : "",
-        item.substitutions.regressions.length
-          ? `regressions: ${item.substitutions.regressions.join("; ")}`
+        item.substitutions.regressions[0]
+          ? `проще: ${item.substitutions.regressions[0]}`
           : "",
-        item.substitutions.progressions.length
-          ? `progressions: ${item.substitutions.progressions.join("; ")}`
+        item.substitutions.progressions[0]
+          ? `сложнее: ${item.substitutions.progressions[0]}`
           : "",
       ]
         .filter(Boolean)

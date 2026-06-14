@@ -120,7 +120,16 @@ assert(weighInPrescription.highRiskAutomationBlocked, "Weigh-in prescription mus
 for (const prescription of prescriptions) {
   assert(prescription.coachEditable === true, `${prescription.name}: prescription must be coach-editable`);
   assert(prescription.loadLocked === false, `${prescription.name}: load must not be locked`);
-  assert(prescription.notes.includes("not medical advice"), `${prescription.name}: must carry not-medical-advice limitation`);
+  assert(
+    prescription.calculationNotes.includes("not medical advice"),
+    `${prescription.name}: audit notes must carry not-medical-advice limitation`,
+  );
+  assert(
+    !prescription.notes.includes("coachEditable=") &&
+      !prescription.notes.includes("loadLocked=") &&
+      !prescription.notes.includes("reviewRequired="),
+    `${prescription.name}: coach-facing notes must not expose technical metadata`,
+  );
 }
 
 assert(summary.prescriptionCount === prescriptions.length, "Load prescription summary count mismatch");

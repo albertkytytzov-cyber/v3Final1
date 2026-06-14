@@ -35,6 +35,8 @@ const apiSource = await readProjectFile(apiRoutePath);
 
 for (const marker of [
   "blockReviewNotes",
+  "blockTechnicalMetadata",
+  "coachVisibleExerciseNotes",
   "block.coachEditable",
   "block.volumeLocked",
   "block.riskFlags",
@@ -42,6 +44,7 @@ for (const marker of [
   "block.localLoadZones",
   "exercise.notes",
   "matrix-coach-exercise-list",
+  "Проверка и доказательства",
 ]) {
   assert(viewSource.includes(marker), `Coach Matrix UI must show ${marker}`);
 }
@@ -82,6 +85,17 @@ for (const forbidden of [
   "sessionStorage",
 ]) {
   assert(!viewSource.toLowerCase().includes(forbidden.toLowerCase()), `Coach UI must not contain ${forbidden}`);
+}
+
+assert(
+  !viewSource.includes("evidence:"),
+  "Coach Matrix UI must not print evidence refs inline in the main exercise row",
+);
+for (const marker of ["coachEditable=", "loadLocked=", "reviewRequired=", "mode="]) {
+  assert(
+    viewSource.includes("TECHNICAL_NOTE_MARKERS") && viewSource.includes(marker),
+    `Coach Matrix UI must explicitly filter ${marker} from visible exercise notes`,
+  );
 }
 
 console.log(JSON.stringify({

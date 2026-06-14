@@ -121,7 +121,7 @@ function strengthLoadCandidateFor(
   };
 }
 
-function prescriptionNotes(params: {
+function auditPrescriptionNotes(params: {
   exercise: ConstructorMatrixExercise;
   block: MatrixDrivenSelectedBlock;
   input: ConstructorInput;
@@ -159,6 +159,27 @@ function prescriptionNotes(params: {
   return notes;
 }
 
+function coachFacingPrescriptionNotes(params: {
+  exercise: ConstructorMatrixExercise;
+  strengthNote: string;
+}) {
+  const notes = [params.exercise.defaultPrescription.notes];
+
+  if (params.strengthNote.includes("training max/e1RM")) {
+    notes.push("если рабочий максимум не задан, использовать RPE и качество техники");
+  } else if (params.strengthNote.includes("coach-editable candidate")) {
+    notes.push("вес рассчитан как тренерский кандидат и редактируется перед применением");
+  }
+
+  if (params.exercise.highRiskAutomationBlocked) {
+    notes.push("только как review-required блок, без автоматического назначения");
+  } else if (params.exercise.reviewRequired.length) {
+    notes.push("требует тренерской проверки перед повышением объёма");
+  }
+
+  return notes.filter(Boolean);
+}
+
 export function buildConstructorMatrixLoadPrescription(
   params: ConstructorMatrixLoadPrescriptionInput,
 ): ConstructorMatrixLoadPrescription {
@@ -167,10 +188,14 @@ export function buildConstructorMatrixLoadPrescription(
   const fallbackRpe = LOAD_LEVEL_RPE[block.volume.loadLevel] ?? 5;
   const targetRpe = capRpeForContext(base.targetRpe ?? fallbackRpe, input, block);
   const strength = strengthLoadCandidateFor(exercise, strengthLoadContext);
-  const notes = prescriptionNotes({
+  const calculationNotes = auditPrescriptionNotes({
     exercise,
     block,
     input,
+    strengthNote: strength.note,
+  });
+  const notes = coachFacingPrescriptionNotes({
+    exercise,
     strengthNote: strength.note,
   });
 
@@ -187,7 +212,7 @@ export function buildConstructorMatrixLoadPrescription(
     displayOrder,
     coachEditable: true,
     loadLocked: false,
-    calculationNotes: notes,
+    calculationNotes,
     reviewRequired: exercise.reviewRequired,
     highRiskAutomationBlocked: exercise.highRiskAutomationBlocked,
   };

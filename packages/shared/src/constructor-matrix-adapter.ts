@@ -46,7 +46,8 @@ import {
 } from "./constructor-matrix-exercise-library";
 import {
   buildConstructorMatrixExerciseResolverSummary,
-  resolveConstructorMatrixBlockExercises,
+  resolveConstructorMatrixExercisesForBlock,
+  type ConstructorMatrixResolvedExercise,
 } from "./constructor-matrix-exercise-resolver";
 import { buildConstructorMatrixNutritionGuidanceSummary } from "./constructor-matrix-nutrition-guidance";
 import { buildConstructorMatrixWeightManagementGuidanceSummary } from "./constructor-matrix-weight-management-guidance";
@@ -352,23 +353,6 @@ function deriveMatrixConfidence(
   return "high";
 }
 
-function constructorExercise(
-  name: string,
-  notes: string,
-  values: Partial<ConstructorPlanExercise> = {},
-): ConstructorPlanExercise {
-  return {
-    name,
-    targetSets: values.targetSets ?? null,
-    targetReps: values.targetReps ?? null,
-    targetWeightKg: values.targetWeightKg ?? null,
-    targetDurationMinutes: values.targetDurationMinutes ?? null,
-    targetRpe: values.targetRpe ?? null,
-    notes,
-    displayOrder: values.displayOrder,
-  };
-}
-
 function matrixBlockName(block: MatrixDrivenSelectedBlock) {
   const names: Partial<Record<ConstructorTrainingBlockType, string>> = {
     mat_technique: "Техника борьбы",
@@ -442,186 +426,29 @@ function matrixBlockVolume(block: MatrixDrivenSelectedBlock) {
   }
 }
 
-function matrixBlockExercises(block: MatrixDrivenSelectedBlock): ConstructorPlanExercise[] {
-  switch (block.blockType) {
-    case "mat_technique":
-      return [
-        constructorExercise("Стойка и перемещения", "смена уровня, вход/выход из дистанции, контроль стойки", {
-          targetDurationMinutes: 8,
-          targetRpe: 3,
-          displayOrder: 0,
-        }),
-        constructorExercise("Входы в ноги под контролем", "3-4 серии по 4-6 входов, качество не ниже 4/5", {
-          targetSets: 4,
-          targetReps: 6,
-          targetRpe: 5,
-          displayOrder: 1,
-        }),
-        constructorExercise("Переход стойка -> партер", "2-3 ситуации, без силовой рубки в подводке", {
-          targetSets: 3,
-          targetDurationMinutes: 5,
-          targetRpe: 5,
-          displayOrder: 2,
-        }),
-      ];
-    case "mat_tactics":
-      return [
-        constructorExercise("Ситуация по счёту", "вести/догонять, край ковра, 30 сек до конца", {
-          targetDurationMinutes: 10,
-          targetRpe: 5,
-          displayOrder: 0,
-        }),
-        constructorExercise("Выход из захвата", "3 серии по 4-6 повторов, без потери стойки", {
-          targetSets: 3,
-          targetReps: 6,
-          targetRpe: 5,
-          displayOrder: 1,
-        }),
-      ];
-    case "mat_competition_model":
-      return [
-        constructorExercise("Модель периода", "3 мин + 30 сек + 3 мин; качество действий важнее добора", {
-          targetSets: 2,
-          targetDurationMinutes: 7,
-          targetRpe: 7,
-          displayOrder: 0,
-        }),
-        constructorExercise("Финиш после паузы", "30-45 сек активного решения без хаоса", {
-          targetSets: 3,
-          targetDurationMinutes: 1,
-          targetRpe: 7,
-          displayOrder: 1,
-        }),
-      ];
-    case "mat_control_bouts":
-      return [
-        constructorExercise("Контрольная схватка", "только при свежести; остановить при падении качества", {
-          targetSets: 1,
-          targetDurationMinutes: 6,
-          targetRpe: 8,
-          displayOrder: 0,
-        }),
-      ];
-    case "mat_light_technical":
-      return [
-        constructorExercise("Лёгкая техника", "стойка-партер без сопротивления, дыхание ровное", {
-          targetDurationMinutes: 15,
-          targetRpe: 3,
-          displayOrder: 0,
-        }),
-        constructorExercise("Короткие входы", "2-4 включения, ощущение резкости, полный отдых", {
-          targetSets: 4,
-          targetReps: 1,
-          targetRpe: 4,
-          displayOrder: 1,
-        }),
-      ];
-    case "spp":
-      return [
-        constructorExercise("СФП круг", "4-6 станций, без отказа, сохранить технику", {
-          targetSets: 4,
-          targetDurationMinutes: 4,
-          targetRpe: 6,
-          displayOrder: 0,
-        }),
-        constructorExercise("Перенос в проход", "после СФП 3 серии по 4 входа", {
-          targetSets: 3,
-          targetReps: 4,
-          targetRpe: 5,
-          displayOrder: 1,
-        }),
-      ];
-    case "gpp":
-    case "aerobic_deload":
-    case "environment_change":
-      return [
-        constructorExercise("Кросс / поход / велосипед Z1-Z2", "разговорный темп, смена обстановки", {
-          targetDurationMinutes: block.blockType === "environment_change" ? 45 : 30,
-          targetRpe: 3,
-          displayOrder: 0,
-        }),
-        constructorExercise("Мобилити после аэробной", "таз, голеностоп, спина, плечи", {
-          targetDurationMinutes: 8,
-          targetRpe: 2,
-          displayOrder: 1,
-        }),
-      ];
-    case "leg_lmv":
-      return [
-        constructorExercise("Статодинамический присед", "2-3 подхода по 20-25 сек, без отказа", {
-          targetSets: 3,
-          targetDurationMinutes: 1,
-          targetRpe: 6,
-          displayOrder: 0,
-        }),
-        constructorExercise("Сплит-присед / выпад", "2 подхода на сторону по 20 сек", {
-          targetSets: 2,
-          targetDurationMinutes: 1,
-          targetRpe: 6,
-          displayOrder: 1,
-        }),
-        constructorExercise("Проходы после локальной работы", "3 серии по 4 входа, техника не ниже 4/5", {
-          targetSets: 3,
-          targetReps: 4,
-          targetRpe: 5,
-          displayOrder: 2,
-        }),
-      ];
-    case "first_action_speed":
-      return [
-        constructorExercise("Старт 10-20 м", "4-8 повторов, отдых 90-120 сек, без добора", {
-          targetSets: 6,
-          targetReps: 1,
-          targetRpe: 5,
-          displayOrder: 0,
-        }),
-        constructorExercise("Вход в ногу по сигналу", "4-6 входов, полный возврат", {
-          targetSets: 3,
-          targetReps: 2,
-          targetRpe: 5,
-          displayOrder: 1,
-        }),
-      ];
-    case "mobility":
-    case "recovery":
-    case "sauna":
-    case "travel":
-    case "weigh_in":
-    case "post_competition_recovery":
-      return [
-        constructorExercise("Контроль состояния", "сон, вес, пульс покоя, боль/жёсткость, самочувствие", {
-          targetDurationMinutes: 5,
-          targetRpe: 1,
-          displayOrder: 0,
-        }),
-        constructorExercise("Мобилити и дыхание", "таз, спина, плечи, голеностоп", {
-          targetDurationMinutes: 10,
-          targetRpe: 2,
-          displayOrder: 1,
-        }),
-      ];
-    case "competition_start":
-      return [
-        constructorExercise("Разминка перед схваткой", "индивидуальная, без лишнего утомления", {
-          targetDurationMinutes: 15,
-          targetRpe: 4,
-          displayOrder: 0,
-        }),
-        constructorExercise("Восстановление между схватками", "вода, дыхание, питание, тактическая поправка", {
-          targetDurationMinutes: 10,
-          targetRpe: 1,
-          displayOrder: 1,
-        }),
-      ];
-    default:
-      return [
-        constructorExercise(matrixBlockName(block), "выполнить по объёму блока, тренер может уточнить вручную", {
-          targetDurationMinutes: block.volume.durationMinutes.target || null,
-          targetRpe: block.volume.loadLevel === "high" ? 7 : block.volume.loadLevel === "medium" ? 5 : 3,
-          displayOrder: 0,
-        }),
-      ];
-  }
+function resolvedExerciseToConstructorExercise(
+  item: ConstructorMatrixResolvedExercise,
+): ConstructorPlanExercise {
+  return {
+    name: item.name,
+    targetSets: item.targetSets,
+    targetReps: item.targetReps,
+    targetWeightKg: item.targetWeightKg,
+    targetDurationMinutes: item.targetDurationMinutes,
+    targetRpe: item.targetRpe,
+    notes: [
+      item.notes,
+      item.substitutions.regressions[0]
+        ? `проще: ${item.substitutions.regressions[0]}`
+        : "",
+      item.substitutions.progressions[0]
+        ? `сложнее: ${item.substitutions.progressions[0]}`
+        : "",
+    ]
+      .filter(Boolean)
+      .join(" · "),
+    displayOrder: item.displayOrder,
+  };
 }
 
 function adaptBlock(
@@ -629,16 +456,35 @@ function adaptBlock(
   input: ConstructorInput,
   dayType?: ConstructorDayType,
   phase?: MatrixDrivenPlanWeek["phase"],
+  rotation?: {
+    weekNumber: number;
+    dayNumber: number;
+    daysUntilStart: number | null;
+    sessionSlot: MatrixDrivenPlanSession["slot"];
+    blockIndex: number;
+    usedExerciseIds: Set<string>;
+  },
 ): ConstructorPlanBlock {
   const evidenceTitles = getConstructorMatrixEvidenceDependencies(block.evidenceDependencies).map(
     (item) => item.title,
   );
-  const resolvedExercises = resolveConstructorMatrixBlockExercises({
+  const resolvedResult = resolveConstructorMatrixExercisesForBlock({
     block,
     input,
     dayType,
     phase,
+    weekNumber: rotation?.weekNumber,
+    dayNumber: rotation?.dayNumber,
+    daysUntilStart: rotation?.daysUntilStart,
+    sessionSlot: rotation?.sessionSlot,
+    blockIndex: rotation?.blockIndex,
+    avoidExerciseIds: rotation ? Array.from(rotation.usedExerciseIds) : undefined,
   });
+  const resolvedExercises = resolvedResult.exercises.map(resolvedExerciseToConstructorExercise);
+
+  for (const exercise of resolvedResult.exercises) {
+    rotation?.usedExerciseIds.add(exercise.sourceExerciseId);
+  }
 
   return {
     name: matrixBlockName(block),
@@ -664,87 +510,8 @@ function adaptBlock(
     ],
     coachEditable: true,
     volumeLocked: false,
-    exercises: resolvedExercises.length ? resolvedExercises : matrixBlockExercises(block),
+    exercises: resolvedExercises,
   };
-}
-
-function warmupBlock(): ConstructorPlanBlock {
-  return {
-    name: "Разминка",
-    type: "activation",
-    targetQuality: "general",
-    volume: "10-15 мин: мобилизация, стойка/перемещения, 2-3 коротких включения",
-    localLoadZones: ["общее", "нервная активация"],
-    energySystem: "активация без утомления",
-    riskFlags: [],
-    evidenceRefs: ["Europe plan analysis", "PERFORM Evidence Matrix"],
-    coachEditable: true,
-    volumeLocked: true,
-    exercises: [
-      constructorExercise("Суставная мобилизация", "шея, плечи, таз, колени, голеностоп", {
-        targetDurationMinutes: 5,
-        targetRpe: 2,
-        displayOrder: 0,
-      }),
-      constructorExercise("Стойка и перемещения", "стойка, смена уровня, шаги, развороты", {
-        targetDurationMinutes: 5,
-        targetRpe: 3,
-        displayOrder: 1,
-      }),
-      constructorExercise("Короткие включения", "2-3 ускорения/входа без утомления", {
-        targetSets: 3,
-        targetReps: 1,
-        targetRpe: 4,
-        displayOrder: 2,
-      }),
-    ],
-  };
-}
-
-function cooldownBlock(): ConstructorPlanBlock {
-  return {
-    name: "Заминка и контроль состояния",
-    type: "recovery",
-    targetQuality: "recovery",
-    volume: "8-15 мин: Z1/дыхание, мобилити, контроль веса и самочувствия",
-    localLoadZones: ["восстановление", "контроль веса", "ЦНС"],
-    energySystem: "восстановление",
-    riskFlags: [],
-    evidenceRefs: ["sleep consensus", "PERFORM Evidence Matrix"],
-    coachEditable: true,
-    volumeLocked: true,
-    exercises: [
-      constructorExercise("Z1 или ходьба", "снизить пульс, дыхание ровное", {
-        targetDurationMinutes: 6,
-        targetRpe: 2,
-        displayOrder: 0,
-      }),
-      constructorExercise("Мобилити и дыхание", "таз, спина, плечи, предплечья", {
-        targetDurationMinutes: 6,
-        targetRpe: 1,
-        displayOrder: 1,
-      }),
-      constructorExercise("Контроль состояния", "вес, сон, пульс покоя, боль/жёсткость", {
-        targetDurationMinutes: 3,
-        targetRpe: 1,
-        displayOrder: 2,
-      }),
-    ],
-  };
-}
-
-function needsSessionFrame(blocks: ConstructorPlanBlock[]) {
-  if (blocks.length === 0) {
-    return false;
-  }
-
-  return blocks.some(
-    (block) =>
-      !["recovery", "mobility"].includes(block.type) &&
-      !["travel", "weigh_in", "competition_start", "post_competition_recovery"].includes(
-        block.localLoadZones[0]?.replace("блок:", "") ?? "",
-      ),
-  );
 }
 
 function sessionNotes(matrixSession: MatrixDrivenPlanSession) {
@@ -756,6 +523,7 @@ function sessionNotes(matrixSession: MatrixDrivenPlanSession) {
     matrixSession.slot === "morning" ? "Утренний блок" : "Вечерний блок",
     `нагрузка ${matrixLoadLabel(matrixSession.volume.loadLevel)}`,
     `интенсивность ${matrixIntensityLabel(matrixSession.volume.intensityLevel)}`,
+    "разминка/заминка внутри основной задачи",
     ...selectedBlockNotes,
   ].join(" · ");
 }
@@ -763,15 +531,25 @@ function sessionNotes(matrixSession: MatrixDrivenPlanSession) {
 export function adaptMatrixDrivenSessionToConstructorSession(
   matrixSession: MatrixDrivenPlanSession,
   input: ConstructorInput,
-  dayType?: ConstructorDayType,
-  phase?: MatrixDrivenPlanWeek["phase"],
+  context: {
+    weekNumber: number;
+    dayNumber: number;
+    daysUntilStart: number | null;
+    dayType?: ConstructorDayType;
+    phase?: MatrixDrivenPlanWeek["phase"];
+    usedExerciseIds: Set<string>;
+  },
 ): ConstructorPlanSession {
-  const mainBlocks = matrixSession.selectedBlocks.map((block) =>
-    adaptBlock(block, input, dayType, phase),
+  const blocks = matrixSession.selectedBlocks.map((block, blockIndex) =>
+    adaptBlock(block, input, context.dayType, context.phase, {
+      weekNumber: context.weekNumber,
+      dayNumber: context.dayNumber,
+      daysUntilStart: context.daysUntilStart,
+      sessionSlot: matrixSession.slot,
+      blockIndex,
+      usedExerciseIds: context.usedExerciseIds,
+    }),
   );
-  const blocks = needsSessionFrame(mainBlocks)
-    ? [warmupBlock(), ...mainBlocks, cooldownBlock()]
-    : mainBlocks;
 
   return {
     name: matrixSession.slot === "morning" ? "УТРО" : "ВЕЧЕР",
@@ -785,13 +563,21 @@ export function adaptMatrixDrivenDayToConstructorDay(
   matrixDay: MatrixDrivenPlanDay,
   input: ConstructorInput,
   phase?: MatrixDrivenPlanWeek["phase"],
+  weekNumber = 1,
+  usedExerciseIds: Set<string> = new Set(),
 ): ConstructorPlanDay {
   const sessions = matrixDay.sessions.map((session) =>
     adaptMatrixDrivenSessionToConstructorSession(
       session,
       input,
-      matrixDay.dayType,
-      phase,
+      {
+        weekNumber,
+        dayNumber: matrixDay.dayNumber,
+        daysUntilStart: matrixDay.daysUntilStart,
+        dayType: matrixDay.dayType,
+        phase,
+        usedExerciseIds,
+      },
     ),
   );
   const dayLabelParts = [
@@ -852,6 +638,8 @@ export function adaptMatrixDrivenWeekToConstructorWeek(
   matrixWeek: MatrixDrivenPlanWeek,
   input: ConstructorInput,
 ): ConstructorPlanWeek {
+  const weekUsedExerciseIds = new Set<string>();
+
   return {
     weekNumber: matrixWeek.weekNumber,
     title: `Неделя ${matrixWeek.weekNumber}: ${weekTypeLabel(matrixWeek.weekType)}`,
@@ -863,7 +651,13 @@ export function adaptMatrixDrivenWeekToConstructorWeek(
       matrixRecoveryPriorityLabel(matrixWeek.recoveryPriority),
     ].join(" · "),
     days: matrixWeek.days.map((day) =>
-      adaptMatrixDrivenDayToConstructorDay(day, input, matrixWeek.phase),
+      adaptMatrixDrivenDayToConstructorDay(
+        day,
+        input,
+        matrixWeek.phase,
+        matrixWeek.weekNumber,
+        weekUsedExerciseIds,
+      ),
     ),
   };
 }

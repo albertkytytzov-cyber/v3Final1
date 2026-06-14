@@ -277,31 +277,31 @@ const allowedPilotCases = [
     id: "far_development_week_d90",
     expectedSource: "matrix_primary_pilot",
     expectedDryRun: "passed",
-    expectedStats: { weeks: 1, days: 7, sessions: 11, blocks: 32 },
+    expectedStats: { weeks: 1, days: 7, sessions: 11, blocks: 14 },
   },
   {
     id: "main_start_d28_special_pre_competition",
     expectedSource: "matrix_primary_pilot",
     expectedDryRun: "passed",
-    expectedStats: { weeks: 4, days: 28, sessions: 37, blocks: 110 },
+    expectedStats: { weeks: 4, days: 28, sessions: 37, blocks: 50 },
   },
   {
     id: "main_start_d21_controlled_volume",
     expectedSource: "matrix_primary_pilot",
     expectedDryRun: "passed",
-    expectedStats: { weeks: 3, days: 21, sessions: 27, blocks: 81 },
+    expectedStats: { weeks: 3, days: 21, sessions: 27, blocks: 39 },
   },
   {
     id: "main_start_d10_taper",
     expectedSource: "matrix_primary_pilot",
     expectedDryRun: "passed",
-    expectedStats: { weeks: 2, days: 10, sessions: 12, blocks: 35 },
+    expectedStats: { weeks: 2, days: 10, sessions: 12, blocks: 19 },
   },
   {
     id: "main_start_d4_start_window",
     expectedSource: "matrix_primary_pilot",
     expectedDryRun: "passed",
-    expectedStats: { weeks: 1, days: 4, sessions: 4, blocks: 15 },
+    expectedStats: { weeks: 1, days: 4, sessions: 4, blocks: 7 },
   },
 ];
 

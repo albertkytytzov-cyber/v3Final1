@@ -33,6 +33,14 @@ function draftStats(draft) {
   const blocks = sessions.flatMap((session) => session.blocks ?? []);
   const exercises = blocks.flatMap((block) => block.exercises ?? []);
   const strengthWeightCandidates = exercises.filter((exercise) => exercise.targetWeightKg !== null);
+  const exerciseNames = exercises.map((exercise) => exercise.name);
+  const uniqueExerciseNames = new Set(exerciseNames);
+  const exerciseNameCounts = exerciseNames.reduce((counts, name) => {
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+
+    return counts;
+  }, new Map());
+  const mostRepeatedExerciseCount = Math.max(0, ...exerciseNameCounts.values());
 
   return {
     weeks: draft.plan.weeks.length,
@@ -44,6 +52,8 @@ function draftStats(draft) {
       /body-composition/i.test(`${exercise.name} ${exercise.notes}`),
     ).length,
     strengthWeightCandidates: strengthWeightCandidates.length,
+    uniqueExerciseCount: uniqueExerciseNames.size,
+    mostRepeatedExerciseCount,
   };
 }
 
@@ -101,6 +111,55 @@ function assertFullContentMetadata(testId, draft) {
   );
 }
 
+function assertCoachFacingExerciseQuality(testId, draft) {
+  const blocks = draft.plan.weeks.flatMap((week) =>
+    week.days.flatMap((day) => (day.sessions ?? []).flatMap((session) => session.blocks ?? [])),
+  );
+  const exercises = blocks.flatMap((block) => block.exercises ?? []);
+  const forbiddenLegacyExerciseNames = new Set([
+    "Суставная мобилизация",
+    "Стойка и перемещения",
+    "Короткие включения",
+    "Z1 или ходьба",
+    "Мобилити и дыхание",
+    "Контроль состояния",
+    "Заминка и контроль состояния",
+  ]);
+  const forbiddenTechnicalMarkers = [
+    "coachEditable=",
+    "loadLocked=",
+    "reviewRequired=",
+    "mode=",
+    "safety:",
+    "regressions:",
+    "progressions:",
+  ];
+  const uniqueExerciseCount = new Set(exercises.map((exercise) => exercise.name)).size;
+
+  for (const exercise of exercises) {
+    assert(
+      !forbiddenLegacyExerciseNames.has(exercise.name),
+      `${testId}: Matrix plan must not surface old hardcoded frame exercise ${exercise.name}`,
+    );
+
+    for (const marker of forbiddenTechnicalMarkers) {
+      assert(
+        !`${exercise.name} ${exercise.notes ?? ""}`.includes(marker),
+        `${testId}: coach-facing exercise ${exercise.name} must not expose ${marker}`,
+      );
+    }
+  }
+
+  assert(uniqueExerciseCount > 0, `${testId}: Matrix pilot must produce named exercises`);
+
+  if (exercises.length >= 30) {
+    assert(
+      uniqueExerciseCount / exercises.length >= 0.12,
+      `${testId}: exercise rotation is too repetitive (${uniqueExerciseCount}/${exercises.length})`,
+    );
+  }
+}
+
 const allowedPilotFixtureIds = [
   "far_development_week_d90",
   "main_start_d28_special_pre_competition",
@@ -128,6 +187,7 @@ const allowedResults = allowedPilotFixtureIds.map((fixtureId) => {
   assert(rollout.mode === "matrix_allowed_for_primary", `${fixtureId}: rollout must allow primary Matrix pilot`);
   assert(readiness.status === "ready_for_limited_primary_pilot", `${fixtureId}: pilot readiness must pass`);
   assertFullContentMetadata(fixtureId, result.draft);
+  assertCoachFacingExerciseQuality(fixtureId, result.draft);
 
   const stats = draftStats(result.draft);
   assert(stats.exercises >= stats.blocks, `${fixtureId}: each Matrix pilot plan should have concrete exercise density`);

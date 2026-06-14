@@ -128,8 +128,13 @@ assert(
   "Resolver must document suppressed body-composition candidates in result notes",
 );
 assert(
-  adapterSource.includes("phase,") && adapterSource.includes("resolveConstructorMatrixBlockExercises"),
-  "Adapter must pass phase context into the exercise resolver",
+  adapterSource.includes("resolveConstructorMatrixExercisesForBlock") &&
+    adapterSource.includes("phase,") &&
+    adapterSource.includes("weekNumber: rotation?.weekNumber") &&
+    adapterSource.includes("dayNumber: rotation?.dayNumber") &&
+    adapterSource.includes("sessionSlot: rotation?.sessionSlot") &&
+    adapterSource.includes("avoidExerciseIds: rotation ? Array.from(rotation.usedExerciseIds) : undefined"),
+  "Adapter must pass phase/day/session rotation context into the exercise resolver",
 );
 assert(
   feedbackDoc.includes("AI-assisted internal pilot feedback"),
