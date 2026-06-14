@@ -22,6 +22,7 @@ export * from "./constructor-matrix-review-package";
 export * from "./constructor-matrix-review-decision-ledger";
 export * from "./constructor-matrix-review-intake-export";
 export * from "./constructor-matrix-rollout";
+export * from "./constructor-matrix-runtime-eligibility";
 export * from "./constructor-matrix-save-dry-run";
 export * from "./constructor-matrix-skeleton";
 export * from "./constructor-matrix-threshold-candidates";
