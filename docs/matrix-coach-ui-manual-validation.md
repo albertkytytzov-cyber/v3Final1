@@ -14,7 +14,19 @@ The validation is intentionally limited to controlled pilot behavior. It does
 not enable Matrix as production default, does not change the production draft
 route, and does not approve high-risk medical or weight-management decisions.
 
-## Local Browser Smoke Check
+## Local Dev Stack
+
+The validation used a temporary local dev stack:
+
+- temporary PostgreSQL on `127.0.0.1:15432`;
+- temporary Redis on `127.0.0.1:16379`;
+- API on `127.0.0.1:4000`;
+- web on `http://localhost:3100`;
+- `SEED_DEMO_DATA=true`;
+- demo coach account from repository seed data;
+- demo athlete selected from seeded data.
+
+No production service, production database or production athlete id was used.
 
 Local web was started with the Matrix UI pilot flags enabled:
 
@@ -27,24 +39,50 @@ The browser opened:
 - `http://localhost:3100/workspace?language=ru`;
 - the workspace shell loaded;
 - Russian navigation loaded;
-- the `Соревнования` zone opened;
-- unauthenticated guest state was displayed;
+- demo coach login succeeded;
+- `Demo Athlete` was selected;
+- the `Планирование` workspace opened;
+- the `Конструктор` tab opened;
+- the Matrix control block was visible;
 - no production write action was performed.
 
-## Full Authenticated Coach Flow Status
+## Authenticated Coach Flow Result
 
-The full authenticated Matrix draft flow could not be completed in this local
-browser pass because the web app attempted to proxy auth state to
-`127.0.0.1:4000`, and the local API was not running in this validation
-environment.
+The authenticated coach flow passed in the temporary local dev stack.
 
-The observed blocker was:
+The D21 Matrix draft was generated from the constructor screen with the default
+manual start configuration:
 
-- `/api/v1/auth/me` proxy failed with connection refused to `127.0.0.1:4000`.
+- manual start date;
+- 21 plan days;
+- selected athlete `Demo Athlete`;
+- phase shown as special preparation;
+- Matrix working plan generated as `Matrix-конструктор`.
 
-The API was not started during this pass to avoid accidental local database
-initialization or seed-data writes outside an explicit dev/staging validation
-run.
+The generated plan showed:
+
+- weeks;
+- days;
+- morning and evening sessions where applicable;
+- concrete exercise names;
+- sets, reps, duration and RPE;
+- coach-editable notes;
+- load-locked notes;
+- risk flags;
+- evidence references;
+- local load zones;
+- review-required language;
+- fallback/safe-mode language.
+
+The controlled save/assign pilot path was also checked in the temporary local
+database:
+
+- `Сохранить шаблон и перейти к назначению` was visible;
+- template save succeeded;
+- the UI moved to assignment mode;
+- `PERFORM Constructor Candidate` was selected;
+- assignment of 21 training days to `Demo Athlete` succeeded in the temporary
+  dev database.
 
 ## Code-Level UI Coverage
 
@@ -73,18 +111,30 @@ This is implemented through
 
 | Item | Status | Notes |
 | --- | --- | --- |
-| Matrix draft opens for authenticated coach | Pending staging/backend pass | Local API was not running. |
-| Plan readable by weeks, days and sessions | Covered by code/checks; pending visual authenticated pass | Component renders this structure. |
-| Concrete exercises visible | Covered by code/checks; pending visual authenticated pass | Scenario checks confirm exercise output. |
-| Sets, reps, duration, RPE and load notes visible | Covered by code/checks; pending visual authenticated pass | Component renders these fields when present. |
-| Coach-editable flags understandable | Covered by code/checks; pending visual authenticated pass | Component renders coach-editable and locked states. |
-| Substitution, regression and progression visibility | Pending UX pass | Existing exercise data has variations, but authenticated visual flow still needs review. |
-| Safety notes visible | Covered by code/checks; pending visual authenticated pass | Exercise notes and risk flags are visible surfaces. |
-| Evidence family status visible | Covered by evidence refs; pending UX pass | Need coach readability review in staging. |
-| Risk flags visible | Covered by code/checks; pending visual authenticated pass | Component renders risk flags. |
-| Blocked/review-required blocks visible | Covered by scenario checks; pending visual authenticated pass | High-risk scenarios keep review-required text. |
-| Save/assign pilot gate visible | Covered by UI gate checks; pending visual authenticated pass | Gate status remains controlled-pilot only. |
+| Matrix draft opens for authenticated coach | Passed in local dev | Demo coach generated a D21 Matrix draft. |
+| Plan readable by weeks, days and sessions | Passed in local dev | Week/day/session structure was visible. |
+| Concrete exercises visible | Passed in local dev | Exercise names were visible inside blocks. |
+| Sets, reps, duration, RPE and load notes visible | Passed in local dev | RPE and prescription notes were visible. |
+| Coach-editable flags understandable | Passed in local dev | `редактируется тренером` and coach-editable notes were visible. |
+| Substitution, regression and progression visibility | Passed with verbosity concern | Regression/progression text was visible but long. |
+| Safety notes visible | Passed with verbosity concern | Safety notes were visible but dense. |
+| Evidence family status visible | Partially passed | Evidence refs were visible; family-level readability still needs coach feedback. |
+| Risk flags visible | Passed in local dev | Risk flags were visible. |
+| Blocked/review-required blocks visible | Passed in local dev | Review-required language was visible. |
+| Save/assign pilot gate visible | Passed in local dev | Save template and assignment path worked in temporary dev DB. |
 | Matrix is not default | Passed | Feature flags default off and production route remains legacy-backed. |
+
+## Quality Notes From The UI Pass
+
+- The coach-facing draft is functionally visible, but the exercise rows can be
+  very dense because each row includes prescription, source-review limitation,
+  safety note, regressions and progressions.
+- D21 output included body-composition candidate exercises in light technical
+  blocks. They are guarded as coach-editable and non-medical, but this should be
+  reviewed in pilot quality feedback because the wording may read like a
+  body-composition objective inside a pre-start technical day.
+- Evidence references are visible, but family-level evidence status may need a
+  more compact coach-facing presentation before broader pilot use.
 
 ## Follow-Up For Real Pilot
 
@@ -94,7 +144,8 @@ Run the same UI checklist in a real dev/staging environment with:
 - safe demo coach account;
 - seeded pilot fixtures;
 - Matrix feature flags enabled only for the pilot cohort;
-- no production athlete data;
+- no production athlete data unless the environment is explicitly approved for
+  pilot testing;
 - no production save/assign unless the controlled pilot gate explicitly passes.
 
 ## Guardrails Confirmed

@@ -22,6 +22,36 @@ and must not be treated as human approval.
 - Feature flags remain off by default.
 - Production draft route remains legacy-backed.
 
+## Current Quality Log Snapshot
+
+`npm run check:constructor-matrix-pilot-quality-log` currently reports:
+
+- 10 controlled-pilot quality log entries;
+- 5 allowed Matrix primary pilot scenarios;
+- 4 fallback scenarios;
+- 1 review-required Matrix internal scenario;
+- 963 total exercise references across the quality-log sample;
+- 157 coach-editable load entries;
+- 25 blocked high-risk markers;
+- no PII;
+- no production athlete id;
+- no runtime behavior change.
+
+`npm run check:constructor-matrix-real-scenario-pilot` currently reports:
+
+- D90: 7 days, 11 sessions, 32 blocks, 94 exercises;
+- D28: 28 days, 37 sessions, 110 blocks, 320 exercises;
+- D21: 21 days, 27 sessions, 81 blocks, 233 exercises;
+- D10: 10 days, 12 sessions, 35 blocks, 97 exercises;
+- D4: 4 days, 4 sessions, 15 blocks, 41 exercises;
+- D-3, travel, weigh-in and competition day stay legacy fallback;
+- body-composition, pain, youth and female/RED-S-sensitive contexts stay
+  review-required Matrix internal scenarios.
+
+The local authenticated UI pass generated a D21 Matrix draft, saved it as a
+template and assigned 21 training days to the demo athlete in a temporary local
+database.
+
 ## Quality Questions For Real Coach Review
 
 The next pilot pass should judge plan quality, not only code correctness:
@@ -55,6 +85,13 @@ pilot:
   should be checked.
 - Evidence-family refs exist, but the UI needs a staging UX pass to confirm
   they are understandable to coaches.
+- In the local D21 coach UI pass, exercise rows were functionally rich but
+  verbose. A coach can see prescriptions, review-required wording, safety notes,
+  regressions and progressions, but this density may slow review.
+- Body-composition candidate exercise names appeared in light technical blocks.
+  They were guarded as coach-editable, review-required and not rapid weight-cut
+  protocols, but the resolver should be watched for whether these candidates
+  belong in pre-start technical sessions by default.
 
 ## Pilot Quality Log Use
 

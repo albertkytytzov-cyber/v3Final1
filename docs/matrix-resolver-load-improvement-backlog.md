@@ -22,6 +22,10 @@ only after real pilot feedback identifies a concrete problem.
   start scenarios.
 - Check whether body-composition training candidates are clearly separated from
   unsafe rapid weight-cut logic.
+- Review whether body-composition candidate exercises should appear by default
+  inside pre-start light technical blocks. The local D21 UI pass showed these
+  candidates as guarded and review-required, but their naming may imply a
+  body-composition objective where the coach expects technical emphasis.
 
 ## Load Prescription Backlog
 
@@ -60,6 +64,18 @@ Resolver and load changes should be considered only after:
 - coach feedback identifies a specific mismatch;
 - the change can be validated by scenario checks;
 - high-risk guardrails remain unchanged.
+
+## Current Decision
+
+No resolver or load-prescription code change is applied in this stage. The
+current findings are quality-review signals, not confirmed defects:
+
+- generated plans pass controlled-pilot checks;
+- unsafe weight-cut language is absent;
+- fake approval language is absent;
+- high-risk decisions remain blocked or review-required;
+- the dense coach-facing text and body-composition candidate placement need
+  real coach feedback before changing selection rules.
 
 ## Non-Goals
 

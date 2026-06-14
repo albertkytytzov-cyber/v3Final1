@@ -71,6 +71,20 @@ Controlled pilot save/assign remains gated:
 - D-3, travel, weigh-in and competition-day scenarios are not Matrix pilot
   save/assign paths.
 
+## Local Dev Save/Assign Check
+
+The D21 authenticated coach UI pass used a temporary local database and confirmed
+the controlled save/assign path for the generated Matrix draft:
+
+- Matrix draft generated for `Demo Athlete`;
+- `Сохранить шаблон и перейти к назначению` was visible;
+- template save succeeded;
+- assignment panel opened for `PERFORM Constructor Candidate`;
+- 21 training days were assigned to the demo athlete in the temporary database.
+
+This confirms the local dev controlled-pilot save/assign path, not production
+save/assign enablement.
+
 ## Current Decision
 
 The fixture suite supports controlled pilot use for D90, D28, D21, D10 and D4.

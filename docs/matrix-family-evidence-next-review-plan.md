@@ -93,6 +93,8 @@ Evidence review must not approve:
 
 The next implementation stage should produce:
 
+- source-text locator pack for the source anchors noted in
+  `docs/matrix-family-source-verification-notes.md`;
 - family-level source acquisition log;
 - source-text availability status;
 - family evidence dossier updates;
