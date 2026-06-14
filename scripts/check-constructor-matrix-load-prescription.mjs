@@ -127,7 +127,9 @@ for (const prescription of prescriptions) {
   assert(
     !prescription.notes.includes("coachEditable=") &&
       !prescription.notes.includes("loadLocked=") &&
-      !prescription.notes.includes("reviewRequired="),
+      !prescription.notes.includes("reviewRequired=") &&
+      !prescription.notes.includes("coach-editable prescription") &&
+      !prescription.notes.includes("no medical threshold"),
     `${prescription.name}: coach-facing notes must not expose technical metadata`,
   );
 }

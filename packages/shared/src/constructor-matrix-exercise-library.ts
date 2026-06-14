@@ -417,16 +417,16 @@ const DEFAULT_PRESCRIPTION: ConstructorMatrixExercisePrescriptionTemplate = {
   durationMinutes: null,
   targetRpe: null,
   distanceMeters: null,
-  notes: "coach-editable prescription; no medical threshold",
+  notes: "нагрузку и объём тренер уточняет перед применением",
 };
 
 const DEFAULT_PROGRESSION = [
-  "add one technical constraint before adding load",
-  "increase complexity only if quality stays stable",
+  "сначала добавить техническое условие, затем нагрузку",
+  "усложнять только если качество остаётся стабильным",
 ];
 const DEFAULT_REGRESSION = [
-  "reduce partner resistance",
-  "switch to slower technical rehearsal",
+  "уменьшить сопротивление партнёра",
+  "перейти на более медленную техническую отработку",
 ];
 
 function evidenceForBlockType(

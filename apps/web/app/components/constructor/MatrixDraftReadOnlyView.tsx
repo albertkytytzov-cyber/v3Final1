@@ -24,6 +24,8 @@ const TECHNICAL_NOTE_MARKERS = [
   "safety:",
   "regressions:",
   "progressions:",
+  "coach-editable prescription",
+  "no medical threshold",
 ] as const;
 
 function exerciseDetails(exercise: ConstructorDraftExercise) {

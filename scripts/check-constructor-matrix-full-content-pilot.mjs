@@ -133,6 +133,8 @@ function assertCoachFacingExerciseQuality(testId, draft) {
     "safety:",
     "regressions:",
     "progressions:",
+    "coach-editable prescription",
+    "no medical threshold",
   ];
   const uniqueExerciseCount = new Set(exercises.map((exercise) => exercise.name)).size;
 
