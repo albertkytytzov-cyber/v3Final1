@@ -106,12 +106,38 @@ payloads must not persist Matrix internals.
 - no numeric medical threshold gate is added;
 - Matrix is not production default.
 
+## Matrix Exercise Evidence Map
+
+Stage: Matrix Exercise Evidence Map.
+
+Load-prescription families are now represented in
+`packages/shared/src/constructor-matrix-exercise-evidence-map.ts`. Max
+strength, strength endurance, Seluyanov/statodynamic LME, speed endurance,
+taper activation, aerobic base and body-composition training are review
+families rather than final evidence-approved protocols.
+
+The map preserves the current rule: training-load prescriptions are
+coach-editable candidates. It does not approve fixed thresholds, failure
+points, medical gates, weight-management gates or production runtime
+promotion.
+
+## Matrix Exercise Source Requirements
+
+Stage: Matrix Exercise Source Requirements.
+
+`packages/shared/src/constructor-matrix-exercise-source-requirements.ts`
+records which source types and review questions are needed before a load
+family can move beyond candidate status. All source requirements keep
+`runtimePromotionAllowedNow: false`.
+
 ## Validation
 
 Run:
 
 ```bash
 npm run check:constructor-matrix-load-prescription
+npm run check:constructor-matrix-exercise-evidence-map
+npm run check:constructor-matrix-exercise-source-requirements
 ```
 
 The checker validates missing-max fallback, max/e1RM-backed strength

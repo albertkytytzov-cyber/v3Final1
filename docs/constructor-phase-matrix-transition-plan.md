@@ -4641,3 +4641,49 @@ Decision:
 - real source-text acquisition and manual review remain future work;
 - no DB schema migration, no numeric threshold runtime gates and no fake human
   approvals are added.
+
+## 65. Stage: Matrix Exercise Evidence Map
+
+Stage: Matrix Exercise Evidence Map.
+
+This stage adds a metadata-only evidence-family map for the expanded Matrix
+exercise, nutrition and weight-management library.
+
+Implemented:
+
+- `packages/shared/src/constructor-matrix-exercise-evidence-map.ts`;
+- `docs/matrix-exercise-evidence-map.md`;
+- `npm run check:constructor-matrix-exercise-evidence-map`.
+
+Transition impact:
+
+- all exercises, nutrition guidance and weight-management guidance are mapped
+  to family-level review groups;
+- body-composition and weight-management families remain review-required and
+  forbid rapid weight cut, dehydration, exact kg-loss prescription and exact
+  calorie prescription;
+- high-risk weight-cut, hydration, weigh-in and BFR/KAATSU contexts remain
+  blocked or review-export-only;
+- no runtime behavior, production route, rollout gate, preview behavior,
+  save/assign production path or DB schema changes are introduced.
+
+## 66. Stage: Matrix Exercise Source Requirements
+
+Stage: Matrix Exercise Source Requirements.
+
+This stage adds source requirements for every exercise evidence family.
+
+Implemented:
+
+- `packages/shared/src/constructor-matrix-exercise-source-requirements.ts`;
+- `docs/matrix-exercise-source-requirements.md`;
+- `npm run check:constructor-matrix-exercise-source-requirements`.
+
+Transition impact:
+
+- each family has source questions, required source types, acceptance criteria
+  and runtime-promotion blockers;
+- P0/P1 priorities identify the next evidence-review work;
+- all requirements keep `runtimePromotionAllowedNow: false`;
+- no fake citations, fake approvals, human review placeholders or numeric
+  medical/weight thresholds are added.

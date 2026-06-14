@@ -149,12 +149,37 @@ targets.
 Matrix is not production default. Production route behavior is unchanged.
 High-risk medical decisions remain non-automated.
 
+## Matrix Exercise Evidence Map
+
+Stage: Matrix Exercise Evidence Map.
+
+The expanded exercise library is now mapped into evidence-review families in
+`packages/shared/src/constructor-matrix-exercise-evidence-map.ts`. This keeps
+the evidence workflow reviewable at the family level instead of forcing the
+next stage to audit every exercise in isolation.
+
+All exercises must map to at least one family. The map also covers nutrition
+guidance and weight-management guidance, but it remains metadata-only. It does
+not add final source approval, fake citations, fake human review or runtime
+promotion.
+
+## Matrix Exercise Source Requirements
+
+Stage: Matrix Exercise Source Requirements.
+
+`packages/shared/src/constructor-matrix-exercise-source-requirements.ts`
+records source requirements for each evidence family. Body-composition,
+weight-management, weigh-in, high-risk hydration and BFR/KAATSU contexts keep
+P0 review/source requirements and cannot become runtime gates from this stage.
+
 ## Validation
 
 Run:
 
 ```bash
 npm run check:constructor-matrix-exercise-library
+npm run check:constructor-matrix-exercise-evidence-map
+npm run check:constructor-matrix-exercise-source-requirements
 ```
 
 The checker validates exercise count, block coverage, category coverage,

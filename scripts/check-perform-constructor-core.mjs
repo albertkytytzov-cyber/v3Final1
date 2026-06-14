@@ -2806,6 +2806,8 @@ const metadataCheckFiles = [
   "scripts/check-constructor-matrix-exercise-resolver.mjs",
   "scripts/check-constructor-matrix-load-prescription.mjs",
   "scripts/check-constructor-matrix-nutrition-weight-guidance.mjs",
+  "scripts/check-constructor-matrix-exercise-evidence-map.mjs",
+  "scripts/check-constructor-matrix-exercise-source-requirements.mjs",
   "scripts/check-constructor-matrix-full-content-pilot.mjs",
   "scripts/check-constructor-matrix-ai-source-review.mjs",
   "scripts/check-constructor-matrix-evidence-dependencies.mjs",
@@ -2847,6 +2849,8 @@ const metadataCheckFiles = [
   "packages/shared/src/constructor-matrix-load-prescription.ts",
   "packages/shared/src/constructor-matrix-nutrition-guidance.ts",
   "packages/shared/src/constructor-matrix-weight-management-guidance.ts",
+  "packages/shared/src/constructor-matrix-exercise-evidence-map.ts",
+  "packages/shared/src/constructor-matrix-exercise-source-requirements.ts",
   "docs/matrix-ai-reviewed-save-assign-readiness.md",
   "docs/matrix-ai-reviewed-production-decision-pack.md",
   "docs/matrix-ai-reviewed-production-deployment-gate.md",
@@ -2860,6 +2864,8 @@ const metadataCheckFiles = [
   "docs/matrix-load-prescription.md",
   "docs/matrix-nutrition-weight-guidance.md",
   "docs/matrix-full-content-controlled-pilot.md",
+  "docs/matrix-exercise-evidence-map.md",
+  "docs/matrix-exercise-source-requirements.md",
   "docs/matrix-review-intake-export/README.md",
   "docs/matrix-claim-candidate-review-export/README.md",
 ];
@@ -2884,6 +2890,8 @@ for (const token of [
   "check:constructor-matrix-exercise-resolver",
   "check:constructor-matrix-load-prescription",
   "check:constructor-matrix-nutrition-weight-guidance",
+  "check:constructor-matrix-exercise-evidence-map",
+  "check:constructor-matrix-exercise-source-requirements",
   "check:constructor-matrix-full-content-pilot",
   "check:constructor-matrix-ai-source-review",
   "check:constructor-matrix-evidence-dependencies",
@@ -2987,6 +2995,14 @@ for (const [path, source] of [
   assert(
     source.includes("Matrix Full Content Controlled Pilot"),
     `${path} must document Matrix Full Content Controlled Pilot`,
+  );
+  assert(
+    source.includes("Matrix Exercise Evidence Map"),
+    `${path} must document Matrix Exercise Evidence Map`,
+  );
+  assert(
+    source.includes("Matrix Exercise Source Requirements"),
+    `${path} must document Matrix Exercise Source Requirements`,
   );
 }
 

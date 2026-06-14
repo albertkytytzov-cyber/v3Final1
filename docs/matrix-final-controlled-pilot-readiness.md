@@ -26,6 +26,28 @@ concrete exercises while preserving the production draft route, rollout gates,
 legacy fallback and template payload boundaries. Travel, weigh-in, competition
 day and high-risk medical contexts remain fallback, blocked or review-required.
 
+## Stage: Matrix Exercise Evidence Map
+
+The expanded exercise, nutrition and weight-management library is now mapped to
+family-level evidence-review groups. This improves review readiness but does
+not mean the families are source-approved, medically approved or production
+default ready.
+
+All exercises, nutrition guidance and weight-management guidance must remain
+covered by the map. High-risk weight-cut, hydration, weigh-in, RED-S-sensitive
+and BFR/KAATSU contexts remain blocked, review-export-only or review-required.
+
+## Stage: Matrix Exercise Source Requirements
+
+Every evidence family now has a source requirement record with priority,
+required source types, review questions, minimum acceptance criteria and
+runtime-promotion blockers. P0 requirements cover the highest-risk
+body-composition, nutrition, weight-management, weigh-in, hydration/weight-cut
+and BFR/KAATSU contexts.
+
+All requirements keep `runtimePromotionAllowedNow: false`; this stage prepares
+real source review and does not authorize Matrix as production default.
+
 ## Decision
 
 Matrix is ready only for controlled pilot use when all validation checks pass.
@@ -93,6 +115,8 @@ Before any controlled pilot expansion, run:
 npm run build --workspace @training-platform/shared
 npm run check:constructor-matrix-controlled-pilot-e2e
 npm run check:constructor-matrix-save-assign-controlled-pilot
+npm run check:constructor-matrix-exercise-evidence-map
+npm run check:constructor-matrix-exercise-source-requirements
 npm run check:constructor-matrix-dependency-map
 npm run check:constructor-matrix-ui-gates
 npm run check:constructor-matrix-ai-runtime-integration

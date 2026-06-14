@@ -10,9 +10,14 @@ import {
   CONSTRUCTOR_MATRIX_EVIDENCE_CLAIM_BLOCKERS,
   CONSTRUCTOR_MATRIX_EVIDENCE_CLAIM_REVIEW_INTAKES,
   CONSTRUCTOR_MATRIX_EVIDENCE_DEPENDENCY_REGISTRY,
+  CONSTRUCTOR_MATRIX_EXERCISE_EVIDENCE_MAP,
+  CONSTRUCTOR_MATRIX_EXERCISE_LIBRARY,
+  CONSTRUCTOR_MATRIX_EXERCISE_SOURCE_REQUIREMENTS,
+  CONSTRUCTOR_MATRIX_NUTRITION_GUIDANCE,
   CONSTRUCTOR_MATRIX_REVIEW_PACKAGE_REQUIRED_THRESHOLD_AREAS,
   CONSTRUCTOR_MATRIX_SOURCE_LOOKUP_INTAKE,
   CONSTRUCTOR_MATRIX_THRESHOLD_CANDIDATES,
+  CONSTRUCTOR_MATRIX_WEIGHT_MANAGEMENT_GUIDANCE,
 } from "@training-platform/shared";
 
 function assert(condition, message) {
@@ -173,6 +178,37 @@ assert(
 assert(
   payload.evidenceClaims.evidenceClaimCount === 0,
   "Review package must keep final evidence claim count at zero",
+);
+assert(
+  payload.exerciseEvidenceMap.familyCount === CONSTRUCTOR_MATRIX_EXERCISE_EVIDENCE_MAP.length,
+  "Review package must include exercise evidence family count",
+);
+assert(
+  payload.exerciseEvidenceMap.coveredExerciseCount === CONSTRUCTOR_MATRIX_EXERCISE_LIBRARY.length,
+  "Review package must report all exercises covered by evidence families",
+);
+assert(
+  payload.exerciseEvidenceMap.coveredNutritionGuidanceCount ===
+    CONSTRUCTOR_MATRIX_NUTRITION_GUIDANCE.length,
+  "Review package must report all nutrition guidance covered by evidence families",
+);
+assert(
+  payload.exerciseEvidenceMap.coveredWeightManagementGuidanceCount ===
+    CONSTRUCTOR_MATRIX_WEIGHT_MANAGEMENT_GUIDANCE.length,
+  "Review package must report all weight-management guidance covered by evidence families",
+);
+assert(
+  payload.exerciseEvidenceMap.humanReviewed === false,
+  "Review package exercise evidence map summary must report no human reviews",
+);
+assert(
+  payload.exerciseSourceRequirements.sourceRequirementCount ===
+    CONSTRUCTOR_MATRIX_EXERCISE_SOURCE_REQUIREMENTS.length,
+  "Review package must include exercise source requirement count",
+);
+assert(
+  payload.exerciseSourceRequirements.runtimePromotionAllowedNow === false,
+  "Review package exercise source requirements must keep runtime promotion blocked",
 );
 const claimCandidateReviewExportPack =
   buildConstructorMatrixClaimCandidateReviewExportPack();

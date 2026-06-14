@@ -2583,3 +2583,47 @@ Decision:
 - high-risk medical decisions remain non-automated and review-required;
 - no DB schema migration, no numeric threshold runtime gates and no fake human
   approvals are added.
+
+### 15.47 Matrix Exercise Evidence Map
+
+Stage: Matrix Exercise Evidence Map.
+
+The exercise evidence map is implemented in
+`packages/shared/src/constructor-matrix-exercise-evidence-map.ts`, documented
+in `docs/matrix-exercise-evidence-map.md` and guarded by
+`npm run check:constructor-matrix-exercise-evidence-map`.
+
+Result:
+
+- all Matrix exercises map to at least one evidence-review family;
+- all nutrition and weight-management guidance items map to at least one
+  evidence-review family;
+- families cover Seluyanov/statodynamic LME, speed, speed endurance, strength,
+  wrestling technical transfer, taper, recovery, body-composition, nutrition
+  and high-risk blocked weight-cut/hydration contexts;
+- high-risk families cannot allow runtime plan content;
+- body-composition families forbid rapid weight cut, dehydration, exact kg-loss
+  prescription and exact calorie prescription;
+- no fake citations, fake human approvals, numeric medical thresholds or
+  runtime promotion are added.
+
+### 15.48 Matrix Exercise Source Requirements
+
+Stage: Matrix Exercise Source Requirements.
+
+The source-requirement registry is implemented in
+`packages/shared/src/constructor-matrix-exercise-source-requirements.ts`,
+documented in `docs/matrix-exercise-source-requirements.md` and guarded by
+`npm run check:constructor-matrix-exercise-source-requirements`.
+
+Result:
+
+- every exercise evidence family has one source requirement;
+- P0 requirements cover body-composition, muscle preservation,
+  nutrition/body-composition, weight-management, weigh-in,
+  high-risk weight-cut/hydration and BFR/KAATSU blocked contexts;
+- P1 requirements cover Seluyanov/statodynamic LME, speed endurance, max
+  strength, strength endurance, competition model, taper and aerobic base;
+- all requirements keep `runtimePromotionAllowedNow: false`;
+- the next logical stage is real source acquisition and family-level evidence
+  review, not Matrix default promotion.

@@ -161,3 +161,35 @@ Future work remains real source-text/manual review for high-risk expansion,
 pilot monitoring and a separate production-readiness decision. Matrix Full
 Content Controlled Pilot can make plans richer, but it does not remove the
 medical and weight-management guardrails.
+
+## Matrix Exercise Evidence Map
+
+Stage: Matrix Exercise Evidence Map.
+
+The next completed metadata step maps the expanded exercise, nutrition and
+weight-management content into evidence-review families. The registry lives in
+`packages/shared/src/constructor-matrix-exercise-evidence-map.ts` and is
+guarded by `npm run check:constructor-matrix-exercise-evidence-map`.
+
+This closes the review-organization gap: the next evidence stage can review
+families such as Seluyanov/statodynamic LME, speed endurance, max strength,
+body-composition training, nutrition guidance and blocked weight-cut/hydration
+contexts instead of reviewing every exercise independently.
+
+The evidence map does not create source approval, human review, fake citations,
+numeric medical thresholds or runtime promotion.
+
+## Matrix Exercise Source Requirements
+
+Stage: Matrix Exercise Source Requirements.
+
+`packages/shared/src/constructor-matrix-exercise-source-requirements.ts`
+records the source types, review questions, acceptance criteria and runtime
+blockers needed for each evidence family. P0 requirements include
+body-composition, muscle preservation, nutrition body-composition,
+weight-management, weigh-in, high-risk hydration/weight-cut and BFR/KAATSU
+blocked contexts.
+
+All source requirements keep `runtimePromotionAllowedNow: false`. The next
+logical stage is real source acquisition and family-level evidence review, not
+production-default promotion.

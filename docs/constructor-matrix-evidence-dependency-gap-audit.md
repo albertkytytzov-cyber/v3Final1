@@ -868,3 +868,25 @@ concrete exercises while confirming fallback for travel, weigh-in, competition
 day and high-risk contexts. Matrix is not production default, the production
 route `/api/v1/plans/constructor/draft` remains legacy-backed and high-risk
 medical decisions remain non-automated.
+
+## Stage: Matrix Exercise Evidence Map
+
+The expanded Matrix content library now has a metadata-only evidence-family
+map in `packages/shared/src/constructor-matrix-exercise-evidence-map.ts`.
+Every exercise, nutrition guidance item and weight-management guidance item is
+covered by at least one review family.
+
+This closes an evidence-audit organization gap without claiming final source
+approval. The map adds no citations, no human approvals, no numeric medical or
+weight-cut thresholds and no runtime promotion.
+
+## Stage: Matrix Exercise Source Requirements
+
+The follow-on source requirement registry in
+`packages/shared/src/constructor-matrix-exercise-source-requirements.ts`
+defines source types, review questions, minimum acceptance criteria and
+runtime-promotion blockers for every evidence family.
+
+P0 requirements cover body-composition, nutrition/body-composition,
+weight-management, weigh-in, high-risk weight-cut/hydration and BFR/KAATSU
+blocked contexts. All requirements keep `runtimePromotionAllowedNow: false`.

@@ -66,12 +66,37 @@ Weight cut, hydration, RED-S-sensitive context, pain, injury-return, youth
 context and BFR/KAATSU remain blocked, fallback-only or review-required.
 Matrix does not add fake human approvals and does not set `humanReviewed=true`.
 
+## Matrix Exercise Evidence Map
+
+Stage: Matrix Exercise Evidence Map.
+
+Nutrition and weight-management guidance are now mapped into evidence-review
+families in `packages/shared/src/constructor-matrix-exercise-evidence-map.ts`.
+This includes nutrition body-composition guidance, training-day nutrition
+guidance, weight-management review prompts, weigh-in review-required guidance
+and high-risk blocked weight-cut/hydration context.
+
+The map does not approve nutrition protocols, calorie prescriptions, kg-loss
+targets, hydration decisions or rapid weight-cut methods. It only records the
+family-level review surface for the next evidence/source stage.
+
+## Matrix Exercise Source Requirements
+
+Stage: Matrix Exercise Source Requirements.
+
+`packages/shared/src/constructor-matrix-exercise-source-requirements.ts`
+keeps nutrition body-composition, weight-management, weigh-in and high-risk
+hydration families as P0 source/review requirements. Runtime promotion remains
+blocked now.
+
 ## Validation
 
 Run:
 
 ```bash
 npm run check:constructor-matrix-nutrition-weight-guidance
+npm run check:constructor-matrix-exercise-evidence-map
+npm run check:constructor-matrix-exercise-source-requirements
 ```
 
 The checker validates evidence refs, review-required status, not-medical-advice

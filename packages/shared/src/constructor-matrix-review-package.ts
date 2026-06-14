@@ -14,6 +14,8 @@ import {
   type ConstructorMatrixEvidenceDependencyId,
   type ConstructorMatrixEvidenceRiskArea,
 } from "./constructor-matrix-evidence";
+import { buildConstructorMatrixExerciseEvidenceMapSummary } from "./constructor-matrix-exercise-evidence-map";
+import { buildConstructorMatrixExerciseSourceRequirementSummary } from "./constructor-matrix-exercise-source-requirements";
 import {
   buildConstructorMatrixEvidenceClaimExtractionSummary,
   type ConstructorMatrixEvidenceClaimExtractionSummary,
@@ -69,6 +71,14 @@ export type ConstructorMatrixReviewPackageLayer =
   | "evidence_dependency"
   | "data_dependency"
   | "threshold_candidate";
+
+export type ConstructorMatrixExerciseEvidenceMapSummary = ReturnType<
+  typeof buildConstructorMatrixExerciseEvidenceMapSummary
+>;
+
+export type ConstructorMatrixExerciseSourceRequirementSummary = ReturnType<
+  typeof buildConstructorMatrixExerciseSourceRequirementSummary
+>;
 
 export interface ConstructorMatrixReviewPackageRef {
   layer: ConstructorMatrixReviewPackageLayer;
@@ -168,6 +178,8 @@ export interface ConstructorMatrixReviewPackagePayload {
   evidenceClaims: ConstructorMatrixEvidenceClaimExtractionSummary;
   evidenceClaimReviewIntake: ConstructorMatrixEvidenceClaimReviewIntakeSummary;
   reviewIntakeExport: ConstructorMatrixReviewIntakeExportSummary;
+  exerciseEvidenceMap: ConstructorMatrixExerciseEvidenceMapSummary;
+  exerciseSourceRequirements: ConstructorMatrixExerciseSourceRequirementSummary;
   reviewerQueues: readonly ConstructorMatrixReviewPackageReviewerQueue[];
   evidenceDependencies: readonly ConstructorMatrixReviewPackageEvidenceItem[];
   dataDependencies: readonly ConstructorMatrixReviewPackageDataItem[];
@@ -662,6 +674,13 @@ export function buildConstructorMatrixLayerReviewMarkdown(
       `Evidence claim review runtime changes: ${payload.evidenceClaimReviewIntake.runtimeChangeAllowedNowCount}`,
       `Review intake export items: ${payload.reviewIntakeExport.reviewIntakeExportItemCount}`,
       `Review intake export runtime changes: ${payload.reviewIntakeExport.reviewIntakeExportRuntimeChangeAllowedNowCount}`,
+      `Exercise evidence families: ${payload.exerciseEvidenceMap.familyCount}`,
+      `Exercise evidence coverage: ${payload.exerciseEvidenceMap.coveredExerciseCount}/${payload.exerciseEvidenceMap.exerciseCount}`,
+      `Nutrition guidance evidence coverage: ${payload.exerciseEvidenceMap.coveredNutritionGuidanceCount}/${payload.exerciseEvidenceMap.nutritionGuidanceCount}`,
+      `Weight-management evidence coverage: ${payload.exerciseEvidenceMap.coveredWeightManagementGuidanceCount}/${payload.exerciseEvidenceMap.weightManagementGuidanceCount}`,
+      `Exercise source requirements: ${payload.exerciseSourceRequirements.sourceRequirementCount}`,
+      `Exercise source P0 families: ${payload.exerciseSourceRequirements.p0FamilyIds.join(", ") || "none"}`,
+      `Exercise source runtimePromotionAllowedNow=${payload.exerciseSourceRequirements.runtimePromotionAllowedNow}`,
     ]),
     "",
     "## Required Threshold Areas Covered",
@@ -727,6 +746,8 @@ export function buildConstructorMatrixLayerReviewPackage(params?: {
     evidenceClaims: buildConstructorMatrixEvidenceClaimExtractionSummary(),
     evidenceClaimReviewIntake: buildConstructorMatrixEvidenceClaimReviewIntakeSummary(),
     reviewIntakeExport: buildConstructorMatrixReviewIntakeExportSummary(),
+    exerciseEvidenceMap: buildConstructorMatrixExerciseEvidenceMapSummary(),
+    exerciseSourceRequirements: buildConstructorMatrixExerciseSourceRequirementSummary(),
     reviewerQueues: buildReviewerQueues(),
     evidenceDependencies: CONSTRUCTOR_MATRIX_EVIDENCE_DEPENDENCY_REGISTRY.map(evidenceItem),
     dataDependencies: CONSTRUCTOR_MATRIX_DATA_DEPENDENCIES.map(dataItem),
