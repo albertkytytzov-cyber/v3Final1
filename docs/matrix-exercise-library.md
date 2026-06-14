@@ -9,10 +9,11 @@ and preparation exercises.
 
 ## Scope
 
-The registry covers at least 80 exercises and all current Matrix block types.
-After the Seluyanov/statodynamic expansion it contains dedicated
-coach-school candidate exercises for local muscular endurance and wrestling
-transfer:
+The registry covers at least 180 exercises and all current Matrix block types.
+After the Seluyanov/statodynamic and performance-content expansions it
+contains dedicated coach-school candidate exercises for local muscular
+endurance, wrestling transfer, speed, speed endurance, strength, endurance and
+exercise complexes:
 
 - wrestling stance and movement;
 - shots and entries;
@@ -35,6 +36,31 @@ transfer:
 - travel mobility;
 - weigh-in day activation;
 - post-competition recovery.
+
+## Performance Exercise And Complex Candidate Layer
+
+The library now includes a broad performance-content candidate layer for:
+
+- speed development and first-action work;
+- acceleration, change of direction and reactive movement;
+- wrestling-specific speed endurance;
+- repeated shot, sprawl, hand-fight and edge-exchange density;
+- max-strength and strength-endurance candidates;
+- posterior-chain, trunk and grip strength candidates;
+- aerobic base, tempo and low-contact endurance candidates;
+- wrestling complexes that combine stance, entries, defense, par terre,
+  grip, strength transfer, taper activation, travel reset and recovery.
+
+These entries are tagged with `performance_content_candidate` and one or more
+specific tags such as `speed_development_candidate`,
+`speed_endurance_candidate`, `strength_development_candidate`,
+`endurance_development_candidate` or `exercise_complex_candidate`.
+
+This layer is intentionally broad enough for controlled-pilot plan generation,
+but it is still candidate content. It is not a final evidence-approved
+exercise protocol library. Every performance candidate requires coach and
+sport-science review, remains coach-editable and must not be used as a
+medical, injury-return, weight-management, hydration or RED-S decision.
 
 ## Seluyanov / Statodynamic Candidate Layer
 
@@ -89,6 +115,9 @@ weight-cut protocols. High-risk entries such as weigh-in, heat-exposure review
 notes and neck/prehab work remain review-required or automation-blocked.
 Seluyanov/statodynamic entries are coach-editable candidates, not automatic
 load prescriptions and not source-verified protocols.
+Performance-content candidates are also coach-editable and not
+source-verified protocols. Speed, strength, endurance and complex density
+prescriptions remain training suggestions, not hard runtime gates.
 
 Matrix is not production default. Production route behavior is unchanged.
 High-risk medical decisions remain non-automated.

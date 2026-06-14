@@ -26,6 +26,13 @@ candidate exercises for local muscular endurance and wrestling transfer. These
 entries are coach-school candidates and review-required; they are not
 source-verified protocols yet.
 
+The pilot now also includes performance-content candidate exercises and
+complexes for speed development, speed endurance, strength development,
+endurance development and wrestling-specific bundled complexes. These entries
+make the generated drafts more complete for coach review, while still
+remaining candidate content. They are coach-editable, review-required at the
+methodology level and not source-verified protocols yet.
+
 ## Fallback / Blocked Scenarios
 
 The following remain fallback or blocked for active Matrix pilot save/assign:

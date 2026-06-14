@@ -51,6 +51,26 @@ The safe runtime behavior is:
 - treat every Seluyanov/statodynamic entry as a coach-school candidate until
   the later source-review stage maps exact evidence and review artifacts.
 
+## Performance Candidate Loads
+
+Speed, speed-endurance, strength, endurance and exercise-complex entries use
+coach-editable candidate prescriptions. Their default prescriptions can include
+sets, reps, duration, distance, RPE or technical-quality notes where that is
+safe for training planning.
+
+The safe runtime behavior is:
+
+- speed work stays quality-first and can regress to technical-quality notes;
+- speed-endurance density remains coach-selected when fatigue or contact risk
+  is unclear;
+- strength weights require athlete max, estimated max or coach-provided
+  training max before any load candidate is calculated;
+- endurance work stays educational and training-focused, not medical or
+  weight-management guidance;
+- complexes are treated as editable exercise bundles, not closed protocols;
+- no performance candidate may become a medical, injury-return, hydration,
+  weight-cut or RED-S gate.
+
 ## Output Contract
 
 Prescriptions keep the existing `ConstructorPlanExercise` output shape and add

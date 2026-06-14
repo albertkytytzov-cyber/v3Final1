@@ -50,6 +50,25 @@ does not yet claim exact source verification per exercise. Future evidence
 review must map each exercise family to source text, review artifacts and
 accepted use.
 
+## Performance Content Expansion
+
+The exercise library now also includes a broader performance-content candidate
+layer for the exercise gaps that remain important before the final evidence
+stage:
+
+- speed development and first-action acceleration;
+- speed endurance and repeated wrestling-exchange density;
+- strength development and strength-endurance support;
+- endurance development, tempo work and aerobic recovery;
+- exercise complexes that combine wrestling skill, strength transfer,
+  competition-model situations, taper activation, travel reset and recovery.
+
+This layer adds concrete exercise families so controlled-pilot drafts can be
+fuller and easier for a coach to edit. It does not claim that every exercise
+family is already source-verified. The later evidence stage must map each
+family to accepted sources, review artifacts, contraindications and allowed
+use.
+
 ## Safe Training Prescription
 
 Safe training prescription can include concrete wrestling drills, strength
@@ -69,6 +88,11 @@ weight-management gates or injury-return clearance.
 
 Seluyanov/statodynamic entries are also coach-editable. They must not be used
 as automatic progression, failure, taper, medical or high-risk gates.
+
+Performance-content entries are also coach-editable. Their default sets, reps,
+duration, RPE and density are training candidates for pilot drafting, not
+medical thresholds, weight-management thresholds, injury-return rules or hard
+runtime gates.
 
 ## Nutrition Education
 

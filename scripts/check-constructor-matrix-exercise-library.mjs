@@ -47,12 +47,36 @@ const evidenceIds = new Set(CONSTRUCTOR_MATRIX_EVIDENCE_DEPENDENCY_IDS);
 const ids = new Set();
 const summary = buildConstructorMatrixExerciseLibrarySummary();
 
-assert(CONSTRUCTOR_MATRIX_EXERCISE_LIBRARY.length >= 80, "Matrix exercise library must contain at least 80 exercises");
+assert(CONSTRUCTOR_MATRIX_EXERCISE_LIBRARY.length >= 180, "Matrix exercise library must contain at least 180 exercises after performance expansion");
 assert(summary.exerciseCount === CONSTRUCTOR_MATRIX_EXERCISE_LIBRARY.length, "Exercise library summary count mismatch");
 assert(summary.humanReviewed === false, "Exercise library must not imply human review");
 assert(
   summary.byMethodologyTag.seluyanov_statodynamic_lme_candidate >= 20,
   "Matrix exercise library must include Seluyanov/statodynamic LME candidate coverage",
+);
+assert(
+  summary.byMethodologyTag.performance_content_candidate >= 60,
+  "Matrix exercise library must include broad performance content candidate coverage",
+);
+assert(
+  summary.byMethodologyTag.speed_development_candidate >= 12,
+  "Matrix exercise library must include speed-development candidate coverage",
+);
+assert(
+  summary.byMethodologyTag.speed_endurance_candidate >= 10,
+  "Matrix exercise library must include speed-endurance candidate coverage",
+);
+assert(
+  summary.byMethodologyTag.strength_development_candidate >= 14,
+  "Matrix exercise library must include strength-development candidate coverage",
+);
+assert(
+  summary.byMethodologyTag.endurance_development_candidate >= 12,
+  "Matrix exercise library must include endurance-development candidate coverage",
+);
+assert(
+  summary.byMethodologyTag.exercise_complex_candidate >= 14,
+  "Matrix exercise library must include exercise-complex candidate coverage",
 );
 
 for (const exercise of CONSTRUCTOR_MATRIX_EXERCISE_LIBRARY) {
@@ -103,6 +127,23 @@ for (const exercise of CONSTRUCTOR_MATRIX_EXERCISE_LIBRARY) {
       `${exercise.id}: Seluyanov/statodynamic entry must not imply source-verified protocol status`,
     );
   }
+
+  if (exercise.methodologyTags.includes("performance_content_candidate")) {
+    assert(
+      exercise.reviewRequired.includes("coach") && exercise.reviewRequired.includes("sport_science"),
+      `${exercise.id}: performance content candidate must require coach and sport-science review`,
+    );
+    assert(
+      exercise.safetyNotes.some((note) => /not source-verified protocol yet/i.test(note)),
+      `${exercise.id}: performance content candidate must not imply source-verified protocol status`,
+    );
+    assert(
+      exercise.athleteContextConstraints.some((note) =>
+        /do not use as medical, weight-management, or injury-return decision/i.test(note),
+      ),
+      `${exercise.id}: performance content candidate must block medical/weight/injury decision use`,
+    );
+  }
 }
 
 for (const category of requiredCategories) {
@@ -139,6 +180,18 @@ console.log(JSON.stringify({
   exerciseCount: CONSTRUCTOR_MATRIX_EXERCISE_LIBRARY.length,
   blockCoverageCount: Object.keys(summary.byBlockType).length,
   categoryCoverageCount: Object.keys(summary.byCategory).length,
+  performanceContentCandidateCount:
+    summary.byMethodologyTag.performance_content_candidate,
+  speedDevelopmentCandidateCount:
+    summary.byMethodologyTag.speed_development_candidate,
+  speedEnduranceCandidateCount:
+    summary.byMethodologyTag.speed_endurance_candidate,
+  strengthDevelopmentCandidateCount:
+    summary.byMethodologyTag.strength_development_candidate,
+  enduranceDevelopmentCandidateCount:
+    summary.byMethodologyTag.endurance_development_candidate,
+  exerciseComplexCandidateCount:
+    summary.byMethodologyTag.exercise_complex_candidate,
   seluyanovStatodynamicCandidateCount:
     summary.byMethodologyTag.seluyanov_statodynamic_lme_candidate,
   reviewRequiredCount: summary.reviewRequiredCount,

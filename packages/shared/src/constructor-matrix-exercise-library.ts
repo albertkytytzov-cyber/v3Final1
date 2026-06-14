@@ -79,7 +79,13 @@ export type ConstructorMatrixExerciseReviewTrack =
 export type ConstructorMatrixExerciseMethodologyTag =
   | "coach_school_candidate"
   | "seluyanov_statodynamic_lme_candidate"
-  | "wrestling_transfer_candidate";
+  | "wrestling_transfer_candidate"
+  | "performance_content_candidate"
+  | "speed_development_candidate"
+  | "speed_endurance_candidate"
+  | "strength_development_candidate"
+  | "endurance_development_candidate"
+  | "exercise_complex_candidate";
 
 export type ConstructorMatrixExercisePrescriptionTemplate = {
   sets: number | null;
@@ -743,7 +749,147 @@ const SELUYANOV_STATODYNAMIC_EXERCISE_SEEDS = [
   },
 })) as readonly ExerciseSeed[];
 
+const PERFORMANCE_REVIEW_TRACKS = [
+  "coach",
+  "sport_science",
+] as const satisfies readonly ConstructorMatrixExerciseReviewTrack[];
+
+const PERFORMANCE_CONSTRAINTS = [
+  "coach must select based on phase, equipment, readiness, and technical quality",
+  "candidate content only until exercise-family evidence review is complete",
+  "do not use as medical, weight-management, or injury-return decision",
+] as const;
+
+const PERFORMANCE_CONTRAINDICATIONS = [
+  "pain_or_injury_requires_review",
+  "poor_sleep_or_low_readiness_requires_regression",
+  "close_main_start_requires_taper_guard",
+] as const;
+
+const PERFORMANCE_CUES = [
+  "quality before volume",
+  "coach controls density and rest",
+  "stop before mechanics degrade",
+] as const;
+
+const PERFORMANCE_MISTAKES = [
+  "turning every drill into conditioning",
+  "adding density without recovery window",
+  "ignoring local fatigue before contact work",
+] as const;
+
+const PERFORMANCE_SAFETY = [
+  "coach-editable performance candidate, not source-verified protocol yet",
+  "regress if pain, coordination loss, or sharp technical drop appears",
+  "keep high-risk medical and weight-management decisions outside this exercise layer",
+] as const;
+
+function performanceSeed(
+  seed: ExerciseSeed,
+  tags: readonly ConstructorMatrixExerciseMethodologyTag[],
+): ExerciseSeed {
+  return {
+    ...seed,
+    methodologyTags: [
+      "performance_content_candidate",
+      ...tags,
+    ],
+    reviewRequired: seed.reviewRequired ?? PERFORMANCE_REVIEW_TRACKS,
+    constraints: seed.constraints ?? PERFORMANCE_CONSTRAINTS,
+    contraindications: seed.contraindications ?? PERFORMANCE_CONTRAINDICATIONS,
+    cues: seed.cues ?? PERFORMANCE_CUES,
+    mistakes: seed.mistakes ?? PERFORMANCE_MISTAKES,
+    safety: seed.safety ?? PERFORMANCE_SAFETY,
+    prescription: {
+      notes: "performance content candidate; coach-editable, no source-verified protocol yet",
+      ...seed.prescription,
+    },
+  };
+}
+
+const SPEED_DEVELOPMENT_EXERCISE_SEEDS = [
+  performanceSeed({ id: "performance_falling_start_acceleration", name: "Falling-start acceleration candidate", category: "acceleration_change_of_direction", blockTypes: ["first_action_speed", "gpp"], targetQualities: ["speed_first_action"], loadMode: "distance", prescription: { sets: 5, reps: 1, durationMinutes: null, targetRpe: 5, distanceMeters: 10 } }, ["speed_development_candidate"]),
+  performanceSeed({ id: "performance_kneeling_start_acceleration", name: "Kneeling-start acceleration candidate", category: "acceleration_change_of_direction", blockTypes: ["first_action_speed", "gpp"], targetQualities: ["speed_first_action"], loadMode: "distance", prescription: { sets: 5, reps: 1, durationMinutes: null, targetRpe: 5, distanceMeters: 10 } }, ["speed_development_candidate"]),
+  performanceSeed({ id: "performance_partner_signal_first_step", name: "Partner signal first-step candidate", category: "speed_first_action", blockTypes: ["first_action_speed", "mat_light_technical"], targetQualities: ["speed_first_action", "taper_quality"], loadMode: "technical_quality", prescription: { sets: 5, reps: 2, durationMinutes: null, targetRpe: 5 } }, ["speed_development_candidate", "wrestling_transfer_candidate"]),
+  performanceSeed({ id: "performance_reactive_level_change", name: "Reactive level-change speed candidate", category: "speed_first_action", blockTypes: ["first_action_speed", "mat_technique"], targetQualities: ["speed_first_action"], loadMode: "technical_quality", prescription: { sets: 5, reps: 2, durationMinutes: null, targetRpe: 5 } }, ["speed_development_candidate", "wrestling_transfer_candidate"]),
+  performanceSeed({ id: "performance_mirror_first_action_chase", name: "Mirror first-action chase candidate", category: "speed_first_action", blockTypes: ["first_action_speed", "mat_tactics"], targetQualities: ["speed_first_action", "fatigue_skill"], loadMode: "technical_quality", prescription: { sets: 4, reps: 3, durationMinutes: null, targetRpe: 5 } }, ["speed_development_candidate", "wrestling_transfer_candidate"]),
+  performanceSeed({ id: "performance_sprawl_to_acceleration", name: "Sprawl to acceleration candidate", category: "defense_sprawl", blockTypes: ["first_action_speed", "mat_technique"], targetQualities: ["speed_first_action", "fatigue_skill"], loadMode: "technical_quality", prescription: { sets: 4, reps: 3, durationMinutes: null, targetRpe: 5 } }, ["speed_development_candidate", "wrestling_transfer_candidate"]),
+  performanceSeed({ id: "performance_lateral_shuffle_cut", name: "Lateral shuffle cut candidate", category: "acceleration_change_of_direction", blockTypes: ["first_action_speed", "gpp"], targetQualities: ["speed_first_action"], loadMode: "distance", prescription: { sets: 4, reps: 2, durationMinutes: null, targetRpe: 5, distanceMeters: 10 } }, ["speed_development_candidate"]),
+  performanceSeed({ id: "performance_edge_reaction_circle", name: "Edge reaction circle candidate", category: "edge_of_mat", blockTypes: ["first_action_speed", "mat_tactics"], targetQualities: ["speed_first_action", "fatigue_skill"], loadMode: "technical_quality", prescription: { sets: 4, reps: 3, durationMinutes: null, targetRpe: 5 } }, ["speed_development_candidate", "wrestling_transfer_candidate"]),
+  performanceSeed({ id: "performance_medball_scoop_throw", name: "Medicine-ball scoop throw speed candidate", category: "acceleration_change_of_direction", blockTypes: ["first_action_speed", "spp"], targetQualities: ["speed_strength", "speed_first_action"], loadMode: "RPE", prescription: { sets: 4, reps: 3, durationMinutes: null, targetRpe: 5 } }, ["speed_development_candidate", "strength_development_candidate"]),
+  performanceSeed({ id: "performance_medball_overhead_reactive_throw", name: "Medicine-ball overhead reactive throw candidate", category: "acceleration_change_of_direction", blockTypes: ["first_action_speed", "spp"], targetQualities: ["speed_strength", "speed_first_action"], loadMode: "RPE", prescription: { sets: 4, reps: 3, durationMinutes: null, targetRpe: 5 } }, ["speed_development_candidate", "strength_development_candidate"]),
+  performanceSeed({ id: "performance_band_resisted_entry", name: "Band-resisted entry speed candidate", category: "shots_entries", blockTypes: ["first_action_speed", "mat_technique", "spp"], targetQualities: ["speed_first_action", "fatigue_skill"], loadMode: "technical_quality", prescription: { sets: 4, reps: 3, durationMinutes: null, targetRpe: 5 } }, ["speed_development_candidate", "wrestling_transfer_candidate"]),
+  performanceSeed({ id: "performance_first_contact_release", name: "First-contact release speed candidate", category: "grip_hand_fighting", blockTypes: ["first_action_speed", "mat_tactics"], targetQualities: ["speed_first_action", "fatigue_skill"], loadMode: "technical_quality", prescription: { sets: 4, reps: 3, durationMinutes: null, targetRpe: 5 } }, ["speed_development_candidate", "wrestling_transfer_candidate"]),
+] as const satisfies readonly ExerciseSeed[];
+
+const SPEED_ENDURANCE_EXERCISE_SEEDS = [
+  performanceSeed({ id: "performance_repeated_shot_cluster", name: "Repeated shot cluster candidate", category: "tactical_score_situation", blockTypes: ["mat_competition_model", "spp"], targetQualities: ["anaerobic_power", "fatigue_skill"], loadMode: "duration", prescription: { sets: 3, reps: null, durationMinutes: 2, targetRpe: 6 } }, ["speed_endurance_candidate", "wrestling_transfer_candidate"]),
+  performanceSeed({ id: "performance_sprawl_shot_repeat", name: "Sprawl-shot repeat candidate", category: "defense_sprawl", blockTypes: ["mat_competition_model", "spp"], targetQualities: ["anaerobic_power", "fatigue_skill"], loadMode: "duration", prescription: { sets: 3, reps: null, durationMinutes: 2, targetRpe: 6 } }, ["speed_endurance_candidate", "wrestling_transfer_candidate"]),
+  performanceSeed({ id: "performance_handfight_burst_repeat", name: "Hand-fight burst repeat candidate", category: "grip_hand_fighting", blockTypes: ["mat_competition_model", "mat_tactics"], targetQualities: ["anaerobic_power", "arms_grip"], loadMode: "duration", prescription: { sets: 3, reps: null, durationMinutes: 2, targetRpe: 6 } }, ["speed_endurance_candidate", "wrestling_transfer_candidate"]),
+  performanceSeed({ id: "performance_edge_attack_repeat", name: "Edge attack repeat candidate", category: "edge_of_mat", blockTypes: ["mat_competition_model", "mat_tactics"], targetQualities: ["anaerobic_power", "wrestling_contact_density"], loadMode: "duration", prescription: { sets: 3, reps: null, durationMinutes: 2, targetRpe: 6 } }, ["speed_endurance_candidate", "wrestling_transfer_candidate"]),
+  performanceSeed({ id: "performance_scramble_repeat", name: "Scramble repeat candidate", category: "competition_model", blockTypes: ["mat_competition_model", "mat_control_bouts"], targetQualities: ["anaerobic_power", "wrestling_contact_density"], loadMode: "duration", prescription: { sets: 2, reps: null, durationMinutes: 3, targetRpe: 7 } }, ["speed_endurance_candidate", "wrestling_transfer_candidate"]),
+  performanceSeed({ id: "performance_mat_return_repeat", name: "Mat return repeat candidate", category: "competition_model", blockTypes: ["mat_competition_model", "spp"], targetQualities: ["anaerobic_power", "wrestling_contact_density"], loadMode: "duration", prescription: { sets: 3, reps: null, durationMinutes: 2, targetRpe: 6 } }, ["speed_endurance_candidate", "wrestling_transfer_candidate"]),
+  performanceSeed({ id: "performance_short_bout_exchange_density", name: "Short-bout exchange density candidate", category: "controlled_bout", blockTypes: ["mat_control_bouts", "mat_competition_model"], targetQualities: ["anaerobic_power", "wrestling_contact_density"], loadMode: "coach_selected", prescription: { sets: 2, reps: null, durationMinutes: 3, targetRpe: 7 } }, ["speed_endurance_candidate", "wrestling_transfer_candidate"]),
+  performanceSeed({ id: "performance_grip_attack_density", name: "Grip-to-attack density candidate", category: "strength_endurance", blockTypes: ["spp", "mat_tactics"], targetQualities: ["arms_grip", "anaerobic_power"], loadMode: "duration", prescription: { sets: 3, reps: null, durationMinutes: 2, targetRpe: 6 } }, ["speed_endurance_candidate", "strength_development_candidate", "wrestling_transfer_candidate"]),
+  performanceSeed({ id: "performance_stance_motion_density", name: "Stance motion density candidate", category: "wrestling_stance_movement", blockTypes: ["mat_technique", "spp"], targetQualities: ["anaerobic_power", "fatigue_skill"], loadMode: "duration", prescription: { sets: 3, reps: null, durationMinutes: 2, targetRpe: 6 } }, ["speed_endurance_candidate", "wrestling_transfer_candidate"]),
+  performanceSeed({ id: "performance_par_terre_pressure_repeat", name: "Par terre pressure repeat candidate", category: "par_terre_top", blockTypes: ["mat_competition_model", "spp"], targetQualities: ["anaerobic_power", "wrestling_contact_density"], loadMode: "duration", prescription: { sets: 3, reps: null, durationMinutes: 2, targetRpe: 6 } }, ["speed_endurance_candidate", "wrestling_transfer_candidate"]),
+] as const satisfies readonly ExerciseSeed[];
+
+const STRENGTH_DEVELOPMENT_EXERCISE_SEEDS = [
+  performanceSeed({ id: "performance_front_squat_strength_candidate", name: "Front squat strength candidate", category: "max_strength", blockTypes: ["spp", "gpp"], targetQualities: ["max_strength"], loadMode: "e1rm_based_candidate", prescription: { sets: 3, reps: 3, durationMinutes: null, targetRpe: 7 } }, ["strength_development_candidate"]),
+  performanceSeed({ id: "performance_split_squat_strength_candidate", name: "Split squat strength candidate", category: "max_strength", blockTypes: ["spp", "gpp"], targetQualities: ["max_strength", "legs_lme"], loadMode: "e1rm_based_candidate", prescription: { sets: 3, reps: 4, durationMinutes: null, targetRpe: 7 } }, ["strength_development_candidate"]),
+  performanceSeed({ id: "performance_trap_bar_hinge_strength_candidate", name: "Trap-bar hinge strength candidate", category: "max_strength", blockTypes: ["spp", "gpp"], targetQualities: ["max_strength"], loadMode: "e1rm_based_candidate", prescription: { sets: 3, reps: 3, durationMinutes: null, targetRpe: 7 } }, ["strength_development_candidate"]),
+  performanceSeed({ id: "performance_bench_pull_strength_candidate", name: "Bench pull strength candidate", category: "max_strength", blockTypes: ["spp", "gpp"], targetQualities: ["max_strength", "arms_grip"], loadMode: "e1rm_based_candidate", prescription: { sets: 3, reps: 4, durationMinutes: null, targetRpe: 7 } }, ["strength_development_candidate"]),
+  performanceSeed({ id: "performance_weighted_chin_candidate", name: "Weighted chin-up candidate", category: "max_strength", blockTypes: ["spp", "gpp"], targetQualities: ["max_strength", "arms_grip"], loadMode: "e1rm_based_candidate", prescription: { sets: 3, reps: 3, durationMinutes: null, targetRpe: 7 } }, ["strength_development_candidate"]),
+  performanceSeed({ id: "performance_landmine_press_candidate", name: "Landmine press candidate", category: "max_strength", blockTypes: ["spp", "gpp"], targetQualities: ["max_strength", "speed_strength"], loadMode: "RPE", prescription: { sets: 3, reps: 5, durationMinutes: null, targetRpe: 6 } }, ["strength_development_candidate"]),
+  performanceSeed({ id: "performance_hip_thrust_strength_candidate", name: "Hip thrust strength candidate", category: "posterior_chain", blockTypes: ["spp", "gpp"], targetQualities: ["max_strength"], loadMode: "e1rm_based_candidate", prescription: { sets: 3, reps: 4, durationMinutes: null, targetRpe: 7 } }, ["strength_development_candidate"]),
+  performanceSeed({ id: "performance_nordic_hamstring_regression", name: "Nordic hamstring regression candidate", category: "posterior_chain", blockTypes: ["spp", "gpp"], targetQualities: ["max_strength", "fatigue_skill"], loadMode: "RPE", prescription: { sets: 3, reps: 4, durationMinutes: null, targetRpe: 6 } }, ["strength_development_candidate"]),
+  performanceSeed({ id: "performance_copenhagen_plank_candidate", name: "Copenhagen plank candidate", category: "trunk_anti_rotation", blockTypes: ["spp", "gpp", "mobility"], targetQualities: ["max_strength", "fatigue_skill"], loadMode: "RPE", prescription: { sets: 3, reps: null, durationMinutes: 1, targetRpe: 5 } }, ["strength_development_candidate"]),
+  performanceSeed({ id: "performance_farmer_carry_strength_candidate", name: "Farmer carry strength candidate", category: "strength_endurance", blockTypes: ["spp", "gpp"], targetQualities: ["arms_grip", "max_strength"], loadMode: "RPE", prescription: { sets: 3, reps: null, durationMinutes: 1, targetRpe: 6 } }, ["strength_development_candidate"]),
+  performanceSeed({ id: "performance_zercher_hold_candidate", name: "Zercher hold candidate", category: "strength_endurance", blockTypes: ["spp"], targetQualities: ["max_strength", "fatigue_skill"], loadMode: "RPE", prescription: { sets: 3, reps: null, durationMinutes: 1, targetRpe: 6 } }, ["strength_development_candidate"]),
+  performanceSeed({ id: "performance_sled_drag_strength_candidate", name: "Sled drag strength candidate", category: "strength_endurance", blockTypes: ["spp", "gpp"], targetQualities: ["legs_lme", "max_strength"], loadMode: "RPE", prescription: { sets: 4, reps: null, durationMinutes: 1, targetRpe: 6 } }, ["strength_development_candidate"]),
+  performanceSeed({ id: "performance_medball_chest_throw_power", name: "Medicine-ball chest throw power candidate", category: "acceleration_change_of_direction", blockTypes: ["first_action_speed", "spp"], targetQualities: ["speed_strength", "max_strength"], loadMode: "RPE", prescription: { sets: 4, reps: 3, durationMinutes: null, targetRpe: 5 } }, ["strength_development_candidate", "speed_development_candidate"]),
+  performanceSeed({ id: "performance_medball_rotational_slam_power", name: "Medicine-ball rotational slam power candidate", category: "acceleration_change_of_direction", blockTypes: ["first_action_speed", "spp"], targetQualities: ["speed_strength", "max_strength"], loadMode: "RPE", prescription: { sets: 4, reps: 3, durationMinutes: null, targetRpe: 5 } }, ["strength_development_candidate", "speed_development_candidate"]),
+] as const satisfies readonly ExerciseSeed[];
+
+const ENDURANCE_DEVELOPMENT_EXERCISE_SEEDS = [
+  performanceSeed({ id: "performance_easy_mat_footwork_continuous", name: "Easy mat footwork continuous candidate", category: "aerobic_recovery", blockTypes: ["aerobic_deload", "gpp", "mat_light_technical"], targetQualities: ["aerobic_base", "recovery"], loadMode: "duration", prescription: { sets: null, reps: null, durationMinutes: 20, targetRpe: 3 } }, ["endurance_development_candidate", "wrestling_transfer_candidate"]),
+  performanceSeed({ id: "performance_shadow_wrestling_aerobic", name: "Shadow wrestling aerobic candidate", category: "aerobic_recovery", blockTypes: ["aerobic_deload", "gpp", "mat_light_technical"], targetQualities: ["aerobic_base", "fatigue_skill"], loadMode: "duration", prescription: { sets: null, reps: null, durationMinutes: 20, targetRpe: 3 } }, ["endurance_development_candidate", "wrestling_transfer_candidate"]),
+  performanceSeed({ id: "performance_bike_aerobic_base_candidate", name: "Bike aerobic base candidate", category: "aerobic_recovery", blockTypes: ["aerobic_deload", "gpp", "environment_change"], targetQualities: ["aerobic_base", "recovery"], loadMode: "duration", prescription: { sets: null, reps: null, durationMinutes: 30, targetRpe: 3 } }, ["endurance_development_candidate"]),
+  performanceSeed({ id: "performance_rower_aerobic_base_candidate", name: "Rower aerobic base candidate", category: "aerobic_recovery", blockTypes: ["aerobic_deload", "gpp", "environment_change"], targetQualities: ["aerobic_base", "recovery"], loadMode: "duration", prescription: { sets: null, reps: null, durationMinutes: 25, targetRpe: 3 } }, ["endurance_development_candidate"]),
+  performanceSeed({ id: "performance_outdoor_tempo_walk_run", name: "Outdoor tempo walk/run candidate", category: "aerobic_recovery", blockTypes: ["aerobic_deload", "gpp", "environment_change"], targetQualities: ["aerobic_base", "recovery"], loadMode: "duration", prescription: { sets: null, reps: null, durationMinutes: 30, targetRpe: 3 } }, ["endurance_development_candidate"]),
+  performanceSeed({ id: "performance_recovery_circuit_aerobic", name: "Recovery circuit aerobic candidate", category: "aerobic_recovery", blockTypes: ["aerobic_deload", "recovery", "gpp"], targetQualities: ["aerobic_base", "recovery"], loadMode: "duration", prescription: { sets: null, reps: null, durationMinutes: 20, targetRpe: 3 } }, ["endurance_development_candidate", "exercise_complex_candidate"]),
+  performanceSeed({ id: "performance_low_contact_conditioning_circuit", name: "Low-contact conditioning circuit candidate", category: "strength_endurance", blockTypes: ["gpp", "spp"], targetQualities: ["aerobic_base", "fatigue_skill"], loadMode: "duration", prescription: { sets: 3, reps: null, durationMinutes: 5, targetRpe: 5 } }, ["endurance_development_candidate", "exercise_complex_candidate"]),
+  performanceSeed({ id: "performance_stance_motion_tempo", name: "Stance motion tempo candidate", category: "wrestling_stance_movement", blockTypes: ["mat_technique", "gpp"], targetQualities: ["aerobic_base", "fatigue_skill"], loadMode: "duration", prescription: { sets: 3, reps: null, durationMinutes: 3, targetRpe: 4 } }, ["endurance_development_candidate", "wrestling_transfer_candidate"]),
+  performanceSeed({ id: "performance_grip_aerobic_flush", name: "Grip aerobic flush candidate", category: "grip_hand_fighting", blockTypes: ["aerobic_deload", "recovery", "spp"], targetQualities: ["aerobic_base", "arms_grip"], loadMode: "duration", prescription: { sets: 2, reps: null, durationMinutes: 3, targetRpe: 3 } }, ["endurance_development_candidate", "wrestling_transfer_candidate"]),
+  performanceSeed({ id: "performance_partner_movement_aerobic", name: "Partner movement aerobic candidate", category: "wrestling_stance_movement", blockTypes: ["mat_light_technical", "gpp"], targetQualities: ["aerobic_base", "fatigue_skill"], loadMode: "duration", prescription: { sets: 3, reps: null, durationMinutes: 3, targetRpe: 4 } }, ["endurance_development_candidate", "wrestling_transfer_candidate"]),
+  performanceSeed({ id: "performance_technical_chain_aerobic", name: "Technical chain aerobic candidate", category: "shots_entries", blockTypes: ["mat_light_technical", "gpp"], targetQualities: ["aerobic_base", "fatigue_skill"], loadMode: "duration", prescription: { sets: 3, reps: null, durationMinutes: 3, targetRpe: 4 } }, ["endurance_development_candidate", "wrestling_transfer_candidate"]),
+  performanceSeed({ id: "performance_post_contact_flush", name: "Post-contact flush candidate", category: "aerobic_recovery", blockTypes: ["aerobic_deload", "recovery", "post_competition_recovery"], targetQualities: ["aerobic_base", "recovery"], loadMode: "duration", prescription: { sets: null, reps: null, durationMinutes: 20, targetRpe: 2 } }, ["endurance_development_candidate"]),
+] as const satisfies readonly ExerciseSeed[];
+
+const EXERCISE_COMPLEX_SEEDS = [
+  performanceSeed({ id: "complex_stance_entry_defense", name: "Complex: stance-entry-defense", category: "tactical_score_situation", blockTypes: ["mat_technique", "mat_tactics"], targetQualities: ["fatigue_skill"], loadMode: "technical_quality", prescription: { sets: 3, reps: 4, durationMinutes: null, targetRpe: 5 } }, ["exercise_complex_candidate", "wrestling_transfer_candidate"]),
+  performanceSeed({ id: "complex_handfight_shot_finish", name: "Complex: hand-fight-shot-finish", category: "tactical_score_situation", blockTypes: ["mat_tactics", "mat_competition_model"], targetQualities: ["fatigue_skill", "wrestling_contact_density"], loadMode: "technical_quality", prescription: { sets: 3, reps: 4, durationMinutes: null, targetRpe: 5 } }, ["exercise_complex_candidate", "wrestling_transfer_candidate"]),
+  performanceSeed({ id: "complex_par_terre_top_pressure", name: "Complex: par terre top pressure", category: "par_terre_top", blockTypes: ["mat_technique", "mat_tactics", "spp"], targetQualities: ["fatigue_skill"], loadMode: "technical_quality", prescription: { sets: 3, reps: 4, durationMinutes: null, targetRpe: 5 } }, ["exercise_complex_candidate", "wrestling_transfer_candidate"]),
+  performanceSeed({ id: "complex_bottom_escape_rescore", name: "Complex: bottom escape and rescore", category: "par_terre_bottom", blockTypes: ["mat_technique", "mat_tactics"], targetQualities: ["fatigue_skill"], loadMode: "technical_quality", prescription: { sets: 3, reps: 4, durationMinutes: null, targetRpe: 5 } }, ["exercise_complex_candidate", "wrestling_transfer_candidate"]),
+  performanceSeed({ id: "complex_strength_power_transfer", name: "Complex: strength-power transfer", category: "strength_endurance", blockTypes: ["spp", "first_action_speed"], targetQualities: ["speed_strength", "max_strength"], loadMode: "RPE", prescription: { sets: 3, reps: 3, durationMinutes: null, targetRpe: 6 } }, ["exercise_complex_candidate", "strength_development_candidate", "speed_development_candidate"]),
+  performanceSeed({ id: "complex_posterior_chain_trunk", name: "Complex: posterior chain and trunk", category: "posterior_chain", blockTypes: ["spp", "gpp"], targetQualities: ["max_strength", "fatigue_skill"], loadMode: "RPE", prescription: { sets: 3, reps: 5, durationMinutes: null, targetRpe: 6 } }, ["exercise_complex_candidate", "strength_development_candidate"]),
+  performanceSeed({ id: "complex_grip_par_terre", name: "Complex: grip and par terre pressure", category: "strength_endurance", blockTypes: ["spp", "mat_tactics"], targetQualities: ["arms_grip", "fatigue_skill"], loadMode: "duration", prescription: { sets: 3, reps: null, durationMinutes: 2, targetRpe: 6 } }, ["exercise_complex_candidate", "strength_development_candidate", "wrestling_transfer_candidate"]),
+  performanceSeed({ id: "complex_lme_entry_transfer", name: "Complex: leg LME to entry transfer", category: "local_muscular_endurance_legs", blockTypes: ["leg_lmv", "spp", "mat_technique"], targetQualities: ["legs_lme", "fatigue_skill"], loadMode: "duration", prescription: { sets: 3, reps: null, durationMinutes: 2, targetRpe: 6 } }, ["exercise_complex_candidate", "wrestling_transfer_candidate"]),
+  performanceSeed({ id: "complex_taper_neural_activation", name: "Complex: taper neural activation", category: "speed_first_action", blockTypes: ["first_action_speed", "mat_light_technical"], targetQualities: ["speed_first_action", "taper_quality"], loadMode: "technical_quality", prescription: { sets: 3, reps: 2, durationMinutes: null, targetRpe: 4 } }, ["exercise_complex_candidate", "speed_development_candidate", "wrestling_transfer_candidate"]),
+  performanceSeed({ id: "complex_travel_reset", name: "Complex: travel reset", category: "travel_mobility", blockTypes: ["travel", "mobility", "recovery"], targetQualities: ["recovery"], loadMode: "duration", prescription: { sets: null, reps: null, durationMinutes: 12, targetRpe: 2 } }, ["exercise_complex_candidate", "endurance_development_candidate"]),
+  performanceSeed({ id: "complex_post_competition_recovery", name: "Complex: post-competition recovery", category: "post_competition_recovery", blockTypes: ["post_competition_recovery", "recovery"], targetQualities: ["recovery"], loadMode: "duration", prescription: { sets: null, reps: null, durationMinutes: 20, targetRpe: 2 } }, ["exercise_complex_candidate", "endurance_development_candidate"]),
+  performanceSeed({ id: "complex_competition_exchange_model", name: "Complex: competition exchange model", category: "competition_model", blockTypes: ["mat_competition_model"], targetQualities: ["wrestling_contact_density", "fatigue_skill"], loadMode: "duration", prescription: { sets: 2, reps: null, durationMinutes: 4, targetRpe: 6 } }, ["exercise_complex_candidate", "speed_endurance_candidate", "wrestling_transfer_candidate"]),
+  performanceSeed({ id: "complex_no_contact_conditioning", name: "Complex: no-contact conditioning", category: "strength_endurance", blockTypes: ["gpp", "aerobic_deload"], targetQualities: ["aerobic_base", "fatigue_skill"], loadMode: "duration", prescription: { sets: 3, reps: null, durationMinutes: 4, targetRpe: 5 } }, ["exercise_complex_candidate", "endurance_development_candidate"]),
+  performanceSeed({ id: "complex_mat_edge_scenario", name: "Complex: mat-edge scenario", category: "edge_of_mat", blockTypes: ["mat_tactics", "mat_competition_model"], targetQualities: ["fatigue_skill", "wrestling_contact_density"], loadMode: "technical_quality", prescription: { sets: 3, reps: 3, durationMinutes: null, targetRpe: 5 } }, ["exercise_complex_candidate", "wrestling_transfer_candidate"]),
+] as const satisfies readonly ExerciseSeed[];
+
 const EXERCISE_SEEDS = [
+  ...SPEED_DEVELOPMENT_EXERCISE_SEEDS,
+  ...SPEED_ENDURANCE_EXERCISE_SEEDS,
+  ...STRENGTH_DEVELOPMENT_EXERCISE_SEEDS,
+  ...ENDURANCE_DEVELOPMENT_EXERCISE_SEEDS,
+  ...EXERCISE_COMPLEX_SEEDS,
   ...SELUYANOV_STATODYNAMIC_EXERCISE_SEEDS,
   { id: "stance_level_change_flow", name: "Stance level-change flow", category: "wrestling_stance_movement", blockTypes: ["mat_technique", "mat_light_technical"], targetQualities: ["fatigue_skill", "taper_quality"] },
   { id: "stance_circle_pressure", name: "Stance circle pressure", category: "wrestling_stance_movement", blockTypes: ["mat_technique"], targetQualities: ["fatigue_skill"] },
