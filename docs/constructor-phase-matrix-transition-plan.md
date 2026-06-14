@@ -4438,3 +4438,26 @@ Guardrails:
   unless a separate save/assign pilot approval is used;
 - high-risk medical decisions remain non-automated;
 - no numeric threshold gates, fake citations or fake human approvals are added.
+
+## 58. Stage: AI-reviewed Matrix save/assign readiness audit
+
+Stage: AI-reviewed Matrix Save/Assign Readiness.
+
+This stage records save/template/assign compatibility for controlled
+AI-reviewed Matrix pilot drafts without enabling production persistence.
+
+Audit result:
+
+- Matrix pilot candidates can produce the existing constructor template payload
+  shape in dry-run checks;
+- assignment and full-plan auto-assignment request schemas accept Matrix-derived
+  dry-run payload shapes;
+- internal Matrix metadata is excluded from template payloads;
+- real save/template/assign remains disabled for `matrix_internal` and
+  `matrix_primary_pilot` by default;
+- save/assign pilot exposure still requires explicit feature flags and server
+  dry-run evidence;
+- production route, legacy fallback, rollout gates, preview behavior and DB
+  schema are unchanged.
+
+Next step: the AI-reviewed Matrix production decision pack.

@@ -66,3 +66,12 @@ It remains review-only support:
 Review export packets remain the handoff path for coach, medical,
 data-quality, sport-science and product-safety review before any future source
 readiness or runtime promotion stage.
+
+## Save/assign readiness note
+
+The AI-reviewed Matrix save/assign readiness audit confirms payload-shape
+compatibility only. It does not turn review export material into production
+save, assignment, medical clearance or coach approval.
+
+Real review decisions, source readiness updates and any future save/assign
+pilot approval remain separate stages.

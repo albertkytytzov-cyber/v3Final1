@@ -648,3 +648,23 @@ Automated coverage:
 - `npm run check:constructor-matrix-ai-runtime-integration`;
 - `npm run check:constructor-matrix-ui-gates`;
 - `npm run check:constructor-core`.
+
+## AI-reviewed Matrix save/assign readiness audit
+
+Stage: AI-reviewed Matrix Save/Assign Readiness.
+
+The save/assign audit is documented in
+`docs/matrix-ai-reviewed-save-assign-readiness.md` and checked by
+`npm run check:constructor-matrix-ai-save-assign-readiness`.
+
+Rollout meaning:
+
+- Matrix pilot drafts are structurally compatible with existing template and
+  assignment payload schemas in dry-run checks;
+- no production DB write path is enabled;
+- legacy constructor save remains the default save-capable path;
+- Matrix save/assign remains blocked unless a future explicit save/assign pilot
+  approval changes the boundary;
+- production route, rollout gates, preview behavior, legacy fallback and DB
+  schema remain unchanged;
+- high-risk decisions remain non-automated and review-required.

@@ -2375,3 +2375,25 @@ npm run check:constructor-matrix-ai-runtime-integration
 npm run check:constructor-matrix-ui-gates
 npm run check:constructor-core
 ```
+
+### 15.40 AI-reviewed Matrix save/assign readiness audit
+
+Stage: AI-reviewed Matrix Save/Assign Readiness.
+
+The audit is documented in `docs/matrix-ai-reviewed-save-assign-readiness.md`
+and guarded by `npm run check:constructor-matrix-ai-save-assign-readiness`.
+
+Current result:
+
+- controlled Matrix pilot drafts can build existing template payload shapes;
+- existing assignment schemas can parse dry-run Matrix-derived payloads;
+- internal Matrix metadata and `matrix.aiRuntime` do not enter template payloads;
+- real Matrix save/template/assign remains disabled by default;
+- `matrix_internal` and `matrix_primary_pilot` remain read-only unless a later
+  explicit save/assign pilot stage changes that boundary;
+- production `/api/v1/plans/constructor/draft`, legacy fallback, rollout gates,
+  preview behavior and DB schema remain unchanged.
+
+This stage approves compatibility evidence only. It does not approve production
+DB writes, Matrix as default, numeric threshold gates or medical/coach/human
+approval.
