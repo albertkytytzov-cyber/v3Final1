@@ -76,6 +76,11 @@ export type ConstructorMatrixExerciseReviewTrack =
   | "sport_science"
   | "product_safety";
 
+export type ConstructorMatrixExerciseMethodologyTag =
+  | "coach_school_candidate"
+  | "seluyanov_statodynamic_lme_candidate"
+  | "wrestling_transfer_candidate";
+
 export type ConstructorMatrixExercisePrescriptionTemplate = {
   sets: number | null;
   reps: number | null;
@@ -106,6 +111,7 @@ export type ConstructorMatrixExercise = {
   defaultPrescription: ConstructorMatrixExercisePrescriptionTemplate;
   evidenceDependencyIds: readonly ConstructorMatrixEvidenceDependencyId[];
   reviewRequired: readonly ConstructorMatrixExerciseReviewTrack[];
+  methodologyTags: readonly ConstructorMatrixExerciseMethodologyTag[];
   highRiskAutomationBlocked: boolean;
 };
 
@@ -122,6 +128,7 @@ type ExerciseSeed = {
   loadMode?: ConstructorMatrixExerciseLoadPrescriptionMode;
   prescription?: Partial<ConstructorMatrixExercisePrescriptionTemplate>;
   reviewRequired?: readonly ConstructorMatrixExerciseReviewTrack[];
+  methodologyTags?: readonly ConstructorMatrixExerciseMethodologyTag[];
   highRiskAutomationBlocked?: boolean;
   constraints?: readonly string[];
   contraindications?: readonly string[];
@@ -508,6 +515,7 @@ function makeExercise(seed: ExerciseSeed): ConstructorMatrixExercise {
     },
     evidenceDependencyIds: evidenceForSeed(seed),
     reviewRequired,
+    methodologyTags: seed.methodologyTags ?? [],
     highRiskAutomationBlocked:
       seed.highRiskAutomationBlocked ??
       (seed.category === "weigh_in_day_activation" ||
@@ -516,7 +524,227 @@ function makeExercise(seed: ExerciseSeed): ConstructorMatrixExercise {
   };
 }
 
+const SELUYANOV_STATODYNAMIC_TAGS = [
+  "coach_school_candidate",
+  "seluyanov_statodynamic_lme_candidate",
+  "wrestling_transfer_candidate",
+] as const satisfies readonly ConstructorMatrixExerciseMethodologyTag[];
+
+const SELUYANOV_REVIEW_TRACKS = [
+  "coach",
+  "sport_science",
+] as const satisfies readonly ConstructorMatrixExerciseReviewTrack[];
+
+const SELUYANOV_CONSTRAINTS = [
+  "coach must confirm local fatigue zone and transfer intent",
+  "use only as coach-editable local muscular endurance candidate",
+  "do not treat as source-verified protocol before evidence review",
+] as const;
+
+const SELUYANOV_CONTRAINDICATIONS = [
+  "pain_or_injury_requires_review",
+  "high_local_fatigue_requires_regression",
+  "close_main_start_requires_taper_guard",
+] as const;
+
+const SELUYANOV_CUES = [
+  "constant tension without chasing failure",
+  "short local stimulus before technique transfer",
+  "quality and posture stay above volume",
+] as const;
+
+const SELUYANOV_MISTAKES = [
+  "turning local endurance into max strength",
+  "working to failure",
+  "placing heavy local work before speed or close-start sessions",
+] as const;
+
+const SELUYANOV_SAFETY = [
+  "coach-review candidate from Seluyanov/statodynamic school, not source-verified protocol yet",
+  "stop or regress if pain, coordination loss, or sharp technique drop appears",
+  "do not combine with heavy contact or sprint work without local-fatigue review",
+] as const;
+
+const SELUYANOV_STATODYNAMIC_EXERCISE_SEEDS = [
+  {
+    id: "seluyanov_statodynamic_half_squat",
+    name: "Seluyanov-style statodynamic half squat",
+    category: "local_muscular_endurance_legs",
+    blockTypes: ["leg_lmv", "spp"],
+    targetQualities: ["legs_lme", "fatigue_skill"],
+  },
+  {
+    id: "seluyanov_statodynamic_split_squat",
+    name: "Seluyanov-style statodynamic split squat",
+    category: "local_muscular_endurance_legs",
+    blockTypes: ["leg_lmv", "spp"],
+    targetQualities: ["legs_lme", "fatigue_skill"],
+  },
+  {
+    id: "seluyanov_statodynamic_lateral_lunge",
+    name: "Seluyanov-style statodynamic lateral lunge",
+    category: "local_muscular_endurance_legs",
+    blockTypes: ["leg_lmv", "spp"],
+    targetQualities: ["legs_lme", "fatigue_skill"],
+  },
+  {
+    id: "seluyanov_statodynamic_calf_ankle",
+    name: "Seluyanov-style calf and ankle constant-tension work",
+    category: "local_muscular_endurance_legs",
+    blockTypes: ["leg_lmv", "spp", "mobility"],
+    targetQualities: ["legs_lme", "fatigue_skill"],
+  },
+  {
+    id: "seluyanov_adductor_constant_tension",
+    name: "Seluyanov-style adductor constant-tension pattern",
+    category: "local_muscular_endurance_legs",
+    blockTypes: ["leg_lmv", "spp", "mobility"],
+    targetQualities: ["legs_lme", "fatigue_skill"],
+  },
+  {
+    id: "seluyanov_glute_bridge_constant_tension",
+    name: "Seluyanov-style glute bridge constant tension",
+    category: "posterior_chain",
+    blockTypes: ["leg_lmv", "spp", "gpp"],
+    targetQualities: ["legs_lme", "fatigue_skill"],
+  },
+  {
+    id: "seluyanov_hamstring_bridge_walkout",
+    name: "Seluyanov-style hamstring bridge walkout",
+    category: "posterior_chain",
+    blockTypes: ["leg_lmv", "spp", "gpp"],
+    targetQualities: ["legs_lme", "fatigue_skill"],
+  },
+  {
+    id: "seluyanov_rdl_iso_dynamic_pattern",
+    name: "Seluyanov-style RDL iso-dynamic pattern",
+    category: "posterior_chain",
+    blockTypes: ["spp", "gpp"],
+    targetQualities: ["max_strength", "fatigue_skill"],
+  },
+  {
+    id: "seluyanov_towel_grip_constant_tension",
+    name: "Seluyanov-style towel grip constant tension",
+    category: "strength_endurance",
+    blockTypes: ["spp", "mat_tactics"],
+    targetQualities: ["arms_grip", "fatigue_skill"],
+  },
+  {
+    id: "seluyanov_rope_pull_constant_tension",
+    name: "Seluyanov-style rope pull constant tension",
+    category: "strength_endurance",
+    blockTypes: ["spp"],
+    targetQualities: ["arms_grip", "fatigue_skill"],
+  },
+  {
+    id: "seluyanov_two_on_one_grip_endurance",
+    name: "Seluyanov-style two-on-one grip endurance",
+    category: "grip_hand_fighting",
+    blockTypes: ["mat_tactics", "spp"],
+    targetQualities: ["arms_grip", "fatigue_skill"],
+  },
+  {
+    id: "seluyanov_underhook_pummel_constant_tension",
+    name: "Seluyanov-style underhook pummel constant tension",
+    category: "grip_hand_fighting",
+    blockTypes: ["mat_tactics", "spp"],
+    targetQualities: ["arms_grip", "fatigue_skill"],
+  },
+  {
+    id: "seluyanov_pallof_static_dynamic_press",
+    name: "Seluyanov-style Pallof static-dynamic press",
+    category: "trunk_anti_rotation",
+    blockTypes: ["spp", "gpp", "mobility"],
+    targetQualities: ["fatigue_skill", "recovery"],
+  },
+  {
+    id: "seluyanov_bear_crawl_constant_tension",
+    name: "Seluyanov-style bear crawl constant tension",
+    category: "trunk_anti_rotation",
+    blockTypes: ["spp", "gpp"],
+    targetQualities: ["fatigue_skill"],
+  },
+  {
+    id: "seluyanov_band_pull_constant_tension",
+    name: "Seluyanov-style band pull constant tension",
+    category: "strength_endurance",
+    blockTypes: ["spp", "gpp"],
+    targetQualities: ["arms_grip", "fatigue_skill"],
+  },
+  {
+    id: "seluyanov_pushup_constant_tension",
+    name: "Seluyanov-style push-up constant tension",
+    category: "strength_endurance",
+    blockTypes: ["spp", "gpp"],
+    targetQualities: ["fatigue_skill"],
+  },
+  {
+    id: "seluyanov_entry_after_leg_lme_transfer",
+    name: "Entry transfer after Seluyanov-style leg LME",
+    category: "shots_entries",
+    blockTypes: ["leg_lmv", "mat_technique", "spp"],
+    targetQualities: ["legs_lme", "fatigue_skill"],
+    loadMode: "technical_quality",
+  },
+  {
+    id: "seluyanov_sprawl_recover_after_local_fatigue",
+    name: "Sprawl-recover after Seluyanov-style local fatigue",
+    category: "defense_sprawl",
+    blockTypes: ["leg_lmv", "mat_technique", "spp"],
+    targetQualities: ["legs_lme", "fatigue_skill"],
+    loadMode: "technical_quality",
+  },
+  {
+    id: "seluyanov_par_terre_pressure_constant_tension",
+    name: "Seluyanov-style par terre pressure constant tension",
+    category: "par_terre_top",
+    blockTypes: ["mat_technique", "spp"],
+    targetQualities: ["fatigue_skill", "wrestling_contact_density"],
+  },
+  {
+    id: "seluyanov_bottom_base_constant_tension",
+    name: "Seluyanov-style bottom base constant tension",
+    category: "par_terre_bottom",
+    blockTypes: ["mat_technique", "spp"],
+    targetQualities: ["fatigue_skill"],
+  },
+  {
+    id: "seluyanov_core_hip_lock_static_dynamic",
+    name: "Seluyanov-style core and hip lock static-dynamic work",
+    category: "trunk_anti_rotation",
+    blockTypes: ["spp", "gpp", "leg_lmv"],
+    targetQualities: ["legs_lme", "fatigue_skill"],
+  },
+  {
+    id: "seluyanov_neck_low_force_isometric_control",
+    name: "Seluyanov-style low-force neck isometric control",
+    category: "neck_prehab",
+    blockTypes: ["mobility", "recovery", "spp"],
+    targetQualities: ["recovery", "fatigue_skill"],
+    reviewRequired: ["coach", "medical", "sport_science"],
+    highRiskAutomationBlocked: true,
+  },
+].map((seed) => ({
+  ...seed,
+  methodologyTags: SELUYANOV_STATODYNAMIC_TAGS,
+  reviewRequired: seed.reviewRequired ?? SELUYANOV_REVIEW_TRACKS,
+  constraints: SELUYANOV_CONSTRAINTS,
+  contraindications: SELUYANOV_CONTRAINDICATIONS,
+  cues: SELUYANOV_CUES,
+  mistakes: SELUYANOV_MISTAKES,
+  safety: SELUYANOV_SAFETY,
+  loadMode: seed.loadMode ?? "duration",
+  prescription: {
+    sets: 3,
+    reps: null,
+    durationMinutes: 1,
+    targetRpe: 6,
+    notes: "Seluyanov/statodynamic coach-school candidate; coach-editable local stimulus, no source-verified protocol yet",
+  },
+})) as readonly ExerciseSeed[];
+
 const EXERCISE_SEEDS = [
+  ...SELUYANOV_STATODYNAMIC_EXERCISE_SEEDS,
   { id: "stance_level_change_flow", name: "Stance level-change flow", category: "wrestling_stance_movement", blockTypes: ["mat_technique", "mat_light_technical"], targetQualities: ["fatigue_skill", "taper_quality"] },
   { id: "stance_circle_pressure", name: "Stance circle pressure", category: "wrestling_stance_movement", blockTypes: ["mat_technique"], targetQualities: ["fatigue_skill"] },
   { id: "stance_reaction_mirror", name: "Partner mirror stance reaction", category: "wrestling_stance_movement", blockTypes: ["mat_technique", "first_action_speed"], targetQualities: ["fatigue_skill", "speed_first_action"] },
@@ -648,6 +876,7 @@ export function getConstructorMatrixExercisesForBlockType(
 export function buildConstructorMatrixExerciseLibrarySummary() {
   const blockTypes = new Map<ConstructorTrainingBlockType, number>();
   const categories = new Map<ConstructorMatrixExerciseCategory, number>();
+  const methodologyTags = new Map<ConstructorMatrixExerciseMethodologyTag, number>();
   const reviewRequired = CONSTRUCTOR_MATRIX_EXERCISE_LIBRARY.filter(
     (item) => item.reviewRequired.length > 0,
   ).length;
@@ -661,12 +890,20 @@ export function buildConstructorMatrixExerciseLibrarySummary() {
     for (const blockType of item.blockTypes) {
       blockTypes.set(blockType, (blockTypes.get(blockType) ?? 0) + 1);
     }
+
+    for (const methodologyTag of item.methodologyTags) {
+      methodologyTags.set(
+        methodologyTag,
+        (methodologyTags.get(methodologyTag) ?? 0) + 1,
+      );
+    }
   }
 
   return {
     exerciseCount: CONSTRUCTOR_MATRIX_EXERCISE_LIBRARY.length,
     byCategory: Object.fromEntries(categories),
     byBlockType: Object.fromEntries(blockTypes),
+    byMethodologyTag: Object.fromEntries(methodologyTags),
     reviewRequiredCount: reviewRequired,
     highRiskAutomationBlockedCount: highRiskBlocked,
     humanReviewed: false,

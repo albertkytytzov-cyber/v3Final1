@@ -38,6 +38,18 @@ Missing or incomplete layers:
 - validation that concrete pilot drafts contain exercises while template
   payloads exclude Matrix internals.
 
+## Seluyanov / Statodynamic Expansion
+
+The exercise library now includes a Seluyanov/Siluyanov-style statodynamic
+candidate layer. This expands local muscular endurance content for legs, hips,
+posterior chain, grip, upper body, trunk, par terre and technique transfer.
+
+This is a coach-school candidate layer. It is aligned with the local PERFORM
+methodology documents that already describe Seluyanov/statodynamic work, but it
+does not yet claim exact source verification per exercise. Future evidence
+review must map each exercise family to source text, review artifacts and
+accepted use.
+
 ## Safe Training Prescription
 
 Safe training prescription can include concrete wrestling drills, strength
@@ -54,6 +66,9 @@ RPE, duration and technical-quality guidance.
 
 All training-load numbers are coach-editable. They are not medical thresholds,
 weight-management gates or injury-return clearance.
+
+Seluyanov/statodynamic entries are also coach-editable. They must not be used
+as automatic progression, failure, taper, medical or high-risk gates.
 
 ## Nutrition Education
 

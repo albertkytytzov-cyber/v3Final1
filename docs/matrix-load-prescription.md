@@ -34,6 +34,23 @@ The engine lowers intensity for recovery-priority blocks, close competition
 windows, travel fatigue, injury caution and weight-management context. These
 caps are conservative training safeguards, not clinical decisions.
 
+## Seluyanov / Statodynamic Candidate Loads
+
+Seluyanov/Siluyanov-style statodynamic exercises use coach-editable local
+stimulus prescriptions. The current Matrix layer does not approve a fixed
+source-verified protocol for time under tension, rest, density, failure point
+or weekly progression.
+
+The safe runtime behavior is:
+
+- keep prescriptions editable by the coach;
+- avoid failure chasing;
+- require local fatigue and pain review;
+- avoid hidden speed/contact conflicts;
+- keep close-start taper guards active;
+- treat every Seluyanov/statodynamic entry as a coach-school candidate until
+  the later source-review stage maps exact evidence and review artifacts.
+
 ## Output Contract
 
 Prescriptions keep the existing `ConstructorPlanExercise` output shape and add

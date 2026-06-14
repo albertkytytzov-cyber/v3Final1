@@ -50,6 +50,10 @@ const summary = buildConstructorMatrixExerciseLibrarySummary();
 assert(CONSTRUCTOR_MATRIX_EXERCISE_LIBRARY.length >= 80, "Matrix exercise library must contain at least 80 exercises");
 assert(summary.exerciseCount === CONSTRUCTOR_MATRIX_EXERCISE_LIBRARY.length, "Exercise library summary count mismatch");
 assert(summary.humanReviewed === false, "Exercise library must not imply human review");
+assert(
+  summary.byMethodologyTag.seluyanov_statodynamic_lme_candidate >= 20,
+  "Matrix exercise library must include Seluyanov/statodynamic LME candidate coverage",
+);
 
 for (const exercise of CONSTRUCTOR_MATRIX_EXERCISE_LIBRARY) {
   assert(!ids.has(exercise.id), `Duplicate exercise id: ${exercise.id}`);
@@ -84,6 +88,21 @@ for (const exercise of CONSTRUCTOR_MATRIX_EXERCISE_LIBRARY) {
     assert(exercise.highRiskAutomationBlocked, `${exercise.id}: sauna block coverage must be automation-blocked`);
     assert(exercise.reviewRequired.includes("medical"), `${exercise.id}: sauna block coverage must require medical review`);
   }
+
+  if (exercise.methodologyTags.includes("seluyanov_statodynamic_lme_candidate")) {
+    assert(
+      exercise.methodologyTags.includes("coach_school_candidate"),
+      `${exercise.id}: Seluyanov/statodynamic entry must be marked coach-school candidate`,
+    );
+    assert(
+      exercise.reviewRequired.includes("coach") && exercise.reviewRequired.includes("sport_science"),
+      `${exercise.id}: Seluyanov/statodynamic entry must require coach and sport-science review`,
+    );
+    assert(
+      exercise.safetyNotes.some((note) => /not source-verified protocol yet/i.test(note)),
+      `${exercise.id}: Seluyanov/statodynamic entry must not imply source-verified protocol status`,
+    );
+  }
 }
 
 for (const category of requiredCategories) {
@@ -108,6 +127,7 @@ const forbiddenSourceMarkers = [
   "diuretic advice",
   "laxative advice",
   "sweat suit plan",
+  "source-verified protocol approved",
 ];
 
 for (const marker of forbiddenSourceMarkers) {
@@ -119,6 +139,8 @@ console.log(JSON.stringify({
   exerciseCount: CONSTRUCTOR_MATRIX_EXERCISE_LIBRARY.length,
   blockCoverageCount: Object.keys(summary.byBlockType).length,
   categoryCoverageCount: Object.keys(summary.byCategory).length,
+  seluyanovStatodynamicCandidateCount:
+    summary.byMethodologyTag.seluyanov_statodynamic_lme_candidate,
   reviewRequiredCount: summary.reviewRequiredCount,
   highRiskAutomationBlockedCount: summary.highRiskAutomationBlockedCount,
 }, null, 2));

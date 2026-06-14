@@ -9,7 +9,10 @@ and preparation exercises.
 
 ## Scope
 
-The registry covers at least 80 exercises and all current Matrix block types:
+The registry covers at least 80 exercises and all current Matrix block types.
+After the Seluyanov/statodynamic expansion it contains dedicated
+coach-school candidate exercises for local muscular endurance and wrestling
+transfer:
 
 - wrestling stance and movement;
 - shots and entries;
@@ -32,6 +35,30 @@ The registry covers at least 80 exercises and all current Matrix block types:
 - travel mobility;
 - weigh-in day activation;
 - post-competition recovery.
+
+## Seluyanov / Statodynamic Candidate Layer
+
+The library now includes Seluyanov/Siluyanov-style statodynamic local muscular
+endurance candidates for:
+
+- legs and hip position;
+- posterior chain;
+- grip, hands and upper-body local endurance;
+- trunk and anti-rotation;
+- controlled technique transfer after local fatigue;
+- par terre pressure and bottom-base work;
+- low-force neck control as high-risk review-required content.
+
+These entries are tagged as `seluyanov_statodynamic_lme_candidate` and
+`coach_school_candidate`. They are based on the existing PERFORM methodology
+documents that describe Seluyanov/statodynamic work as a practical coach-school
+layer for local muscular endurance, constant tension, local fatigue control and
+wrestling transfer.
+
+They are not marked as source-verified protocols. They require coach and
+sport-science review, and the neck-related entry also requires medical review.
+Future evidence work must map each exercise family to exact sources, review
+artifacts and accepted use.
 
 ## Entry Metadata
 
@@ -60,6 +87,8 @@ The library does not add BFR/KAATSU prescriptions, medical clearance,
 injury-return rules, RED-S decisions, dehydration decisions or rapid
 weight-cut protocols. High-risk entries such as weigh-in, heat-exposure review
 notes and neck/prehab work remain review-required or automation-blocked.
+Seluyanov/statodynamic entries are coach-editable candidates, not automatic
+load prescriptions and not source-verified protocols.
 
 Matrix is not production default. Production route behavior is unchanged.
 High-risk medical decisions remain non-automated.

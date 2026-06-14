@@ -21,6 +21,11 @@ These scenarios can generate concrete wrestling, strength, mobility, recovery
 and preparation exercise plans while preserving the existing plan/template
 output shape.
 
+The controlled pilot also includes Seluyanov/Siluyanov-style statodynamic
+candidate exercises for local muscular endurance and wrestling transfer. These
+entries are coach-school candidates and review-required; they are not
+source-verified protocols yet.
+
 ## Fallback / Blocked Scenarios
 
 The following remain fallback or blocked for active Matrix pilot save/assign:
