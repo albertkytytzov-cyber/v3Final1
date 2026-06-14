@@ -40,6 +40,9 @@ function draftStats(draft) {
     sessions: sessions.length,
     blocks: blocks.length,
     exercises: exercises.length,
+    bodyCompositionExerciseCount: exercises.filter((exercise) =>
+      /body-composition/i.test(`${exercise.name} ${exercise.notes}`),
+    ).length,
     strengthWeightCandidates: strengthWeightCandidates.length,
   };
 }
@@ -129,6 +132,12 @@ const allowedResults = allowedPilotFixtureIds.map((fixtureId) => {
   const stats = draftStats(result.draft);
   assert(stats.exercises >= stats.blocks, `${fixtureId}: each Matrix pilot plan should have concrete exercise density`);
   assert(stats.strengthWeightCandidates === 0, `${fixtureId}: fixtures without max/e1RM must not invent strength weights`);
+  if (fixtureId !== "far_development_week_d90") {
+    assert(
+      stats.bodyCompositionExerciseCount === 0,
+      `${fixtureId}: close-start full-content pilot should suppress body-composition exercise candidates`,
+    );
+  }
 
   const templatePayload = buildConstructorTemplatePayload(result.draft, `PERFORM Matrix Full Content ${fixtureId}`);
   assertTemplatePayloadSafe(fixtureId, templatePayload);

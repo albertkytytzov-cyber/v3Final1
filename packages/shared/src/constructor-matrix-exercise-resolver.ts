@@ -115,6 +115,46 @@ function sortExerciseCandidates(
   return left.id.localeCompare(right.id);
 }
 
+function hasExplicitWeightManagementGoal(input: ConstructorInput) {
+  return input.goals.some((goal) => goal.goalType === "weight_management");
+}
+
+function isBodyCompositionCandidate(exercise: ConstructorMatrixExercise) {
+  return exercise.methodologyTags.includes("body_composition_training_candidate");
+}
+
+function isCloseStartPhase(phase?: ConstructorPreparationPhase) {
+  return (
+    phase === "special_pre_competition" ||
+    phase === "direct_pre_competition" ||
+    phase === "taper" ||
+    phase === "competition"
+  );
+}
+
+function shouldSuppressBodyCompositionCandidate(
+  exercise: ConstructorMatrixExercise,
+  params: ConstructorMatrixExerciseResolverContext,
+) {
+  if (!isBodyCompositionCandidate(exercise)) {
+    return false;
+  }
+
+  if (params.block.blockType === "mat_light_technical") {
+    return true;
+  }
+
+  if (params.input.constraints?.weightCutActive) {
+    return true;
+  }
+
+  if (isCloseStartPhase(params.phase)) {
+    return true;
+  }
+
+  return !hasExplicitWeightManagementGoal(params.input);
+}
+
 function maxExercisesFor(params: ConstructorMatrixExerciseResolverContext) {
   return (
     params.maxExercises ??
@@ -148,12 +188,19 @@ export function resolveConstructorMatrixExercisesForBlock(
 ): ConstructorMatrixExerciseResolverResult {
   const blockType = params.block.blockType;
   const primaryCandidates = getConstructorMatrixExercisesForBlockType(blockType);
+  const suppressedBodyCompositionIds = primaryCandidates
+    .filter((exercise) => shouldSuppressBodyCompositionCandidate(exercise, params))
+    .map((exercise) => exercise.id);
   const applicableCandidates = primaryCandidates
     .filter((exercise) => isExerciseApplicable(exercise, params))
+    .filter((exercise) => !shouldSuppressBodyCompositionCandidate(exercise, params))
+    .sort(sortExerciseCandidates);
+  const fallbackCandidates = fallbackExercisesFor(blockType)
+    .filter((exercise) => !shouldSuppressBodyCompositionCandidate(exercise, params))
     .sort(sortExerciseCandidates);
   const sourceCandidates = applicableCandidates.length
     ? applicableCandidates
-    : fallbackExercisesFor(blockType).sort(sortExerciseCandidates);
+    : fallbackCandidates;
   const maxExercises = maxExercisesFor(params);
   const selected = sourceCandidates.slice(0, maxExercises);
   const rejectedIds = primaryCandidates
@@ -195,7 +242,10 @@ export function resolveConstructorMatrixExercisesForBlock(
       "exercise resolver uses registry-backed concrete exercises",
       "all prescriptions remain coach-editable",
       "high-risk entries stay review-required or automation-blocked",
-    ],
+      suppressedBodyCompositionIds.length
+        ? `body-composition candidates suppressed by pilot quality guard: ${suppressedBodyCompositionIds.join(",")}`
+        : "",
+    ].filter(Boolean),
   };
 }
 

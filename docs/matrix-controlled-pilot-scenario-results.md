@@ -26,6 +26,8 @@ behind feature flags and server gates:
 All allowed scenarios:
 
 - generate concrete exercises;
+- suppress body-composition exercise candidates in D28, D21, D10 and D4
+  close-start pilot output;
 - keep review-required language where needed;
 - avoid unsafe weight-cut text;
 - avoid fake approval text;
@@ -59,6 +61,10 @@ review-required and non-automated:
 
 These scenarios must preserve review-required or blocked language and must not
 automate medical, injury, RED-S, youth, hydration or weight-cut decisions.
+
+The body-composition long-horizon review-required scenario remains the only
+scenario in this pack where body-composition exercise candidates are expected.
+They are coach-editable review-required content, not weight-cut automation.
 
 ## Save/Assign Boundary
 

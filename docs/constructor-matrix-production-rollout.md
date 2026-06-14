@@ -821,6 +821,23 @@ Guardrails remain:
 - no fake citations;
 - no fake human/medical/coach approvals.
 
+## Stage: Matrix AI Internal Pilot Feedback + Resolver Hardening
+
+AI-assisted internal pilot feedback found a coach-readability issue: close-start
+light technical blocks could surface body-composition candidate exercise names.
+The resolver now suppresses those candidates in D28, D21, D10 and D4
+close-start output, active weight-cut context and `mat_light_technical` blocks.
+
+This is a narrowing hardening change, not rollout expansion:
+
+- Matrix remains controlled-pilot only;
+- production draft route remains legacy-backed;
+- body-composition long-horizon content remains coach-editable and
+  review-required;
+- high-risk weight-cut, hydration, RED-S, pain, injury, youth and BFR/KAATSU
+  decisions remain blocked or review-required;
+- no numeric medical or weight-management runtime threshold is added.
+
 ## Stage: Matrix Family-Level Evidence Review + Coach UI + Controlled Pilot Readiness
 
 Family-level AI desk source review and P0/P1 dossiers have been added for the

@@ -2814,6 +2814,7 @@ const metadataCheckFiles = [
   "scripts/check-constructor-matrix-family-allowed-use.mjs",
   "scripts/check-constructor-matrix-coach-ui.mjs",
   "scripts/check-constructor-matrix-pilot-quality-log.mjs",
+  "scripts/check-constructor-matrix-internal-pilot-feedback.mjs",
   "scripts/check-constructor-matrix-real-scenario-pilot.mjs",
   "scripts/check-constructor-matrix-full-content-pilot.mjs",
   "scripts/check-constructor-matrix-ai-source-review.mjs",
@@ -2884,6 +2885,7 @@ const metadataCheckFiles = [
   "docs/matrix-p1-family-evidence-dossiers.md",
   "docs/matrix-coach-facing-ui.md",
   "docs/matrix-controlled-pilot-quality-log.md",
+  "docs/matrix-ai-internal-pilot-feedback-resolver-hardening.md",
   "docs/matrix-real-scenario-controlled-pilot.md",
   "docs/matrix-family-evidence-production-decision-pack.md",
   "docs/matrix-review-intake-export/README.md",
@@ -2918,6 +2920,7 @@ for (const token of [
   "check:constructor-matrix-family-allowed-use",
   "check:constructor-matrix-coach-ui",
   "check:constructor-matrix-pilot-quality-log",
+  "check:constructor-matrix-internal-pilot-feedback",
   "check:constructor-matrix-real-scenario-pilot",
   "check:constructor-matrix-full-content-pilot",
   "check:constructor-matrix-ai-source-review",
@@ -3034,6 +3037,10 @@ for (const [path, source] of [
   assert(
     source.includes("Matrix Family-Level Evidence Review + Coach UI + Controlled Pilot Readiness"),
     `${path} must document Matrix Family-Level Evidence Review + Coach UI + Controlled Pilot Readiness`,
+  );
+  assert(
+    source.includes("Matrix AI Internal Pilot Feedback + Resolver Hardening"),
+    `${path} must document Matrix AI Internal Pilot Feedback + Resolver Hardening`,
   );
 }
 

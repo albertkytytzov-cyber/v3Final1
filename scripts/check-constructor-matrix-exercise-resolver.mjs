@@ -50,6 +50,12 @@ const fixtureIds = [
   "weigh_in_day",
   "competition_day",
 ];
+const closeStartFixtureIds = new Set([
+  "main_start_d28_special_pre_competition",
+  "main_start_d21_controlled_volume",
+  "main_start_d10_taper",
+  "main_start_d4_start_window",
+]);
 
 const results = fixtureIds.map((fixtureId) => {
   const fixture = fixtureById(fixtureId);
@@ -74,6 +80,12 @@ const results = fixtureIds.map((fixtureId) => {
       assert(exercise.safetyNotes.length > 0, `${fixtureId}:${exercise.name} missing safety notes`);
       assert(exercise.substitutions.regressions.length > 0, `${fixtureId}:${exercise.name} missing regressions`);
       assert(exercise.substitutions.progressions.length > 0, `${fixtureId}:${exercise.name} missing progressions`);
+      if (closeStartFixtureIds.has(fixtureId)) {
+        assert(
+          !/body-composition/i.test(`${exercise.name} ${exercise.notes}`),
+          `${fixtureId}:${result.blockType} must not surface body-composition candidates in close-start pilot output`,
+        );
+      }
     }
 
     if (result.blockType === "sauna" || result.blockType === "weigh_in") {
@@ -89,6 +101,14 @@ const results = fixtureIds.map((fixtureId) => {
     fixtureId,
     selectedBlockCount: blockResults.length,
     resolvedExerciseCount: blockResults.reduce((sum, item) => sum + item.exerciseCount, 0),
+    bodyCompositionExerciseCount: blockResults.reduce(
+      (sum, item) =>
+        sum +
+        item.exercises.filter((exercise) =>
+          /body-composition/i.test(`${exercise.name} ${exercise.notes}`),
+        ).length,
+      0,
+    ),
     highRiskAutomationBlockedCount: blockResults.reduce(
       (sum, item) => sum + item.highRiskAutomationBlockedIds.length,
       0,
@@ -96,9 +116,49 @@ const results = fixtureIds.map((fixtureId) => {
   };
 });
 
+const bodyCompositionFixture = fixtureById("far_development_week_d90");
+const bodyCompositionInput = {
+  ...bodyCompositionFixture.input,
+  goals: [
+    {
+      goalType: "weight_management",
+      priority: 1,
+      reason: "Synthetic long-horizon body-composition quality check.",
+    },
+    ...bodyCompositionFixture.input.goals,
+  ],
+  constraints: {
+    ...bodyCompositionFixture.input.constraints,
+    weightCutActive: false,
+  },
+};
+const bodyCompositionDraft = buildMatrixDrivenPlanDraft(bodyCompositionInput);
+const bodyCompositionBlockResults = selectedBlocks(bodyCompositionDraft).map(({ block, phase, dayType }) =>
+  resolveConstructorMatrixExercisesForBlock({
+    block,
+    input: bodyCompositionInput,
+    phase,
+    dayType,
+  }),
+);
+const longHorizonBodyCompositionCount = bodyCompositionBlockResults.reduce(
+  (sum, item) =>
+    sum +
+    item.exercises.filter((exercise) =>
+      /body-composition/i.test(`${exercise.name} ${exercise.notes}`),
+    ).length,
+  0,
+);
+
+assert(
+  longHorizonBodyCompositionCount > 0,
+  "Long-horizon explicit body-composition context should keep coach-editable body-composition candidates available",
+);
+
 console.log(JSON.stringify({
   ok: true,
   coveredBlockTypes: summary.coveredBlockTypes,
   coveredBlockTypeCount: summary.coveredBlockTypeCount,
   fixtureResults: results,
+  longHorizonBodyCompositionCount,
 }, null, 2));

@@ -40,6 +40,19 @@ persist Matrix internals.
 Travel, weigh-in, competition day and high-risk contexts remain fallback,
 blocked or review-required.
 
+## Stage: Matrix AI Internal Pilot Feedback + Resolver Hardening
+
+The internal pilot feedback pass converted a local D21 coach-UI quality signal
+into a targeted resolver hardening rule. Body-composition candidate exercises
+are now suppressed in close-start, active weight-cut and `mat_light_technical`
+contexts. This keeps D28, D21, D10 and D4 focused on technical freshness and
+start proximity, while long-horizon explicit body-composition contexts can still
+show coach-editable review-required candidates.
+
+This stage does not enable Matrix as production default, does not change the
+production draft route and does not automate weight-cut, hydration, RED-S,
+injury, pain, youth or BFR/KAATSU decisions.
+
 ## 1. Текущая реализация
 
 ### 1.1 Где находится "голова" конструктора

@@ -32,6 +32,25 @@ EvidenceDependency[]
 - расширять Matrix как постоянный default для всех сценариев рано;
 - следующий инженерный слой должен быть не "ещё один шаблон", а `EvidenceDependencyRegistry`.
 
+## Stage: Matrix AI Internal Pilot Feedback + Resolver Hardening
+
+AI-assisted internal pilot feedback found one resolver-quality issue: close-start
+light technical blocks could surface body-composition candidate exercise names.
+This was not evidence approval and not high-risk automation, but it could make
+the coach-facing plan less clear near a start.
+
+Hardening now applies:
+
+- Matrix phase is passed into the exercise resolver;
+- D28, D21, D10 and D4 close-start pilot drafts suppress body-composition
+  exercise candidates;
+- active weight-cut and `mat_light_technical` contexts suppress
+  body-composition exercise candidates;
+- long-horizon explicit body-composition content remains coach-editable and
+  review-required;
+- no human approval, no fake citation and no numeric medical or weight-cut
+  runtime threshold was added.
+
 ## 2. Авторитетные источники текущего аудита
 
 | Слой | Источник | Что проверялось |

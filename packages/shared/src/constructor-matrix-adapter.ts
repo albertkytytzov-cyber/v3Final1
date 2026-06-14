@@ -628,6 +628,7 @@ function adaptBlock(
   block: MatrixDrivenSelectedBlock,
   input: ConstructorInput,
   dayType?: ConstructorDayType,
+  phase?: MatrixDrivenPlanWeek["phase"],
 ): ConstructorPlanBlock {
   const evidenceTitles = getConstructorMatrixEvidenceDependencies(block.evidenceDependencies).map(
     (item) => item.title,
@@ -636,6 +637,7 @@ function adaptBlock(
     block,
     input,
     dayType,
+    phase,
   });
 
   return {
@@ -762,9 +764,10 @@ export function adaptMatrixDrivenSessionToConstructorSession(
   matrixSession: MatrixDrivenPlanSession,
   input: ConstructorInput,
   dayType?: ConstructorDayType,
+  phase?: MatrixDrivenPlanWeek["phase"],
 ): ConstructorPlanSession {
   const mainBlocks = matrixSession.selectedBlocks.map((block) =>
-    adaptBlock(block, input, dayType),
+    adaptBlock(block, input, dayType, phase),
   );
   const blocks = needsSessionFrame(mainBlocks)
     ? [warmupBlock(), ...mainBlocks, cooldownBlock()]
@@ -781,9 +784,15 @@ export function adaptMatrixDrivenSessionToConstructorSession(
 export function adaptMatrixDrivenDayToConstructorDay(
   matrixDay: MatrixDrivenPlanDay,
   input: ConstructorInput,
+  phase?: MatrixDrivenPlanWeek["phase"],
 ): ConstructorPlanDay {
   const sessions = matrixDay.sessions.map((session) =>
-    adaptMatrixDrivenSessionToConstructorSession(session, input, matrixDay.dayType),
+    adaptMatrixDrivenSessionToConstructorSession(
+      session,
+      input,
+      matrixDay.dayType,
+      phase,
+    ),
   );
   const dayLabelParts = [
     matrixDay.date ?? `День ${matrixDay.dayNumber}`,
@@ -853,7 +862,9 @@ export function adaptMatrixDrivenWeekToConstructorWeek(
       `ковёр: ${matrixMatVolumeLabel(matrixWeek.volume.matVolume)}`,
       matrixRecoveryPriorityLabel(matrixWeek.recoveryPriority),
     ].join(" · "),
-    days: matrixWeek.days.map((day) => adaptMatrixDrivenDayToConstructorDay(day, input)),
+    days: matrixWeek.days.map((day) =>
+      adaptMatrixDrivenDayToConstructorDay(day, input, matrixWeek.phase),
+    ),
   };
 }
 

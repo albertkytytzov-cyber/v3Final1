@@ -106,6 +106,30 @@ npm run check:constructor-matrix-nutrition-weight-guidance
 npm run check:constructor-matrix-full-content-pilot
 ```
 
+## Stage: Matrix AI Internal Pilot Feedback + Resolver Hardening
+
+The internal pilot feedback pass found that body-composition candidate exercise
+names could appear inside close-start light technical blocks. They were already
+coach-editable and review-required, but the wording could distract from the
+pre-start technical intent.
+
+The resolver is now hardened:
+
+- Matrix week phase is passed into the exercise resolver;
+- D28, D21, D10 and D4 close-start pilot drafts suppress body-composition
+  exercise candidates;
+- active weight-cut and `mat_light_technical` contexts suppress
+  body-composition exercise candidates;
+- long-horizon explicit body-composition scenarios still expose
+  coach-editable review-required candidates;
+- no high-risk medical or weight-cut automation was added.
+
+Check:
+
+```bash
+npm run check:constructor-matrix-internal-pilot-feedback
+```
+
 ## 1. Главный принцип
 
 Конструктор не должен “генерировать красивый календарь”. Он должен строить план по цепочке:

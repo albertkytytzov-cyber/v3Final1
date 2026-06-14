@@ -41,6 +41,9 @@ function draftStats(draft) {
     sessions: sessions.length,
     blocks: blocks.length,
     exercises: exercises.length,
+    bodyCompositionExerciseCount: exercises.filter((exercise) =>
+      /body-composition/i.test(`${exercise.name} ${exercise.notes}`),
+    ).length,
     strengthWeightCandidates: exercises.filter((exercise) => exercise.targetWeightKg !== null).length,
     hasReviewRequiredText: /review|required|blocked|fallback|medical|coach/i.test(serialized),
     hasUnsafeWeightCutText:
@@ -100,6 +103,12 @@ const allowedResults = allowedScenarioIds.map((scenarioId) => {
   assert(stats.days > 0, `${scenarioId}: draft must include days`);
   assert(stats.sessions > 0, `${scenarioId}: draft must include sessions`);
   assert(stats.exercises > 0, `${scenarioId}: draft must include exercises`);
+  if (scenarioId !== "far_development_week_d90") {
+    assert(
+      stats.bodyCompositionExerciseCount === 0,
+      `${scenarioId}: close-start pilot drafts must not surface body-composition exercise candidates`,
+    );
+  }
   assert(!stats.hasUnsafeWeightCutText, `${scenarioId}: must not include unsafe weight-cut text`);
   assert(!stats.hasFakeApprovalText, `${scenarioId}: must not include fake approval text`);
   assertTemplatePayloadSafe(scenarioId, result.draft);

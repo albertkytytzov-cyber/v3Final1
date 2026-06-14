@@ -45,6 +45,11 @@ and must not be treated as human approval.
 - D10: 10 days, 12 sessions, 35 blocks, 97 exercises;
 - D4: 4 days, 4 sessions, 15 blocks, 41 exercises;
 - D-3, travel, weigh-in and competition day stay legacy fallback;
+- D28, D21, D10 and D4 now report zero body-composition exercise candidates in
+  close-start pilot output;
+- the long-horizon body-composition review-required internal scenario keeps
+  body-composition candidates available as coach-editable review-required
+  content;
 - body-composition, pain, youth and female/RED-S-sensitive contexts stay
   review-required Matrix internal scenarios.
 
@@ -88,10 +93,11 @@ pilot:
 - In the local D21 coach UI pass, exercise rows were functionally rich but
   verbose. A coach can see prescriptions, review-required wording, safety notes,
   regressions and progressions, but this density may slow review.
-- Body-composition candidate exercise names appeared in light technical blocks.
-  They were guarded as coach-editable, review-required and not rapid weight-cut
-  protocols, but the resolver should be watched for whether these candidates
-  belong in pre-start technical sessions by default.
+- Body-composition candidate exercise names appeared in light technical blocks
+  during the first local D21 UI pass. This has now been hardened in the
+  resolver: close-start, active weight-cut and `mat_light_technical` contexts
+  suppress body-composition exercise candidates, while long-horizon explicit
+  body-composition review-required content remains available.
 
 ## Pilot Quality Log Use
 
