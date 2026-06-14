@@ -1,6 +1,7 @@
 export const PLATFORM_NAME = "PERFORM";
 
 export * from "./constructor-core";
+export * from "./constructor-matrix-ai-evidence-claims";
 export * from "./constructor-matrix-ai-review-policy";
 export * from "./constructor-matrix-ai-source-review";
 export * from "./constructor-matrix-data-dependencies";
