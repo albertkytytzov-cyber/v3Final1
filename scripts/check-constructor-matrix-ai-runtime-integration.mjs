@@ -22,11 +22,22 @@ async function collectFiles(path) {
   const root = new URL(`../${path}`, import.meta.url);
   const entries = await readdir(root, { withFileTypes: true });
   const files = [];
+  const ignoredDirectoryNames = new Set([
+    ".next",
+    ".turbo",
+    "build",
+    "coverage",
+    "dist",
+    "node_modules",
+  ]);
 
   for (const entry of entries) {
     const childPath = `${path}/${entry.name}`;
 
     if (entry.isDirectory()) {
+      if (ignoredDirectoryNames.has(entry.name)) {
+        continue;
+      }
       files.push(...await collectFiles(childPath));
     } else if (/\.(ts|tsx|js|jsx|mjs)$/.test(entry.name)) {
       files.push(childPath);

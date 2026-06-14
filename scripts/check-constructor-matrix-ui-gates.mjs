@@ -779,6 +779,9 @@ const pilotDraftResults = cases.map((testCase) => {
     localRolloutDecision: response.rolloutDecision,
     localPilotReadiness: response.pilotReadiness,
   });
+  const aiRuntimeReadinessItem = response.pilotReadiness.checklist.find(
+    (item) => item.id === "ai_runtime_metadata_safe",
+  );
 
   assert(
     response.source === expectedSource,
@@ -834,12 +837,25 @@ const pilotDraftResults = cases.map((testCase) => {
       !serializedPayload.includes('"pilotReadiness"'),
     `${testCase.id}: template payload must not leak internal matrix fields`,
   );
+  assert(
+    aiRuntimeReadinessItem?.status === "pass",
+    `${testCase.id}: pilot readiness must pass AI runtime metadata safety`,
+  );
   assertNoTrainerFacingMatrixLeaks(testCase.id, response.draft);
 
   if (testCase.allowed) {
     assert(
       response.draft.generatedFrom === "matrix",
       `${testCase.id}: allowed pilot draft must be generated from matrix`,
+    );
+    assert(
+      response.draft.matrix.aiRuntime.metadataOnly === true &&
+        response.draft.matrix.aiRuntime.runtimeHardGatesEnabled === false &&
+        response.draft.matrix.aiRuntime.highRiskAutomationEnabled === false &&
+        response.draft.matrix.aiRuntime.numericThresholdRuntimeGatesEnabled === false &&
+        response.draft.matrix.aiRuntime.medicalDecisionAutomationEnabled === false &&
+        response.draft.matrix.aiRuntime.humanReviewed === false,
+      `${testCase.id}: allowed pilot draft must expose safe AI runtime metadata only`,
     );
     assert(
       response.serverSaveDryRun.dryRun.status === "passed",
@@ -878,6 +894,7 @@ const pilotDraftResults = cases.map((testCase) => {
     apiAssignSchema: "passed",
     apiAutoAssignSchema: "passed",
     autoAssignItems: autoAssignPayload.items.length,
+    aiRuntimeMetadata: aiRuntimeReadinessItem?.status ?? "missing",
   };
 });
 

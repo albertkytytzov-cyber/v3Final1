@@ -611,3 +611,40 @@ Next real-world step: manual source verification, full-text acquisition and
 reviewer completion outside code. Next code stage after real review: Source
 Readiness Update from Human Review Results. Runtime promotion requires a
 separate explicit stage.
+
+## AI-reviewed Matrix preparation pilot rollout note
+
+Stage: Matrix Preparation Plan Pilot with AI-reviewed runtime metadata.
+
+The controlled pilot can now expose AI-reviewed runtime eligibility metadata
+inside the matrix draft as `matrix.aiRuntime`. This is not a production default
+and not a medical, coach or human approval layer.
+
+Pilot scope:
+
+- enabled only through the existing internal/limited pilot feature flags;
+- uses existing Matrix structure, rollout gates, pilot readiness and server
+  dry-run evidence;
+- exposes soft-warning eligibility ids, plan-structure hint eligibility ids,
+  high-risk blocked ids and review-required ids as metadata;
+- keeps all high-risk medical/clinical/weight-cut/hydration/injury/RED-S/BFR
+  decisions non-automated;
+- keeps `runtimeHardGatesEnabled=false`,
+  `numericThresholdRuntimeGatesEnabled=false`,
+  `medicalDecisionAutomationEnabled=false` and `humanReviewed=false`.
+
+Rollout guardrails:
+
+- production `/api/v1/plans/constructor/draft` remains legacy-backed;
+- Matrix default remains disabled;
+- rollout allowlists are unchanged;
+- save/template/assign remains unavailable for `matrix_primary_pilot` unless
+  the separate explicit save/assign pilot flag and checks are used;
+- no DB schema or API contract change is required;
+- no numeric thresholds, fake citations or fake human approvals are added.
+
+Automated coverage:
+
+- `npm run check:constructor-matrix-ai-runtime-integration`;
+- `npm run check:constructor-matrix-ui-gates`;
+- `npm run check:constructor-core`.

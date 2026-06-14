@@ -4394,3 +4394,47 @@ fallback are unchanged. Matrix default remains disabled.
 Next real-world step: manual source verification, full-text acquisition and
 reviewer completion outside code. Next code stage after real review: Source
 Readiness Update from Human Review Results.
+
+## 57. Stage: AI-reviewed Matrix preparation pilot metadata
+
+Stage: Matrix Preparation Plan Pilot.
+
+This stage connects the AI-reviewed metadata chain to the controlled Matrix
+pilot without changing the constructor's plan-building decisions.
+
+New chain:
+
+```text
+EvidenceDependencyRegistry
+-> DataDependencyGate
+-> ThresholdCandidateRegistry
+-> ReviewPackage
+-> ReviewDecisionLedger
+-> SourceExpansionBacklog
+-> SourceLookupIntake
+-> AI Source Review
+-> AI Evidence Claims
+-> AI Safety Classification
+-> Runtime Eligibility Map
+-> matrix.aiRuntime metadata
+```
+
+Implementation:
+
+- `buildMatrixDrivenConstructorDraft(...)` now includes `matrix.aiRuntime`;
+- `matrix.aiRuntime` is metadata-only and records soft-warning,
+  plan-structure hint, blocked high-risk and review-required eligibility ids;
+- pilot readiness includes `ai_runtime_metadata_safe`;
+- UI gate regression checks confirm allowed pilot drafts carry safe AI runtime
+  metadata and blocked/fallback scenarios do not expose Matrix as active.
+
+Guardrails:
+
+- no Matrix default is enabled;
+- production `/api/v1/plans/constructor/draft` remains unchanged;
+- rollout gates and allowlists remain unchanged;
+- preview behavior and legacy fallback remain unchanged;
+- save/template/assign behavior remains gated and off for Matrix pilot sources
+  unless a separate save/assign pilot approval is used;
+- high-risk medical decisions remain non-automated;
+- no numeric threshold gates, fake citations or fake human approvals are added.

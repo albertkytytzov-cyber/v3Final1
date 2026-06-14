@@ -2335,3 +2335,43 @@ remains disabled.
 Next real-world step: manual source verification, full-text acquisition and
 reviewer completion outside code. Next code stage after real review: Source
 Readiness Update from Human Review Results.
+
+### 15.39 AI-reviewed Matrix preparation pilot metadata
+
+Stage: Matrix Preparation Plan Pilot with AI-reviewed runtime metadata.
+
+The Matrix adapter now exposes `matrix.aiRuntime` for controlled pilot
+reporting. This metadata is derived from:
+
+```text
+AI Evidence Claims
+-> AI Safety Classification
+-> Runtime Eligibility Map
+-> matrix.aiRuntime metadata
+```
+
+The integration is deliberately narrow:
+
+- the plan structure, block selection, volume logic, risk logic, skeleton,
+  rollout gate and preview behavior are unchanged;
+- API/UI/mobile do not consume `constructor-matrix-runtime-eligibility`;
+- the production draft route remains the legacy constructor;
+- `matrix.aiRuntime` reports soft-warning eligibility ids,
+  plan-structure hint eligibility ids, blocked high-risk ids and
+  review-required ids;
+- high-risk automation, medical decisions, numeric threshold gates and runtime
+  hard gates remain disabled;
+- all AI-reviewed entries remain `humanReviewed=false`.
+
+The pilot readiness checklist now includes `ai_runtime_metadata_safe`. A
+scenario cannot be considered pilot-ready if this metadata is missing or if it
+claims high-risk automation, hard runtime gates, numeric threshold gates,
+medical decision automation or human approval.
+
+Checks:
+
+```bash
+npm run check:constructor-matrix-ai-runtime-integration
+npm run check:constructor-matrix-ui-gates
+npm run check:constructor-core
+```

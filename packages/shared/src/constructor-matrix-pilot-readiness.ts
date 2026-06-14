@@ -34,6 +34,7 @@ export type MatrixPilotReadinessChecklistItemId =
   | "scenario_allowlisted"
   | "scenario_fixture_covered"
   | "review_export_available"
+  | "ai_runtime_metadata_safe"
   | "no_pii_required"
   | "close_main_start_policy_respected"
   | "logistics_load_is_light"
@@ -66,6 +67,7 @@ interface MatrixPilotFixtureCoverage {
 export interface MatrixPilotReadinessOptions {
   rolloutOptions?: MatrixConstructorRolloutOptions;
   reviewExportAvailable?: boolean;
+  aiRuntimeMetadataRequired?: boolean;
   noPiiRequired?: boolean;
   productionRouteUnchanged?: boolean;
   noDbWriteRequired?: boolean;
@@ -324,6 +326,18 @@ export function buildMatrixPilotReadinessChecklist(
   const logisticsRelevant = INTERNAL_PILOT_SCENARIOS.has(scenario);
   const heavyLogisticsLoad = hasHeavyLogisticsLoad(preview);
   const reviewExportAvailable = options?.reviewExportAvailable ?? true;
+  const aiRuntimeMetadataRequired = options?.aiRuntimeMetadataRequired ?? true;
+  const aiRuntime = matrixDraft(preview)?.matrix.aiRuntime ?? null;
+  const aiRuntimeMetadataSafe =
+    Boolean(aiRuntime?.metadataOnly) &&
+    aiRuntime?.runtimeHardGatesEnabled === false &&
+    aiRuntime?.highRiskAutomationEnabled === false &&
+    aiRuntime?.numericThresholdRuntimeGatesEnabled === false &&
+    aiRuntime?.medicalDecisionAutomationEnabled === false &&
+    aiRuntime?.humanReviewed === false &&
+    (aiRuntime?.blockedHighRiskEligibilityIds.length ?? 0) > 0 &&
+    aiRuntime?.reviewRequiredEligibilityIds.length ===
+      aiRuntime?.summary.runtimeEligibilityCount;
   const noPiiRequired = options?.noPiiRequired ?? true;
   const productionRouteUnchanged = options?.productionRouteUnchanged ?? true;
   const noDbWriteRequired = options?.noDbWriteRequired ?? true;
@@ -421,6 +435,30 @@ export function buildMatrixPilotReadinessChecklist(
         ? "Internal review export exists for manual coach/QA feedback."
         : "Internal review export is not available, so pilot feedback cannot be packaged.",
       evidence: [`reviewExportAvailable=${reviewExportAvailable}`],
+    }),
+    item({
+      id: "ai_runtime_metadata_safe",
+      label: "AI runtime metadata safe",
+      status: aiRuntimeMetadataRequired
+        ? aiRuntimeMetadataSafe
+          ? "pass"
+          : "fail"
+        : "not_applicable",
+      severity: "error",
+      explanation: aiRuntimeMetadataSafe
+        ? "AI-reviewed runtime metadata is present, metadata-only and keeps high-risk automation disabled."
+        : "AI-reviewed runtime metadata is missing or unsafe for controlled pilot reporting.",
+      evidence: [
+        `aiRuntimeMetadataRequired=${aiRuntimeMetadataRequired}`,
+        `metadataOnly=${aiRuntime?.metadataOnly ?? false}`,
+        `runtimeHardGatesEnabled=${aiRuntime?.runtimeHardGatesEnabled ?? "missing"}`,
+        `highRiskAutomationEnabled=${aiRuntime?.highRiskAutomationEnabled ?? "missing"}`,
+        `numericThresholdRuntimeGatesEnabled=${aiRuntime?.numericThresholdRuntimeGatesEnabled ?? "missing"}`,
+        `medicalDecisionAutomationEnabled=${aiRuntime?.medicalDecisionAutomationEnabled ?? "missing"}`,
+        `humanReviewed=${aiRuntime?.humanReviewed ?? "missing"}`,
+        `blockedHighRiskEligibilityIds=${aiRuntime?.blockedHighRiskEligibilityIds.length ?? 0}`,
+        `reviewRequiredEligibilityIds=${aiRuntime?.reviewRequiredEligibilityIds.length ?? 0}`,
+      ],
     }),
     item({
       id: "no_pii_required",

@@ -47,3 +47,22 @@ Files:
 - `data-quality-review.md`: data-quality review packet
 - `sport-science-review.md`: sport-science review packet
 - `product-safety-review.md`: product-safety review packet
+
+## AI-reviewed pilot metadata note
+
+The controlled Matrix preparation pilot may now include `matrix.aiRuntime`
+metadata in Matrix drafts. This metadata is derived from AI desk review,
+safety classification and runtime eligibility registries.
+
+It remains review-only support:
+
+- not human review;
+- not medical or coach approval;
+- not final evidence claim extraction;
+- not a numeric threshold or runtime hard gate;
+- not a production default;
+- high-risk medical decisions remain blocked or review-required.
+
+Review export packets remain the handoff path for coach, medical,
+data-quality, sport-science and product-safety review before any future source
+readiness or runtime promotion stage.
