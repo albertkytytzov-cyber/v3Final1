@@ -751,3 +751,33 @@ unchanged. Matrix default remains disabled.
 Next real-world step: manual source verification, full-text acquisition and
 reviewer completion outside code. Next code stage after real review: Source
 Readiness Update from Human Review Results.
+
+## 24. Matrix Constructor Dependency Map
+
+Stage: Matrix Constructor Dependency Map + Controlled Pilot Hardening Audit.
+
+This stage adds a machine-readable dependency map and controlled-pilot
+hardening audit without changing Matrix runtime behavior.
+
+Implemented:
+
+- `packages/shared/src/constructor-matrix-dependency-map.ts`;
+- `scripts/check-constructor-matrix-dependency-map.mjs`;
+- `docs/matrix-controlled-pilot-acceptance-matrix.md`;
+- `npm run check:constructor-matrix-dependency-map`.
+
+The audit validates runtime/source/AI governance boundaries, production draft
+route safety, feature-flag defaults, no-write internal endpoints, Matrix
+save/assign default blocking and pilot fixture coverage.
+
+Current pilot boundaries:
+
+- safe D90/D28/D21/D10/D4 pilot scenarios may use Matrix only after rollout,
+  readiness and server dry-run evidence pass;
+- D-3, travel, weigh-in and competition-day contexts fall back or remain
+  preview-only when server dry-run blocks the pilot;
+- female/RED-S, youth, pain, injury-return, weight-cut, hydration and
+  BFR/KAATSU areas remain blocked, fallback-only or review-required;
+- no numeric threshold gates, fake citations or fake human approvals are added;
+- production route, rollout gates, preview behavior and legacy fallback remain
+  unchanged.

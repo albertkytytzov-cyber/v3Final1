@@ -8,6 +8,7 @@ export * from "./constructor-matrix-ai-source-review";
 export * from "./constructor-matrix-data-dependencies";
 export * from "./constructor-matrix-adapter";
 export * from "./constructor-matrix-comparison";
+export * from "./constructor-matrix-dependency-map";
 export * from "./constructor-matrix-desk-source-review";
 export * from "./constructor-matrix-evidence-claim-candidate-review-export";
 export * from "./constructor-matrix-evidence-claim-review-intake";

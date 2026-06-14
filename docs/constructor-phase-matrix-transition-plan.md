@@ -4502,3 +4502,33 @@ pilot exposure:
 - no numeric threshold runtime gates and no fake human approval.
 
 This stage is a deployment gate, not a production rollout.
+
+## 61. Stage: Matrix Constructor Dependency Map
+
+Stage: Matrix Constructor Dependency Map + Controlled Pilot Hardening Audit.
+
+This stage adds a machine-readable dependency map and a controlled-pilot
+hardening audit after the AI-reviewed stages.
+
+Added guardrails:
+
+- `packages/shared/src/constructor-matrix-dependency-map.ts` records runtime,
+  adapter, preview, rollout, pilot, save/assign, API, UI and governance
+  dependency groups;
+- `npm run check:constructor-matrix-dependency-map` validates referenced files,
+  import boundaries, production route safety, feature-flag defaults,
+  save/assign default behavior, high-risk pilot coverage and documentation;
+- `docs/matrix-controlled-pilot-acceptance-matrix.md` documents allowed,
+  fallback, preview-only and blocked pilot scenarios.
+
+Controlled pilot result:
+
+- D90/D28/D21/D10/D4 safe pilot fixtures may use Matrix only when rollout,
+  pilot readiness and server dry-run evidence all pass;
+- D-3, travel, weigh-in and competition-day scenarios fall back to legacy when
+  server dry-run blocks primary pilot activation;
+- female/RED-S, youth, injury, pain, weight-cut, hydration and BFR/KAATSU
+  contexts remain blocked, fallback-only or review-required;
+- production route, legacy fallback, rollout gates, preview behavior and DB
+  schema are unchanged;
+- Matrix default remains prohibited.

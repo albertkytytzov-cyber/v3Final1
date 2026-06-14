@@ -705,3 +705,28 @@ Deployment mode remains feature-flagged controlled pilot only:
 - all high-risk areas remain blocked, fallback-only or review-required;
 - no numeric thresholds are used as runtime gates;
 - no medical or coach approval is represented as human approval.
+
+## Matrix Constructor Dependency Map
+
+Stage: Matrix Constructor Dependency Map + Controlled Pilot Hardening Audit.
+
+The rollout package now has a machine-readable dependency map and controlled
+pilot acceptance matrix:
+
+- `packages/shared/src/constructor-matrix-dependency-map.ts`;
+- `docs/matrix-controlled-pilot-acceptance-matrix.md`;
+- `npm run check:constructor-matrix-dependency-map`.
+
+Rollout meaning:
+
+- Matrix remains a feature-flagged controlled pilot only;
+- production `/api/v1/plans/constructor/draft` remains legacy-backed;
+- internal Matrix endpoints remain no-write and coach/admin plus athlete-access
+  guarded;
+- Matrix save/assign production path remains disabled by default;
+- safe pilot fixtures require rollout, readiness and server dry-run evidence;
+- D-3, travel, weigh-in and competition-day scenarios must fall back or remain
+  preview-only when server evidence blocks primary pilot activation;
+- female/RED-S, youth, pain, injury-return, weight-cut, hydration and
+  BFR/KAATSU contexts remain blocked, fallback-only or review-required;
+- no numeric threshold gates, fake citations or fake human approvals are added.

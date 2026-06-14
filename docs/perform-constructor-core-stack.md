@@ -2437,3 +2437,36 @@ Gate result:
   approval stage enables it;
 - rollback and monitoring checklists are documented;
 - high-risk medical decisions remain non-automated.
+
+### 15.43 Matrix Constructor Dependency Map
+
+Stage: Matrix Constructor Dependency Map + Controlled Pilot Hardening Audit.
+
+The dependency map is implemented in
+`packages/shared/src/constructor-matrix-dependency-map.ts`, documented in
+`docs/matrix-controlled-pilot-acceptance-matrix.md` and guarded by
+`npm run check:constructor-matrix-dependency-map`.
+
+The audit records the Matrix constructor dependency groups:
+
+- runtime core;
+- runtime adapter metadata bridge;
+- preview and comparison;
+- rollout and pilot gates;
+- save/assign dry-run boundary;
+- internal API routes;
+- web UI feature gates;
+- evidence, source and AI review governance;
+- production guardrails.
+
+Hardening result:
+
+- production `/api/v1/plans/constructor/draft` remains legacy-backed;
+- Matrix is not production default;
+- Matrix save/assign production path remains disabled by default;
+- feature flags remain off by default;
+- internal Matrix endpoints remain no-write and role/athlete guarded;
+- high-risk medical, weight-cut, hydration, injury-return, RED-S, youth and
+  BFR/KAATSU areas remain blocked, fallback-only or review-required;
+- no numeric threshold gates, fake citations or fake human approvals are
+  added.
