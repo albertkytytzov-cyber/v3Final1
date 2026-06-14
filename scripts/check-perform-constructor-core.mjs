@@ -2791,6 +2791,7 @@ const coreStackDoc = readProjectFile("docs/perform-constructor-core-stack.md");
 const transitionPlanDoc = readProjectFile("docs/constructor-phase-matrix-transition-plan.md");
 
 const metadataCheckFiles = [
+  "scripts/check-constructor-matrix-ai-review-policy.mjs",
   "scripts/check-constructor-matrix-evidence-dependencies.mjs",
   "scripts/check-constructor-matrix-data-dependencies.mjs",
   "scripts/check-constructor-matrix-threshold-candidates.mjs",
@@ -2804,6 +2805,7 @@ const metadataCheckFiles = [
   "scripts/check-constructor-matrix-review-intake-export.mjs",
   "scripts/check-constructor-matrix-desk-source-review-and-claim-candidates.mjs",
   "scripts/check-constructor-matrix-evidence-claim-candidate-review-export.mjs",
+  "packages/shared/src/constructor-matrix-ai-review-policy.ts",
   "packages/shared/src/constructor-matrix-evidence.ts",
   "packages/shared/src/constructor-matrix-evidence-claims.ts",
   "packages/shared/src/constructor-matrix-evidence-claim-review-intake.ts",
@@ -2827,6 +2829,7 @@ for (const path of metadataCheckFiles) {
 }
 
 for (const token of [
+  "check:constructor-matrix-ai-review-policy",
   "check:constructor-matrix-evidence-dependencies",
   "check:constructor-matrix-data-dependencies",
   "check:constructor-matrix-threshold-candidates",
