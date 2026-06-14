@@ -191,3 +191,31 @@ Stage: Final Controlled Pilot Readiness.
 Matrix is controlled-pilot ready only after all checks pass. Matrix is not
 production default. Legacy fallback remains default. High-risk medical
 decisions remain non-automated and review-required.
+# Stage: Matrix Full Training Content Library
+
+The controlled pilot can now build fuller plans with concrete wrestling,
+strength, mobility, recovery and preparation exercises. Load prescriptions are
+coach-editable. Strength weights require athlete max/e1RM or coach-provided
+training max; missing max/e1RM falls back to RPE, duration and technical
+quality.
+
+Nutrition guidance is educational and not medical advice. Weight-management
+guidance is review-required and non-automated. Do not present Matrix guidance
+as medical, nutrition, weight-cut, hydration, injury-return or RED-S clearance.
+
+## Stage: Matrix Full Content Controlled Pilot
+
+Run these additional checks before enabling the controlled pilot for a cohort:
+
+```bash
+npm run check:constructor-matrix-exercise-library
+npm run check:constructor-matrix-exercise-resolver
+npm run check:constructor-matrix-load-prescription
+npm run check:constructor-matrix-nutrition-weight-guidance
+npm run check:constructor-matrix-full-content-pilot
+```
+
+Allowed full-content pilot scenarios remain D90, D28, D21, D10 and D4.
+Travel, weigh-in, competition day, D-3 and high-risk contexts remain fallback,
+blocked or review-required. Matrix is not production default and legacy
+fallback remains default.

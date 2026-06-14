@@ -40,6 +40,16 @@ import {
   type ConstructorMatrixRuntimeEligibilityId,
   type ConstructorMatrixRuntimeEligibilitySummary,
 } from "./constructor-matrix-runtime-eligibility";
+import { buildConstructorMatrixAthleteContextRequirementSummary } from "./constructor-matrix-athlete-context-requirements";
+import {
+  buildConstructorMatrixExerciseLibrarySummary,
+} from "./constructor-matrix-exercise-library";
+import {
+  buildConstructorMatrixExerciseResolverSummary,
+  resolveConstructorMatrixBlockExercises,
+} from "./constructor-matrix-exercise-resolver";
+import { buildConstructorMatrixNutritionGuidanceSummary } from "./constructor-matrix-nutrition-guidance";
+import { buildConstructorMatrixWeightManagementGuidanceSummary } from "./constructor-matrix-weight-management-guidance";
 
 export interface MatrixDrivenAiRuntimeMetadata {
   generatedFrom: "ai_reviewed_runtime_eligibility";
@@ -65,6 +75,16 @@ export interface MatrixDrivenConstructorDraft extends ConstructorDraft {
     explanationCount: number;
     legacyCards: MatrixDrivenPlanDraft["legacyCards"];
     aiRuntime: MatrixDrivenAiRuntimeMetadata;
+    fullContent: {
+      exerciseLibrary: ReturnType<typeof buildConstructorMatrixExerciseLibrarySummary>;
+      exerciseResolver: ReturnType<typeof buildConstructorMatrixExerciseResolverSummary>;
+      athleteContextRequirements: ReturnType<typeof buildConstructorMatrixAthleteContextRequirementSummary>;
+      nutritionGuidance: ReturnType<typeof buildConstructorMatrixNutritionGuidanceSummary>;
+      weightManagementGuidance: ReturnType<typeof buildConstructorMatrixWeightManagementGuidanceSummary>;
+      metadataOnly: true;
+      humanReviewed: false;
+      highRiskAutomationEnabled: false;
+    };
   };
 }
 
@@ -604,10 +624,19 @@ function matrixBlockExercises(block: MatrixDrivenSelectedBlock): ConstructorPlan
   }
 }
 
-function adaptBlock(block: MatrixDrivenSelectedBlock): ConstructorPlanBlock {
+function adaptBlock(
+  block: MatrixDrivenSelectedBlock,
+  input: ConstructorInput,
+  dayType?: ConstructorDayType,
+): ConstructorPlanBlock {
   const evidenceTitles = getConstructorMatrixEvidenceDependencies(block.evidenceDependencies).map(
     (item) => item.title,
   );
+  const resolvedExercises = resolveConstructorMatrixBlockExercises({
+    block,
+    input,
+    dayType,
+  });
 
   return {
     name: matrixBlockName(block),
@@ -633,7 +662,7 @@ function adaptBlock(block: MatrixDrivenSelectedBlock): ConstructorPlanBlock {
     ],
     coachEditable: true,
     volumeLocked: false,
-    exercises: matrixBlockExercises(block),
+    exercises: resolvedExercises.length ? resolvedExercises : matrixBlockExercises(block),
   };
 }
 
@@ -732,9 +761,11 @@ function sessionNotes(matrixSession: MatrixDrivenPlanSession) {
 export function adaptMatrixDrivenSessionToConstructorSession(
   matrixSession: MatrixDrivenPlanSession,
   input: ConstructorInput,
+  dayType?: ConstructorDayType,
 ): ConstructorPlanSession {
-  void input;
-  const mainBlocks = matrixSession.selectedBlocks.map(adaptBlock);
+  const mainBlocks = matrixSession.selectedBlocks.map((block) =>
+    adaptBlock(block, input, dayType),
+  );
   const blocks = needsSessionFrame(mainBlocks)
     ? [warmupBlock(), ...mainBlocks, cooldownBlock()]
     : mainBlocks;
@@ -752,7 +783,7 @@ export function adaptMatrixDrivenDayToConstructorDay(
   input: ConstructorInput,
 ): ConstructorPlanDay {
   const sessions = matrixDay.sessions.map((session) =>
-    adaptMatrixDrivenSessionToConstructorSession(session, input),
+    adaptMatrixDrivenSessionToConstructorSession(session, input, matrixDay.dayType),
   );
   const dayLabelParts = [
     matrixDay.date ?? `День ${matrixDay.dayNumber}`,
@@ -1061,6 +1092,16 @@ export function buildMatrixDrivenConstructorDraft(
         matrixDraft.weeks.flatMap((week) => week.days.flatMap((day) => day.explanations)).length,
       legacyCards: matrixDraft.legacyCards,
       aiRuntime: buildMatrixDrivenAiRuntimeMetadata(),
+      fullContent: {
+        exerciseLibrary: buildConstructorMatrixExerciseLibrarySummary(),
+        exerciseResolver: buildConstructorMatrixExerciseResolverSummary(),
+        athleteContextRequirements: buildConstructorMatrixAthleteContextRequirementSummary(),
+        nutritionGuidance: buildConstructorMatrixNutritionGuidanceSummary(),
+        weightManagementGuidance: buildConstructorMatrixWeightManagementGuidanceSummary(),
+        metadataOnly: true,
+        humanReviewed: false,
+        highRiskAutomationEnabled: false,
+      },
     },
   };
 }

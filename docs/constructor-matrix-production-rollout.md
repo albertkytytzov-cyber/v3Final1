@@ -792,3 +792,31 @@ Stage: Final Controlled Pilot Readiness.
 - high-risk medical decisions remain non-automated and review-required;
 - no DB schema migration, no numeric threshold runtime gates and no fake human
   approvals are added.
+# Stage: Matrix Full Training Content Library
+
+Matrix controlled pilot now includes a richer exercise/load/nutrition/weight
+guidance content layer. This does not change rollout mode. Matrix is not
+production default, feature flags remain off by default and the production
+route `/api/v1/plans/constructor/draft` remains legacy-backed.
+
+Full-content output is allowed only inside controlled pilot drafts. Template
+payloads must not persist Matrix internals, AI/runtime metadata, exercise
+library summaries, source metadata, review metadata, nutrition metadata or
+weight-management metadata.
+
+## Stage: Matrix Full Content Controlled Pilot
+
+The full-content pilot validates D90, D28, D21, D10 and D4 controlled pilot
+scenarios with concrete exercises and coach-editable load recommendations.
+Travel, weigh-in, competition day and high-risk medical contexts remain
+fallback, blocked or review-required.
+
+Guardrails remain:
+
+- no Matrix production default;
+- no production draft route change;
+- no unsafe rapid weight-cut automation;
+- no hydration, RED-S, pain, injury-return, youth or BFR/KAATSU automation;
+- no numeric medical threshold gates;
+- no fake citations;
+- no fake human/medical/coach approvals.

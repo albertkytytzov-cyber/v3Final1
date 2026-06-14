@@ -65,6 +65,47 @@ npm run check:constructor-matrix-evidence-dependencies
 npm run check:constructor-matrix-data-dependencies
 ```
 
+## Stage: Matrix Full Training Content Library
+
+Matrix controlled pilot now has a richer content layer for concrete wrestling,
+strength, mobility, recovery and preparation exercises. The layer is backed by
+typed registries:
+
+- `packages/shared/src/constructor-matrix-exercise-library.ts`;
+- `packages/shared/src/constructor-matrix-exercise-resolver.ts`;
+- `packages/shared/src/constructor-matrix-load-prescription.ts`;
+- `packages/shared/src/constructor-matrix-athlete-context-requirements.ts`;
+- `packages/shared/src/constructor-matrix-nutrition-guidance.ts`;
+- `packages/shared/src/constructor-matrix-weight-management-guidance.ts`.
+
+Training load prescriptions are coach-editable. Strength weights require an
+athlete max/e1RM or coach-provided training max; otherwise Matrix falls back to
+RPE, duration and technical-quality guidance. Nutrition guidance is educational
+and not medical advice. Weight management is review-required and non-automated.
+No unsafe rapid weight-cut automation, no numeric medical thresholds and no
+fake human approvals were added.
+
+## Stage: Matrix Full Content Controlled Pilot
+
+Matrix Full Content Controlled Pilot validates D90, D28, D21, D10 and D4
+controlled-pilot scenarios with concrete exercises while preserving the legacy
+production route and template payload contract. Travel, weigh-in, competition
+day and high-risk medical contexts remain fallback, blocked or review-required.
+
+Matrix is not production default. The production route
+`/api/v1/plans/constructor/draft` remains legacy-backed, rollout gates remain
+unchanged and Matrix internals are not persisted into templates.
+
+Checks:
+
+```bash
+npm run check:constructor-matrix-exercise-library
+npm run check:constructor-matrix-exercise-resolver
+npm run check:constructor-matrix-load-prescription
+npm run check:constructor-matrix-nutrition-weight-guidance
+npm run check:constructor-matrix-full-content-pilot
+```
+
 ## 1. Главный принцип
 
 Конструктор не должен “генерировать красивый календарь”. Он должен строить план по цепочке:

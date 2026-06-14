@@ -7,6 +7,28 @@ only for controlled pilot users and only when every explicit gate passes. It
 does not make Matrix the production default, does not change the production
 constructor route and does not add a new persistence contract.
 
+## Stage: Matrix Full Training Content Library
+
+Matrix controlled pilot drafts may now include richer exercise content,
+coach-editable load prescriptions, educational nutrition guidance and
+review-required weight-management prompts. This does not widen save/assign
+eligibility.
+
+Strength weights require athlete max/e1RM or coach-provided training max.
+Missing max/e1RM falls back to RPE, duration and technical-quality guidance.
+Nutrition guidance is not medical advice. Weight-management guidance is
+non-automated and review-required.
+
+## Stage: Matrix Full Content Controlled Pilot
+
+Full-content drafts remain save-compatible only when the existing controlled
+pilot gates pass. Template payloads must not persist Matrix internals, full
+content summaries, nutrition metadata, weight-management metadata,
+AI/runtime metadata, source metadata or review metadata.
+
+Matrix is not production default. High-risk medical decisions remain
+non-automated.
+
 ## Deployment Mode
 
 Deployment mode is feature-flagged controlled pilot only.

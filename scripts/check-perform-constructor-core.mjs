@@ -2802,6 +2802,11 @@ const metadataCheckFiles = [
   "scripts/check-constructor-matrix-dependency-map.mjs",
   "scripts/check-constructor-matrix-controlled-pilot-e2e.mjs",
   "scripts/check-constructor-matrix-save-assign-controlled-pilot.mjs",
+  "scripts/check-constructor-matrix-exercise-library.mjs",
+  "scripts/check-constructor-matrix-exercise-resolver.mjs",
+  "scripts/check-constructor-matrix-load-prescription.mjs",
+  "scripts/check-constructor-matrix-nutrition-weight-guidance.mjs",
+  "scripts/check-constructor-matrix-full-content-pilot.mjs",
   "scripts/check-constructor-matrix-ai-source-review.mjs",
   "scripts/check-constructor-matrix-evidence-dependencies.mjs",
   "scripts/check-constructor-matrix-data-dependencies.mjs",
@@ -2836,6 +2841,12 @@ const metadataCheckFiles = [
   "packages/shared/src/constructor-matrix-source-expansion-backlog.ts",
   "packages/shared/src/constructor-matrix-source-candidates.ts",
   "packages/shared/src/constructor-matrix-source-lookup-intake.ts",
+  "packages/shared/src/constructor-matrix-athlete-context-requirements.ts",
+  "packages/shared/src/constructor-matrix-exercise-library.ts",
+  "packages/shared/src/constructor-matrix-exercise-resolver.ts",
+  "packages/shared/src/constructor-matrix-load-prescription.ts",
+  "packages/shared/src/constructor-matrix-nutrition-guidance.ts",
+  "packages/shared/src/constructor-matrix-weight-management-guidance.ts",
   "docs/matrix-ai-reviewed-save-assign-readiness.md",
   "docs/matrix-ai-reviewed-production-decision-pack.md",
   "docs/matrix-ai-reviewed-production-deployment-gate.md",
@@ -2844,6 +2855,11 @@ const metadataCheckFiles = [
   "docs/matrix-controlled-pilot-runbook.md",
   "docs/matrix-save-assign-controlled-pilot.md",
   "docs/matrix-final-controlled-pilot-readiness.md",
+  "docs/matrix-full-content-library-gap-audit.md",
+  "docs/matrix-exercise-library.md",
+  "docs/matrix-load-prescription.md",
+  "docs/matrix-nutrition-weight-guidance.md",
+  "docs/matrix-full-content-controlled-pilot.md",
   "docs/matrix-review-intake-export/README.md",
   "docs/matrix-claim-candidate-review-export/README.md",
 ];
@@ -2864,6 +2880,11 @@ for (const token of [
   "check:constructor-matrix-dependency-map",
   "check:constructor-matrix-controlled-pilot-e2e",
   "check:constructor-matrix-save-assign-controlled-pilot",
+  "check:constructor-matrix-exercise-library",
+  "check:constructor-matrix-exercise-resolver",
+  "check:constructor-matrix-load-prescription",
+  "check:constructor-matrix-nutrition-weight-guidance",
+  "check:constructor-matrix-full-content-pilot",
   "check:constructor-matrix-ai-source-review",
   "check:constructor-matrix-evidence-dependencies",
   "check:constructor-matrix-data-dependencies",
@@ -2958,6 +2979,14 @@ for (const [path, source] of [
   assert(
     source.includes("Final Controlled Pilot Readiness"),
     `${path} must document Final Controlled Pilot Readiness`,
+  );
+  assert(
+    source.includes("Matrix Full Training Content Library"),
+    `${path} must document Matrix Full Training Content Library`,
+  );
+  assert(
+    source.includes("Matrix Full Content Controlled Pilot"),
+    `${path} must document Matrix Full Content Controlled Pilot`,
   );
 }
 

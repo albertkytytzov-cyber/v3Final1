@@ -848,3 +848,23 @@ decision:
 - high-risk medical decisions remain non-automated;
 - no DB schema migration, no numeric threshold runtime gates and no fake human
   approvals are added.
+# Stage: Matrix Full Training Content Library
+
+Matrix controlled pilot now includes a full-content layer tied back to the
+existing evidence dependency registry. The exercise library, resolver, load
+prescription, athlete-context requirement, nutrition guidance and
+weight-management guidance registries use existing evidence dependency ids and
+remain controlled-pilot metadata/content.
+
+This stage adds no fake citations, no fake human approvals, no numeric medical
+threshold gates and no unsafe rapid weight-cut automation. Nutrition guidance
+is educational and not medical advice. Weight-management guidance is
+review-required and non-automated.
+
+## Stage: Matrix Full Content Controlled Pilot
+
+Full-content pilot checks validate D90, D28, D21, D10 and D4 plans with
+concrete exercises while confirming fallback for travel, weigh-in, competition
+day and high-risk contexts. Matrix is not production default, the production
+route `/api/v1/plans/constructor/draft` remains legacy-backed and high-risk
+medical decisions remain non-automated.

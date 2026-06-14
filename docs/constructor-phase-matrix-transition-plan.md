@@ -8,6 +8,38 @@
 
 Связанный аудит доказательных зависимостей: `docs/constructor-matrix-evidence-dependency-gap-audit.md`.
 
+## Stage: Matrix Full Training Content Library
+
+The Matrix transition now includes a typed full-content layer. The controlled
+pilot can resolve Matrix block types into concrete wrestling, strength,
+mobility, recovery and preparation exercises through
+`constructor-matrix-exercise-library.ts` and
+`constructor-matrix-exercise-resolver.ts`.
+
+Load prescription remains conservative and coach-editable:
+
+- sets/reps/duration/RPE are training recommendations;
+- strength weights require athlete max/e1RM or coach-provided training max;
+- missing max/e1RM falls back to RPE, duration and technical quality;
+- high-risk medical, hydration, weight-cut, RED-S, pain, injury-return, youth
+  and BFR/KAATSU decisions remain blocked or review-required.
+
+Nutrition guidance is educational and not medical advice. Weight-management
+guidance is review-required and non-automated. No unsafe rapid weight-cut
+automation, no numeric medical thresholds and no fake human approvals were
+added.
+
+## Stage: Matrix Full Content Controlled Pilot
+
+Matrix Full Content Controlled Pilot validates richer D90, D28, D21, D10 and
+D4 preparation drafts while preserving existing API contracts. The production
+route `/api/v1/plans/constructor/draft` remains legacy-backed, Matrix is not
+production default, rollout gates remain unchanged and template payloads do not
+persist Matrix internals.
+
+Travel, weigh-in, competition day and high-risk contexts remain fallback,
+blocked or review-required.
+
 ## 1. Текущая реализация
 
 ### 1.1 Где находится "голова" конструктора

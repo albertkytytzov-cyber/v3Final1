@@ -6,6 +6,26 @@ This document records the current end-state for the Matrix constructor after
 controlled pilot E2E validation and Matrix Save/Assign Controlled Pilot
 hardening.
 
+## Stage: Matrix Full Training Content Library
+
+Matrix controlled pilot can now produce fuller preparation drafts with concrete
+wrestling, strength, mobility, recovery and preparation exercises. Load
+prescriptions are coach-editable. Strength weights require athlete max/e1RM or
+coach-provided training max; missing max/e1RM falls back to RPE, duration and
+technical quality.
+
+Nutrition guidance is educational and not medical advice. Weight-management
+guidance is review-required and non-automated. No unsafe rapid weight-cut
+automation, no numeric medical threshold gates and no fake human approvals were
+added.
+
+## Stage: Matrix Full Content Controlled Pilot
+
+Full-content pilot readiness covers D90, D28, D21, D10 and D4 scenarios with
+concrete exercises while preserving the production draft route, rollout gates,
+legacy fallback and template payload boundaries. Travel, weigh-in, competition
+day and high-risk medical contexts remain fallback, blocked or review-required.
+
 ## Decision
 
 Matrix is ready only for controlled pilot use when all validation checks pass.
