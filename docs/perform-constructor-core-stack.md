@@ -152,6 +152,24 @@ Check:
 npm run check:constructor-matrix-athlete-specific-exercise-variation
 ```
 
+## Stage: Matrix Limited Pilot Main Build Routing
+
+The main coach build flow now uses the no-write Matrix primary pilot draft
+route when the internal UI and limited primary pilot flags are enabled. This
+lets the working plan panel show concrete Matrix exercises, RPE/load notes and
+review-required blocks without requiring the save/assign pilot flag.
+
+The save/assign flag remains separate: Matrix templates and assignments are
+still blocked unless `NEXT_PUBLIC_MATRIX_CONSTRUCTOR_SAVE_ASSIGN_PILOT=true`
+and server dry-run evidence both pass. The production draft route
+`/api/v1/plans/constructor/draft` remains legacy-backed.
+
+Check:
+
+```bash
+npm run check:constructor-matrix-ui-gates
+```
+
 ## 1. Главный принцип
 
 Конструктор не должен “генерировать красивый календарь”. Он должен строить план по цепочке:

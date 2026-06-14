@@ -249,11 +249,16 @@ async function checkControlledExposureSourceGuards() {
     "Server save dry-run request must remain scoped behind limited primary pilot flag",
   );
   assert(
-    buildDraftBlock.includes("ENABLE_MATRIX_CONSTRUCTOR_SAVE_ASSIGN_PILOT") &&
+    buildDraftBlock.includes("ENABLE_MATRIX_CONSTRUCTOR_LIMITED_PRIMARY_PILOT") &&
       buildDraftBlock.includes("requestMatrixPrimaryPilotDraft") &&
       buildDraftBlock.includes('pilotDraft.source === "matrix_primary_pilot"') &&
       buildDraftBlock.includes('pilotDraft.source === "legacy_fallback"'),
-    "Main build action must use the server-authoritative matrix pilot draft path before legacy fallback",
+    "Main build action must use the server-authoritative matrix pilot draft path when limited pilot is enabled",
+  );
+  assert(
+    !buildDraftBlock.includes("if (ENABLE_MATRIX_CONSTRUCTOR_SAVE_ASSIGN_PILOT)") &&
+      pageClientSource.includes("const constructorMatrixSaveAssignPilotAllowed"),
+    "Main Matrix draft display must not require the save/assign pilot flag; saving remains separately gated",
   );
   assert(
     saveConstructorTemplateBlock.includes("activeConstructorDraftSaveAllowed") &&

@@ -2888,6 +2888,7 @@ const metadataCheckFiles = [
   "docs/matrix-controlled-pilot-quality-log.md",
   "docs/matrix-ai-internal-pilot-feedback-resolver-hardening.md",
   "docs/matrix-athlete-specific-exercise-variation.md",
+  "docs/matrix-limited-pilot-main-build-routing.md",
   "docs/matrix-real-scenario-controlled-pilot.md",
   "docs/matrix-family-evidence-production-decision-pack.md",
   "docs/matrix-review-intake-export/README.md",
@@ -3048,6 +3049,10 @@ for (const [path, source] of [
   assert(
     source.includes("Matrix Athlete-Specific Exercise Variation"),
     `${path} must document Matrix Athlete-Specific Exercise Variation`,
+  );
+  assert(
+    source.includes("Matrix Limited Pilot Main Build Routing"),
+    `${path} must document Matrix Limited Pilot Main Build Routing`,
   );
 }
 

@@ -75,6 +75,27 @@ This stage does not change the production draft route, does not enable Matrix
 default and does not automate weight-cut, hydration, RED-S, injury-return, pain,
 youth or BFR/KAATSU decisions.
 
+## Stage: Matrix Limited Pilot Main Build Routing
+
+This stage fixes the coach-facing path from the build button to the Matrix
+content library. The production route `/api/v1/plans/constructor/draft` stays
+legacy-backed, but the main web build flow now calls the no-write internal
+`matrix-primary-pilot-draft` route when the internal UI and limited primary
+pilot flags are enabled.
+
+The Matrix draft can therefore appear in the main working-plan panel with
+concrete exercises, RPE/load notes, evidence refs and review-required blocks
+without requiring Matrix save/assign to be enabled.
+
+Save/assign remains controlled by its own explicit flag and server dry-run
+evidence. If save/assign is off, the Matrix draft is visible for review but
+cannot be saved as a Matrix template.
+
+This stage does not enable Matrix default, does not change production
+`/api/v1/plans/constructor/draft`, does not add DB migrations and does not
+automate high-risk medical, weight-cut, hydration, RED-S, injury, youth or
+BFR/KAATSU decisions.
+
 ## 1. Текущая реализация
 
 ### 1.1 Где находится "голова" конструктора

@@ -952,3 +952,24 @@ their exercise sequences collapse back to identical output. This remains a
 controlled-pilot content improvement only: no production route change, Matrix
 default, unsafe weight-cut automation, numeric medical threshold, fake citation
 or fake approval is introduced.
+
+## Stage: Matrix Limited Pilot Main Build Routing
+
+The audit found a UI routing gap after the exercise library and resolver work:
+Matrix could be enabled for limited primary pilot review, but the main coach
+build action still used the legacy draft route unless the separate save/assign
+pilot flag was also enabled.
+
+This meant a coach could see generic legacy rows instead of the concrete Matrix
+exercise library even though Matrix content existed and passed controlled-pilot
+checks.
+
+The main web build action now calls the no-write
+`/api/v1/plans/constructor/internal/matrix-primary-pilot-draft` route when the
+internal Matrix UI and limited primary pilot flags are enabled. The production
+route `/api/v1/plans/constructor/draft` remains legacy-backed.
+
+Save/assign remains separately gated by
+`NEXT_PUBLIC_MATRIX_CONSTRUCTOR_SAVE_ASSIGN_PILOT` and server dry-run evidence.
+No Matrix default, DB migration, high-risk automation, numeric medical
+threshold, fake citation or fake human approval is introduced.

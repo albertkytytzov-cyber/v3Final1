@@ -30,6 +30,30 @@ Enable in this order for a controlled pilot:
 
 Disable in reverse order for rollback.
 
+## Main Build Routing
+
+For controlled pilot review, the coach-facing build button must show the Matrix
+draft when the first two flags are enabled:
+
+```bash
+NEXT_PUBLIC_INTERNAL_MATRIX_CONSTRUCTOR_UI=true
+NEXT_PUBLIC_MATRIX_CONSTRUCTOR_LIMITED_PRIMARY_PILOT=true
+```
+
+`NEXT_PUBLIC_MATRIX_CONSTRUCTOR_SAVE_ASSIGN_PILOT` is not required for the
+coach to inspect the Matrix draft. It is required only when the pilot is allowed
+to save or assign Matrix-derived templates.
+
+Expected behavior:
+
+- D90, D28, D21, D10 and D4 controlled pilot scenarios show concrete Matrix
+  exercises in the working-plan panel;
+- save/assign remains disabled unless the save/assign flag and server dry-run
+  both pass;
+- D-3, travel, weigh-in and competition day remain fallback/blocked for primary
+  Matrix use;
+- production `/api/v1/plans/constructor/draft` remains legacy-backed.
+
 ## Access Rules
 
 Allowed users:

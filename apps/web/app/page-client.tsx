@@ -14321,7 +14321,7 @@ export function PageClient({
         return;
       }
 
-      if (ENABLE_MATRIX_CONSTRUCTOR_SAVE_ASSIGN_PILOT) {
+      if (ENABLE_MATRIX_CONSTRUCTOR_LIMITED_PRIMARY_PILOT) {
         const previewOptions: ConstructorMatrixPreviewApiOptions = {
           includeDrafts: true,
           includeComparisonReport: true,
