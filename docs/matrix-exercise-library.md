@@ -9,11 +9,11 @@ and preparation exercises.
 
 ## Scope
 
-The registry covers at least 180 exercises and all current Matrix block types.
-After the Seluyanov/statodynamic and performance-content expansions it
-contains dedicated coach-school candidate exercises for local muscular
-endurance, wrestling transfer, speed, speed endurance, strength, endurance and
-exercise complexes:
+The registry covers at least 200 exercises and all current Matrix block types.
+After the Seluyanov/statodynamic, performance-content and body-composition
+expansions it contains dedicated coach-school candidate exercises for local
+muscular endurance, wrestling transfer, speed, speed endurance, strength,
+endurance, exercise complexes and long-horizon body-composition support:
 
 - wrestling stance and movement;
 - shots and entries;
@@ -36,6 +36,30 @@ exercise complexes:
 - travel mobility;
 - weigh-in day activation;
 - post-competition recovery.
+
+## Body-Composition Training Candidate Layer
+
+The library now includes body-composition training candidates for long-horizon
+fat-loss support while preserving strength, muscle mass and training quality.
+This layer includes:
+
+- full-body strength-maintenance candidates;
+- push/pull/hinge strength-endurance circuits;
+- lower- and upper-body strength anchors;
+- posterior-chain, trunk, grip and carry circuits;
+- low-impact bike, rower and walk/run conditioning;
+- low-contact wrestling movement and technical-chain density;
+- recovery flush, travel reset and post-competition habit reset candidates.
+
+These entries are tagged with `body_composition_training_candidate` and may
+also include `muscle_preservation_candidate`,
+`low_impact_conditioning_candidate`, `strength_development_candidate`,
+`endurance_development_candidate` or `exercise_complex_candidate`.
+
+This is not a rapid weight-cut layer. It does not prescribe dehydration,
+sauna, sweat suits, diuretics, laxatives, spitting, last-minute weigh-in
+manipulation or medical decisions. The entries remain coach-editable and
+require coach and sport-science review before evidence-family approval.
 
 ## Performance Exercise And Complex Candidate Layer
 
@@ -118,6 +142,9 @@ load prescriptions and not source-verified protocols.
 Performance-content candidates are also coach-editable and not
 source-verified protocols. Speed, strength, endurance and complex density
 prescriptions remain training suggestions, not hard runtime gates.
+Body-composition candidates are long-horizon training support only. They do
+not authorize rapid weight cuts, dehydration methods or automatic body-mass
+targets.
 
 Matrix is not production default. Production route behavior is unchanged.
 High-risk medical decisions remain non-automated.

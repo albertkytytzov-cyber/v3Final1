@@ -14,6 +14,9 @@ advice and do not replace a qualified professional.
 
 Allowed guidance includes:
 
+- body-composition meal-pattern review prompts;
+- muscle-preservation fueling prompts;
+- training-day recovery prompts for body-composition phases;
 - general meal timing reminders;
 - training-day fueling reminders;
 - recovery meal reminders;
@@ -30,6 +33,10 @@ protocols, RED-S decisions and medical diagnosis.
 
 Allowed guidance includes:
 
+- long-horizon body-composition review prompts;
+- fat-loss support without rapid-cut automation;
+- muscle-mass preservation context checks;
+- plateau review prompts that look at sleep, recovery and training density;
 - request current body-mass trend;
 - request target-category confirmation;
 - flag missing data;
@@ -41,6 +48,17 @@ Forbidden uses include automatic kg loss recommendations, automatic water
 restriction, sauna prescription, sweat-suit or dehydration methods, medication
 advice, diuretic/laxative advice, spitting protocols, medical clearance and
 hard numeric runtime thresholds.
+
+## Body-Composition Boundary
+
+Body-composition guidance is allowed only as educational and review-required
+support for long-horizon planning. It can ask for body-mass trend, strength
+trend, recovery context, appetite/fatigue context and coach review.
+
+Matrix must not convert this layer into automatic kg-loss targets, exact
+calorie prescriptions, rapid weight-cut plans, dehydration protocols, sauna
+use, sweat-suit/spitting protocols, diuretic/laxative advice, RED-S decisions
+or medical clearance.
 
 ## High-Risk Boundary
 

@@ -47,7 +47,7 @@ const evidenceIds = new Set(CONSTRUCTOR_MATRIX_EVIDENCE_DEPENDENCY_IDS);
 const ids = new Set();
 const summary = buildConstructorMatrixExerciseLibrarySummary();
 
-assert(CONSTRUCTOR_MATRIX_EXERCISE_LIBRARY.length >= 180, "Matrix exercise library must contain at least 180 exercises after performance expansion");
+assert(CONSTRUCTOR_MATRIX_EXERCISE_LIBRARY.length >= 200, "Matrix exercise library must contain at least 200 exercises after body-composition expansion");
 assert(summary.exerciseCount === CONSTRUCTOR_MATRIX_EXERCISE_LIBRARY.length, "Exercise library summary count mismatch");
 assert(summary.humanReviewed === false, "Exercise library must not imply human review");
 assert(
@@ -77,6 +77,18 @@ assert(
 assert(
   summary.byMethodologyTag.exercise_complex_candidate >= 14,
   "Matrix exercise library must include exercise-complex candidate coverage",
+);
+assert(
+  summary.byMethodologyTag.body_composition_training_candidate >= 20,
+  "Matrix exercise library must include body-composition training candidate coverage",
+);
+assert(
+  summary.byMethodologyTag.muscle_preservation_candidate >= 10,
+  "Matrix exercise library must include muscle-preservation candidate coverage",
+);
+assert(
+  summary.byMethodologyTag.low_impact_conditioning_candidate >= 10,
+  "Matrix exercise library must include low-impact conditioning candidate coverage",
 );
 
 for (const exercise of CONSTRUCTOR_MATRIX_EXERCISE_LIBRARY) {
@@ -144,6 +156,23 @@ for (const exercise of CONSTRUCTOR_MATRIX_EXERCISE_LIBRARY) {
       `${exercise.id}: performance content candidate must block medical/weight/injury decision use`,
     );
   }
+
+  if (exercise.methodologyTags.includes("body_composition_training_candidate")) {
+    assert(
+      exercise.reviewRequired.includes("coach") && exercise.reviewRequired.includes("sport_science"),
+      `${exercise.id}: body-composition candidate must require coach and sport-science review`,
+    );
+    assert(
+      exercise.safetyNotes.some((note) => /not a rapid weight-cut protocol/i.test(note)),
+      `${exercise.id}: body-composition candidate must reject rapid weight-cut protocol status`,
+    );
+    assert(
+      exercise.athleteContextConstraints.some((note) =>
+        /do not use for rapid weight cut, dehydration, weigh-in manipulation, or medical decision/i.test(note),
+      ),
+      `${exercise.id}: body-composition candidate must block rapid-cut and medical decision use`,
+    );
+  }
 }
 
 for (const category of requiredCategories) {
@@ -192,6 +221,12 @@ console.log(JSON.stringify({
     summary.byMethodologyTag.endurance_development_candidate,
   exerciseComplexCandidateCount:
     summary.byMethodologyTag.exercise_complex_candidate,
+  bodyCompositionTrainingCandidateCount:
+    summary.byMethodologyTag.body_composition_training_candidate,
+  musclePreservationCandidateCount:
+    summary.byMethodologyTag.muscle_preservation_candidate,
+  lowImpactConditioningCandidateCount:
+    summary.byMethodologyTag.low_impact_conditioning_candidate,
   seluyanovStatodynamicCandidateCount:
     summary.byMethodologyTag.seluyanov_statodynamic_lme_candidate,
   reviewRequiredCount: summary.reviewRequiredCount,

@@ -33,6 +33,13 @@ make the generated drafts more complete for coach review, while still
 remaining candidate content. They are coach-editable, review-required at the
 methodology level and not source-verified protocols yet.
 
+The pilot also includes body-composition training candidates for long-horizon
+fat-loss support while preserving strength and training quality. These entries
+can enrich development and GPP/SPP drafts with strength-maintenance,
+low-impact conditioning, technical-density and recovery options. They are not
+rapid weight-cut prescriptions and cannot authorize dehydration, sauna,
+medical clearance or automatic body-mass targets.
+
 ## Fallback / Blocked Scenarios
 
 The following remain fallback or blocked for active Matrix pilot save/assign:

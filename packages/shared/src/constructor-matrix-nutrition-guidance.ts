@@ -1,6 +1,7 @@
 import type { ConstructorMatrixEvidenceDependencyId } from "./constructor-matrix-evidence";
 
 export type ConstructorMatrixNutritionGuidancePhase =
+  | "body_composition"
   | "development"
   | "pre_competition"
   | "taper"
@@ -45,6 +46,57 @@ const COMMON_LIMITATIONS = [
 ] as const;
 
 export const CONSTRUCTOR_MATRIX_NUTRITION_GUIDANCE = [
+  {
+    id: "body_composition_meal_pattern_review_prompt",
+    phase: "body_composition",
+    title: "Body-composition meal pattern review prompt",
+    guidance: [
+      "Use a repeatable meal pattern that supports training quality instead of crash restriction.",
+      "Coach and qualified support should review appetite, fatigue, recovery and body-mass trend together.",
+      "Do not turn body-composition guidance into a rapid weight-cut plan.",
+    ],
+    allowedUseNow: "educational_guidance",
+    reviewRequired: ["coach", "sport_science"],
+    highRiskBlocked: false,
+    rationale: "Long-horizon body-composition work needs consistency and training support, not last-minute restriction.",
+    forbiddenUses: COMMON_FORBIDDEN,
+    evidenceDependencyIds: ["perform_evidence_matrix", "acsm_hydration_nutrition"],
+    limitations: COMMON_LIMITATIONS,
+  },
+  {
+    id: "muscle_preservation_fueling_prompt",
+    phase: "body_composition",
+    title: "Muscle-preservation fueling prompt",
+    guidance: [
+      "Protect hard training quality when body-composition work is active.",
+      "Review recovery meals and familiar protein-containing foods with qualified support when needed.",
+      "Escalate sudden performance drop, persistent fatigue, illness or RED-S-sensitive concerns.",
+    ],
+    allowedUseNow: "review_prompt",
+    reviewRequired: ["coach", "medical", "sport_science"],
+    highRiskBlocked: false,
+    rationale: "Body-composition changes should not be treated as progress if strength, recovery or health context deteriorates.",
+    forbiddenUses: COMMON_FORBIDDEN,
+    evidenceDependencyIds: ["perform_evidence_matrix", "acsm_hydration_nutrition", "recovery_monitoring_consensus"],
+    limitations: COMMON_LIMITATIONS,
+  },
+  {
+    id: "body_composition_training_day_recovery_prompt",
+    phase: "body_composition",
+    title: "Body-composition training-day recovery prompt",
+    guidance: [
+      "Plan recovery food and normal hydration around strength and mat sessions.",
+      "Use body-composition work as a long-horizon habit layer, not as a reason to under-fuel key sessions.",
+      "Coach should adjust training density when appetite, sleep or readiness worsens.",
+    ],
+    allowedUseNow: "educational_guidance",
+    reviewRequired: ["coach", "sport_science"],
+    highRiskBlocked: false,
+    rationale: "Maintaining training output is part of preserving muscle mass while body composition is being reviewed.",
+    forbiddenUses: COMMON_FORBIDDEN,
+    evidenceDependencyIds: ["perform_evidence_matrix", "recovery_monitoring_consensus", "acsm_hydration_nutrition"],
+    limitations: COMMON_LIMITATIONS,
+  },
   {
     id: "development_training_day_fueling",
     phase: "development",

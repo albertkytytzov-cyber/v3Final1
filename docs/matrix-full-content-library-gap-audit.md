@@ -94,6 +94,26 @@ duration, RPE and density are training candidates for pilot drafting, not
 medical thresholds, weight-management thresholds, injury-return rules or hard
 runtime gates.
 
+## Body-Composition Expansion
+
+The library now includes a body-composition candidate layer for long-horizon
+fat-loss support while preserving muscle mass, strength quality and recovery.
+This closes another practical gap before the evidence stage:
+
+- strength-maintenance anchors for lower body, upper pull, posterior chain and
+  trunk;
+- low-impact conditioning options for bike, rower, walk/run and technical
+  wrestling movement;
+- coach-editable circuits that pair strength, grip, trunk, mobility and
+  recovery work;
+- travel and post-competition reset options that avoid rapid-cut behavior.
+
+This does not make weight cutting automatic. The body-composition layer is
+review-required and cannot prescribe kg loss, calories, dehydration, sauna,
+sweat suits, diuretics, laxatives, spitting or medical clearance. Future
+evidence review must still map these exercise and guidance families to source
+text and accepted use.
+
 ## Nutrition Education
 
 Nutrition guidance is educational and limited to reminders such as meal
@@ -108,6 +128,10 @@ ask for body-mass trend, target-category confirmation and coach/qualified
 review. Matrix cannot prescribe automatic kg loss, water restriction, sauna
 use, dehydration methods, medication, diuretics, laxatives, sweat-suit use,
 spitting or clearance language.
+
+Long-horizon body-composition guidance can ask for strength trend, recovery
+context, appetite/fatigue context, meal consistency and coach review. It must
+not be used as rapid weight-cut automation.
 
 ## Medical / Review-Required Decisions
 

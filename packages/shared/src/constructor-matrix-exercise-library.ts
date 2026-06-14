@@ -85,7 +85,10 @@ export type ConstructorMatrixExerciseMethodologyTag =
   | "speed_endurance_candidate"
   | "strength_development_candidate"
   | "endurance_development_candidate"
-  | "exercise_complex_candidate";
+  | "exercise_complex_candidate"
+  | "body_composition_training_candidate"
+  | "muscle_preservation_candidate"
+  | "low_impact_conditioning_candidate";
 
 export type ConstructorMatrixExercisePrescriptionTemplate = {
   sets: number | null;
@@ -784,6 +787,41 @@ const PERFORMANCE_SAFETY = [
   "keep high-risk medical and weight-management decisions outside this exercise layer",
 ] as const;
 
+const BODY_COMPOSITION_REVIEW_TRACKS = [
+  "coach",
+  "sport_science",
+] as const satisfies readonly ConstructorMatrixExerciseReviewTrack[];
+
+const BODY_COMPOSITION_CONSTRAINTS = [
+  "long-horizon body-composition training candidate only",
+  "coach must coordinate with nutrition and recovery context",
+  "do not use for rapid weight cut, dehydration, weigh-in manipulation, or medical decision",
+] as const;
+
+const BODY_COMPOSITION_CONTRAINDICATIONS = [
+  "pain_or_injury_requires_review",
+  "low_energy_or_reds_sensitive_context_requires_medical_review",
+  "rapid_weight_change_requires_qualified_review",
+] as const;
+
+const BODY_COMPOSITION_CUES = [
+  "preserve strength quality",
+  "keep repeatable effort",
+  "finish with recoverable fatigue",
+] as const;
+
+const BODY_COMPOSITION_MISTAKES = [
+  "turning fat-loss support into rapid weight cut",
+  "chasing exhaustion instead of consistency",
+  "reducing fuel for hard sessions without review",
+] as const;
+
+const BODY_COMPOSITION_SAFETY = [
+  "body-composition candidate, not a rapid weight-cut protocol",
+  "coach-editable and review-required until evidence-family review is complete",
+  "stop or regress when performance, recovery, symptoms, or mood deteriorate",
+] as const;
+
 function performanceSeed(
   seed: ExerciseSeed,
   tags: readonly ConstructorMatrixExerciseMethodologyTag[],
@@ -802,6 +840,29 @@ function performanceSeed(
     safety: seed.safety ?? PERFORMANCE_SAFETY,
     prescription: {
       notes: "performance content candidate; coach-editable, no source-verified protocol yet",
+      ...seed.prescription,
+    },
+  };
+}
+
+function bodyCompositionSeed(
+  seed: ExerciseSeed,
+  tags: readonly ConstructorMatrixExerciseMethodologyTag[] = [],
+): ExerciseSeed {
+  return {
+    ...seed,
+    methodologyTags: [
+      "body_composition_training_candidate",
+      ...tags,
+    ],
+    reviewRequired: seed.reviewRequired ?? BODY_COMPOSITION_REVIEW_TRACKS,
+    constraints: seed.constraints ?? BODY_COMPOSITION_CONSTRAINTS,
+    contraindications: seed.contraindications ?? BODY_COMPOSITION_CONTRAINDICATIONS,
+    cues: seed.cues ?? BODY_COMPOSITION_CUES,
+    mistakes: seed.mistakes ?? BODY_COMPOSITION_MISTAKES,
+    safety: seed.safety ?? BODY_COMPOSITION_SAFETY,
+    prescription: {
+      notes: "body-composition training candidate; coach-editable, no rapid weight-cut or medical protocol",
       ...seed.prescription,
     },
   };
@@ -884,7 +945,35 @@ const EXERCISE_COMPLEX_SEEDS = [
   performanceSeed({ id: "complex_mat_edge_scenario", name: "Complex: mat-edge scenario", category: "edge_of_mat", blockTypes: ["mat_tactics", "mat_competition_model"], targetQualities: ["fatigue_skill", "wrestling_contact_density"], loadMode: "technical_quality", prescription: { sets: 3, reps: 3, durationMinutes: null, targetRpe: 5 } }, ["exercise_complex_candidate", "wrestling_transfer_candidate"]),
 ] as const satisfies readonly ExerciseSeed[];
 
+const BODY_COMPOSITION_EXERCISE_SEEDS = [
+  bodyCompositionSeed({ id: "body_comp_full_body_strength_maintenance", name: "Body-composition full-body strength maintenance", category: "strength_endurance", blockTypes: ["gpp", "spp"], targetQualities: ["max_strength", "weight_management"], loadMode: "RPE", prescription: { sets: 3, reps: 6, durationMinutes: null, targetRpe: 6 } }, ["muscle_preservation_candidate", "strength_development_candidate"]),
+  bodyCompositionSeed({ id: "body_comp_push_pull_hinge_circuit", name: "Body-composition push-pull-hinge circuit", category: "strength_endurance", blockTypes: ["gpp", "spp"], targetQualities: ["fatigue_skill", "weight_management"], loadMode: "RPE", prescription: { sets: 3, reps: 8, durationMinutes: null, targetRpe: 6 } }, ["muscle_preservation_candidate", "exercise_complex_candidate"]),
+  bodyCompositionSeed({ id: "body_comp_lower_strength_anchor", name: "Body-composition lower strength anchor", category: "max_strength", blockTypes: ["gpp", "spp"], targetQualities: ["max_strength", "weight_management"], loadMode: "e1rm_based_candidate", prescription: { sets: 3, reps: 3, durationMinutes: null, targetRpe: 7 } }, ["muscle_preservation_candidate", "strength_development_candidate"]),
+  bodyCompositionSeed({ id: "body_comp_upper_pull_anchor", name: "Body-composition upper pull anchor", category: "max_strength", blockTypes: ["gpp", "spp"], targetQualities: ["max_strength", "arms_grip"], loadMode: "e1rm_based_candidate", prescription: { sets: 3, reps: 4, durationMinutes: null, targetRpe: 7 } }, ["muscle_preservation_candidate", "strength_development_candidate"]),
+  bodyCompositionSeed({ id: "body_comp_posterior_chain_maintenance", name: "Body-composition posterior-chain maintenance", category: "posterior_chain", blockTypes: ["gpp", "spp"], targetQualities: ["max_strength", "weight_management"], loadMode: "RPE", prescription: { sets: 3, reps: 6, durationMinutes: null, targetRpe: 6 } }, ["muscle_preservation_candidate"]),
+  bodyCompositionSeed({ id: "body_comp_grip_trunk_carry_circuit", name: "Body-composition grip and trunk carry circuit", category: "strength_endurance", blockTypes: ["gpp", "spp"], targetQualities: ["arms_grip", "fatigue_skill"], loadMode: "RPE", prescription: { sets: 3, reps: null, durationMinutes: 2, targetRpe: 5 } }, ["exercise_complex_candidate", "muscle_preservation_candidate"]),
+  bodyCompositionSeed({ id: "body_comp_low_contact_mat_density", name: "Body-composition low-contact mat density", category: "wrestling_stance_movement", blockTypes: ["gpp", "mat_light_technical"], targetQualities: ["aerobic_base", "weight_management"], loadMode: "duration", prescription: { sets: 3, reps: null, durationMinutes: 4, targetRpe: 4 } }, ["low_impact_conditioning_candidate", "wrestling_transfer_candidate"]),
+  bodyCompositionSeed({ id: "body_comp_shadow_wrestling_continuous", name: "Body-composition shadow wrestling continuous", category: "aerobic_recovery", blockTypes: ["gpp", "aerobic_deload", "mat_light_technical"], targetQualities: ["aerobic_base", "weight_management"], loadMode: "duration", prescription: { sets: null, reps: null, durationMinutes: 20, targetRpe: 3 } }, ["low_impact_conditioning_candidate", "endurance_development_candidate"]),
+  bodyCompositionSeed({ id: "body_comp_bike_low_impact_conditioning", name: "Body-composition bike low-impact conditioning", category: "aerobic_recovery", blockTypes: ["gpp", "aerobic_deload", "environment_change"], targetQualities: ["aerobic_base", "weight_management"], loadMode: "duration", prescription: { sets: null, reps: null, durationMinutes: 30, targetRpe: 3 } }, ["low_impact_conditioning_candidate", "endurance_development_candidate"]),
+  bodyCompositionSeed({ id: "body_comp_rower_low_impact_conditioning", name: "Body-composition rower low-impact conditioning", category: "aerobic_recovery", blockTypes: ["gpp", "aerobic_deload", "environment_change"], targetQualities: ["aerobic_base", "weight_management"], loadMode: "duration", prescription: { sets: null, reps: null, durationMinutes: 25, targetRpe: 3 } }, ["low_impact_conditioning_candidate", "endurance_development_candidate"]),
+  bodyCompositionSeed({ id: "body_comp_walk_run_tempo_candidate", name: "Body-composition walk/run tempo candidate", category: "aerobic_recovery", blockTypes: ["gpp", "aerobic_deload", "environment_change"], targetQualities: ["aerobic_base", "weight_management"], loadMode: "duration", prescription: { sets: null, reps: null, durationMinutes: 30, targetRpe: 3 } }, ["low_impact_conditioning_candidate", "endurance_development_candidate"]),
+  bodyCompositionSeed({ id: "body_comp_sled_drag_low_impact", name: "Body-composition sled drag low-impact", category: "strength_endurance", blockTypes: ["gpp", "spp"], targetQualities: ["legs_lme", "weight_management"], loadMode: "RPE", prescription: { sets: 4, reps: null, durationMinutes: 1, targetRpe: 5 } }, ["low_impact_conditioning_candidate", "muscle_preservation_candidate"]),
+  bodyCompositionSeed({ id: "body_comp_step_up_strength_endurance", name: "Body-composition step-up strength endurance", category: "local_muscular_endurance_legs", blockTypes: ["gpp", "leg_lmv"], targetQualities: ["legs_lme", "weight_management"], loadMode: "RPE", prescription: { sets: 3, reps: 8, durationMinutes: null, targetRpe: 5 } }, ["muscle_preservation_candidate"]),
+  bodyCompositionSeed({ id: "body_comp_trunk_anti_rotation_circuit", name: "Body-composition trunk anti-rotation circuit", category: "trunk_anti_rotation", blockTypes: ["gpp", "spp", "mobility"], targetQualities: ["fatigue_skill", "weight_management"], loadMode: "RPE", prescription: { sets: 3, reps: 8, durationMinutes: null, targetRpe: 5 } }, ["exercise_complex_candidate"]),
+  bodyCompositionSeed({ id: "body_comp_medball_power_maintenance", name: "Body-composition medicine-ball power maintenance", category: "acceleration_change_of_direction", blockTypes: ["first_action_speed", "spp"], targetQualities: ["speed_strength", "weight_management"], loadMode: "RPE", prescription: { sets: 4, reps: 3, durationMinutes: null, targetRpe: 5 } }, ["muscle_preservation_candidate", "speed_development_candidate"]),
+  bodyCompositionSeed({ id: "body_comp_bodyweight_strength_circuit", name: "Body-composition bodyweight strength circuit", category: "strength_endurance", blockTypes: ["gpp", "spp"], targetQualities: ["fatigue_skill", "weight_management"], loadMode: "RPE", prescription: { sets: 3, reps: 8, durationMinutes: null, targetRpe: 5 } }, ["exercise_complex_candidate", "muscle_preservation_candidate"]),
+  bodyCompositionSeed({ id: "body_comp_technical_chain_low_density", name: "Body-composition technical chain low density", category: "shots_entries", blockTypes: ["mat_light_technical", "gpp"], targetQualities: ["aerobic_base", "fatigue_skill"], loadMode: "duration", prescription: { sets: 3, reps: null, durationMinutes: 3, targetRpe: 4 } }, ["low_impact_conditioning_candidate", "wrestling_transfer_candidate"]),
+  bodyCompositionSeed({ id: "body_comp_partner_movement_low_density", name: "Body-composition partner movement low density", category: "wrestling_stance_movement", blockTypes: ["mat_light_technical", "gpp"], targetQualities: ["aerobic_base", "weight_management"], loadMode: "duration", prescription: { sets: 3, reps: null, durationMinutes: 3, targetRpe: 4 } }, ["low_impact_conditioning_candidate", "wrestling_transfer_candidate"]),
+  bodyCompositionSeed({ id: "body_comp_recovery_flush_after_strength", name: "Body-composition recovery flush after strength", category: "aerobic_recovery", blockTypes: ["aerobic_deload", "recovery"], targetQualities: ["recovery", "weight_management"], loadMode: "duration", prescription: { sets: null, reps: null, durationMinutes: 15, targetRpe: 2 } }, ["low_impact_conditioning_candidate"]),
+  bodyCompositionSeed({ id: "body_comp_travel_no_equipment_reset", name: "Body-composition travel no-equipment reset", category: "travel_mobility", blockTypes: ["travel", "mobility", "recovery"], targetQualities: ["recovery", "weight_management"], loadMode: "duration", prescription: { sets: null, reps: null, durationMinutes: 12, targetRpe: 2 } }, ["low_impact_conditioning_candidate"]),
+  bodyCompositionSeed({ id: "body_comp_home_band_strength_maintenance", name: "Body-composition home band strength maintenance", category: "strength_endurance", blockTypes: ["gpp", "spp"], targetQualities: ["max_strength", "weight_management"], equipment: ["resistance_band", "bodyweight", "timer"], environments: ["home", "travel"], loadMode: "RPE", prescription: { sets: 3, reps: 10, durationMinutes: null, targetRpe: 5 } }, ["muscle_preservation_candidate"]),
+  bodyCompositionSeed({ id: "body_comp_grip_flush_no_dehydration", name: "Body-composition grip flush without dehydration", category: "grip_hand_fighting", blockTypes: ["aerobic_deload", "recovery", "spp"], targetQualities: ["arms_grip", "recovery"], loadMode: "duration", prescription: { sets: 2, reps: null, durationMinutes: 3, targetRpe: 3 } }, ["low_impact_conditioning_candidate"]),
+  bodyCompositionSeed({ id: "body_comp_mobility_strength_pair", name: "Body-composition mobility-strength pair", category: "mobility", blockTypes: ["mobility", "gpp", "recovery"], targetQualities: ["recovery", "weight_management"], loadMode: "duration", prescription: { sets: 2, reps: null, durationMinutes: 8, targetRpe: 2 } }, ["exercise_complex_candidate"]),
+  bodyCompositionSeed({ id: "body_comp_post_competition_habit_reset", name: "Body-composition post-competition habit reset", category: "post_competition_recovery", blockTypes: ["post_competition_recovery", "recovery"], targetQualities: ["recovery", "weight_management"], loadMode: "duration", prescription: { sets: null, reps: null, durationMinutes: 20, targetRpe: 2 } }, ["low_impact_conditioning_candidate"]),
+] as const satisfies readonly ExerciseSeed[];
+
 const EXERCISE_SEEDS = [
+  ...BODY_COMPOSITION_EXERCISE_SEEDS,
   ...SPEED_DEVELOPMENT_EXERCISE_SEEDS,
   ...SPEED_ENDURANCE_EXERCISE_SEEDS,
   ...STRENGTH_DEVELOPMENT_EXERCISE_SEEDS,

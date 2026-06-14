@@ -71,6 +71,25 @@ The safe runtime behavior is:
 - no performance candidate may become a medical, injury-return, hydration,
   weight-cut or RED-S gate.
 
+## Body-Composition Candidate Loads
+
+Body-composition training candidates use coach-editable prescriptions for
+long-horizon fat-loss support while preserving strength, muscle mass and
+training quality. They may include strength-maintenance work, low-impact
+conditioning, technical-density drills and recovery flushes.
+
+The safe runtime behavior is:
+
+- strength-maintenance load remains coach-editable and follows the same
+  max/e1RM rule as other strength candidates;
+- low-impact conditioning uses duration/RPE/technical-quality guidance, not
+  medical or weight-cut thresholds;
+- body-composition entries never prescribe kg loss, exact calories,
+  dehydration, sauna, sweat suits, diuretics, laxatives, spitting or medical
+  clearance;
+- appetite, sudden fatigue, performance drop, RED-S-sensitive context or rapid
+  weight change remains review-required.
+
 ## Output Contract
 
 Prescriptions keep the existing `ConstructorPlanExercise` output shape and add
