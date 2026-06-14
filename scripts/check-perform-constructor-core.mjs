@@ -2793,6 +2793,7 @@ const transitionPlanDoc = readProjectFile("docs/constructor-phase-matrix-transit
 const metadataCheckFiles = [
   "scripts/check-constructor-matrix-ai-review-policy.mjs",
   "scripts/check-constructor-matrix-ai-evidence-claims.mjs",
+  "scripts/check-constructor-matrix-ai-safety-classification.mjs",
   "scripts/check-constructor-matrix-ai-source-review.mjs",
   "scripts/check-constructor-matrix-evidence-dependencies.mjs",
   "scripts/check-constructor-matrix-data-dependencies.mjs",
@@ -2809,6 +2810,7 @@ const metadataCheckFiles = [
   "scripts/check-constructor-matrix-evidence-claim-candidate-review-export.mjs",
   "packages/shared/src/constructor-matrix-ai-review-policy.ts",
   "packages/shared/src/constructor-matrix-ai-evidence-claims.ts",
+  "packages/shared/src/constructor-matrix-ai-safety-classification.ts",
   "packages/shared/src/constructor-matrix-ai-source-review.ts",
   "packages/shared/src/constructor-matrix-evidence.ts",
   "packages/shared/src/constructor-matrix-evidence-claims.ts",
@@ -2835,6 +2837,7 @@ for (const path of metadataCheckFiles) {
 for (const token of [
   "check:constructor-matrix-ai-review-policy",
   "check:constructor-matrix-ai-evidence-claims",
+  "check:constructor-matrix-ai-safety-classification",
   "check:constructor-matrix-ai-source-review",
   "check:constructor-matrix-evidence-dependencies",
   "check:constructor-matrix-data-dependencies",
