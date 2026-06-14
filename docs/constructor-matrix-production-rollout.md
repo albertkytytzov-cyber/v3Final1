@@ -685,3 +685,23 @@ production decision:
   metadata;
 - high-risk medical decisions remain non-automated;
 - no numeric thresholds, fake citations or fake human approvals are approved.
+
+## Matrix AI-reviewed production deployment gate
+
+Stage: Production Deployment Gate.
+
+The deployment gate is documented in
+`docs/matrix-ai-reviewed-production-deployment-gate.md`.
+
+Deployment mode remains feature-flagged controlled pilot only:
+
+- feature flags are off by default;
+- Matrix is not production default;
+- legacy constructor remains default;
+- production `/api/v1/plans/constructor/draft` remains unchanged;
+- no DB schema migration is required;
+- save/assign production path is not enabled without a later explicit approval;
+- rollback and monitoring checklists are documented;
+- all high-risk areas remain blocked, fallback-only or review-required;
+- no numeric thresholds are used as runtime gates;
+- no medical or coach approval is represented as human approval.

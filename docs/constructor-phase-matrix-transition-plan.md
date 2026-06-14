@@ -4482,3 +4482,23 @@ Decision:
   high-risk decisions.
 
 Next step: production deployment gate documentation.
+
+## 60. Stage: Matrix AI-reviewed production deployment gate
+
+Stage: Production Deployment Gate.
+
+The production deployment gate records the conditions for any future controlled
+pilot exposure:
+
+- feature flags off by default;
+- feature-flagged controlled pilot only;
+- Matrix not production default;
+- legacy constructor remains default;
+- production draft route unchanged;
+- no DB schema migration required;
+- no Matrix save/assign production path without a later explicit approval;
+- rollback and monitoring plans documented;
+- high-risk medical decisions remain non-automated;
+- no numeric threshold runtime gates and no fake human approval.
+
+This stage is a deployment gate, not a production rollout.

@@ -2417,3 +2417,23 @@ Decision:
 - all high-risk medical, weight-cut, hydration, injury-return, RED-S and
   BFR/KAATSU decisions remain non-automated;
 - no human, medical or coach approval is represented by AI desk review.
+
+### 15.42 Matrix AI-reviewed production deployment gate
+
+Stage: Production Deployment Gate.
+
+The deployment gate is documented in
+`docs/matrix-ai-reviewed-production-deployment-gate.md` and guarded by
+`npm run check:constructor-matrix-ai-production-deployment-gate`.
+
+Gate result:
+
+- deployment mode is feature-flagged controlled pilot only;
+- Matrix is not production default;
+- feature flags are off by default;
+- production `/api/v1/plans/constructor/draft` remains legacy-backed;
+- no DB schema migration is required;
+- Matrix save/assign production path remains blocked unless a later explicit
+  approval stage enables it;
+- rollback and monitoring checklists are documented;
+- high-risk medical decisions remain non-automated.
