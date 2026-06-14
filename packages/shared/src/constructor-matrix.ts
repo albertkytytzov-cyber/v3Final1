@@ -1518,7 +1518,11 @@ export function getAllowedSessionSlots(context: ConstructorMatrixContext): Const
   const dayType = getDayTypeForContext(context);
   const rule = getDayRule(dayType);
 
-  return rule ? [...rule.allowedSessionSlots] : ["morning"];
+  if (!rule) {
+    return ["morning"];
+  }
+
+  return rule.allowedSessionSlots.slice(0, Math.max(1, rule.maxSessions));
 }
 
 export function getForbiddenBlockReasons(

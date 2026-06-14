@@ -99,6 +99,41 @@ function draftStats(draft) {
   };
 }
 
+function assertMatrixCalendarRhythm(testId, draft) {
+  const matrixDays = draft.matrix?.draft?.weeks.flatMap((week) => week.days) ?? [];
+  const coachDays = draft.plan.weeks.flatMap((week) => week.days);
+
+  assert(matrixDays.length > 0, `${testId}: Matrix draft must expose calendar days`);
+
+  for (const day of matrixDays) {
+    if (!day.date) {
+      continue;
+    }
+
+    const weekday = new Date(`${day.date}T00:00:00.000Z`).getUTCDay();
+
+    const isSpecialLogisticsDay =
+      day.flags?.travel ||
+      day.flags?.weighIn ||
+      day.flags?.competition ||
+      day.flags?.postCompetition;
+
+    if (weekday === 0 && !isSpecialLogisticsDay) {
+      assert(day.dayType === "recovery", `${testId}: Sunday ${day.date} must be a recovery day`);
+      assert(day.sessions.length === 1, `${testId}: Sunday ${day.date} must have one recovery session`);
+    }
+
+    if (weekday === 3 || weekday === 6) {
+      assert(day.sessions.length === 1, `${testId}: ${day.date} must be a one-session Wednesday/Saturday`);
+    }
+  }
+
+  assert(
+    coachDays.every((day) => /^(ПН|ВТ|СР|ЧТ|ПТ|СБ|ВС)\s\d{2}\.\d{2}\s\/\sД-/.test(day.dayLabel)),
+    `${testId}: coach-facing day labels must include Russian weekday and D-day marker`,
+  );
+}
+
 function assertMatrixAiRuntimeMetadataSafe(testId, draft) {
   assert(draft.generatedFrom === "matrix", `${testId}: expected matrix generated draft`);
   assert(draft.matrix?.aiRuntime?.metadataOnly === true, `${testId}: matrix.aiRuntime must be metadata-only`);
@@ -253,6 +288,7 @@ function evaluatePilotFixture(testCase) {
   if (source === "matrix_primary_pilot") {
     assert(gate.allowed, `${testCase.id}: server gate must allow active Matrix pilot`);
     assertMatrixAiRuntimeMetadataSafe(testCase.id, activeDraft);
+    assertMatrixCalendarRhythm(testCase.id, activeDraft);
   } else {
     assert(!gate.allowed, `${testCase.id}: server gate must block fallback scenario`);
     assert(activeDraft.generatedFrom !== "matrix", `${testCase.id}: fallback active draft must not be Matrix`);
@@ -277,25 +313,25 @@ const allowedPilotCases = [
     id: "far_development_week_d90",
     expectedSource: "matrix_primary_pilot",
     expectedDryRun: "passed",
-    expectedStats: { weeks: 1, days: 7, sessions: 11, blocks: 14 },
+    expectedStats: { weeks: 1, days: 7, sessions: 10, blocks: 12 },
   },
   {
     id: "main_start_d28_special_pre_competition",
     expectedSource: "matrix_primary_pilot",
     expectedDryRun: "passed",
-    expectedStats: { weeks: 4, days: 28, sessions: 37, blocks: 50 },
+    expectedStats: { weeks: 4, days: 28, sessions: 34, blocks: 46 },
   },
   {
     id: "main_start_d21_controlled_volume",
     expectedSource: "matrix_primary_pilot",
     expectedDryRun: "passed",
-    expectedStats: { weeks: 3, days: 21, sessions: 27, blocks: 39 },
+    expectedStats: { weeks: 3, days: 21, sessions: 24, blocks: 35 },
   },
   {
     id: "main_start_d10_taper",
     expectedSource: "matrix_primary_pilot",
     expectedDryRun: "passed",
-    expectedStats: { weeks: 2, days: 10, sessions: 12, blocks: 19 },
+    expectedStats: { weeks: 2, days: 10, sessions: 10, blocks: 16 },
   },
   {
     id: "main_start_d4_start_window",
@@ -392,6 +428,31 @@ assert(
 
 const allowedResults = allowedPilotCases.map(evaluatePilotFixture);
 const fallbackResults = fallbackCases.map(evaluatePilotFixture);
+const popovaD22BaseFixture = fixtureById("main_start_d28_special_pre_competition");
+const popovaD22Draft = buildMatrixDrivenConstructorDraft({
+  ...popovaD22BaseFixture.input,
+  context: {
+    ...popovaD22BaseFixture.input.context,
+    cycleLengthDays: 22,
+  },
+  seasonStrategy: {
+    ...popovaD22BaseFixture.input.seasonStrategy,
+    currentWindow: {
+      ...popovaD22BaseFixture.input.seasonStrategy.currentWindow,
+      cycleLengthDays: 22,
+      daysToStart: 22,
+    },
+  },
+});
+const popovaD22FirstDay = popovaD22Draft.plan.weeks[0]?.days[0];
+
+assert(popovaD22FirstDay?.dayLabel.startsWith("ВС 14.06 / Д-22"), "Popova D-22 case must start on Sunday 14.06");
+assert(
+  /восстановительный день/.test(popovaD22FirstDay?.dayIntent ?? ""),
+  "Popova D-22 first day must be recovery, not ordinary technique/SPP",
+);
+assert((popovaD22FirstDay?.sessions ?? []).length === 1, "Popova D-22 Sunday must have one recovery session");
+assertMatrixCalendarRhythm("popova_d22_calendar_rhythm", popovaD22Draft);
 
 console.log(JSON.stringify({
   ok: true,

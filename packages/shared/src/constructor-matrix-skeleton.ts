@@ -35,7 +35,12 @@ export interface MatrixDrivenSkeletonContext {
   startDate?: string | null;
   weighInDate?: string | null;
   travelRequired?: boolean;
+  availableTrainingDays?: readonly MatrixDrivenCalendarWeekday[];
 }
+
+export type MatrixDrivenCalendarWeekday = NonNullable<
+  ConstructorInput["context"]["availableTrainingDays"]
+>[number];
 
 export interface MatrixDrivenSkeletonWarning {
   code:
@@ -86,6 +91,8 @@ export interface MatrixDrivenSessionSkeleton {
 
 export interface MatrixDrivenDaySkeleton {
   dayNumber: number;
+  weekday: MatrixDrivenCalendarWeekday | null;
+  dayIndexInWeek: number;
   dayType: ConstructorDayType;
   daysUntilStart: number | null;
   date: string | null;
@@ -136,9 +143,27 @@ interface NormalizedSkeletonInput {
   startDate: string | null;
   weighInDate: string | null;
   travelRequired: boolean;
+  availableTrainingDays: readonly MatrixDrivenCalendarWeekday[];
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const DEFAULT_TRAINING_WEEKDAYS: readonly MatrixDrivenCalendarWeekday[] = [
+  "mon",
+  "tue",
+  "wed",
+  "thu",
+  "fri",
+  "sat",
+];
+const WEEKDAY_BY_MONDAY_INDEX: readonly MatrixDrivenCalendarWeekday[] = [
+  "mon",
+  "tue",
+  "wed",
+  "thu",
+  "fri",
+  "sat",
+  "sun",
+];
 
 function isConstructorInput(input: ConstructorInput | MatrixDrivenSkeletonContext): input is ConstructorInput {
   return Boolean((input as ConstructorInput).competition && (input as ConstructorInput).context);
@@ -168,6 +193,28 @@ function formatDateInput(date: Date | null) {
 
 function shiftDate(date: Date | null, days: number) {
   return date ? new Date(date.getTime() + days * DAY_MS) : null;
+}
+
+function getCalendarDayIndexInWeek(date: string | null, fallback: number) {
+  if (!date) {
+    return fallback % 7;
+  }
+
+  const parsed = parseDateInput(date);
+
+  if (!parsed) {
+    return fallback % 7;
+  }
+
+  return (parsed.getUTCDay() + 6) % 7;
+}
+
+function getCalendarWeekday(date: string | null, fallbackIndex: number): MatrixDrivenCalendarWeekday | null {
+  return WEEKDAY_BY_MONDAY_INDEX[getCalendarDayIndexInWeek(date, fallbackIndex)] ?? null;
+}
+
+function daysRemainingInCalendarWeek(date: string | null, fallbackDayIndexInWeek: number) {
+  return 7 - getCalendarDayIndexInWeek(date, fallbackDayIndexInWeek);
 }
 
 function inferCompetitionRoleFromInput(input: ConstructorInput): ConstructorCompetitionRole | null {
@@ -254,6 +301,9 @@ function normalizeSkeletonInput(input: ConstructorInput | MatrixDrivenSkeletonCo
       startDate: input.startDate ?? null,
       weighInDate: input.weighInDate ?? null,
       travelRequired: input.travelRequired ?? false,
+      availableTrainingDays: input.availableTrainingDays?.length
+        ? input.availableTrainingDays
+        : DEFAULT_TRAINING_WEEKDAYS,
     };
   }
 
@@ -282,6 +332,9 @@ function normalizeSkeletonInput(input: ConstructorInput | MatrixDrivenSkeletonCo
     startDate: input.competition.startDate,
     weighInDate: input.competition.weighInDate,
     travelRequired: input.competition.travelRequired || input.constraints?.travelFatigue === true,
+    availableTrainingDays: input.context.availableTrainingDays?.length
+      ? input.context.availableTrainingDays
+      : DEFAULT_TRAINING_WEEKDAYS,
   };
 }
 
@@ -367,6 +420,7 @@ function getPreparationPhaseForSkeletonDay(
 function getSkeletonDayType(
   context: ConstructorMatrixContext,
   dayIndexInWeek: number,
+  isTrainingDayAvailable: boolean,
 ): ConstructorDayType {
   if (context.isPostCompetitionDay) {
     return "post_competition";
@@ -382,6 +436,10 @@ function getSkeletonDayType(
 
   if (context.isTravelDay) {
     return "travel";
+  }
+
+  if (!isTrainingDayAvailable || dayIndexInWeek === 6) {
+    return "recovery";
   }
 
   if (context.weekType === "pre_competition" || context.weekType === "special") {
@@ -433,6 +491,7 @@ export function buildSkeletonContextForDay(params: {
   input: NormalizedSkeletonInput;
   daysUntilStart: number | null;
   dayIndexInWeek: number;
+  weekday: MatrixDrivenCalendarWeekday | null;
   date: string | null;
 }): ConstructorMatrixContext {
   const phase = getPreparationPhaseForSkeletonDay(params.input, params.daysUntilStart);
@@ -447,11 +506,14 @@ export function buildSkeletonContextForDay(params: {
     isPostCompetitionDay: params.daysUntilStart !== null && params.daysUntilStart < 0,
   };
   const weekType = getWeekTypeForContext(baseContext);
+  const isTrainingDayAvailable = params.weekday
+    ? params.input.availableTrainingDays.includes(params.weekday)
+    : true;
 
   return {
     ...baseContext,
     weekType,
-    dayType: getSkeletonDayType({ ...baseContext, weekType }, params.dayIndexInWeek),
+    dayType: getSkeletonDayType({ ...baseContext, weekType }, params.dayIndexInWeek, isTrainingDayAvailable),
   };
 }
 
@@ -713,14 +775,17 @@ function buildSessionSkeleton(
 function buildDaySkeleton(params: {
   input: NormalizedSkeletonInput;
   dayIndex: number;
-  dayIndexInWeek: number;
+  fallbackDayIndexInWeek: number;
 }): MatrixDrivenDaySkeleton {
   const daysUntilStart = getDaysUntilStartForSkeletonDay(params.input.daysUntilStart, params.dayIndex);
   const date = getSkeletonDate(params.input, daysUntilStart);
+  const dayIndexInWeek = getCalendarDayIndexInWeek(date, params.fallbackDayIndexInWeek);
+  const weekday = getCalendarWeekday(date, params.fallbackDayIndexInWeek);
   const dayContext = buildSkeletonContextForDay({
     input: params.input,
     daysUntilStart,
-    dayIndexInWeek: params.dayIndexInWeek,
+    dayIndexInWeek,
+    weekday,
     date,
   });
   const allowedSessionSlots = getAllowedSessionSlots(dayContext);
@@ -732,6 +797,8 @@ function buildDaySkeleton(params: {
 
   return {
     dayNumber: params.dayIndex + 1,
+    weekday,
+    dayIndexInWeek,
     dayType: dayContext.dayType ?? "medium_training",
     daysUntilStart,
     date,
@@ -761,7 +828,7 @@ function buildWeekSkeleton(params: {
     buildDaySkeleton({
       input: params.input,
       dayIndex: params.startDayIndex + index,
-      dayIndexInWeek: index,
+      fallbackDayIndexInWeek: index,
     }),
   );
   const firstDay = days[0];
@@ -818,15 +885,27 @@ export function buildMatrixDrivenWeekSkeleton(
   const totalDays = normalizedInput.daysUntilStart !== null && normalizedInput.daysUntilStart <= 0
     ? 1
     : normalizedInput.cycleLengthDays;
-  const weekCount = Math.max(1, Math.ceil(totalDays / 7));
-  const weeks = Array.from({ length: weekCount }, (_, index) =>
-    buildWeekSkeleton({
+  const weeks: MatrixDrivenWeekSkeleton[] = [];
+  let startDayIndex = 0;
+
+  while (startDayIndex < totalDays) {
+    const firstDayDate = getSkeletonDate(
+      normalizedInput,
+      getDaysUntilStartForSkeletonDay(normalizedInput.daysUntilStart, startDayIndex),
+    );
+    const dayCount = Math.min(
+      daysRemainingInCalendarWeek(firstDayDate, startDayIndex % 7),
+      totalDays - startDayIndex,
+    );
+
+    weeks.push(buildWeekSkeleton({
       input: normalizedInput,
-      weekNumber: index + 1,
-      startDayIndex: index * 7,
-      dayCount: Math.min(7, totalDays - index * 7),
-    }),
-  );
+      weekNumber: weeks.length + 1,
+      startDayIndex,
+      dayCount,
+    }));
+    startDayIndex += dayCount;
+  }
 
   return {
     generatedFrom: "matrix",

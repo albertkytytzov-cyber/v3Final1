@@ -219,6 +219,24 @@ function matrixRecoveryPriorityLabel(value: MatrixDrivenPlanWeek["recoveryPriori
   return labels[value] ?? String(value);
 }
 
+function matrixWeekdayDateLabel(date: string | null, fallbackDayNumber: number) {
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return `День ${fallbackDayNumber}`;
+  }
+
+  const parsed = new Date(`${date}T00:00:00.000Z`);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return `День ${fallbackDayNumber}`;
+  }
+
+  const weekdayLabels = ["ВС", "ПН", "ВТ", "СР", "ЧТ", "ПТ", "СБ"];
+  const day = date.slice(8, 10);
+  const month = date.slice(5, 7);
+
+  return `${weekdayLabels[parsed.getUTCDay()]} ${day}.${month}`;
+}
+
 function matrixDayTypeLabel(value: ConstructorDayType) {
   const labels: Record<ConstructorDayType, string> = {
     heavy_training: "тяжёлый тренировочный день",
@@ -581,7 +599,7 @@ export function adaptMatrixDrivenDayToConstructorDay(
     ),
   );
   const dayLabelParts = [
-    matrixDay.date ?? `День ${matrixDay.dayNumber}`,
+    matrixWeekdayDateLabel(matrixDay.date, matrixDay.dayNumber),
     matrixDay.daysUntilStart !== null ? `Д-${matrixDay.daysUntilStart}` : null,
   ].filter(Boolean);
 
