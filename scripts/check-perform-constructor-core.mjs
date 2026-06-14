@@ -2797,6 +2797,7 @@ const metadataCheckFiles = [
   "scripts/check-constructor-matrix-runtime-eligibility.mjs",
   "scripts/check-constructor-matrix-ai-runtime-integration.mjs",
   "scripts/check-constructor-matrix-ai-save-assign-readiness.mjs",
+  "scripts/check-constructor-matrix-ai-production-decision-pack.mjs",
   "scripts/check-constructor-matrix-ai-source-review.mjs",
   "scripts/check-constructor-matrix-evidence-dependencies.mjs",
   "scripts/check-constructor-matrix-data-dependencies.mjs",
@@ -2831,6 +2832,7 @@ const metadataCheckFiles = [
   "packages/shared/src/constructor-matrix-source-candidates.ts",
   "packages/shared/src/constructor-matrix-source-lookup-intake.ts",
   "docs/matrix-ai-reviewed-save-assign-readiness.md",
+  "docs/matrix-ai-reviewed-production-decision-pack.md",
   "docs/matrix-review-intake-export/README.md",
   "docs/matrix-claim-candidate-review-export/README.md",
 ];
@@ -2846,6 +2848,7 @@ for (const token of [
   "check:constructor-matrix-runtime-eligibility",
   "check:constructor-matrix-ai-runtime-integration",
   "check:constructor-matrix-ai-save-assign-readiness",
+  "check:constructor-matrix-ai-production-decision-pack",
   "check:constructor-matrix-ai-source-review",
   "check:constructor-matrix-evidence-dependencies",
   "check:constructor-matrix-data-dependencies",

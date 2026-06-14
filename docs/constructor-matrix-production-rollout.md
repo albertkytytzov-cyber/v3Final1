@@ -668,3 +668,20 @@ Rollout meaning:
 - production route, rollout gates, preview behavior, legacy fallback and DB
   schema remain unchanged;
 - high-risk decisions remain non-automated and review-required.
+
+## AI-reviewed Matrix production decision pack
+
+Stage: Final Matrix Decision Pack.
+
+`docs/matrix-ai-reviewed-production-decision-pack.md` records the current
+production decision:
+
+- controlled preparation-plan building is allowed for feature-flagged pilot
+  users/admin/test cohorts only;
+- Matrix is not production default;
+- legacy fallback remains the production default path;
+- AI-reviewed metadata can support docs/review export, soft-warning metadata,
+  conservative plan-structure hint metadata and blocked/review-required
+  metadata;
+- high-risk medical decisions remain non-automated;
+- no numeric thresholds, fake citations or fake human approvals are approved.

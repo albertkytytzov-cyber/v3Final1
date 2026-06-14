@@ -2397,3 +2397,23 @@ Current result:
 This stage approves compatibility evidence only. It does not approve production
 DB writes, Matrix as default, numeric threshold gates or medical/coach/human
 approval.
+
+### 15.41 AI-reviewed Matrix production decision pack
+
+Stage: Final Matrix Decision Pack.
+
+The decision pack is documented in
+`docs/matrix-ai-reviewed-production-decision-pack.md` and guarded by
+`npm run check:constructor-matrix-ai-production-decision-pack`.
+
+Decision:
+
+- Matrix can be used for controlled preparation-plan building in pilot mode
+  only;
+- Matrix cannot become production default from this stage;
+- AI-reviewed runtime use is limited to docs/review export, soft-warning
+  metadata, conservative plan-structure hint metadata and blocked/review
+  metadata;
+- all high-risk medical, weight-cut, hydration, injury-return, RED-S and
+  BFR/KAATSU decisions remain non-automated;
+- no human, medical or coach approval is represented by AI desk review.
