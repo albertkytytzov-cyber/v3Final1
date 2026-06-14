@@ -781,3 +781,29 @@ Current pilot boundaries:
 - no numeric threshold gates, fake citations or fake human approvals are added;
 - production route, rollout gates, preview behavior and legacy fallback remain
   unchanged.
+
+## 25. Controlled Pilot End-to-End Validation
+
+Stage: Controlled Pilot End-to-End Validation.
+
+This stage validates the Matrix controlled pilot as a real plan-building path
+and adds the Matrix Controlled Pilot Runbook.
+
+Implemented:
+
+- `scripts/check-constructor-matrix-controlled-pilot-e2e.mjs`;
+- `docs/matrix-controlled-pilot-e2e-validation.md`;
+- `docs/matrix-controlled-pilot-runbook.md`;
+- `npm run check:constructor-matrix-controlled-pilot-e2e`.
+
+The check builds D90, D28, D21, D10 and D4 Matrix pilot drafts through rollout,
+readiness, dry-run and server gate evidence, then validates the weeks/days/
+sessions/blocks shape and existing template/assignment payload compatibility.
+
+D-3, travel, weigh-in and competition-day contexts remain fallback or
+preview-only. High-risk medical, weight-cut, hydration, pain, injury, RED-S,
+youth and BFR/KAATSU areas remain blocked, fallback-only or review-required.
+
+The runbook keeps feature flags off by default, preserves legacy fallback,
+keeps Matrix save/assign production writes disabled and documents feature-flag
+rollback.

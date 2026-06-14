@@ -2800,6 +2800,7 @@ const metadataCheckFiles = [
   "scripts/check-constructor-matrix-ai-production-decision-pack.mjs",
   "scripts/check-constructor-matrix-ai-production-deployment-gate.mjs",
   "scripts/check-constructor-matrix-dependency-map.mjs",
+  "scripts/check-constructor-matrix-controlled-pilot-e2e.mjs",
   "scripts/check-constructor-matrix-ai-source-review.mjs",
   "scripts/check-constructor-matrix-evidence-dependencies.mjs",
   "scripts/check-constructor-matrix-data-dependencies.mjs",
@@ -2838,6 +2839,8 @@ const metadataCheckFiles = [
   "docs/matrix-ai-reviewed-production-decision-pack.md",
   "docs/matrix-ai-reviewed-production-deployment-gate.md",
   "docs/matrix-controlled-pilot-acceptance-matrix.md",
+  "docs/matrix-controlled-pilot-e2e-validation.md",
+  "docs/matrix-controlled-pilot-runbook.md",
   "docs/matrix-review-intake-export/README.md",
   "docs/matrix-claim-candidate-review-export/README.md",
 ];
@@ -2856,6 +2859,7 @@ for (const token of [
   "check:constructor-matrix-ai-production-decision-pack",
   "check:constructor-matrix-ai-production-deployment-gate",
   "check:constructor-matrix-dependency-map",
+  "check:constructor-matrix-controlled-pilot-e2e",
   "check:constructor-matrix-ai-source-review",
   "check:constructor-matrix-evidence-dependencies",
   "check:constructor-matrix-data-dependencies",
@@ -2934,6 +2938,14 @@ for (const [path, source] of [
   assert(
     source.includes("Controlled Pilot Hardening Audit"),
     `${path} must document Controlled Pilot Hardening Audit`,
+  );
+  assert(
+    source.includes("Controlled Pilot End-to-End Validation"),
+    `${path} must document Controlled Pilot End-to-End Validation`,
+  );
+  assert(
+    source.includes("Matrix Controlled Pilot Runbook"),
+    `${path} must document Matrix Controlled Pilot Runbook`,
   );
 }
 

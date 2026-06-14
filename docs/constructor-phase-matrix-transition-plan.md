@@ -4532,3 +4532,31 @@ Controlled pilot result:
 - production route, legacy fallback, rollout gates, preview behavior and DB
   schema are unchanged;
 - Matrix default remains prohibited.
+
+## 62. Stage: Controlled Pilot End-to-End Validation
+
+Stage: Controlled Pilot End-to-End Validation.
+
+This stage validates the controlled pilot as an executable plan-building path
+and adds the Matrix Controlled Pilot Runbook.
+
+Implemented:
+
+- `scripts/check-constructor-matrix-controlled-pilot-e2e.mjs`;
+- `docs/matrix-controlled-pilot-e2e-validation.md`;
+- `docs/matrix-controlled-pilot-runbook.md`;
+- `npm run check:constructor-matrix-controlled-pilot-e2e`.
+
+Validation result:
+
+- D90, D28, D21, D10 and D4 allowed scenarios produce active
+  `matrix_primary_pilot` drafts only after rollout, readiness, server dry-run
+  and server gate evidence pass;
+- D-3, travel, weigh-in and competition-day scenarios remain fallback or
+  preview-only;
+- plan shape is checked at weeks, days, sessions and blocks level;
+- template and assignment payloads remain compatible with existing schemas and
+  exclude Matrix internals;
+- save/assign production writes remain disabled for Matrix sources;
+- high-risk medical, weight-cut, hydration, injury, RED-S, youth and BFR/KAATSU
+  areas remain blocked or review-required.

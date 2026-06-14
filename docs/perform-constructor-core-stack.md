@@ -2470,3 +2470,32 @@ Hardening result:
   BFR/KAATSU areas remain blocked, fallback-only or review-required;
 - no numeric threshold gates, fake citations or fake human approvals are
   added.
+
+### 15.44 Controlled Pilot End-to-End Validation
+
+Stage: Controlled Pilot End-to-End Validation.
+
+The controlled pilot E2E validation is documented in
+`docs/matrix-controlled-pilot-e2e-validation.md`, operated through
+`docs/matrix-controlled-pilot-runbook.md` and guarded by
+`npm run check:constructor-matrix-controlled-pilot-e2e`.
+
+The validation builds active pilot candidates end to end:
+
+- D90, D28, D21, D10 and D4 scenarios must pass rollout, readiness, server
+  dry-run and server gate checks before using `matrix_primary_pilot`;
+- D-3, travel, weigh-in and competition-day scenarios must remain
+  `legacy_fallback`, blocked or preview-only when server evidence blocks
+  Matrix primary pilot activation;
+- generated weeks, days, sessions and blocks are checked against fixture
+  expectations;
+- template and assignment payload shapes parse through existing API schemas;
+- Matrix internals do not enter template payloads.
+
+Matrix Controlled Pilot Runbook result:
+
+- feature flags remain off by default;
+- pilot access is limited to admin/coach/test cohorts;
+- rollback is feature-flag first;
+- Matrix save/assign production path remains disabled;
+- high-risk medical decisions remain non-automated and review-required.

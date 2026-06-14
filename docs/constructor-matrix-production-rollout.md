@@ -730,3 +730,26 @@ Rollout meaning:
 - female/RED-S, youth, pain, injury-return, weight-cut, hydration and
   BFR/KAATSU contexts remain blocked, fallback-only or review-required;
 - no numeric threshold gates, fake citations or fake human approvals are added.
+
+## Controlled Pilot End-to-End Validation
+
+Stage: Controlled Pilot End-to-End Validation.
+
+The rollout package now includes a practical E2E pilot validation and Matrix
+Controlled Pilot Runbook:
+
+- `docs/matrix-controlled-pilot-e2e-validation.md`;
+- `docs/matrix-controlled-pilot-runbook.md`;
+- `npm run check:constructor-matrix-controlled-pilot-e2e`.
+
+Rollout meaning:
+
+- allowed pilot scenarios must produce active Matrix pilot drafts only after
+  server-side rollout, readiness, dry-run and gate evidence pass;
+- D-3, travel, weigh-in and competition-day scenarios fall back or remain
+  preview-only;
+- generated plan shape is checked at weeks, days, sessions and blocks level;
+- template and assignment payloads stay compatible with existing schemas;
+- Matrix internals are excluded from template payloads;
+- Matrix save/assign production writes remain disabled;
+- Matrix is still not production default.

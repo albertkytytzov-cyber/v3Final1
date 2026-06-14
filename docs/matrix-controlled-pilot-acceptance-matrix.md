@@ -11,6 +11,11 @@ The related machine-readable registry is
 `packages/shared/src/constructor-matrix-dependency-map.ts`; the guard is
 `npm run check:constructor-matrix-dependency-map`.
 
+The executable pilot validation is documented in
+`docs/matrix-controlled-pilot-e2e-validation.md`, operated through
+`docs/matrix-controlled-pilot-runbook.md` and guarded by
+`npm run check:constructor-matrix-controlled-pilot-e2e`.
+
 ## Deployment Mode
 
 Matrix remains a feature-flagged controlled pilot only.
