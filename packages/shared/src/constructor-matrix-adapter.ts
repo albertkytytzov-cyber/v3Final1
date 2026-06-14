@@ -34,6 +34,28 @@ import type {
   MatrixDrivenSelectedBlock,
 } from "./constructor-matrix-plan-builder";
 import { buildMatrixDrivenPlanDraft } from "./constructor-matrix-plan-builder";
+import {
+  buildConstructorMatrixRuntimeEligibilitySummary,
+  CONSTRUCTOR_MATRIX_RUNTIME_ELIGIBILITY,
+  type ConstructorMatrixRuntimeEligibilityId,
+  type ConstructorMatrixRuntimeEligibilitySummary,
+} from "./constructor-matrix-runtime-eligibility";
+
+export interface MatrixDrivenAiRuntimeMetadata {
+  generatedFrom: "ai_reviewed_runtime_eligibility";
+  metadataOnly: true;
+  summary: ConstructorMatrixRuntimeEligibilitySummary;
+  softWarningEligibilityIds: readonly ConstructorMatrixRuntimeEligibilityId[];
+  planStructureHintEligibilityIds: readonly ConstructorMatrixRuntimeEligibilityId[];
+  fallbackGuardEligibilityIds: readonly ConstructorMatrixRuntimeEligibilityId[];
+  blockedHighRiskEligibilityIds: readonly ConstructorMatrixRuntimeEligibilityId[];
+  reviewRequiredEligibilityIds: readonly ConstructorMatrixRuntimeEligibilityId[];
+  runtimeHardGatesEnabled: false;
+  highRiskAutomationEnabled: false;
+  numericThresholdRuntimeGatesEnabled: false;
+  medicalDecisionAutomationEnabled: false;
+  humanReviewed: false;
+}
 
 export interface MatrixDrivenConstructorDraft extends ConstructorDraft {
   generatedFrom: "matrix";
@@ -42,6 +64,7 @@ export interface MatrixDrivenConstructorDraft extends ConstructorDraft {
     riskChecks: MatrixDrivenRiskCheckResult[];
     explanationCount: number;
     legacyCards: MatrixDrivenPlanDraft["legacyCards"];
+    aiRuntime: MatrixDrivenAiRuntimeMetadata;
   };
 }
 
@@ -898,6 +921,42 @@ function matrixDevelopmentAllowed(matrixDraft: MatrixDrivenPlanDraft) {
   return matrixDraft.weeks.some((week) => week.volume.loadLevel === "high");
 }
 
+function runtimeEligibilityIdsFor(
+  predicate: (item: (typeof CONSTRUCTOR_MATRIX_RUNTIME_ELIGIBILITY)[number]) => boolean,
+): ConstructorMatrixRuntimeEligibilityId[] {
+  return CONSTRUCTOR_MATRIX_RUNTIME_ELIGIBILITY.filter(predicate).map(
+    (item) => item.id as ConstructorMatrixRuntimeEligibilityId,
+  );
+}
+
+export function buildMatrixDrivenAiRuntimeMetadata(): MatrixDrivenAiRuntimeMetadata {
+  return {
+    generatedFrom: "ai_reviewed_runtime_eligibility",
+    metadataOnly: true,
+    summary: buildConstructorMatrixRuntimeEligibilitySummary(),
+    softWarningEligibilityIds: runtimeEligibilityIdsFor(
+      (item) => item.allowedRuntimeUse === "soft_warning",
+    ),
+    planStructureHintEligibilityIds: runtimeEligibilityIdsFor(
+      (item) => item.allowedRuntimeUse === "plan_structure_hint",
+    ),
+    fallbackGuardEligibilityIds: runtimeEligibilityIdsFor(
+      (item) => item.allowedRuntimeUse === "fallback_guard",
+    ),
+    blockedHighRiskEligibilityIds: runtimeEligibilityIdsFor(
+      (item) => item.status === "blocked_high_risk",
+    ),
+    reviewRequiredEligibilityIds: runtimeEligibilityIdsFor((item) =>
+      item.requiredClassifications.includes("human_review_required"),
+    ),
+    runtimeHardGatesEnabled: false,
+    highRiskAutomationEnabled: false,
+    numericThresholdRuntimeGatesEnabled: false,
+    medicalDecisionAutomationEnabled: false,
+    humanReviewed: false,
+  };
+}
+
 export function buildMatrixDrivenConstructorDraft(
   input: ConstructorInput,
   options?: MatrixDrivenBuilderOptions,
@@ -1001,6 +1060,7 @@ export function buildMatrixDrivenConstructorDraft(
         matrixDraft.weeks.flatMap((week) => week.explanations).length +
         matrixDraft.weeks.flatMap((week) => week.days.flatMap((day) => day.explanations)).length,
       legacyCards: matrixDraft.legacyCards,
+      aiRuntime: buildMatrixDrivenAiRuntimeMetadata(),
     },
   };
 }

@@ -32,8 +32,8 @@ const runtimeDecisionFiles = [
   "packages/shared/src/constructor-matrix-pilot-readiness.ts",
   "packages/shared/src/constructor-matrix-save-dry-run.ts",
   "packages/shared/src/constructor-core.ts",
-  "packages/shared/src/constructor-matrix-adapter.ts",
 ];
+const adapterFile = "packages/shared/src/constructor-matrix-adapter.ts";
 
 const allowedStatuses = new Set([
   "eligible_for_soft_warning_metadata",
@@ -237,9 +237,21 @@ for (const path of runtimeDecisionFiles) {
   const source = await readProjectFile(path);
   assert(
     !source.includes("constructor-matrix-runtime-eligibility"),
-    `${path} must not import runtime eligibility before the explicit integration stage`,
+    `${path} must not import runtime eligibility metadata`,
   );
 }
+
+const adapterSource = await readProjectFile(adapterFile);
+assert(
+  adapterSource.includes("constructor-matrix-runtime-eligibility") &&
+    adapterSource.includes("aiRuntime") &&
+    adapterSource.includes("metadataOnly: true") &&
+    adapterSource.includes("runtimeHardGatesEnabled: false") &&
+    adapterSource.includes("highRiskAutomationEnabled: false") &&
+    adapterSource.includes("numericThresholdRuntimeGatesEnabled: false") &&
+    adapterSource.includes("medicalDecisionAutomationEnabled: false"),
+  "constructor-matrix-adapter may import runtime eligibility only for aiRuntime metadata",
+);
 
 const summary = buildConstructorMatrixRuntimeEligibilitySummary();
 
