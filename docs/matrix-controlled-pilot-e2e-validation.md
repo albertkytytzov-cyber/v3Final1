@@ -100,16 +100,24 @@ desk review as human review.
 
 ## Save/Assign Boundary
 
-The E2E stage confirms payload compatibility only. Production save/assign
-remains disabled for Matrix sources by default:
+The E2E stage confirms payload compatibility and feeds the Matrix Save/Assign
+Controlled Pilot. Production default save/assign remains legacy-backed:
 
 - `legacy` save remains allowed;
 - `matrix_internal` save remains disabled;
-- `matrix_primary_pilot` save remains disabled by default;
+- `matrix_primary_pilot` save is available only when all explicit controlled
+  pilot flags, rollout, readiness, local dry-run, server dry-run and server
+  gate evidence pass;
 - no DB migration is required;
-- no production save/assign write path is enabled.
+- no Matrix internals enter template payloads;
+- high-risk medical decisions remain non-automated;
+- no numeric threshold gates and no fake human approvals are added.
 
-Any future Matrix save/assign pilot must be a separate explicit stage.
+The dedicated save/assign check is:
+
+```bash
+npm run check:constructor-matrix-save-assign-controlled-pilot
+```
 
 ## Commands
 
@@ -128,5 +136,9 @@ git diff --check
 ## Result
 
 Matrix is validated for controlled preparation-plan building in the allowed
-pilot scenarios above. Matrix is still not production default. High-risk
+pilot scenarios above. Matrix is not production default. High-risk
 medical decisions remain non-automated and review-required.
+
+Final Controlled Pilot Readiness is recorded in
+`docs/matrix-final-controlled-pilot-readiness.md`. It confirms no DB schema
+migration, no numeric threshold runtime gates and no fake human approvals.

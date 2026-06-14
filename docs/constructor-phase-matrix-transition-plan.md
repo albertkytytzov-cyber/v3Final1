@@ -4560,3 +4560,52 @@ Validation result:
 - save/assign production writes remain disabled for Matrix sources;
 - high-risk medical, weight-cut, hydration, injury, RED-S, youth and BFR/KAATSU
   areas remain blocked or review-required.
+
+## 63. Stage: Matrix Save/Assign Controlled Pilot
+
+Stage: Matrix Save/Assign Controlled Pilot.
+
+This stage validates optional Matrix save/assign as a controlled pilot path,
+not as production default.
+
+Implemented:
+
+- `scripts/check-constructor-matrix-save-assign-controlled-pilot.mjs`;
+- `docs/matrix-save-assign-controlled-pilot.md`;
+- `npm run check:constructor-matrix-save-assign-controlled-pilot`.
+
+Validation result:
+
+- Matrix save/assign requires all explicit flags: internal Matrix UI, limited
+  primary pilot and save/assign pilot;
+- D90, D28, D21, D10 and D4 pilot scenarios can produce existing
+  save-compatible template payloads only after rollout, readiness, local
+  dry-run, server dry-run and server gate evidence pass;
+- D-3, travel, weigh-in and competition-day scenarios cannot save as Matrix
+  pilot and remain fallback or blocked;
+- `matrix_internal` remains read-only;
+- production `/api/v1/plans/constructor/draft` remains legacy-backed;
+- existing template and assignment API contracts are reused;
+- no Matrix internals are persisted;
+- Matrix is not production default;
+- high-risk medical decisions remain non-automated;
+- no DB schema migration, no numeric threshold gates and no fake human
+  approvals are added.
+
+## 64. Stage: Final Controlled Pilot Readiness
+
+Stage: Final Controlled Pilot Readiness.
+
+This stage records the current readiness decision in
+`docs/matrix-final-controlled-pilot-readiness.md`.
+
+Decision:
+
+- Matrix is ready only for controlled pilot use if all checks pass;
+- Matrix is not production default;
+- legacy fallback remains default;
+- Matrix save/assign is allowed only under explicit controlled pilot gates;
+- high-risk medical decisions remain non-automated and review-required;
+- real source-text acquisition and manual review remain future work;
+- no DB schema migration, no numeric threshold runtime gates and no fake human
+  approvals are added.

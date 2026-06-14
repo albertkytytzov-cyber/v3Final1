@@ -2499,3 +2499,46 @@ Matrix Controlled Pilot Runbook result:
 - rollback is feature-flag first;
 - Matrix save/assign production path remains disabled;
 - high-risk medical decisions remain non-automated and review-required.
+
+### 15.45 Matrix Save/Assign Controlled Pilot
+
+Stage: Matrix Save/Assign Controlled Pilot.
+
+The controlled save/assign pilot is documented in
+`docs/matrix-save-assign-controlled-pilot.md` and guarded by
+`npm run check:constructor-matrix-save-assign-controlled-pilot`.
+
+Result:
+
+- Matrix save/assign remains feature-flagged controlled pilot only;
+- all three flags must be enabled: internal Matrix UI, limited primary pilot
+  and save/assign pilot;
+- allowed D90, D28, D21, D10 and D4 pilot scenarios must pass rollout,
+  readiness, local dry-run, server dry-run and server gate evidence;
+- D-3, travel, weigh-in and competition-day scenarios remain fallback or
+  blocked for Matrix save/assign;
+- existing template and assignment API schemas are reused;
+- no Matrix internals are persisted in template payloads;
+- production `/api/v1/plans/constructor/draft` remains legacy-backed;
+- Matrix is not production default;
+- high-risk medical decisions remain non-automated;
+- no DB schema migration is required;
+- no numeric threshold gates and no fake human approvals are added.
+
+### 15.46 Final Controlled Pilot Readiness
+
+Stage: Final Controlled Pilot Readiness.
+
+The final controlled pilot decision is documented in
+`docs/matrix-final-controlled-pilot-readiness.md`.
+
+Decision:
+
+- Matrix can be used only as a controlled pilot plan builder when all checks
+  pass;
+- Matrix is not production default;
+- legacy fallback remains default;
+- controlled save/assign is allowed only behind explicit pilot gates;
+- high-risk medical decisions remain non-automated and review-required;
+- no DB schema migration, no numeric threshold runtime gates and no fake human
+  approvals are added.

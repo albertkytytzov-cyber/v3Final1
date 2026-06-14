@@ -753,3 +753,42 @@ Rollout meaning:
 - Matrix internals are excluded from template payloads;
 - Matrix save/assign production writes remain disabled;
 - Matrix is still not production default.
+
+## Matrix Save/Assign Controlled Pilot
+
+Stage: Matrix Save/Assign Controlled Pilot.
+
+The rollout package now includes a controlled save/assign gate:
+
+- `docs/matrix-save-assign-controlled-pilot.md`;
+- `npm run check:constructor-matrix-save-assign-controlled-pilot`.
+
+Rollout meaning:
+
+- save/assign is controlled pilot only and requires all explicit Matrix flags;
+- D90, D28, D21, D10 and D4 scenarios can save/assign only when rollout,
+  readiness, local dry-run, server dry-run and server gate evidence all pass;
+- D-3, travel, weigh-in and competition-day scenarios remain blocked or
+  fallback for Matrix save/assign;
+- existing template and assignment contracts are reused;
+- no Matrix internals are persisted in templates;
+- production `/api/v1/plans/constructor/draft` remains unchanged and
+  legacy-backed;
+- Matrix is not production default;
+- high-risk medical decisions remain non-automated;
+- no DB schema migration, no numeric threshold gate and no fake human approvals
+  are added.
+
+## Final Controlled Pilot Readiness
+
+Stage: Final Controlled Pilot Readiness.
+
+`docs/matrix-final-controlled-pilot-readiness.md` records the current decision:
+
+- Matrix is ready only for controlled pilot use after all checks pass;
+- legacy fallback remains default;
+- Matrix is not production default;
+- controlled save/assign remains gated by explicit flags and server evidence;
+- high-risk medical decisions remain non-automated and review-required;
+- no DB schema migration, no numeric threshold runtime gates and no fake human
+  approvals are added.

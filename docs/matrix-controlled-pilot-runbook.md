@@ -141,21 +141,53 @@ path is enabled.
 
 ## Save/Assign Decision
 
-Current decision: keep Matrix save/assign production path disabled.
+Current decision: Matrix Save/Assign Controlled Pilot may be used only when
+`NEXT_PUBLIC_INTERNAL_MATRIX_CONSTRUCTOR_UI`,
+`NEXT_PUBLIC_MATRIX_CONSTRUCTOR_LIMITED_PRIMARY_PILOT` and
+`NEXT_PUBLIC_MATRIX_CONSTRUCTOR_SAVE_ASSIGN_PILOT` are all explicitly enabled
+for the controlled cohort.
 
 Reason:
 
 - dry-run compatibility exists;
-- real DB write behavior is a separate risk boundary;
-- production assignment should require a later explicit controlled save/assign
-  pilot stage;
-- rollback and monitoring must be verified under that separate stage.
+- real DB writes remain bounded by existing template and assignment contracts;
+- no Matrix internals are persisted in template payloads;
+- D-3, travel, weigh-in and competition-day scenarios remain blocked or
+  fallback for Matrix save/assign;
+- Matrix is not production default;
+- high-risk medical decisions remain non-automated;
+- no DB schema migration, no numeric threshold gates and no fake human
+  approvals are added.
 
 ## Next Steps
 
 Possible next stages:
 
-- Matrix save/assign controlled pilot, still feature-flagged and no DB schema
-  changes;
 - real source-text acquisition and manual review for high-risk areas;
 - production readiness decision after controlled pilot evidence is collected.
+
+## Matrix Save/Assign Controlled Pilot
+
+Stage: Matrix Save/Assign Controlled Pilot.
+
+Run `npm run check:constructor-matrix-save-assign-controlled-pilot` before any
+controlled save/assign exposure. The check verifies:
+
+- feature flags default off;
+- all three pilot flags are required;
+- production `/api/v1/plans/constructor/draft` remains legacy-backed;
+- allowed D90, D28, D21, D10 and D4 scenarios can produce save-compatible
+  payloads only after server evidence passes;
+- fallback/high-risk scenarios cannot save as Matrix pilot;
+- existing template and assignment APIs parse the payloads;
+- no DB schema migration is required;
+- no numeric threshold gates and no fake human approvals are added.
+
+## Final Controlled Pilot Readiness
+
+Stage: Final Controlled Pilot Readiness.
+
+`docs/matrix-final-controlled-pilot-readiness.md` records the current decision:
+Matrix is controlled-pilot ready only after all checks pass. Matrix is not
+production default. Legacy fallback remains default. High-risk medical
+decisions remain non-automated and review-required.

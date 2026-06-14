@@ -807,3 +807,44 @@ youth and BFR/KAATSU areas remain blocked, fallback-only or review-required.
 The runbook keeps feature flags off by default, preserves legacy fallback,
 keeps Matrix save/assign production writes disabled and documents feature-flag
 rollback.
+
+## 26. Matrix Save/Assign Controlled Pilot
+
+Stage: Matrix Save/Assign Controlled Pilot.
+
+This stage adds the controlled save/assign pilot guard without changing the
+Matrix evidence governance layer.
+
+Implemented:
+
+- `scripts/check-constructor-matrix-save-assign-controlled-pilot.mjs`;
+- `docs/matrix-save-assign-controlled-pilot.md`;
+- `npm run check:constructor-matrix-save-assign-controlled-pilot`.
+
+Evidence/governance impact:
+
+- allowed D90, D28, D21, D10 and D4 pilot scenarios can produce
+  save-compatible payloads only after rollout, readiness, local dry-run, server
+  dry-run and server gate evidence pass;
+- D-3, travel, weigh-in and competition-day scenarios remain fallback or
+  blocked for Matrix save/assign;
+- high-risk medical decisions remain non-automated and review-required;
+- Matrix is not production default;
+- no DB schema migration is required;
+- no numeric threshold gates, fake citations or fake human approvals are added;
+- no evidence/source/review metadata is persisted in template payloads.
+
+## 27. Final Controlled Pilot Readiness
+
+Stage: Final Controlled Pilot Readiness.
+
+`docs/matrix-final-controlled-pilot-readiness.md` records the readiness
+decision:
+
+- Matrix is controlled-pilot ready only if all checks pass;
+- legacy fallback remains default;
+- Matrix is not production default;
+- controlled save/assign remains feature-flagged and server-evidence gated;
+- high-risk medical decisions remain non-automated;
+- no DB schema migration, no numeric threshold runtime gates and no fake human
+  approvals are added.
