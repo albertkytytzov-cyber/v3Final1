@@ -21,6 +21,18 @@ function exerciseDetails(exercise: NonNullable<ConstructorDraft["plan"]["weeks"]
     .join(" / ");
 }
 
+function blockReviewNotes(block: ConstructorDraft["plan"]["weeks"][number]["days"][number]["blocks"][number]) {
+  return [
+    block.coachEditable ? "редактируется тренером" : "нагрузка зафиксирована",
+    block.volumeLocked ? "нагрузка заблокирована" : "",
+    block.riskFlags.length ? `риски: ${block.riskFlags.join(", ")}` : "",
+    block.evidenceRefs.length ? `evidence: ${block.evidenceRefs.slice(0, 3).join(", ")}` : "",
+    block.localLoadZones.length ? `зоны: ${block.localLoadZones.slice(0, 3).join(", ")}` : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
 export function MatrixDraftReadOnlyView({
   draft,
   phaseLabel,
@@ -61,17 +73,20 @@ export function MatrixDraftReadOnlyView({
                         <li key={`${keyPrefix}-${day.dayLabel}-${session.name}-${block.name}-${blockIndex}`}>
                           <span>{block.name}</span>
                           <strong>{block.volume}</strong>
+                          <small>{blockReviewNotes(block)}</small>
                           {block.exercises?.length ? (
-                            <small>
-                              {block.exercises
-                                .slice(0, 3)
-                                .map((exercise) => {
-                                  const details = exerciseDetails(exercise);
+                            <div className="matrix-coach-exercise-list">
+                              {block.exercises.slice(0, 4).map((exercise) => {
+                                const details = exerciseDetails(exercise);
 
-                                  return details ? `${exercise.name} (${details})` : exercise.name;
-                                })
-                                .join("; ")}
-                            </small>
+                                return (
+                                  <small key={`${keyPrefix}-${day.dayLabel}-${session.name}-${exercise.name}`}>
+                                    {details ? `${exercise.name} (${details})` : exercise.name}
+                                    {exercise.notes ? ` — ${exercise.notes}` : ""}
+                                  </small>
+                                );
+                              })}
+                            </div>
                           ) : null}
                         </li>
                       ))}

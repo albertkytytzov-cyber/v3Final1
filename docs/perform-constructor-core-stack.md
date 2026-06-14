@@ -2627,3 +2627,25 @@ Result:
 - all requirements keep `runtimePromotionAllowedNow: false`;
 - the next logical stage is real source acquisition and family-level evidence
   review, not Matrix default promotion.
+
+### 15.49 Matrix Family-Level Evidence Review + Coach UI + Controlled Pilot Readiness
+
+Stage: Matrix Family-Level Evidence Review + Coach UI + Controlled Pilot Readiness.
+
+This stage adds AI desk family source review, P0/P1 family evidence dossiers,
+family allowed-use checks, coach-facing Matrix plan inspection and controlled
+pilot quality-log support.
+
+Result:
+
+- all 26 exercise evidence families have source-review metadata;
+- P0 dossiers keep weight management, weigh-in, hydration/weight-cut and
+  BFR/KAATSU blocked or review-required;
+- P1 dossiers allow safe training families only as coach-editable controlled
+  pilot content;
+- the UI shows coach-editable flags, risk flags, evidence refs, local load zones
+  and exercise notes without persisting Matrix internals;
+- controlled pilot quality logging records scenario quality without PII or
+  production athlete ids;
+- production route, legacy fallback, rollout gates, preview behavior,
+  save/assign contracts and Matrix default remain unchanged.

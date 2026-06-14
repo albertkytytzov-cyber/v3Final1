@@ -219,3 +219,22 @@ Allowed full-content pilot scenarios remain D90, D28, D21, D10 and D4.
 Travel, weigh-in, competition day, D-3 and high-risk contexts remain fallback,
 blocked or review-required. Matrix is not production default and legacy
 fallback remains default.
+
+## Stage: Matrix Family-Level Evidence Review + Coach UI + Controlled Pilot Readiness
+
+Before a coach-facing pilot session, also run:
+
+```bash
+npm run check:constructor-matrix-family-source-review
+npm run check:constructor-matrix-p0-family-evidence-dossiers
+npm run check:constructor-matrix-p1-family-evidence-dossiers
+npm run check:constructor-matrix-family-allowed-use
+npm run check:constructor-matrix-coach-ui
+npm run check:constructor-matrix-pilot-quality-log
+npm run check:constructor-matrix-real-scenario-pilot
+```
+
+Coach UI may inspect weeks, days, sessions, exercises, editable-load status,
+risk flags, evidence refs and exercise notes. It must not imply human review,
+medical approval or coach approval. High-risk areas remain blocked or
+review-required.

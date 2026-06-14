@@ -85,3 +85,13 @@ The checker builds the allowed pilot scenarios, verifies concrete exercise
 density, confirms that strength weights are not invented when max/e1RM is
 missing, confirms fallback scenarios stay fallback, and confirms the production
 draft route remains legacy-backed.
+
+## Family Evidence Review Extension
+
+Stage: Matrix Family-Level Evidence Review + Coach UI + Controlled Pilot
+Readiness.
+
+Controlled pilot drafts now have a family-reviewed metadata layer and a
+coach-facing inspection UI. P0/P1 dossiers do not approve medical or weight
+decisions. They only keep safe training families coach-editable and keep
+high-risk areas blocked, fallback or review-required.

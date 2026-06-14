@@ -210,6 +210,42 @@ assert(
   payload.exerciseSourceRequirements.runtimePromotionAllowedNow === false,
   "Review package exercise source requirements must keep runtime promotion blocked",
 );
+assert(
+  payload.familySourceReview.familyCoverage.ok,
+  "Review package family source review must cover every exercise evidence family",
+);
+assert(
+  payload.familySourceReview.humanReviewed === false,
+  "Review package family source review summary must report no human reviews",
+);
+assert(
+  payload.familySourceReview.runtimePromotionAllowedNow === false,
+  "Review package family source review must keep runtime promotion blocked",
+);
+assert(
+  payload.p0FamilyEvidenceDossiers.p0DossierCount >= 7,
+  "Review package must include P0 family evidence dossier count",
+);
+assert(
+  payload.p0FamilyEvidenceDossiers.blockedHighRiskCount >= 5,
+  "Review package must keep P0 high-risk families blocked",
+);
+assert(
+  payload.p0FamilyEvidenceDossiers.humanReviewed === false,
+  "Review package P0 dossier summary must report no human reviews",
+);
+assert(
+  payload.p1FamilyEvidenceDossiers.p1DossierCount >= 7,
+  "Review package must include P1 family evidence dossier count",
+);
+assert(
+  payload.p1FamilyEvidenceDossiers.runtimePromotionAllowedNow === false,
+  "Review package P1 dossiers must keep runtime promotion blocked",
+);
+assert(
+  payload.familyAllowedUse.runtimePromotionAllowedNow === false,
+  "Review package family allowed-use summary must keep runtime promotion blocked",
+);
 const claimCandidateReviewExportPack =
   buildConstructorMatrixClaimCandidateReviewExportPack();
 assert(

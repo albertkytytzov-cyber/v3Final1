@@ -88,3 +88,14 @@ npm run check:constructor-matrix-exercise-evidence-map
 The checker validates coverage, references, high-risk boundaries, absence of
 fake approvals, absence of fake citations, absence of numeric medical or
 weight-cut thresholds and absence of runtime imports.
+
+## Next Stage
+
+Stage: Matrix Family-Level Evidence Review + Coach UI + Controlled Pilot
+Readiness.
+
+The evidence map now feeds the family source review, P0/P1 family evidence
+dossiers and family allowed-use checks. Safe training families can remain
+coach-editable controlled-pilot content; high-risk weight-cut, hydration,
+weigh-in, RED-S, injury, pain, youth and BFR/KAATSU families remain blocked or
+review-required.

@@ -150,3 +150,14 @@ This stage feeds the Final Controlled Pilot Readiness decision. Matrix is not
 production default; high-risk medical decisions remain non-automated; no DB
 schema migration is required; no numeric threshold runtime gates are added; no
 fake human approvals are added.
+
+## Family Evidence Review Link
+
+Stage: Matrix Family-Level Evidence Review + Coach UI + Controlled Pilot
+Readiness.
+
+Family source review and P0/P1 dossiers do not expand save/assign eligibility.
+They only clarify which safe training families may be inspected as
+coach-editable controlled-pilot content. High-risk weight-management,
+hydration, weigh-in, RED-S, pain, injury, youth and BFR/KAATSU contexts remain
+blocked, fallback or review-required for save/assign.

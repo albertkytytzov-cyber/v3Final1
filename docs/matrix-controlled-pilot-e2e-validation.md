@@ -142,3 +142,18 @@ medical decisions remain non-automated and review-required.
 Final Controlled Pilot Readiness is recorded in
 `docs/matrix-final-controlled-pilot-readiness.md`. It confirms no DB schema
 migration, no numeric threshold runtime gates and no fake human approvals.
+
+## Family Evidence Review Extension
+
+Stage: Matrix Family-Level Evidence Review + Coach UI + Controlled Pilot
+Readiness.
+
+The E2E pilot now has a companion real-scenario check:
+
+```bash
+npm run check:constructor-matrix-real-scenario-pilot
+```
+
+It verifies allowed D90/D28/D21/D10/D4 Matrix drafts, fallback D-3/travel/
+weigh-in/competition-day scenarios, high-risk review-required contexts,
+template payload boundaries and the legacy-backed production route.

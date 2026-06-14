@@ -6153,6 +6153,13 @@ td {
   line-height: 1.35;
 }
 
+.matrix-coach-exercise-list {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
 .constructor-matrix-preview-panel {
   grid-column: 2 / -1;
   grid-row: 2;

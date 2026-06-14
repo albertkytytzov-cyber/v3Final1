@@ -140,3 +140,19 @@ Until that happens, Matrix remains controlled-pilot only. Matrix is not
 production default; high-risk medical decisions remain non-automated; no DB
 schema migration is required; no numeric threshold gate is approved; no fake
 human approvals are added.
+
+## Matrix Family-Level Evidence Review + Coach UI + Controlled Pilot Readiness
+
+The current controlled pilot readiness now includes family-level AI desk source
+review and P0/P1 evidence dossiers.
+
+Readiness update:
+
+- all 26 exercise evidence families have source-review metadata;
+- P0 high-risk families remain blocked or review-required;
+- P1 safe training families remain coach-editable only;
+- coach-facing UI can inspect exercise notes, risk flags, evidence refs and
+  editable load status;
+- pilot quality log support can audit controlled scenarios without PII;
+- production default, production route, DB schema and high-risk automation
+  remain unchanged.

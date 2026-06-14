@@ -820,3 +820,20 @@ Guardrails remain:
 - no numeric medical threshold gates;
 - no fake citations;
 - no fake human/medical/coach approvals.
+
+## Stage: Matrix Family-Level Evidence Review + Coach UI + Controlled Pilot Readiness
+
+Family-level AI desk source review and P0/P1 dossiers have been added for the
+expanded Matrix content library. This does not change rollout mode.
+
+Rollout meaning:
+
+- safe training families may be used only as coach-editable controlled pilot
+  content;
+- high-risk weight management, weigh-in, hydration/weight-cut, RED-S,
+  injury/pain, youth and BFR/KAATSU contexts remain blocked or review-required;
+- coach-facing UI can inspect Matrix plans, exercises, risk flags and evidence
+  refs, but it does not enable save/assign outside controlled pilot gates;
+- controlled pilot quality log support is metadata-only and stores no PII;
+- Matrix is not production default and `/api/v1/plans/constructor/draft`
+  remains legacy-backed.

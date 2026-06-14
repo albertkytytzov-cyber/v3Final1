@@ -4687,3 +4687,29 @@ Transition impact:
 - all requirements keep `runtimePromotionAllowedNow: false`;
 - no fake citations, fake approvals, human review placeholders or numeric
   medical/weight thresholds are added.
+
+## 67. Stage: Matrix Family-Level Evidence Review + Coach UI + Controlled Pilot Readiness
+
+Stage: Matrix Family-Level Evidence Review + Coach UI + Controlled Pilot Readiness.
+
+This stage converts the exercise evidence map into a practical controlled pilot
+review layer.
+
+Implemented:
+
+- `packages/shared/src/constructor-matrix-family-source-review.ts`;
+- `packages/shared/src/constructor-matrix-p0-family-evidence-dossiers.ts`;
+- `packages/shared/src/constructor-matrix-p1-family-evidence-dossiers.ts`;
+- `packages/shared/src/constructor-matrix-family-allowed-use.ts`;
+- `packages/shared/src/constructor-matrix-pilot-quality-log.ts`;
+- coach-facing Matrix draft inspection in the web UI;
+- source-review, dossier, allowed-use, coach UI, pilot quality and real
+  scenario checks.
+
+Transition impact:
+
+- safe training families can remain coach-editable in controlled pilot;
+- high-risk medical, weight-cut, hydration, RED-S, injury, pain, youth and
+  BFR/KAATSU decisions remain blocked or review-required;
+- no runtime hard gates, production default, DB migration, fake citations,
+  fake approvals or numeric medical/weight thresholds are added.

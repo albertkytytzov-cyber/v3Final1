@@ -47,6 +47,7 @@ export type ConstructorMatrixExerciseEvidenceSourceTypeNeeded =
   | "meta_analysis"
   | "position_stand"
   | "consensus_statement"
+  | "official_regulation"
   | "wrestling_specific_study"
   | "combat_sport_study"
   | "strength_conditioning_guideline"

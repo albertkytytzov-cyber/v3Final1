@@ -890,3 +890,19 @@ runtime-promotion blockers for every evidence family.
 P0 requirements cover body-composition, nutrition/body-composition,
 weight-management, weigh-in, high-risk weight-cut/hydration and BFR/KAATSU
 blocked contexts. All requirements keep `runtimePromotionAllowedNow: false`.
+
+## Stage: Matrix Family-Level Evidence Review + Coach UI + Controlled Pilot Readiness
+
+The evidence-family map now has AI desk source-review metadata, P0/P1 family
+evidence dossiers and family allowed-use checks.
+
+This closes the next audit gap: Matrix can distinguish safe coach-editable
+training families from high-risk families that must remain blocked,
+fallback-only or review-required. The coach-facing UI can inspect Matrix plans,
+exercise notes, editable-load status, risk flags and evidence refs, while
+controlled pilot quality logging remains metadata-only and avoids PII.
+
+No production route behavior, Matrix default, DB schema, rollout gate,
+preview behavior or save/assign production path changes are introduced. No
+fake citations, fake human approvals, medical approvals, coach approvals,
+numeric medical thresholds or unsafe weight-cut automation are added.

@@ -77,3 +77,13 @@ The checker validates family coverage, required P0/P1 priorities, blocked
 runtime promotion, manual/human review requirements where needed, absence of
 fake citations, absence of fake approvals, absence of numeric thresholds and
 absence of runtime imports.
+
+## Next Stage
+
+Stage: Matrix Family-Level Evidence Review + Coach UI + Controlled Pilot
+Readiness.
+
+The source requirements are now consumed by family source review and P0/P1
+evidence dossiers. This still does not create human approval or runtime
+promotion. It only clarifies which families can support coach-editable
+controlled-pilot training content and which must stay blocked or review-only.

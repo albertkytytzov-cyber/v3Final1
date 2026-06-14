@@ -20,6 +20,8 @@ import {
   buildConstructorMatrixEvidenceClaimExtractionSummary,
   type ConstructorMatrixEvidenceClaimExtractionSummary,
 } from "./constructor-matrix-evidence-claims";
+import { buildConstructorMatrixFamilyAllowedUseSummary } from "./constructor-matrix-family-allowed-use";
+import { buildConstructorMatrixFamilySourceReviewSummary } from "./constructor-matrix-family-source-review";
 import {
   buildConstructorMatrixClaimCandidateReviewExportSummary,
   type ConstructorMatrixClaimCandidateReviewExportSummary,
@@ -43,6 +45,8 @@ import {
   buildConstructorMatrixReviewIntakeExportSummary,
   type ConstructorMatrixReviewIntakeExportSummary,
 } from "./constructor-matrix-review-intake-export";
+import { buildConstructorMatrixP0FamilyEvidenceDossierSummary } from "./constructor-matrix-p0-family-evidence-dossiers";
+import { buildConstructorMatrixP1FamilyEvidenceDossierSummary } from "./constructor-matrix-p1-family-evidence-dossiers";
 import {
   buildConstructorMatrixSourceExpansionBacklogSummary,
   type ConstructorMatrixSourceExpansionBacklogSummary,
@@ -78,6 +82,22 @@ export type ConstructorMatrixExerciseEvidenceMapSummary = ReturnType<
 
 export type ConstructorMatrixExerciseSourceRequirementSummary = ReturnType<
   typeof buildConstructorMatrixExerciseSourceRequirementSummary
+>;
+
+export type ConstructorMatrixFamilySourceReviewSummary = ReturnType<
+  typeof buildConstructorMatrixFamilySourceReviewSummary
+>;
+
+export type ConstructorMatrixP0FamilyEvidenceDossierSummary = ReturnType<
+  typeof buildConstructorMatrixP0FamilyEvidenceDossierSummary
+>;
+
+export type ConstructorMatrixP1FamilyEvidenceDossierSummary = ReturnType<
+  typeof buildConstructorMatrixP1FamilyEvidenceDossierSummary
+>;
+
+export type ConstructorMatrixFamilyAllowedUseSummary = ReturnType<
+  typeof buildConstructorMatrixFamilyAllowedUseSummary
 >;
 
 export interface ConstructorMatrixReviewPackageRef {
@@ -180,6 +200,10 @@ export interface ConstructorMatrixReviewPackagePayload {
   reviewIntakeExport: ConstructorMatrixReviewIntakeExportSummary;
   exerciseEvidenceMap: ConstructorMatrixExerciseEvidenceMapSummary;
   exerciseSourceRequirements: ConstructorMatrixExerciseSourceRequirementSummary;
+  familySourceReview: ConstructorMatrixFamilySourceReviewSummary;
+  p0FamilyEvidenceDossiers: ConstructorMatrixP0FamilyEvidenceDossierSummary;
+  p1FamilyEvidenceDossiers: ConstructorMatrixP1FamilyEvidenceDossierSummary;
+  familyAllowedUse: ConstructorMatrixFamilyAllowedUseSummary;
   reviewerQueues: readonly ConstructorMatrixReviewPackageReviewerQueue[];
   evidenceDependencies: readonly ConstructorMatrixReviewPackageEvidenceItem[];
   dataDependencies: readonly ConstructorMatrixReviewPackageDataItem[];
@@ -681,6 +705,16 @@ export function buildConstructorMatrixLayerReviewMarkdown(
       `Exercise source requirements: ${payload.exerciseSourceRequirements.sourceRequirementCount}`,
       `Exercise source P0 families: ${payload.exerciseSourceRequirements.p0FamilyIds.join(", ") || "none"}`,
       `Exercise source runtimePromotionAllowedNow=${payload.exerciseSourceRequirements.runtimePromotionAllowedNow}`,
+      `Family source reviews: ${payload.familySourceReview.familySourceReviewCount}`,
+      `Family source verified records: ${payload.familySourceReview.verifiedSourceCount}`,
+      `Family source full-text/manual still needed: ${payload.familySourceReview.fullTextNeededCount}`,
+      `Family source humanReviewed=${payload.familySourceReview.humanReviewed}`,
+      `P0 family dossiers: ${payload.p0FamilyEvidenceDossiers.p0DossierCount}`,
+      `P0 family blocked high-risk: ${payload.p0FamilyEvidenceDossiers.blockedHighRiskCount}`,
+      `P1 family dossiers: ${payload.p1FamilyEvidenceDossiers.p1DossierCount}`,
+      `P1 family coach-editable count: ${payload.p1FamilyEvidenceDossiers.coachEditableFamilyCount}`,
+      `Family allowed-use decisions: ${payload.familyAllowedUse.familyAllowedUseDecisionCount}`,
+      `Family allowed-use runtimePromotionAllowedNow=${payload.familyAllowedUse.runtimePromotionAllowedNow}`,
     ]),
     "",
     "## Required Threshold Areas Covered",
@@ -748,6 +782,10 @@ export function buildConstructorMatrixLayerReviewPackage(params?: {
     reviewIntakeExport: buildConstructorMatrixReviewIntakeExportSummary(),
     exerciseEvidenceMap: buildConstructorMatrixExerciseEvidenceMapSummary(),
     exerciseSourceRequirements: buildConstructorMatrixExerciseSourceRequirementSummary(),
+    familySourceReview: buildConstructorMatrixFamilySourceReviewSummary(),
+    p0FamilyEvidenceDossiers: buildConstructorMatrixP0FamilyEvidenceDossierSummary(),
+    p1FamilyEvidenceDossiers: buildConstructorMatrixP1FamilyEvidenceDossierSummary(),
+    familyAllowedUse: buildConstructorMatrixFamilyAllowedUseSummary(),
     reviewerQueues: buildReviewerQueues(),
     evidenceDependencies: CONSTRUCTOR_MATRIX_EVIDENCE_DEPENDENCY_REGISTRY.map(evidenceItem),
     dataDependencies: CONSTRUCTOR_MATRIX_DATA_DEPENDENCIES.map(dataItem),
