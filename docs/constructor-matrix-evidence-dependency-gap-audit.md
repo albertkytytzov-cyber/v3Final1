@@ -925,3 +925,30 @@ No production route behavior, Matrix default, DB schema, rollout gate,
 preview behavior or save/assign production path changes are introduced. No
 fake citations, fake human approvals, medical approvals, coach approvals,
 numeric medical thresholds or unsafe weight-cut automation are added.
+
+## Stage: Matrix Athlete-Specific Exercise Variation
+
+The controlled-pilot audit now includes a guard against identical exercise
+selection for different athlete profiles. The issue was not missing content:
+the web form already passes strengths, weaknesses, pain/injury notes, training
+age, goals and coach context into `ConstructorInput`. The resolver previously
+ranked candidates mostly by block category and id, so materially different
+athletes could still receive the same first exercise sequence.
+
+`packages/shared/src/constructor-matrix-exercise-resolver.ts` now applies
+athlete-profile scoring:
+
+- weaknesses, goals and coach context can move relevant exercise categories
+  earlier;
+- strengths can support selection without overriding development needs;
+- pain/injury/youth context can lower candidate priority without implying
+  medical clearance;
+- deterministic tie-breaking keeps output repeatable.
+
+The validation script
+`scripts/check-constructor-matrix-athlete-specific-exercise-variation.mjs`
+builds the same D21 scenario for two synthetic athlete profiles and fails if
+their exercise sequences collapse back to identical output. This remains a
+controlled-pilot content improvement only: no production route change, Matrix
+default, unsafe weight-cut automation, numeric medical threshold, fake citation
+or fake approval is introduced.

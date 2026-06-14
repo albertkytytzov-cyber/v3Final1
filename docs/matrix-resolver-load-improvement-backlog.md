@@ -26,6 +26,10 @@ remain tied to concrete quality evidence and must preserve high-risk guardrails.
   suppressed inside close-start, active weight-cut and `mat_light_technical`
   contexts, while long-horizon explicit body-composition contexts can still
   expose coach-editable review-required candidates.
+- Resolved after athlete-profile check: exercise ranking now uses strengths,
+  weaknesses, goals and coach context before deterministic ordering, so two
+  materially different athletes do not collapse to the same first exercise
+  sequence only because their phase and block type match.
 
 ## Load Prescription Backlog
 
@@ -74,6 +78,9 @@ One resolver hardening change is applied from the internal feedback pass:
   active weight-cut contexts;
 - long-horizon explicit body-composition content remains available only as
   coach-editable review-required content.
+- athlete-profile scoring now adjusts candidate order for different strengths,
+  weaknesses, goals and coach context while keeping all prescriptions
+  coach-editable.
 
 The remaining findings are quality-review signals, not confirmed defects:
 

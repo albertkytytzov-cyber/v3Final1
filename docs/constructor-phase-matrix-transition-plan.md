@@ -53,6 +53,28 @@ This stage does not enable Matrix as production default, does not change the
 production draft route and does not automate weight-cut, hydration, RED-S,
 injury, pain, youth or BFR/KAATSU decisions.
 
+## Stage: Matrix Athlete-Specific Exercise Variation
+
+This stage converts a coach-facing observation into a resolver hardening rule:
+athletes with different strengths, weaknesses, goals or coach context should
+not receive the same first exercise sequence merely because the same block type
+and phase were selected.
+
+`constructor-matrix-exercise-resolver.ts` now applies athlete-profile scoring
+before deterministic ordering:
+
+- weaknesses, current goals and coach context shape the primary exercise
+  ranking;
+- strengths are treated as support signals;
+- pain, injury, youth or low-training-age context can lower risky candidate
+  priority, but never creates medical clearance;
+- exercise prescriptions remain coach-editable and Matrix remains controlled
+  pilot only.
+
+This stage does not change the production draft route, does not enable Matrix
+default and does not automate weight-cut, hydration, RED-S, injury-return, pain,
+youth or BFR/KAATSU decisions.
+
 ## 1. Текущая реализация
 
 ### 1.1 Где находится "голова" конструктора

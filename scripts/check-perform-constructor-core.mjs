@@ -2804,6 +2804,7 @@ const metadataCheckFiles = [
   "scripts/check-constructor-matrix-save-assign-controlled-pilot.mjs",
   "scripts/check-constructor-matrix-exercise-library.mjs",
   "scripts/check-constructor-matrix-exercise-resolver.mjs",
+  "scripts/check-constructor-matrix-athlete-specific-exercise-variation.mjs",
   "scripts/check-constructor-matrix-load-prescription.mjs",
   "scripts/check-constructor-matrix-nutrition-weight-guidance.mjs",
   "scripts/check-constructor-matrix-exercise-evidence-map.mjs",
@@ -2886,6 +2887,7 @@ const metadataCheckFiles = [
   "docs/matrix-coach-facing-ui.md",
   "docs/matrix-controlled-pilot-quality-log.md",
   "docs/matrix-ai-internal-pilot-feedback-resolver-hardening.md",
+  "docs/matrix-athlete-specific-exercise-variation.md",
   "docs/matrix-real-scenario-controlled-pilot.md",
   "docs/matrix-family-evidence-production-decision-pack.md",
   "docs/matrix-review-intake-export/README.md",
@@ -2910,6 +2912,7 @@ for (const token of [
   "check:constructor-matrix-save-assign-controlled-pilot",
   "check:constructor-matrix-exercise-library",
   "check:constructor-matrix-exercise-resolver",
+  "check:constructor-matrix-athlete-specific-exercise-variation",
   "check:constructor-matrix-load-prescription",
   "check:constructor-matrix-nutrition-weight-guidance",
   "check:constructor-matrix-exercise-evidence-map",
@@ -3041,6 +3044,10 @@ for (const [path, source] of [
   assert(
     source.includes("Matrix AI Internal Pilot Feedback + Resolver Hardening"),
     `${path} must document Matrix AI Internal Pilot Feedback + Resolver Hardening`,
+  );
+  assert(
+    source.includes("Matrix Athlete-Specific Exercise Variation"),
+    `${path} must document Matrix Athlete-Specific Exercise Variation`,
   );
 }
 

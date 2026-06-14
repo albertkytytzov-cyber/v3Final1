@@ -98,6 +98,11 @@ pilot:
   resolver: close-start, active weight-cut and `mat_light_technical` contexts
   suppress body-composition exercise candidates, while long-horizon explicit
   body-composition review-required content remains available.
+- A later coach-facing check found a different resolver issue: two athletes
+  with different profile needs could still receive the same first exercise
+  sequence when the same phase and block type were selected. This is now
+  hardened by athlete-profile scoring from strengths, weaknesses, goals and
+  coach context.
 
 ## Pilot Quality Log Use
 
@@ -131,6 +136,18 @@ For each real pilot plan, record:
 - coach edit burden: low, medium, high;
 - final decision: keep, adjust resolver, adjust load prescription, block
   scenario, source-review needed.
+
+## Athlete-Specific Variation Guard
+
+The check `npm run check:constructor-matrix-athlete-specific-exercise-variation`
+uses the same D21 controlled-pilot scenario with two synthetic profiles:
+
+- speed and leg-entry development need;
+- grip endurance and par-terre pressure need.
+
+The check fails if their exercise sequences become identical again. It also
+confirms that pain/injury context remains a caution/review-required signal, not
+medical approval or return-to-training clearance.
 
 ## Guardrails Confirmed
 

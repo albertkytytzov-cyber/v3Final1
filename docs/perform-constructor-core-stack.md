@@ -130,6 +130,28 @@ Check:
 npm run check:constructor-matrix-internal-pilot-feedback
 ```
 
+## Stage: Matrix Athlete-Specific Exercise Variation
+
+The athlete-specific variation pass fixes the next controlled-pilot quality
+issue: two athletes with different strengths, weaknesses or coach context could
+receive the same first exercise sequence when the competition timing and block
+selection were similar.
+
+The resolver now ranks exercise candidates with athlete profile signals before
+the deterministic tie-break:
+
+- weaknesses, goals and coach context have the strongest influence;
+- strengths can support the selection without overriding development needs;
+- pain, injury, youth or low-training-age context only lowers risky candidate
+  priority and does not create medical clearance;
+- all output remains coach-editable and controlled-pilot only.
+
+Check:
+
+```bash
+npm run check:constructor-matrix-athlete-specific-exercise-variation
+```
+
 ## 1. Главный принцип
 
 Конструктор не должен “генерировать красивый календарь”. Он должен строить план по цепочке:
